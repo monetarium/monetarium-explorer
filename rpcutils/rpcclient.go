@@ -137,7 +137,7 @@ func ConnectNodeRPC(host, user, pass, cert string, disableTLS, disableReconnect 
 		return nil, nodeVer, fmt.Errorf("unable to get node RPC version")
 	}
 
-	dcrdVer := ver["dcrdjsonrpcapi"]
+	dcrdVer := ver["monetariumjsonrpcapi"]
 	nodeVer = semver.NewSemver(dcrdVer.Major, dcrdVer.Minor, dcrdVer.Patch)
 
 	// Check if the dcrd RPC API version is compatible with dcrdata.
