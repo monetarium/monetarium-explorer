@@ -5,7 +5,7 @@
 
 package netparams
 
-import "github.com/decred/dcrd/chaincfg/v3"
+import "github.com/monetarium/monetarium-node/chaincfg"
 
 // Params is used to group parameters for various networks such as the main
 // network and test networks.

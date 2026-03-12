@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/decred/dcrd/blockchain/stake/v5"
-	"github.com/decred/dcrd/chaincfg/chainhash"
-	"github.com/decred/dcrd/chaincfg/v3"
-	"github.com/decred/dcrd/database/v3"
-	_ "github.com/decred/dcrd/database/v3/ffldb" // init the ffldb driver
-	"github.com/decred/dcrd/dcrutil/v4"
-	"github.com/decred/dcrd/wire"
+	"github.com/monetarium/monetarium-node/blockchain/stake"
+	"github.com/monetarium/monetarium-node/chaincfg/chainhash"
+	"github.com/monetarium/monetarium-node/chaincfg"
+	"github.com/monetarium/monetarium-node/database"
+	_ "github.com/monetarium/monetarium-node/database/ffldb" // init the ffldb driver
+	"github.com/monetarium/monetarium-node/dcrutil"
+	"github.com/monetarium/monetarium-node/wire"
 )
 
 const (

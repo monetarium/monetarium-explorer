@@ -9,9 +9,9 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/decred/dcrd/chaincfg/chainhash"
-	"github.com/decred/dcrd/dcrutil/v4"
-	"github.com/decred/dcrd/wire"
+	"github.com/monetarium/monetarium-node/chaincfg/chainhash"
+	"github.com/monetarium/monetarium-node/dcrutil"
+	"github.com/monetarium/monetarium-node/wire"
 	"github.com/decred/dcrdata/v8/txhelpers"
 )
 

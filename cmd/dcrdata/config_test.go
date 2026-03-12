@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/decred/dcrd/dcrutil/v4"
+	"github.com/monetarium/monetarium-node/dcrutil"
 )
 
 var tempConfigFile *os.File

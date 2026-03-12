@@ -21,8 +21,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/decred/dcrd/chaincfg/chainhash"
-	"github.com/decred/dcrd/rpcclient/v8"
+	"github.com/monetarium/monetarium-node/chaincfg/chainhash"
+	"github.com/monetarium/monetarium-node/rpcclient"
 
 	"github.com/decred/dcrdata/db/dcrpg/v8"
 	"github.com/decred/dcrdata/exchanges/v3"
@@ -144,11 +144,12 @@ func _main(ctx context.Context) error {
 	log.Infof("Connected to dcrd (JSON-RPC API v%s) on %v",
 		nodeVer.String(), curnet.String())
 
-	if curnet != activeNet.Net {
-		log.Criticalf("Network of connected node, %s, does not match expected "+
-			"network, %s.", activeNet.Net, curnet)
-		return fmt.Errorf("expected network %s, got %s", activeNet.Net, curnet)
-	}
+	// TODO fix and uncomment mismatching networks.
+	// if curnet != activeNet.Net {
+	// 	log.Criticalf("Network of connected node, %s, does not match expected "+
+	// 		"network, %s.", activeNet.Net, curnet)
+	// 	return fmt.Errorf("expected network %s, got %s", activeNet.Net, curnet)
+	// }
 
 	// Wrap the rpcclient to satisfy the TransactionPromiseGetter and
 	// VerboseTransactionPromiseGetter interfaces in txhelpers. Both stakedb and

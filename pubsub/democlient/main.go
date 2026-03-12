@@ -10,8 +10,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/decred/dcrd/chaincfg/v3"
-	"github.com/decred/dcrd/txscript/v4/stdaddr"
+	"github.com/monetarium/monetarium-node/chaincfg"
+	"github.com/monetarium/monetarium-node/txscript/stdaddr"
 	"github.com/decred/slog"
 	survey "gopkg.in/AlecAivazis/survey.v1"
 

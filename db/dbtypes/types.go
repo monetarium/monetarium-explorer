@@ -17,9 +17,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/decred/dcrd/chaincfg/chainhash"
-	"github.com/decred/dcrd/dcrutil/v4"
-	"github.com/decred/dcrd/txscript/v4/stdscript"
+	"github.com/monetarium/monetarium-node/chaincfg/chainhash"
+	"github.com/monetarium/monetarium-node/dcrutil"
+	"github.com/monetarium/monetarium-node/txscript/stdscript"
 	"github.com/lib/pq"
 
 	"github.com/decred/dcrdata/v8/db/dbtypes/internal"

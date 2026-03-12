@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/decred/dcrd/chaincfg/v3"
+	"github.com/monetarium/monetarium-node/chaincfg"
 	"github.com/decred/dcrdata/v8/semver"
 	"github.com/decred/dcrdata/v8/txhelpers"
 )

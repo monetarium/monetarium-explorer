@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/decred/dcrd/chaincfg/v3"
-	"github.com/decred/dcrd/wire"
+	"github.com/monetarium/monetarium-node/chaincfg"
+	"github.com/monetarium/monetarium-node/wire"
 
 	"github.com/decred/dcrdata/v8/txhelpers"
 )

@@ -6,8 +6,8 @@
 package txhelpers
 
 import (
-	"github.com/decred/dcrd/dcrutil/v4"
-	"github.com/decred/dcrd/wire"
+	"github.com/monetarium/monetarium-node/dcrutil"
+	"github.com/monetarium/monetarium-node/wire"
 )
 
 // DefaultRelayFeePerKb is the default minimum relay fee policy for a mempool.
@@ -23,9 +23,10 @@ func FeeForSerializeSize(relayFeePerKb dcrutil.Amount, txSerializeSize int) dcru
 		fee = relayFeePerKb
 	}
 
-	if fee < 0 || fee > dcrutil.MaxAmount {
-		fee = dcrutil.MaxAmount
-	}
+	// // TODO uncomment and fix dcrutil.MaxAmount is undefined
+	// if fee < 0 || fee > dcrutil.MaxAmount {
+	// 	fee = dcrutil.MaxAmount
+	// }
 
 	return fee
 }

@@ -6,8 +6,8 @@ package mempool
 import (
 	"time"
 
-	"github.com/decred/dcrd/chaincfg/chainhash"
-	chainjson "github.com/decred/dcrd/rpc/jsonrpc/types/v4"
+	"github.com/monetarium/monetarium-node/chaincfg/chainhash"
+	chainjson "github.com/monetarium/monetarium-node/rpc/jsonrpc/types"
 	apitypes "github.com/decred/dcrdata/v8/api/types"
 )
 

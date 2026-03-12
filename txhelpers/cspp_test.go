@@ -3,7 +3,7 @@ package txhelpers
 import (
 	"testing"
 
-	"github.com/decred/dcrd/wire"
+	"github.com/monetarium/monetarium-node/wire"
 )
 
 func TestIsMixedSplitTx(t *testing.T) {

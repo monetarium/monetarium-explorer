@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/decred/dcrd/chaincfg/v3"
+	"github.com/monetarium/monetarium-node/chaincfg"
 	"github.com/go-chi/chi/v5"
 )
 

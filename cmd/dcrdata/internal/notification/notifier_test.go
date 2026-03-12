@@ -7,9 +7,9 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/decred/dcrd/chaincfg/chainhash"
-	chainjson "github.com/decred/dcrd/rpc/jsonrpc/types/v4"
-	"github.com/decred/dcrd/wire"
+	"github.com/monetarium/monetarium-node/chaincfg/chainhash"
+	chainjson "github.com/monetarium/monetarium-node/rpc/jsonrpc/types"
+	"github.com/monetarium/monetarium-node/wire"
 	"github.com/decred/dcrdata/v8/txhelpers"
 )
 
