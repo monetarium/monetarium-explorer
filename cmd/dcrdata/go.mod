@@ -7,11 +7,11 @@ replace (
 	github.com/decred/dcrdata/exchanges/v3 => ../../exchanges/
 	github.com/decred/dcrdata/gov/v6 => ../../gov/
 	github.com/decred/dcrdata/v8 => ../../
+	github.com/monetarium/monetarium-node/chaincfg => ../../chaincfg
 )
 
 require (
 	github.com/caarlos0/env/v6 v6.10.1
-	github.com/decred/dcrd/chaincfg/chainhash v1.0.5
 	github.com/decred/dcrd/rpcclient/v8 v8.1.0
 	github.com/decred/dcrdata/db/dcrpg/v8 v8.0.0
 	github.com/decred/dcrdata/exchanges/v3 v3.1.0
@@ -27,15 +27,15 @@ require (
 	github.com/googollee/go-socket.io v1.4.4
 	github.com/jessevdk/go-flags v1.5.0
 	github.com/jrick/logrotate v1.0.0
-	github.com/monetarium/monetarium-node/blockchain/stake v1.0.11
-	github.com/monetarium/monetarium-node/blockchain/standalone v1.0.11
+	github.com/monetarium/monetarium-node/blockchain/stake v1.1.0
+	github.com/monetarium/monetarium-node/blockchain/standalone v1.1.0
 	github.com/monetarium/monetarium-node/chaincfg v1.1.0
 	github.com/monetarium/monetarium-node/chaincfg/chainhash v1.1.0
 	github.com/monetarium/monetarium-node/dcrutil v1.1.0
 	github.com/monetarium/monetarium-node/rpc/jsonrpc/types v1.1.0
 	github.com/monetarium/monetarium-node/rpcclient v1.1.0
-	github.com/monetarium/monetarium-node/txscript v1.0.11
-	github.com/monetarium/monetarium-node/wire v1.0.11
+	github.com/monetarium/monetarium-node/txscript v1.1.0
+	github.com/monetarium/monetarium-node/wire v1.1.0
 	github.com/rs/cors v1.8.2
 	golang.org/x/net v0.28.0
 	golang.org/x/text v0.22.0
@@ -97,6 +97,7 @@ require (
 	github.com/decred/dcrd/blockchain/stake/v5 v5.0.2 // indirect
 	github.com/decred/dcrd/blockchain/standalone/v2 v2.2.2 // indirect
 	github.com/decred/dcrd/certgen v1.2.0 // indirect
+	github.com/decred/dcrd/chaincfg/chainhash v1.0.5 // indirect
 	github.com/decred/dcrd/chaincfg/v3 v3.3.0 // indirect
 	github.com/decred/dcrd/connmgr/v3 v3.1.2 // indirect
 	github.com/decred/dcrd/container/lru v1.0.0 // indirect
@@ -181,10 +182,10 @@ require (
 	github.com/matttproud/golang_protobuf_extensions v1.0.4 // indirect
 	github.com/mmcloughlin/addchain v0.4.0 // indirect
 	github.com/monetarium/monetarium-node/cointype v1.0.11 // indirect
-	github.com/monetarium/monetarium-node/crypto/blake256 v1.0.11 // indirect
+	github.com/monetarium/monetarium-node/crypto/blake256 v1.1.0 // indirect
 	github.com/monetarium/monetarium-node/crypto/rand v1.0.11 // indirect
 	github.com/monetarium/monetarium-node/crypto/ripemd160 v1.0.11 // indirect
-	github.com/monetarium/monetarium-node/database v1.0.11 // indirect
+	github.com/monetarium/monetarium-node/database v1.1.0 // indirect
 	github.com/monetarium/monetarium-node/dcrec v1.0.11 // indirect
 	github.com/monetarium/monetarium-node/dcrec/edwards v1.0.11 // indirect
 	github.com/monetarium/monetarium-node/dcrec/secp256k1 v1.0.11 // indirect

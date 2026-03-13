@@ -145,11 +145,11 @@ func _main(ctx context.Context) error {
 		nodeVer.String(), curnet.String())
 
 	// TODO fix and uncomment mismatching networks.
-	// if curnet != activeNet.Net {
-	// 	log.Criticalf("Network of connected node, %s, does not match expected "+
-	// 		"network, %s.", activeNet.Net, curnet)
-	// 	return fmt.Errorf("expected network %s, got %s", activeNet.Net, curnet)
-	// }
+	if curnet != activeNet.Net {
+		log.Criticalf("Network of connected node, %s, does not match expected "+
+			"network, %s.", activeNet.Net, curnet)
+		return fmt.Errorf("expected network %s, got %s", activeNet.Net, curnet)
+	}
 
 	// Wrap the rpcclient to satisfy the TransactionPromiseGetter and
 	// VerboseTransactionPromiseGetter interfaces in txhelpers. Both stakedb and
@@ -844,6 +844,7 @@ func _main(ctx context.Context) error {
 			if !errors.Is(err, context.Canceled) {
 				requestShutdown()
 			}
+			log.Errorf("Error: %w", err)
 			log.Errorf("dcrpg.SyncChainDB failed at height %d.", height)
 			return height, err
 		}
@@ -929,6 +930,7 @@ func _main(ctx context.Context) error {
 				if err != nil {
 					// If data collection succeeded, but storage fails, bail out
 					// to diagnose the DB trouble.
+					log.Errorf("ChainDB.StoreBlock failed: %w", err)
 					return fmt.Errorf("ChainDB.StoreBlock failed: %w", err)
 				}
 

@@ -518,6 +518,7 @@ func loadConfig() (*config, error) {
 	if cfg.TestNet {
 		activeNet = &netparams.TestNet3Params
 		activeChain = chaincfg.TestNet3Params()
+	        //log.Infof("ActiveChainTest:  %#v", activeChain)
 		defaultPort = defaultTestnetPort
 		numNets++
 	}

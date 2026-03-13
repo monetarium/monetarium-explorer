@@ -12,9 +12,9 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/decred/dcrd/chaincfg/v3"
-	"github.com/decred/dcrd/dcrutil/v4"
-	"github.com/decred/dcrd/rpcclient/v8"
+	"github.com/monetarium/monetarium-node/chaincfg"
+	"github.com/monetarium/monetarium-node/dcrutil"
+	"github.com/monetarium/monetarium-node/rpcclient"
 
 	"github.com/decred/dcrdata/v8/rpcutils"
 	"github.com/decred/dcrdata/v8/txhelpers"

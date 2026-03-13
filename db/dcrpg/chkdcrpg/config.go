@@ -12,8 +12,8 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/decred/dcrd/chaincfg/v3"
-	"github.com/decred/dcrd/dcrutil/v4"
+	"github.com/monetarium/monetarium-node/chaincfg"
+	"github.com/monetarium/monetarium-node/dcrutil"
 	"github.com/decred/dcrdata/v8/netparams"
 	flags "github.com/jessevdk/go-flags"
 )

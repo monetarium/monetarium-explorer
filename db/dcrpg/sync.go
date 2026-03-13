@@ -39,12 +39,14 @@ func (pgb *ChainDB) SyncChainDB(ctx context.Context, client rpcutils.BlockFetche
 	// Get the chain servers's best block.
 	_, nodeHeight, err := client.GetBestBlock(ctx)
 	if err != nil {
+		log.Infof("GetBestBlock failed: %w\n", err)
 		return -1, fmt.Errorf("GetBestBlock failed: %w", err)
 	}
 
 	// Retrieve the best block in the database from the meta table.
 	lastBlock, err := pgb.HeightDB(ctx)
 	if err != nil {
+		log.Infof("RetrieveBestBlockHeight: %w\n", err)
 		return -1, fmt.Errorf("RetrieveBestBlockHeight: %w", err)
 	}
 	if lastBlock == -1 {
@@ -59,6 +61,7 @@ func (pgb *ChainDB) SyncChainDB(ctx context.Context, client rpcutils.BlockFetche
 	// See if initial sync (initial block download) was previously completed.
 	ibdComplete, err := ibdComplete(pgb.db)
 	if err != nil {
+		log.Infof("IBDComplete failed: %w\n", err)
 		return lastBlock, fmt.Errorf("IBDComplete failed: %w", err)
 	}
 
@@ -77,12 +80,14 @@ func (pgb *ChainDB) SyncChainDB(ctx context.Context, client rpcutils.BlockFetche
 	// height (or 0 if the lowest DB height is -1).
 	if stakeDBHeight > lastBlock && stakeDBHeight > 0 {
 		if lastBlock < 0 || stakeDBHeight > 2*lastBlock {
+			log.Infof("delete stake db (ffldb_stake) and try again")
 			return -1, fmt.Errorf("delete stake db (ffldb_stake) and try again")
 		}
 		log.Infof("Rewinding stake node from %d to %d", stakeDBHeight, lastBlock)
 		// Rewind best node in ticket DB to larger of lowest DB height or zero.
 		stakeDBHeight, err = pgb.RewindStakeDB(ctx, lastBlock)
 		if err != nil {
+			log.Infof("RewindStakeDB failed: %w", err)
 			return lastBlock, fmt.Errorf("RewindStakeDB failed: %w", err)
 		}
 	}
@@ -120,6 +125,7 @@ func (pgb *ChainDB) SyncChainDB(ctx context.Context, client rpcutils.BlockFetche
 		log.Info("Large bulk load: Removing indexes and disabling duplicate checks.")
 		err = pgb.DeindexAll()
 		if err != nil && !strings.Contains(err.Error(), "does not exist") {
+			log.Infof("Error: %w", err)
 			return lastBlock, err
 		}
 
@@ -130,6 +136,7 @@ func (pgb *ChainDB) SyncChainDB(ctx context.Context, client rpcutils.BlockFetche
 		_, err = pgb.db.Exec(`CREATE INDEX IF NOT EXISTS idx_addresses_vinvout_id_tmp ` +
 			`ON addresses(tx_vin_vout_row_id)`)
 		if err != nil {
+			log.Infof("Error: %w", err)
 			return lastBlock, err
 		}
 
@@ -150,6 +157,7 @@ func (pgb *ChainDB) SyncChainDB(ctx context.Context, client rpcutils.BlockFetche
 	if ibdComplete && (reindexing || updateAllAddresses) {
 		// Set meta.ibd_complete = FALSE.
 		if err = setIBDComplete(pgb.db, false); err != nil {
+			log.Infof("failed to set meta.ibd_complete: %w", err)
 			return nodeHeight, fmt.Errorf("failed to set meta.ibd_complete: %w", err)
 		}
 	}
@@ -243,6 +251,7 @@ func (pgb *ChainDB) SyncChainDB(ctx context.Context, client rpcutils.BlockFetche
 			// Check for quit signal.
 			select {
 			case <-ctx.Done():
+				log.Infof("sync cancelled at height %d", ib)
 				return ib - 1, fmt.Errorf("sync cancelled at height %d", ib)
 			default:
 			}
@@ -254,6 +263,7 @@ func (pgb *ChainDB) SyncChainDB(ctx context.Context, client rpcutils.BlockFetche
 				} else {
 					_, nodeHeight, err = client.GetBestBlock(ctx)
 					if err != nil {
+						log.Infof("GetBestBlock failed: %w", err)
 						return ib, fmt.Errorf("GetBestBlock failed: %w", err)
 					}
 					endRangeBlock := rescanLogBlockChunk * (1 + (ib-1)/rescanLogBlockChunk)
