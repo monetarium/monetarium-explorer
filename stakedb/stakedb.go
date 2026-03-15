@@ -59,9 +59,11 @@ func (c *PoolInfoCache) Get(hash chainhash.Hash) (*apitypes.TicketPoolInfo, bool
 
 // Set stores the ticket pool info for the given hash in the pool info cache.
 func (c *PoolInfoCache) Set(hash chainhash.Hash, p *apitypes.TicketPoolInfo) {
+	log.Debugf("PoolInfoCache.Set: %v", hash)
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
 	c.poolInfo[hash] = p
+	log.Debugf("PoolInfoCache.Set poolInfo: %v", c.poolInfo)
 	if len(c.expireQueue)+1 >= c.maxSize {
 		expireHash := c.expireQueue[0]
 		c.expireQueue = c.expireQueue[1:]
@@ -358,6 +360,7 @@ func (db *StakeDatabase) PopulateLiveTicketCache() error {
 			result: db.NodeClient.GetRawTransactionPromise(context.TODO(), &liveTickets[i]),
 			ticket: liveTickets[i],
 		})
+		log.Debugf("PopulateLiveTicketCache: %v", i)
 	}
 
 	// Reset ticket cache.
@@ -378,6 +381,7 @@ func (db *StakeDatabase) PopulateLiveTicketCache() error {
 		}
 
 		value := ticketTx.MsgTx().TxOut[0].Value
+		log.Debugf("PopulateLiveTicketCache: %v", value)
 		db.poolValue += value
 		db.liveTicketCache[p.ticket] = value
 	}
@@ -531,6 +535,7 @@ func (db *StakeDatabase) ConnectBlockHash(hash *chainhash.Hash) (*dcrutil.Block,
 // which those tickets would be found, and passes them to connectBlock.
 func (db *StakeDatabase) ConnectBlock(block *dcrutil.Block) error {
 	height := block.Height()
+	log.Debugf("ConnectBlock height: %v", height)
 	maturingHeight := height - int64(db.params.TicketMaturity)
 
 	var maturingTickets []chainhash.Hash
@@ -639,6 +644,7 @@ func (db *StakeDatabase) connectBlock(block *dcrutil.Block, spent []chainhash.Ha
 
 // applyDiff updates liveTicketCache and poolValue for the given PoolDiff.
 func (db *StakeDatabase) applyDiff(poolDiff PoolDiff, inVals []int64) {
+	log.Debugf("StakeDatabase.applyDiff: %v", poolDiff)
 	db.liveTicketMtx.Lock()
 	for i, hash := range poolDiff.In {
 		_, ok := db.liveTicketCache[hash]
@@ -687,6 +693,7 @@ func (db *StakeDatabase) undoDiff(poolDiff PoolDiff) {
 // SetPoolInfo stores the ticket pool info for the given hash in the pool info
 // cache.
 func (db *StakeDatabase) SetPoolInfo(blockHash chainhash.Hash, tpi *apitypes.TicketPoolInfo) {
+	log.Debugf("StakeDatabase.SetPoolInfo: %v", blockHash)
 	db.poolInfo.Set(blockHash, tpi)
 }
 

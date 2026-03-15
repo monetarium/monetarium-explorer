@@ -543,6 +543,7 @@ func NewChainDB(ctx context.Context, cfg *ChainDBCfg, stakeDB *stakedb.StakeData
 	params := cfg.Params
 
 	// Perform any necessary database schema upgrades.
+	log.Debug("Perform any necessary database schema upgrades.")
 	dbVer, compatAction, err := versionCheck(db)
 	switch err {
 	case nil:
@@ -590,6 +591,7 @@ func NewChainDB(ctx context.Context, cfg *ChainDBCfg, stakeDB *stakedb.StakeData
 	// Get the best block height from the blocks table.
 	bestHeight, bestHash, err := retrieveBestBlock(ctx, db)
 	if err != nil {
+		log.Errorf("retrieveBestBlock: %w", err)
 		return nil, fmt.Errorf("retrieveBestBlock: %w", err)
 	}
 	// NOTE: Once legacy versioned tables are no longer in use, use the height
@@ -602,6 +604,7 @@ func NewChainDB(ctx context.Context, cfg *ChainDBCfg, stakeDB *stakedb.StakeData
 	// table's best block height. Also purge if the hashes do not match.
 	dbHash, dbHeightInit, err := dbBestBlock(ctx, db)
 	if err != nil {
+		log.Errorf("dbBestBlock: %w", err)
 		return nil, fmt.Errorf("dbBestBlock: %w", err)
 	}
 
@@ -1078,6 +1081,7 @@ func (pgb *ChainDB) HeightHashDBLegacy(ctx context.Context) (uint64, string, err
 
 // Height is a getter for ChainDB.bestBlock.height.
 func (pgb *ChainDB) Height() int64 {
+	log.Debugf("Height: %#v", pgb.bestBlock)
 	return pgb.bestBlock.Height()
 }
 
@@ -1118,6 +1122,7 @@ func (pgb *ChainDB) BestBlock() (*chainhash.Hash, int64) {
 	pgb.bestBlock.mtx.RLock()
 	defer pgb.bestBlock.mtx.RUnlock()
 	hash := chainhash.Hash(pgb.bestBlock.hash)
+	log.Debugf("BestBlock: %v", hash)
 	return &hash, pgb.bestBlock.height
 }
 
@@ -1235,6 +1240,7 @@ func (pgb *ChainDB) SpendingTransaction(ctx context.Context, fundingTxID string,
 // indexes in the block, their tree, and an error value.
 func (pgb *ChainDB) BlockTransactions(ctx context.Context, blockHash string) ([]string, []uint32, []int8, error) {
 	ch, err := chainHashFromStr(blockHash)
+	log.Debugf("BlockTransactions: %v", blockHash)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -1264,6 +1270,7 @@ func (pgb *ChainDB) Transaction(ctx context.Context, txHash string) ([]*dbtypes.
 // BlockMissedVotes retrieves the ticket IDs for all missed votes in the
 // specified block, and an error value.
 func (pgb *ChainDB) BlockMissedVotes(ctx context.Context, blockHash string) ([]string, error) {
+	log.Debugf("BlockMissedVotes: %v", blockHash)
 	ch, err := chainHashFromStr(blockHash)
 	if err != nil {
 		return nil, err
@@ -1311,6 +1318,7 @@ func (pgb *ChainDB) TicketMiss(ctx context.Context, ticketHash string) (string, 
 	ctx, cancel := context.WithTimeout(ctx, pgb.queryTimeout)
 	defer cancel()
 	blockHash, blockHeight, err := retrieveMissForTicket(ctx, pgb.db, ch)
+	log.Debugf("TicketsMiss: %v", blockHash)
 	return blockHash.String(), blockHeight, pgb.replaceCancelError(err)
 }
 
@@ -1372,6 +1380,7 @@ func (pgb *ChainDB) TransactionBlock(ctx context.Context, txID string) (string, 
 	ctx, cancel := context.WithTimeout(ctx, pgb.queryTimeout)
 	defer cancel()
 	_, blockHash, blockInd, tree, err := retrieveTxByHash(ctx, pgb.db, ch)
+	log.Debugf("TransactionBlock: %v", blockHash)
 	return blockHash.String(), blockInd, tree, pgb.replaceCancelError(err)
 }
 
@@ -2777,6 +2786,7 @@ func (pgb *ChainDB) AddressTransactionDetails(ctx context.Context, addr string, 
 // is "lockedIn" or "activated"), Activated is set to the height at which the
 // rule change will take(or took) place.
 func (pgb *ChainDB) UpdateChainState(blockChainInfo *chainjson.GetBlockChainInfoResult) {
+	log.Debugf("UpdateChainState: %v", blockChainInfo)
 	if pgb == nil {
 		return
 	}
@@ -2788,6 +2798,7 @@ func (pgb *ChainDB) UpdateChainState(blockChainInfo *chainjson.GetBlockChainInfo
 	ruleChangeInterval := int64(pgb.chainParams.RuleChangeActivationInterval)
 
 	blockHash, _ := chainHashFromStr(blockChainInfo.BestBlockHash)
+	log.Debugf("UpdateChainState: %v", blockHash)
 
 	chainInfo := dbtypes.BlockChainData{
 		Chain:                  blockChainInfo.Chain,
@@ -3262,6 +3273,7 @@ func (pgb *ChainDB) PowerlessTickets(ctx context.Context) (*apitypes.PowerlessTi
 func (pgb *ChainDB) setVinsMainchainByBlock(blockHash dbtypes.ChainHash) (int64, []dbtypes.UInt64Array, []dbtypes.UInt64Array, error) {
 	// The queries in this function should not timeout or (probably) canceled,
 	// so use a background context.
+	log.Debugf("setVinsMainchainByBlock: %v", blockHash)
 	ctx := context.Background()
 
 	// Get vins DB IDs from the transactions table, for each tx in the block.
@@ -3467,6 +3479,7 @@ func (pgb *ChainDB) StoreBlock(msgBlock *wire.MsgBlock, isValid, isMainchain,
 	chainWork string) (numVins int64, numVouts int64, numAddresses int64, err error) {
 
 	blockHash := msgBlock.BlockHash()
+	log.Debugf("StoreBlock: %v", blockHash)
 
 	// winningTickets is only set during initial chain sync.
 	// Retrieve it from the stakeDB.
@@ -3685,6 +3698,7 @@ func (pgb *ChainDB) updateLastBlock(msgBlock *wire.MsgBlock, isMainchain bool) e
 	}
 
 	blockHash := dbtypes.ChainHash(msgBlock.Header.BlockHash())
+	log.Debugf("updateLastBlock: %v", blockHash)
 
 	// Ensure previous block has the same main/sidechain status. If the
 	// current block being added is side chain, do not invalidate the
@@ -4751,10 +4765,12 @@ func (pgb *ChainDB) GetPoolValAndSizeRange(ctx context.Context, idx0, idx1 int) 
 // ChargePoolInfoCache prepares the stakeDB by querying the database for block
 // info.
 func (pgb *ChainDB) ChargePoolInfoCache(startHeight int64) error {
+	log.Debugf("ChargePoolInfoCache: %v", startHeight)
 	if startHeight < 0 {
 		startHeight = 0
 	}
 	endHeight := pgb.Height()
+	log.Debugf("ChargePoolInfoCache: %v", endHeight)
 	if startHeight > endHeight {
 		log.Debug("No pool info to load into cache")
 		return nil
@@ -4900,6 +4916,7 @@ func (pgb *ChainDB) CurrentCoinSupply(ctx context.Context) (supply *apitypes.Coi
 // string.
 func (pgb *ChainDB) GetBlockByHash(ctx context.Context, hash string) (*wire.MsgBlock, error) {
 	blockHash, err := chainhash.NewHashFromStr(hash)
+	log.Debugf("GetBlockByHash: %v", blockHash)
 	if err != nil {
 		log.Errorf("Invalid block hash %s", hash)
 		return nil, err
@@ -4917,6 +4934,7 @@ func (pgb *ChainDB) GetHeader(idx int) *chainjson.GetBlockHeaderVerboseResult {
 // a given block hash.
 func (pgb *ChainDB) GetBlockHeaderByHash(ctx context.Context, hash string) (*wire.BlockHeader, error) {
 	blockHash, err := chainhash.NewHashFromStr(hash)
+	log.Debugf("GetBlockHeaderByHash: %v", blockHash)
 	if err != nil {
 		log.Errorf("Invalid block hash %s", hash)
 		return nil, err
@@ -5066,6 +5084,7 @@ func (pgb *ChainDB) GetVoteVersionInfo(ctx context.Context, ver uint32) (*chainj
 // stake version information and individual vote version information starting at the
 // given block and for count-1 blocks prior.
 func (pgb *ChainDB) GetStakeVersions(ctx context.Context, blockHash string, count int32) (*chainjson.GetStakeVersionsResult, error) {
+	log.Debugf("GetStakeVersions: %v", blockHash)
 	return pgb.Client.GetStakeVersions(ctx, blockHash, count)
 }
 
@@ -6139,6 +6158,7 @@ func (pgb *ChainDB) txWithTicketPrice(ctx context.Context, txhash *chainhash.Has
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	blockHash, _, err := pgb.Client.GetBestBlock(ctx)
+	log.Debugf("txWithTicketPrice: %v", blockHash)
 	if err != nil {
 		return nil, 0, fmt.Errorf("GetBestBlock failed: %w", err)
 	}

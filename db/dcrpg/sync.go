@@ -32,6 +32,7 @@ const (
 func (pgb *ChainDB) SyncChainDB(ctx context.Context, client rpcutils.BlockFetcher,
 	updateAllAddresses, newIndexes bool, updateExplorer chan *chainhash.Hash,
 	barLoad chan *dbtypes.ProgressBarLoad) (int64, error) {
+	log.Debug("Start SyncChainDB")
 	// Note that we are doing a batch blockchain sync.
 	pgb.InBatchSync = true
 	defer func() { pgb.InBatchSync = false }()
@@ -45,6 +46,7 @@ func (pgb *ChainDB) SyncChainDB(ctx context.Context, client rpcutils.BlockFetche
 
 	// Retrieve the best block in the database from the meta table.
 	lastBlock, err := pgb.HeightDB(ctx)
+	log.Debugf("SyncChainDB lastBlock: %v", lastBlock)
 	if err != nil {
 		log.Infof("RetrieveBestBlockHeight: %w\n", err)
 		return -1, fmt.Errorf("RetrieveBestBlockHeight: %w", err)
@@ -60,6 +62,7 @@ func (pgb *ChainDB) SyncChainDB(ctx context.Context, client rpcutils.BlockFetche
 
 	// See if initial sync (initial block download) was previously completed.
 	ibdComplete, err := ibdComplete(pgb.db)
+	log.Debugf("SyncChainDB ibdComplete: %v", ibdComplete)
 	if err != nil {
 		log.Infof("IBDComplete failed: %w\n", err)
 		return lastBlock, fmt.Errorf("IBDComplete failed: %w", err)
@@ -68,7 +71,9 @@ func (pgb *ChainDB) SyncChainDB(ctx context.Context, client rpcutils.BlockFetche
 	// Check and report heights of the DBs. dbHeight is the lowest of the
 	// heights, and may be -1 with an empty DB.
 	stakeDBHeight := int64(pgb.stakeDB.Height())
+	log.Debugf("SyncChain stakeDBHeight: %v", stakeDBHeight)
 	if lastBlock < -1 {
+	        log.Debug("invalid starting height")
 		panic("invalid starting height")
 	}
 
@@ -120,6 +125,7 @@ func (pgb *ChainDB) SyncChainDB(ctx context.Context, client rpcutils.BlockFetche
 		log.Infof("UTXO cache is ready.")
 	}
 
+	log.Debugf("SyncChainDB reindexing: %v", reindexing)
 	if reindexing {
 		// Remove any existing indexes.
 		log.Info("Large bulk load: Removing indexes and disabling duplicate checks.")
@@ -151,6 +157,7 @@ func (pgb *ChainDB) SyncChainDB(ctx context.Context, client rpcutils.BlockFetche
 
 	// When reindexing or adding a large amount of data, ANALYZE tables.
 	requireAnalyze := reindexing || nodeHeight-lastBlock > 10000
+	log.Debugf("SyncChainDB requireAnalyze: %v", requireAnalyze)
 
 	// If reindexing or batch table data updates are required, set the
 	// ibd_complete flag to false if it is not already false.
@@ -171,11 +178,13 @@ func (pgb *ChainDB) SyncChainDB(ctx context.Context, client rpcutils.BlockFetche
 	if updateAllAddresses {
 		stages++ // addresses table spending info update
 	}
+	log.Infof("SyncChainDB stages: %w", stages)
 
 	// Safely send sync status updates on barLoad channel, and set the channel
 	// to nil if the buffer is full.
 	sendProgressUpdate := func(p *dbtypes.ProgressBarLoad) {
 		if barLoad == nil {
+	                log.Debugf("SyncChainDB barLoad: %v", barLoad)
 			return
 		}
 		select {
@@ -190,6 +199,7 @@ func (pgb *ChainDB) SyncChainDB(ctx context.Context, client rpcutils.BlockFetche
 	// to nil if the buffer is full.
 	sendPageData := func(hash *chainhash.Hash) {
 		if updateExplorer == nil {
+	                log.Debugf("SyncChainDB updateExplorer: %v", updateExplorer)
 			return
 		}
 		select {
