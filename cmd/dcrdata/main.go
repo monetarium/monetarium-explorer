@@ -383,17 +383,20 @@ func _main(ctx context.Context) error {
 	log.Debugf("Setting ticket pool cache capacity to %d blocks", tpcSize)
 	err = stakeDB.SetPoolCacheCapacity(tpcSize)
 	if err != nil {
+		log.Errorf("Setting ticket pool cache capacity: %v", err)
 		return err
 	}
 
 	// Charge stakedb pool info cache, including previous PG blocks.
 	if err = chainDB.ChargePoolInfoCache(heightDB - 2); err != nil {
+		log.Errorf("Failed to charge pool info cache: %v", err)
 		return fmt.Errorf("Failed to charge pool info cache: %v", err)
 	}
 
 	// Block data collector. Needs a StakeDatabase too.
 	collector := blockdata.NewCollector(dcrdClient, activeChain, stakeDB)
 	if collector == nil {
+		log.Errorf("Failed to create block data collector")
 		return fmt.Errorf("Failed to create block data collector")
 	}
 
