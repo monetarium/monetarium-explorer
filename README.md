@@ -64,10 +64,10 @@ modern javascript features, as well as SCSS for styling.
 
 Always run the Current release or on the Current stable branch. Do not use `master` in production.
 
-|             | Series  | Branch       | Latest release tag | `dcrd` RPC server version required |
-| ----------- | ------- | ------------ | ------------------ | ---------------------------------- |
-| Development | 6.1     | `master`     | N/A                | ^7.0.0 (dcrd v1.7 release)         |
-| Current     | 6.0     | `6.0-stable` | `release-v6.0`     | ^6.2.0 (dcrd v1.6 release)         |
+|             | Series | Branch       | Latest release tag | `dcrd` RPC server version required |
+| ----------- | ------ | ------------ | ------------------ | ---------------------------------- |
+| Development | 6.1    | `master`     | N/A                | ^7.0.0 (dcrd v1.7 release)         |
+| Current     | 6.0    | `6.0-stable` | `release-v6.0`     | ^6.2.0 (dcrd v1.6 release)         |
 
 ## Repository Overview
 
@@ -228,10 +228,10 @@ script to mostly automate the build steps.
 
 ### Setting build version flags
 
-By default, the version string will be postfixed with "-pre+dev".  For example,
-`dcrdata version 5.1.0-pre+dev (Go version go1.12.7)`.  However, it may be
+By default, the version string will be postfixed with "-pre+dev". For example,
+`dcrdata version 5.1.0-pre+dev (Go version go1.12.7)`. However, it may be
 desirable to set the "pre" and "dev" values to different strings, such as
-"beta" or the actual commit hash.  To set these values, build with the
+"beta" or the actual commit hash. To set these values, build with the
 `-ldflags` switch as follows:
 
 ```sh
@@ -301,7 +301,6 @@ automatic migration. The tables must be rebuilt from scratch:
 
 2. Delete the dcrdata data folder (i.e. corresponding to the `datadir` setting).
    By default, `datadir` is in `{appdata}/data`:
-
    - Linux: `~/.dcrdata/data`
    - Mac: `~/Library/Application Support/Dcrdata/data`
    - Windows: `C:\Users\<your-username>\AppData\Local\Dcrdata\data` (`%localappdata%\Dcrdata\data`)
@@ -323,8 +322,8 @@ tool for determining good settings for your system is called
 subtract 1.5-2GB from your system RAM so dcrdata itself will have plenty of
 memory. **DO NOT** simply use this file in place of your existing
 postgresql.conf. **DO NOT** simply copy and paste these settings into the
-existing postgresql.conf. It is necessary to *edit the existing
-postgresql.conf*, reviewing all the settings to ensure the same configuration
+existing postgresql.conf. It is necessary to _edit the existing
+postgresql.conf_, reviewing all the settings to ensure the same configuration
 parameters are not set in two different places in the file (postgres will not
 complain).
 
@@ -569,9 +568,9 @@ the `/api` path prefix.
 | Verbose transaction result for last <br> `N` transactions, skipping `M` | `/address/A/count/N/skip/M/raw` | `types.AddressTxRaw`  |
 | Transaction inputs and outputs as a CSV formatted file.                 | `/download/address/io/A`        | CSV file              |
 
-| Treasury                                                          | Path                  | Type                        |
-| ----------------------------------------------------------------- | --------------------- | --------------------------- |
-| Current treasury info (e.g. spendable/immature/spent balance)     | `/treasury/balance`   | `dbtypes.TreasuryBalance`   |
+| Treasury                                                      | Path                | Type                      |
+| ------------------------------------------------------------- | ------------------- | ------------------------- |
+| Current treasury info (e.g. spendable/immature/spent balance) | `/treasury/balance` | `dbtypes.TreasuryBalance` |
 
 | Stake Difficulty (Ticket Price)        | Path                    | Type                               |
 | -------------------------------------- | ----------------------- | ---------------------------------- |
@@ -614,23 +613,23 @@ This may make parsing more efficient for the client.
 | Detailed ticket list (fee, hash, size, age, etc.) | `/mempool/sstx/details`   | `apitypes.MempoolTicketDetails` |
 | Detailed ticket list (N highest fee rates)        | `/mempool/sstx/details/N` | `apitypes.MempoolTicketDetails` |
 
-| Exchanges                         | Path                | Type                         |
-| ----------------------------------| --------------------| ---------------------------- |
-| Exchange data summary             | `/exchanges`        | `exchanges.ExchangeBotState` |
-| List of available currency codes  | `/exchanges/codes`  | `[]string`                   |
+| Exchanges                        | Path               | Type                         |
+| -------------------------------- | ------------------ | ---------------------------- |
+| Exchange data summary            | `/exchanges`       | `exchanges.ExchangeBotState` |
+| List of available currency codes | `/exchanges/codes` | `[]string`                   |
 
 Exchange monitoring is off by default. Server must be started with
 `--exchange-monitor` to enable exchange data.
 The server will set a default currency code. To use a different code, pass URL
 parameter `?code=[code]`. For example, `/exchanges?code=EUR`.
 
-| Other                           | Path                                          | Type                                    |
-| ------------------------------- | --------------------------------------------- | --------------------------------------- |
-| Status                          | `/status`                                     | `types.Status`                          |
-| Health (HTTP 200 or 503)        | `/status/happy`                               | `types.Happy`                           |
-| Coin Supply                     | `/supply`                                     | `types.CoinSupply`                      |
-| Coin Supply Circulating (Mined) | `/supply/circulating?dcr=[true\|false]`       | `int` (default) or `float` (`dcr=true`) |
-| Endpoint list (always indented) | `/list`                                       | `[]string`                              |
+| Other                           | Path                                    | Type                                    |
+| ------------------------------- | --------------------------------------- | --------------------------------------- |
+| Status                          | `/status`                               | `types.Status`                          |
+| Health (HTTP 200 or 503)        | `/status/happy`                         | `types.Happy`                           |
+| Coin Supply                     | `/supply`                               | `types.CoinSupply`                      |
+| Coin Supply Circulating (Mined) | `/supply/circulating?dcr=[true\|false]` | `int` (default) or `float` (`dcr=true`) |
+| Endpoint list (always indented) | `/list`                                 | `[]string`                              |
 
 All JSON endpoints accept the URL query `indent=[true|false]`. For example,
 `/stake/diff?indent=true`. By default, indentation is off. The characters to use
@@ -796,3 +795,9 @@ dcrdata channel!
 
 This project is licensed under the ISC License. See the [LICENSE](LICENSE) file
 for details.
+
+---
+
+**Upstream Reference**
+This project is a derivative of [decred/dcrdata](https://github.com/decred/dcrdata).
+Base commit: `[9c02e7116ede87b57ee6189c5dc3c22d48937a3a]`
