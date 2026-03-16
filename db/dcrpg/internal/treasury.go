@@ -8,7 +8,7 @@ const (
 	CreateTreasuryTable = `CREATE TABLE IF NOT EXISTS treasury (
 		tx_hash BYTEA,
 		tx_type INT4,
-		value INT8,
+		value NUMERIC(32,8),
 		block_hash BYTEA,
 		block_height INT8,
 		block_time TIMESTAMPTZ NOT NULL,

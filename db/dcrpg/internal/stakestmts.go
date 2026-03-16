@@ -15,8 +15,8 @@ const (
 		is_multisig BOOLEAN, -- historically false always, but actually indicates is_p2sh
 		is_split BOOLEAN,
 		num_inputs INT2,
-		price FLOAT8,
-		fee FLOAT8,
+		price NUMERIC(32,8),
+		fee NUMERIC(32,8),
 		spend_type INT2,
 		pool_status INT2,
 		is_mainchain BOOLEAN,
@@ -169,8 +169,8 @@ const (
 		block_valid BOOLEAN,
 		ticket_hash BYTEA,
 		ticket_tx_db_id INT8,
-		ticket_price FLOAT8,
-		vote_reward FLOAT8,
+		ticket_price NUMERIC(32,8),
+		vote_reward NUMERIC(32,8),
 		is_mainchain BOOLEAN,
 		block_time TIMESTAMPTZ
 	);`

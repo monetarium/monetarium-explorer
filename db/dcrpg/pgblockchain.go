@@ -741,8 +741,10 @@ func NewChainDB(ctx context.Context, cfg *ChainDBCfg, stakeDB *stakedb.StakeData
 	if client != nil {
 		bci, err := chainDB.Client.GetBlockChainInfo(ctx)
 		if err != nil {
+			log.Errorf("failed to fetch the latest blockchain info")
 			return nil, fmt.Errorf("failed to fetch the latest blockchain info")
 		}
+		log.Debug("NewChainDB update state: %v", bci)
 		chainDB.UpdateChainState(bci)
 	}
 
@@ -2786,7 +2788,7 @@ func (pgb *ChainDB) AddressTransactionDetails(ctx context.Context, addr string, 
 // is "lockedIn" or "activated"), Activated is set to the height at which the
 // rule change will take(or took) place.
 func (pgb *ChainDB) UpdateChainState(blockChainInfo *chainjson.GetBlockChainInfoResult) {
-	log.Debugf("UpdateChainState: %v", blockChainInfo)
+	log.Debugf("UpdateChainState: %#v", blockChainInfo)
 	if pgb == nil {
 		return
 	}

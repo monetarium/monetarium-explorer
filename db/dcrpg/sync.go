@@ -39,6 +39,7 @@ func (pgb *ChainDB) SyncChainDB(ctx context.Context, client rpcutils.BlockFetche
 
 	// Get the chain servers's best block.
 	_, nodeHeight, err := client.GetBestBlock(ctx)
+	log.Debugf("SyncChainDB nodeHeight: %v", nodeHeight)
 	if err != nil {
 		log.Infof("GetBestBlock failed: %w\n", err)
 		return -1, fmt.Errorf("GetBestBlock failed: %w", err)
@@ -343,7 +344,7 @@ func (pgb *ChainDB) SyncChainDB(ctx context.Context, client rpcutils.BlockFetche
 			}
 
 			// Store data from this block in the database.
-			isValid, isMainchain := true, true
+			isValid, isMainchain := true, false
 			// updateExisting is ignored if dupCheck=false, but set it to true since
 			// SyncChainDB is processing main chain blocks.
 			updateExisting := true

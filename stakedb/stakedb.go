@@ -63,7 +63,6 @@ func (c *PoolInfoCache) Set(hash chainhash.Hash, p *apitypes.TicketPoolInfo) {
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
 	c.poolInfo[hash] = p
-	log.Debugf("PoolInfoCache.Set poolInfo: %v", c.poolInfo)
 	if len(c.expireQueue)+1 >= c.maxSize {
 		expireHash := c.expireQueue[0]
 		c.expireQueue = c.expireQueue[1:]
@@ -258,6 +257,7 @@ func NewStakeDatabase(client NodeClient, params *chaincfg.Params,
 	height := int64(-1)
 	// Create DB folder
 	err := os.MkdirAll(dataDir, 0700)
+	log.Debugf("NewStakeDatabase os.Mkdir: %v", dataDir)
 	if err != nil {
 		return nil, height, fmt.Errorf("unable to create DB folder: %v", err)
 	}
