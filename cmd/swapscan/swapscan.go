@@ -16,8 +16,8 @@ import (
 	"github.com/monetarium/monetarium-node/dcrutil"
 	"github.com/monetarium/monetarium-node/rpcclient"
 
-	"github.com/decred/dcrdata/v8/rpcutils"
-	"github.com/decred/dcrdata/v8/txhelpers"
+	"github.com/monetarium/monetarium-explorer/rpcutils"
+	"github.com/monetarium/monetarium-explorer/txhelpers"
 	"github.com/decred/slog"
 )
 

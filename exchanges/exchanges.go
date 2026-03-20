@@ -22,7 +22,7 @@ import (
 	"decred.org/dcrdex/dex"
 	dexcandles "decred.org/dcrdex/dex/candles"
 	"decred.org/dcrdex/dex/msgjson"
-	dcrrates "github.com/decred/dcrdata/exchanges/v3/ratesproto"
+	dcrrates "github.com/monetarium/monetarium-explorer/exchanges/ratesproto"
 )
 
 // Tokens. Used to identify the exchange.

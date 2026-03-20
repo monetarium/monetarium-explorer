@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"github.com/monetarium/monetarium-node/chaincfg/chainhash"
-	"github.com/decred/dcrdata/v8/db/dbtypes"
+	"github.com/monetarium/monetarium-explorer/db/dbtypes"
 )
 
 const (

@@ -12,8 +12,8 @@ import (
 	"github.com/monetarium/monetarium-node/dcrutil"
 	chainjson "github.com/monetarium/monetarium-node/rpc/jsonrpc/types"
 
-	apitypes "github.com/decred/dcrdata/v8/api/types"
-	"github.com/decred/dcrdata/v8/txhelpers"
+	apitypes "github.com/monetarium/monetarium-explorer/api/types"
+	"github.com/monetarium/monetarium-explorer/txhelpers"
 )
 
 // TxConverter converts dcrd-tx to insight tx

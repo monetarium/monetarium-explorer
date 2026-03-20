@@ -1,4 +1,4 @@
-module github.com/decred/dcrdata/exchanges/v3
+module github.com/monetarium/monetarium-explorer/exchanges
 
 go 1.22
 

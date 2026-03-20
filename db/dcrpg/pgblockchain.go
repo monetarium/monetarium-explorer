@@ -30,17 +30,17 @@ import (
 	"github.com/monetarium/monetarium-node/wire"
 	humanize "github.com/dustin/go-humanize"
 
-	"github.com/decred/dcrdata/db/dcrpg/v8/internal"
-	apitypes "github.com/decred/dcrdata/v8/api/types"
-	"github.com/decred/dcrdata/v8/blockdata"
-	"github.com/decred/dcrdata/v8/db/cache"
-	"github.com/decred/dcrdata/v8/db/dbtypes"
-	exptypes "github.com/decred/dcrdata/v8/explorer/types"
-	"github.com/decred/dcrdata/v8/mempool"
-	"github.com/decred/dcrdata/v8/rpcutils"
-	"github.com/decred/dcrdata/v8/stakedb"
-	"github.com/decred/dcrdata/v8/trylock"
-	"github.com/decred/dcrdata/v8/txhelpers"
+	"github.com/monetarium/monetarium-explorer/db/dcrpg/internal"
+	apitypes "github.com/monetarium/monetarium-explorer/api/types"
+	"github.com/monetarium/monetarium-explorer/blockdata"
+	"github.com/monetarium/monetarium-explorer/db/cache"
+	"github.com/monetarium/monetarium-explorer/db/dbtypes"
+	exptypes "github.com/monetarium/monetarium-explorer/explorer/types"
+	"github.com/monetarium/monetarium-explorer/mempool"
+	"github.com/monetarium/monetarium-explorer/rpcutils"
+	"github.com/monetarium/monetarium-explorer/stakedb"
+	"github.com/monetarium/monetarium-explorer/trylock"
+	"github.com/monetarium/monetarium-explorer/txhelpers"
 )
 
 var (

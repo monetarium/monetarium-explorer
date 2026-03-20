@@ -13,22 +13,22 @@ import (
 	"github.com/decred/slog"
 	"github.com/jrick/logrotate/rotator"
 
-	"github.com/decred/dcrdata/cmd/dcrdata/internal/api"
-	"github.com/decred/dcrdata/cmd/dcrdata/internal/api/insight"
-	"github.com/decred/dcrdata/cmd/dcrdata/internal/explorer"
-	"github.com/decred/dcrdata/cmd/dcrdata/internal/middleware"
-	notify "github.com/decred/dcrdata/cmd/dcrdata/internal/notification"
+	"github.com/monetarium/monetarium-explorer/cmd/dcrdata/internal/api"
+	"github.com/monetarium/monetarium-explorer/cmd/dcrdata/internal/api/insight"
+	"github.com/monetarium/monetarium-explorer/cmd/dcrdata/internal/explorer"
+	"github.com/monetarium/monetarium-explorer/cmd/dcrdata/internal/middleware"
+	notify "github.com/monetarium/monetarium-explorer/cmd/dcrdata/internal/notification"
 
-	"github.com/decred/dcrdata/db/dcrpg/v8"
-	"github.com/decred/dcrdata/exchanges/v3"
-	"github.com/decred/dcrdata/gov/v6/agendas"
-	"github.com/decred/dcrdata/gov/v6/politeia"
+	"github.com/monetarium/monetarium-explorer/db/dcrpg"
+	"github.com/monetarium/monetarium-explorer/exchanges"
+	"github.com/monetarium/monetarium-explorer/gov/agendas"
+	"github.com/monetarium/monetarium-explorer/gov/politeia"
 
-	"github.com/decred/dcrdata/v8/blockdata"
-	"github.com/decred/dcrdata/v8/mempool"
-	"github.com/decred/dcrdata/v8/pubsub"
-	"github.com/decred/dcrdata/v8/rpcutils"
-	"github.com/decred/dcrdata/v8/stakedb"
+	"github.com/monetarium/monetarium-explorer/blockdata"
+	"github.com/monetarium/monetarium-explorer/mempool"
+	"github.com/monetarium/monetarium-explorer/pubsub"
+	"github.com/monetarium/monetarium-explorer/rpcutils"
+	"github.com/monetarium/monetarium-explorer/stakedb"
 )
 
 // logWriter implements an io.Writer that outputs to both standard output and

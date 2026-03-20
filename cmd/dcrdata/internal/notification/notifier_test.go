@@ -10,7 +10,7 @@ import (
 	"github.com/monetarium/monetarium-node/chaincfg/chainhash"
 	chainjson "github.com/monetarium/monetarium-node/rpc/jsonrpc/types"
 	"github.com/monetarium/monetarium-node/wire"
-	"github.com/decred/dcrdata/v8/txhelpers"
+	"github.com/monetarium/monetarium-explorer/txhelpers"
 )
 
 type dummyNode struct{}

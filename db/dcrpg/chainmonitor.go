@@ -11,7 +11,7 @@ import (
 
 	"github.com/monetarium/monetarium-node/chaincfg/chainhash"
 	"github.com/monetarium/monetarium-node/wire"
-	"github.com/decred/dcrdata/v8/txhelpers"
+	"github.com/monetarium/monetarium-explorer/txhelpers"
 )
 
 // ChainMonitor responds to block connection and chain reorganization.

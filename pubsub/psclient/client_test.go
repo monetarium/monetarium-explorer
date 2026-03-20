@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	pstypes "github.com/decred/dcrdata/v8/pubsub/types"
+	pstypes "github.com/monetarium/monetarium-explorer/pubsub/types"
 )
 
 var msgMempool5Latest = &pstypes.WebSocketMessage{

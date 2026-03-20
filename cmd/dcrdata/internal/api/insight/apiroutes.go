@@ -25,11 +25,11 @@ import (
 	chainjson "github.com/monetarium/monetarium-node/rpc/jsonrpc/types"
 	"github.com/monetarium/monetarium-node/rpcclient"
 
-	m "github.com/decred/dcrdata/cmd/dcrdata/internal/middleware"
+	m "github.com/monetarium/monetarium-explorer/cmd/dcrdata/internal/middleware"
 
-	apitypes "github.com/decred/dcrdata/v8/api/types"
-	"github.com/decred/dcrdata/v8/db/dbtypes"
-	"github.com/decred/dcrdata/v8/txhelpers"
+	apitypes "github.com/monetarium/monetarium-explorer/api/types"
+	"github.com/monetarium/monetarium-explorer/db/dbtypes"
+	"github.com/monetarium/monetarium-explorer/txhelpers"
 )
 
 type BlockDataSource interface {

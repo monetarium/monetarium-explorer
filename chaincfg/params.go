@@ -1,5 +1,5 @@
 // Copyright (c) 2014-2016 The btcsuite developers
-// Copyright (c) 2015-2025 The Decred developers
+// Copyright (c) 2015-2023 The Decred developers
 // Use of this source code is governed by an ISC
 // license that can be found in the LICENSE file.
 
@@ -8,16 +8,43 @@ package chaincfg
 import (
 	"bytes"
 	"encoding/hex"
+	"fmt"
 	"math/big"
 	"time"
 
 	"github.com/monetarium/monetarium-node/chaincfg/chainhash"
+	"github.com/monetarium/monetarium-node/cointype"
+	"github.com/monetarium/monetarium-node/dcrec/secp256k1"
 	"github.com/monetarium/monetarium-node/wire"
 )
 
 // bigOne is 1 represented as a big.Int.  It is defined here to avoid the
 // overhead of creating it multiple times.
 var bigOne = big.NewInt(1)
+
+// mustParseBigInt parses a decimal string as *big.Int, panicking on failure.
+// Used for configuring SKA amounts that exceed int64 (e.g., 900T * 1e18).
+func mustParseBigInt(s string) *big.Int {
+	v, ok := new(big.Int).SetString(s, 10)
+	if !ok {
+		panic("failed to parse big.Int: " + s)
+	}
+	return v
+}
+
+// bigIntSlice creates a []*big.Int from a slice of strings.
+// Used for configuring SKA emission amounts.
+func bigIntSlice(strs ...string) []*big.Int {
+	result := make([]*big.Int, len(strs))
+	for i, s := range strs {
+		result[i] = mustParseBigInt(s)
+	}
+	return result
+}
+
+// SKABurnScriptMarker is the ASCII marker used in SKA burn scripts to identify
+// them as burn outputs. This marker appears in the OP_RETURN data of burn scripts.
+var SKABurnScriptMarker = []byte("SKA_BURN")
 
 // Checkpoint identifies a known good point in the block chain.  Using
 // checkpoints allows a few optimizations for old blocks during initial download
@@ -174,10 +201,9 @@ const (
 	// defined in DCP0012.
 	VoteIDChangeSubsidySplitR2 = "changesubsidysplitr2"
 
-	// VoteIDMaxTreasurySpend is the vote ID for the agenda that changes the
-	// maximum expenditure policy of the treasury account to be limited to 4% of
-	// the total available treasury per month as defined in DCP0013.
-	VoteIDMaxTreasurySpend = "maxtreasuryspend"
+	// VoteIDActivateSKA2 is the vote ID for activating SKA-2 coin type for use
+	// in transactions.
+	VoteIDActivateSKA2 = "activateska2"
 )
 
 // ConsensusDeployment defines details related to a specific consensus rule
@@ -217,6 +243,82 @@ type TokenPayout struct {
 	Amount        int64
 }
 
+// SKACoinConfig defines the configuration for a specific SKA coin type.
+// This allows the network to support multiple SKA coin types (1-255)
+// with individual configurations for each.
+type SKACoinConfig struct {
+	// CoinType is the numeric identifier for this SKA coin type (1-255).
+	CoinType cointype.CoinType
+
+	// Name is the human-readable name for this SKA coin type.
+	Name string
+
+	// Symbol is the short symbol used to identify this SKA coin type.
+	Symbol string
+
+	// MaxSupply is the maximum number of atoms that can be emitted for
+	// this specific SKA coin type. Uses *big.Int because SKA amounts
+	// can exceed int64 (e.g., 900 trillion coins * 1e18 atoms/coin).
+	MaxSupply *big.Int
+
+	// AtomsPerCoin is the number of atoms per whole coin for this SKA type.
+	// Default is 1e18 (like Ethereum wei). Uses *big.Int for consistency.
+	AtomsPerCoin *big.Int
+
+	// EmissionHeight is the block height at which this SKA coin type
+	// was or will be initially emitted. Set to 0 for genesis emission.
+	EmissionHeight int32
+
+	// EmissionWindow is the number of blocks after EmissionHeight during
+	// which emission is allowed. If 0, emission is only allowed at the
+	// exact EmissionHeight block. Default is 4320 blocks (~30 days).
+	EmissionWindow int32
+
+	// Active indicates whether this SKA coin type is currently active
+	// and can be used in transactions.
+	Active bool
+
+	// Description provides additional information about this SKA coin type.
+	Description string
+
+	// EmissionAddresses are the governance-approved addresses that will
+	// receive the emitted SKA coins for this coin type.
+	EmissionAddresses []string
+
+	// EmissionAmounts are the corresponding amounts in atoms to be sent to each
+	// address in EmissionAddresses. Must have same length as EmissionAddresses.
+	// Uses []*big.Int because SKA amounts can exceed int64.
+	EmissionAmounts []*big.Int
+
+	// EmissionKey is the authorized public key for creating emission transactions
+	// for this specific SKA coin type. Only transactions signed by the corresponding
+	// private key are valid emissions.
+	EmissionKey *secp256k1.PublicKey
+
+	// MinRelayTxFee is the minimum fee rate for this SKA coin type (atoms/KB).
+	// Uses *big.Int to support fees > 9.22 SKA without int64 overflow.
+	MinRelayTxFee *big.Int
+
+	// MaxFeeMultiplier is the multiplier applied to MinRelayTxFee to determine
+	// the maximum allowed fee for transactions of this coin type. Default is 2500.
+	MaxFeeMultiplier int64
+}
+
+// IsActive returns true if this SKA coin type is active.
+// Implements cointype.SKACoinConfig interface.
+func (c *SKACoinConfig) IsActive() bool {
+	return c != nil && c.Active
+}
+
+// GetAtomsPerCoin returns the atoms per coin for this SKA type.
+// Returns cointype.AtomsPerSKACoin (1e18) if not explicitly configured.
+func (c *SKACoinConfig) GetAtomsPerCoin() *big.Int {
+	if c == nil || c.AtomsPerCoin == nil {
+		return cointype.AtomsPerSKACoin
+	}
+	return c.AtomsPerCoin
+}
+
 // DNSSeed identifies a DNS seed.
 //
 // Deprecated: This will be removed in the next major version bump.
@@ -232,6 +334,33 @@ type DNSSeed struct {
 // String returns the hostname of the DNS seed in human-readable form.
 func (d DNSSeed) String() string {
 	return d.Host
+}
+
+// SKAEmissionAuth represents cryptographic authorization for SKA emission.
+// This structure provides replay protection and ensures only authorized
+// entities can create SKA emission transactions.
+type SKAEmissionAuth struct {
+	// EmissionKey is the master public key authorized for this coin type emission
+	EmissionKey *secp256k1.PublicKey
+
+	// Signature is the ECDSA signature proving authorization
+	Signature []byte
+
+	// Nonce provides replay protection - must be unique per coin type
+	Nonce uint64
+
+	// CoinType specifies which SKA coin type this authorization covers (1-255)
+	CoinType cointype.CoinType
+
+	// Amount is the total amount authorized for emission.
+	// Uses *big.Int because SKA amounts can exceed int64.
+	Amount *big.Int
+
+	// Height is the target block height for this emission
+	Height int64
+
+	// Timestamp when this authorization was created
+	Timestamp int64
 }
 
 // Params defines a Decred network by its parameters.  These parameters may be
@@ -604,25 +733,35 @@ type Params struct {
 	// that define a single "expenditure window".
 	TreasuryExpenditureWindow uint64
 
-	// TreasuryExpenditurePolicy defines the number of previous expenditure
-	// windows to use when calculating the average expenditure of the treasury
-	// for an expenditure policy check.
-	//
-	// NOTE: This only applies to the treasury expenditure policy introduced by
-	// DCP0006.  Later iterations of the policy do not make use of it.
+	// TreasuryExpenditurePolicy is the number of previous
+	// TreasuryExpenditureWindows that defines how far back to calculate
+	// the average expenditure of the treasury for an expenditure policy
+	// check.
 	TreasuryExpenditurePolicy uint64
 
 	// TreasuryExpenditureBootstrap is the value to use as previous average
-	// expenditure when there are no treasury spends inside the entire window
-	// defined by TreasuryExpenditurePolicy.
-	//
-	// NOTE: This only applies to the treasury expenditure policy introduced by
-	// DCP0006.  Later iterations of the policy do not make use of it.
+	// expenditure when there are no treasury spends inside the entire
+	// window defined by TreasuryExpenditurePolicy.
 	TreasuryExpenditureBootstrap uint64
 
 	// seeders defines a list of seeders for the network that are used
 	// as one method to discover peers.
 	seeders []string
+
+	// -------------------------------------------------------------------------
+	// SKA (Skarb) dual-coin system parameters
+	// -------------------------------------------------------------------------
+
+	// SKACoins is a map of coin type to configuration for all supported
+	// SKA coin types in this network. This allows dynamic management of
+	// multiple SKA coin types. Fee configuration (MinRelayTxFee, MaxFeeMultiplier)
+	// is now per-coin-type within SKACoinConfig.
+	SKACoins map[cointype.CoinType]*SKACoinConfig
+
+	// InitialSKATypes defines which SKA coin types should be active at
+	// network genesis. Additional types can be activated later through
+	// governance or admin commands.
+	InitialSKATypes []cointype.CoinType
 }
 
 // HDPrivKeyVersion returns the hierarchical deterministic extended private key
@@ -761,47 +900,23 @@ func (p *Params) TicketExpiryBlocks() uint32 {
 	return p.TicketExpiry
 }
 
-// newHashFromStr converts the passed big-endian hex string into a
-// chainhash.Hash.  It only differs from the one available in chainhash in that
-// it panics on an error since it will only (and must only) be called with
-// hard-coded, and therefore known good, hashes.
-func newHashFromStr(hexStr string) *chainhash.Hash {
-	hash, err := chainhash.NewHashFromStr(hexStr)
-	if err != nil {
-		// Ordinarily I don't like panics in library code since it
-		// can take applications down without them having a chance to
-		// recover which is extremely annoying, however an exception is
-		// being made in this case because the only way this can panic
-		// is if there is an error in the hard-coded hashes.  Thus it
-		// will only ever potentially panic on init and therefore is
-		// 100% predictable.
-		panic(err)
-	}
-	return hash
-}
-
 // hexDecode decodes the passed hex string and returns the resulting bytes.  It
-// panics if an error occurs. This is only provided for the hard-coded constants
+// logs critical errors instead of panicking. This is only provided for the hard-coded constants
 // so errors in the source code can be detected. It will only (and must only) be
 // called with hard-coded values.
 func hexDecode(hexStr string) []byte {
 	b, err := hex.DecodeString(hexStr)
 	if err != nil {
+		fmt.Printf("CRITICAL: Invalid hardcoded hex string in chaincfg: %s, error: %v\n", hexStr, err)
 		panic(err)
 	}
 	return b
 }
 
-// hexToBigInt converts the passed hex string into a big integer and will panic
-// if there is an error.  This is only provided for the hard-coded constants so
-// errors in the source code can be detected. It will only (and must only) be
-// called with hard-coded values.
-func hexToBigInt(hexStr string) *big.Int {
-	val, ok := new(big.Int).SetString(hexStr, 16)
-	if !ok {
-		panic("failed to parse big integer from hex: " + hexStr)
-	}
-	return val
+// mustParseHex is an alias for hexDecode for consistency with emission key parsing.
+// It decodes the passed hex string and panics if an error occurs.
+func mustParseHex(hexStr string) []byte {
+	return hexDecode(hexStr)
 }
 
 // BlockOneSubsidy returns the total subsidy of block height 1 for the
@@ -849,4 +964,103 @@ func (p *Params) PiKeyExists(key []byte) bool {
 // Seeders returns the list of HTTP seeders.
 func (p *Params) Seeders() []string {
 	return p.seeders
+}
+
+// GetSKACoinConfig returns the configuration for the specified SKA coin type.
+// Returns nil if the coin type is not configured.
+func (p *Params) GetSKACoinConfig(coinType cointype.CoinType) *SKACoinConfig {
+	return p.SKACoins[coinType]
+}
+
+// IsSKACoinTypeActive returns true if the specified SKA coin type is
+// configured and active in this network.
+func (p *Params) IsSKACoinTypeActive(coinType cointype.CoinType) bool {
+	config := p.SKACoins[coinType]
+	return config != nil && config.Active
+}
+
+// GetActiveSKATypes returns a slice of all currently active SKA coin types.
+func (p *Params) GetActiveSKATypes() []cointype.CoinType {
+	var active []cointype.CoinType
+	for coinType, config := range p.SKACoins {
+		if config.Active {
+			active = append(active, coinType)
+		}
+	}
+	return active
+}
+
+// GetAllSKATypes returns a slice of all configured SKA coin types,
+// both active and inactive.
+func (p *Params) GetAllSKATypes() []cointype.CoinType {
+	var all []cointype.CoinType
+	for coinType := range p.SKACoins {
+		all = append(all, coinType)
+	}
+	return all
+}
+
+// GetSKAEmissionKey returns the authorized emission public key for the specified
+// coin type. Returns nil if no key is configured for this coin type.
+func (p *Params) GetSKAEmissionKey(coinType cointype.CoinType) *secp256k1.PublicKey {
+	config := p.GetSKACoinConfig(coinType)
+	if config == nil {
+		return nil
+	}
+	return config.EmissionKey
+}
+
+// IsSKAEmissionAuthorized returns true if the provided coin type has an
+// authorized emission key configured.
+func (p *Params) IsSKAEmissionAuthorized(coinType cointype.CoinType) bool {
+	return p.GetSKAEmissionKey(coinType) != nil
+}
+
+// CreateSKABurnScript creates a provably unspendable burn script for the
+// specified SKA coin type. The script uses OP_RETURN to make it consensus-unspendable,
+// ensuring that coins sent to this script are permanently removed from circulation.
+//
+// Returns an error if the coin type is not a valid SKA type (must be 1-255).
+func (p *Params) CreateSKABurnScript(coinType cointype.CoinType) ([]byte, error) {
+	if !coinType.IsSKA() {
+		return nil, fmt.Errorf("invalid coin type for burn script: %d (must be SKA type 1-255)", coinType)
+	}
+
+	// Note: NewSKABurnScriptV0 returns nil for invalid coin types
+	script := make([]byte, 11)
+	script[0] = 0x6a // OP_RETURN
+	script[1] = 0x09 // Push 9 bytes
+	copy(script[2:10], SKABurnScriptMarker)
+	script[10] = byte(coinType)
+
+	return script, nil
+}
+
+// IsSKABurnScript returns true if the provided script is a valid SKA burn script.
+// A valid burn script is an OP_RETURN output containing the "SKA_BURN" marker
+// and a valid SKA coin type (1-255).
+func (p *Params) IsSKABurnScript(script []byte) bool {
+	// Check minimum length: OP_RETURN (1) + push length (1) + marker (8) + cointype (1) = 11 bytes
+	if len(script) != 11 {
+		return false
+	}
+
+	// Check for OP_RETURN opcode
+	if script[0] != 0x6a {
+		return false
+	}
+
+	// Check push length
+	if script[1] != 0x09 {
+		return false
+	}
+
+	// Check for SKA_BURN marker
+	if !bytes.Equal(script[2:10], SKABurnScriptMarker) {
+		return false
+	}
+
+	// Check that coin type is valid SKA (1-255)
+	coinType := cointype.CoinType(script[10])
+	return coinType.IsSKA()
 }

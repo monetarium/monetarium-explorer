@@ -12,7 +12,7 @@ import (
 
 	"github.com/monetarium/monetarium-node/chaincfg/chainhash"
 	"github.com/monetarium/monetarium-node/chaincfg"
-	"github.com/decred/dcrdata/v8/txhelpers"
+	"github.com/monetarium/monetarium-explorer/txhelpers"
 )
 
 var tempDir string

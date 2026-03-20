@@ -32,14 +32,14 @@ import (
 	"github.com/monetarium/monetarium-node/txscript/stdscript"
 	"github.com/monetarium/monetarium-node/wire"
 
-	m "github.com/decred/dcrdata/cmd/dcrdata/internal/middleware"
-	"github.com/decred/dcrdata/exchanges/v3"
-	"github.com/decred/dcrdata/gov/v6/agendas"
-	"github.com/decred/dcrdata/gov/v6/politeia"
-	apitypes "github.com/decred/dcrdata/v8/api/types"
-	"github.com/decred/dcrdata/v8/db/cache"
-	"github.com/decred/dcrdata/v8/db/dbtypes"
-	"github.com/decred/dcrdata/v8/txhelpers"
+	m "github.com/monetarium/monetarium-explorer/cmd/dcrdata/internal/middleware"
+	"github.com/monetarium/monetarium-explorer/exchanges"
+	"github.com/monetarium/monetarium-explorer/gov/agendas"
+	"github.com/monetarium/monetarium-explorer/gov/politeia"
+	apitypes "github.com/monetarium/monetarium-explorer/api/types"
+	"github.com/monetarium/monetarium-explorer/db/cache"
+	"github.com/monetarium/monetarium-explorer/db/dbtypes"
+	"github.com/monetarium/monetarium-explorer/txhelpers"
 )
 
 // maxBlockRangeCount is the maximum number of blocks that can be requested at

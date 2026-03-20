@@ -15,9 +15,9 @@ import (
 	"github.com/monetarium/monetarium-node/dcrutil"
 
 	chainjson "github.com/monetarium/monetarium-node/rpc/jsonrpc/types"
-	"github.com/decred/dcrdata/v8/db/cache"
-	"github.com/decred/dcrdata/v8/db/dbtypes"
-	"github.com/decred/dcrdata/v8/txhelpers"
+	"github.com/monetarium/monetarium-explorer/db/cache"
+	"github.com/monetarium/monetarium-explorer/db/dbtypes"
+	"github.com/monetarium/monetarium-explorer/txhelpers"
 )
 
 // func TestTreasuryTxns(t *testing.T) {

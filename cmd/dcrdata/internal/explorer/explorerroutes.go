@@ -25,12 +25,12 @@ import (
 	"github.com/monetarium/monetarium-node/txscript/stdaddr"
 	"github.com/monetarium/monetarium-node/txscript/stdscript"
 
-	"github.com/decred/dcrdata/exchanges/v3"
-	"github.com/decred/dcrdata/gov/v6/agendas"
-	pitypes "github.com/decred/dcrdata/gov/v6/politeia/types"
-	"github.com/decred/dcrdata/v8/db/dbtypes"
-	"github.com/decred/dcrdata/v8/explorer/types"
-	"github.com/decred/dcrdata/v8/txhelpers"
+	"github.com/monetarium/monetarium-explorer/exchanges"
+	"github.com/monetarium/monetarium-explorer/gov/agendas"
+	pitypes "github.com/monetarium/monetarium-explorer/gov/politeia/types"
+	"github.com/monetarium/monetarium-explorer/db/dbtypes"
+	"github.com/monetarium/monetarium-explorer/explorer/types"
+	"github.com/monetarium/monetarium-explorer/txhelpers"
 	ticketvotev1 "github.com/decred/politeia/politeiawww/api/ticketvote/v1"
 
 	"golang.org/x/text/cases"

@@ -8,7 +8,7 @@ import (
 	"errors"
 	"testing"
 
-	pstypes "github.com/decred/dcrdata/v8/pubsub/types"
+	pstypes "github.com/monetarium/monetarium-explorer/pubsub/types"
 )
 
 func Test_client_subscribe(t *testing.T) {

@@ -18,11 +18,11 @@ import (
 	"github.com/monetarium/monetarium-node/chaincfg"
 	"github.com/monetarium/monetarium-node/wire"
 
-	"github.com/decred/dcrdata/db/dcrpg/v8/internal"
-	apitypes "github.com/decred/dcrdata/v8/api/types"
-	"github.com/decred/dcrdata/v8/db/cache"
-	"github.com/decred/dcrdata/v8/db/dbtypes"
-	"github.com/decred/dcrdata/v8/txhelpers"
+	"github.com/monetarium/monetarium-explorer/db/dcrpg/internal"
+	apitypes "github.com/monetarium/monetarium-explorer/api/types"
+	"github.com/monetarium/monetarium-explorer/db/cache"
+	"github.com/monetarium/monetarium-explorer/db/dbtypes"
+	"github.com/monetarium/monetarium-explorer/txhelpers"
 	humanize "github.com/dustin/go-humanize"
 	"github.com/lib/pq"
 )
@@ -117,8 +117,10 @@ type SqlExecQueryer interface {
 // sqlExec executes the SQL statement string with any optional arguments, and
 // returns the number of rows affected.
 func sqlExec(db SqlExecutor, stmt, execErrPrefix string, args ...interface{}) (int64, error) {
+	log.Debugf("sqlExec: %v(%v)", stmt, args)
 	res, err := db.Exec(stmt, args...)
 	if err != nil {
+		log.Errorf("%v: %w", execErrPrefix, err)
 		return 0, fmt.Errorf("%v: %w", execErrPrefix, err)
 	}
 	if res == nil {
@@ -128,6 +130,7 @@ func sqlExec(db SqlExecutor, stmt, execErrPrefix string, args ...interface{}) (i
 	var N int64
 	N, err = res.RowsAffected()
 	if err != nil {
+		log.Errorf("error in RowsAffected: %w", err)
 		return 0, fmt.Errorf("error in RowsAffected: %w", err)
 	}
 	return N, err
@@ -4178,6 +4181,7 @@ func updateLastAddressesValid(db *sql.DB, blockHash dbtypes.ChainHash, isValid b
 // updateBlockNext sets the next block's hash for the specified row of the
 // block_chain table specified by DB row ID.
 func updateBlockNext(db SqlExecutor, blockDbID uint64, next dbtypes.ChainHash) error {
+	log.Debugf("updateBlockNext: %v, %v, %v",internal.UpdateBlockNext,blockDbID, next)
 	res, err := db.Exec(internal.UpdateBlockNext, blockDbID, next)
 	if err != nil {
 		return err

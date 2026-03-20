@@ -22,8 +22,8 @@ import (
 	"github.com/monetarium/monetarium-node/txscript/stdscript"
 	"github.com/lib/pq"
 
-	"github.com/decred/dcrdata/v8/db/dbtypes/internal"
-	"github.com/decred/dcrdata/v8/txhelpers"
+	"github.com/monetarium/monetarium-explorer/db/dbtypes/internal"
+	"github.com/monetarium/monetarium-explorer/txhelpers"
 )
 
 var scriptClassNames map[string]ScriptClass

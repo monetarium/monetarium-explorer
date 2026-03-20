@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"net/http"
 
-	m "github.com/decred/dcrdata/cmd/dcrdata/internal/middleware"
+	m "github.com/monetarium/monetarium-explorer/cmd/dcrdata/internal/middleware"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 )

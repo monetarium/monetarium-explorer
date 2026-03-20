@@ -16,10 +16,10 @@ import (
 	chainjson "github.com/monetarium/monetarium-node/rpc/jsonrpc/types"
 	"github.com/monetarium/monetarium-node/wire"
 
-	apitypes "github.com/decred/dcrdata/v8/api/types"
-	"github.com/decred/dcrdata/v8/db/dbtypes"
-	"github.com/decred/dcrdata/v8/stakedb"
-	"github.com/decred/dcrdata/v8/txhelpers"
+	apitypes "github.com/monetarium/monetarium-explorer/api/types"
+	"github.com/monetarium/monetarium-explorer/db/dbtypes"
+	"github.com/monetarium/monetarium-explorer/stakedb"
+	"github.com/monetarium/monetarium-explorer/txhelpers"
 )
 
 // BlockData contains all the data collected by a Collector and stored

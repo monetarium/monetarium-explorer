@@ -6,11 +6,17 @@ package chaincfg
 
 //go:generate go run -tags subsidydefs generatesubsidytables.go
 
+// blockOnePayout is used by generated subsidy tables.
+//
+//nolint:unused
 type blockOnePayout struct {
 	offset int
 	amount int64
 }
 
+// tokenPayouts is used by generated subsidy tables.
+//
+//nolint:unused
 func tokenPayouts(scriptsHex string, payouts []blockOnePayout) []TokenPayout {
 	tokenPayouts := make([]TokenPayout, len(payouts))
 	var offset int

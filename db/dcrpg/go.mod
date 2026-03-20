@@ -1,8 +1,8 @@
-module github.com/decred/dcrdata/db/dcrpg/v8
+module github.com/monetarium/monetarium-explorer/db/dcrpg
 
 go 1.21
 
-replace github.com/decred/dcrdata/v8 => ../../
+replace github.com/decred/dcrdata => ../../
 
 require (
 	github.com/davecgh/go-spew v1.1.1
@@ -16,7 +16,7 @@ require (
 	github.com/decred/dcrd/rpcclient/v8 v8.1.0
 	github.com/decred/dcrd/txscript/v4 v4.1.2
 	github.com/decred/dcrd/wire v1.7.1
-	github.com/decred/dcrdata/v8 v8.0.0
+	github.com/monetarium/monetarium-explorer v1
 	github.com/decred/slog v1.2.0
 	github.com/dustin/go-humanize v1.0.1
 	github.com/jessevdk/go-flags v1.5.0

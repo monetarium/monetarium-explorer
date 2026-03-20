@@ -10,6 +10,7 @@ debug
 *.key
 cmd/dcrdata/dcrdata
 dcrdata.conf
+__debug_bin*
 /vendor/
 *.orig
 *.db

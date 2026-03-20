@@ -1,4 +1,4 @@
-module github.com/decred/dcrdata/v8
+module github.com/monetarium/monetarium-explorer
 
 go 1.23
 

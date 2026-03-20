@@ -16,9 +16,9 @@ import (
 	"github.com/monetarium/monetarium-node/chaincfg"
 	chainjson "github.com/monetarium/monetarium-node/rpc/jsonrpc/types"
 
-	exptypes "github.com/decred/dcrdata/v8/explorer/types"
-	pstypes "github.com/decred/dcrdata/v8/pubsub/types"
-	"github.com/decred/dcrdata/v8/txhelpers"
+	exptypes "github.com/monetarium/monetarium-explorer/explorer/types"
+	pstypes "github.com/monetarium/monetarium-explorer/pubsub/types"
+	"github.com/monetarium/monetarium-explorer/txhelpers"
 )
 
 // MempoolDataSaver is an interface for storing mempool data.

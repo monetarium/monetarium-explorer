@@ -21,8 +21,8 @@ import (
 	"github.com/monetarium/monetarium-node/dcrutil"
 	"github.com/monetarium/monetarium-node/wire"
 
-	apitypes "github.com/decred/dcrdata/v8/api/types"
-	"github.com/decred/dcrdata/v8/txhelpers"
+	apitypes "github.com/monetarium/monetarium-explorer/api/types"
+	"github.com/monetarium/monetarium-explorer/txhelpers"
 )
 
 // PoolInfoCache contains a map of block hashes to ticket pool info data at that

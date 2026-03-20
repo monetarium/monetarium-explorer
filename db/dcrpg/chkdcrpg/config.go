@@ -14,7 +14,7 @@ import (
 
 	"github.com/monetarium/monetarium-node/chaincfg"
 	"github.com/monetarium/monetarium-node/dcrutil"
-	"github.com/decred/dcrdata/v8/netparams"
+	"github.com/monetarium/monetarium-explorer/netparams"
 	flags "github.com/jessevdk/go-flags"
 )
 

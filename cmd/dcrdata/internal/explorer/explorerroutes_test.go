@@ -7,8 +7,8 @@ import (
 	"testing"
 
 	"github.com/monetarium/monetarium-node/chaincfg"
-	"github.com/decred/dcrdata/db/dcrpg/v8"
-	"github.com/decred/dcrdata/v8/explorer/types"
+	"github.com/monetarium/monetarium-explorer/db/dcrpg"
+	"github.com/monetarium/monetarium-explorer/explorer/types"
 )
 
 const (

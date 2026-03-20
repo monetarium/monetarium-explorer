@@ -22,7 +22,7 @@ import (
 	chainjson "github.com/monetarium/monetarium-node/rpc/jsonrpc/types"
 	"github.com/monetarium/monetarium-node/txscript/stdaddr"
 	"github.com/monetarium/monetarium-node/wire"
-	apitypes "github.com/decred/dcrdata/v8/api/types"
+	apitypes "github.com/monetarium/monetarium-explorer/api/types"
 	"github.com/didip/tollbooth/v6"
 	"github.com/didip/tollbooth/v6/limiter"
 	"github.com/go-chi/chi/v5"

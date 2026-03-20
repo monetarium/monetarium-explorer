@@ -24,8 +24,8 @@ import (
 	"github.com/decred/slog"
 	flags "github.com/jessevdk/go-flags"
 
-	"github.com/decred/dcrdata/v8/db/dbtypes"
-	"github.com/decred/dcrdata/v8/netparams"
+	"github.com/monetarium/monetarium-explorer/db/dbtypes"
+	"github.com/monetarium/monetarium-explorer/netparams"
 )
 
 const (

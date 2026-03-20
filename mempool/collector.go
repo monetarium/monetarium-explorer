@@ -17,9 +17,9 @@ import (
 	"github.com/monetarium/monetarium-node/dcrutil"
 	chainjson "github.com/monetarium/monetarium-node/rpc/jsonrpc/types"
 
-	apitypes "github.com/decred/dcrdata/v8/api/types"
-	exptypes "github.com/decred/dcrdata/v8/explorer/types"
-	"github.com/decred/dcrdata/v8/txhelpers"
+	apitypes "github.com/monetarium/monetarium-explorer/api/types"
+	exptypes "github.com/monetarium/monetarium-explorer/explorer/types"
+	"github.com/monetarium/monetarium-explorer/txhelpers"
 )
 
 // NodeClient is similar to a rpcclient.Client, except for the addition of

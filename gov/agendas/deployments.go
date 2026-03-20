@@ -15,8 +15,8 @@ import (
 	"github.com/asdine/storm/v3/q"
 	"github.com/monetarium/monetarium-node/dcrjson"
 	chainjson "github.com/monetarium/monetarium-node/rpc/jsonrpc/types"
-	"github.com/decred/dcrdata/v8/db/dbtypes"
-	"github.com/decred/dcrdata/v8/semver"
+	"github.com/monetarium/monetarium-explorer/db/dbtypes"
+	"github.com/monetarium/monetarium-explorer/semver"
 )
 
 // AgendaDB represents the data for the stored DB.

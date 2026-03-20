@@ -14,8 +14,8 @@ import (
 	"time"
 
 	"github.com/monetarium/monetarium-node/chaincfg"
-	"github.com/decred/dcrdata/v8/semver"
-	"github.com/decred/dcrdata/v8/txhelpers"
+	"github.com/monetarium/monetarium-explorer/semver"
+	"github.com/monetarium/monetarium-explorer/txhelpers"
 )
 
 // Keys for specifying chart data type.

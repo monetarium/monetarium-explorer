@@ -14,8 +14,8 @@ import (
 	"strconv"
 	"strings"
 
-	m "github.com/decred/dcrdata/cmd/dcrdata/internal/middleware"
-	apitypes "github.com/decred/dcrdata/v8/api/types"
+	m "github.com/monetarium/monetarium-explorer/cmd/dcrdata/internal/middleware"
+	apitypes "github.com/monetarium/monetarium-explorer/api/types"
 	"github.com/go-chi/chi/v5"
 )
 

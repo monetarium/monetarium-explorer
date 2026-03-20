@@ -1,5 +1,5 @@
 // Copyright (c) 2014-2016 The btcsuite developers
-// Copyright (c) 2015-2025 The Decred developers
+// Copyright (c) 2015-2023 The Decred developers
 // Use of this source code is governed by an ISC
 // license that can be found in the LICENSE file.
 
@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/monetarium/monetarium-node/chaincfg/chainhash"
+	"github.com/monetarium/monetarium-node/cointype"
+	"github.com/monetarium/monetarium-node/dcrec/secp256k1"
 	"github.com/monetarium/monetarium-node/wire"
 )
 
@@ -75,7 +77,9 @@ func SimNetParams() *Params {
 				Sequence: 0xffffffff,
 			}},
 			TxOut: []*wire.TxOut{{
-				Value: 0x00000000,
+				Value:    0x00000000,
+				CoinType: cointype.CoinTypeVAR,
+				Version:  0,
 				PkScript: hexDecode("4104678afdb0fe5548271967f1a67130b7105c" +
 					"d6a828e03909a67962e0ea1f61deb649f6bc3f4cef38c4f35504e5" +
 					"1ec112de5c384df7ba0b8d578a4c702b6bf11d5fac"),
@@ -89,7 +93,7 @@ func SimNetParams() *Params {
 	return &Params{
 		Name:        "simnet",
 		Net:         wire.SimNet,
-		DefaultPort: "18555",
+		DefaultPort: "18955",
 		DNSSeeds:    nil, // NOTE: There must NOT be any seeds.
 
 		// Chain parameters
@@ -100,8 +104,8 @@ func SimNetParams() *Params {
 		ReduceMinDifficulty:  false,
 		MinDiffReductionTime: 0, // Does not apply since ReduceMinDifficulty false
 		GenerateSupported:    true,
-		MaximumBlockSizes:    []int{1000000, 1310720},
-		MaxTxSize:            1000000,
+		MaximumBlockSizes:    []int{393216, 493216},
+		MaxTxSize:            393216,
 		TargetTimePerBlock:   time.Second,
 
 		// Version 1 difficulty algorithm (EMA + BLAKE256) parameters.
@@ -116,15 +120,15 @@ func SimNetParams() *Params {
 		WorkDiffV2HalfLifeSecs:    6, // 6 * TimePerBlock
 
 		// Subsidy parameters.
-		BaseSubsidy:              50000000000,
-		MulSubsidy:               100,
-		DivSubsidy:               101,
-		SubsidyReductionInterval: 128,
+		BaseSubsidy:              6400000000, // 64 VAR per block (same as mainnet)
+		MulSubsidy:               1,          // Numerator for halving (1/2)
+		DivSubsidy:               2,          // Denominator for halving (1/2)
+		SubsidyReductionInterval: 128,        // Fast halving for testing
 		WorkRewardProportion:     6,
-		WorkRewardProportionV2:   1,
+		WorkRewardProportionV2:   5,
 		StakeRewardProportion:    3,
-		StakeRewardProportionV2:  8,
-		BlockTaxProportion:       1,
+		StakeRewardProportionV2:  5,
+		BlockTaxProportion:       0,
 
 		// AssumeValid is the hash of a block that has been externally verified
 		// to be valid.  It is also used to determine the old forks rejection
@@ -143,10 +147,10 @@ func SimNetParams() *Params {
 		//
 		// The miner confirmation window is defined as:
 		//   target proof of work timespan / target proof of work spacing
-		RuleChangeActivationQuorum:     160, // 10 % of RuleChangeActivationInterval * TicketsPerBlock
-		RuleChangeActivationMultiplier: 3,   // 75%
+		RuleChangeActivationQuorum:     5, // 10 % of RuleChangeActivationInterval * TicketsPerBlock (5 votes for 10 blocks * 5 tickets)
+		RuleChangeActivationMultiplier: 3, // 75%
 		RuleChangeActivationDivisor:    4,
-		RuleChangeActivationInterval:   320, // 320 seconds
+		RuleChangeActivationInterval:   10, // 10 blocks for fast testing (was 320)
 		Deployments: map[uint32][]ConsensusDeployment{
 			4: {{
 				Vote: Vote{
@@ -494,32 +498,31 @@ func SimNetParams() *Params {
 			}},
 			12: {{
 				Vote: Vote{
-					Id:          VoteIDMaxTreasurySpend,
-					Description: "Change maximum treasury expenditure policy as defined in DCP0013",
+					Id:          VoteIDActivateSKA2,
+					Description: "Activate SKA-2 (Skarb-2) coin type for transactions",
 					Mask:        0x0006, // Bits 1 and 2
 					Choices: []Choice{{
 						Id:          "abstain",
-						Description: "abstain voting for change",
+						Description: "abstain from voting",
 						Bits:        0x0000,
 						IsAbstain:   true,
 						IsNo:        false,
 					}, {
 						Id:          "no",
-						Description: "keep the existing consensus rules",
+						Description: "keep SKA-2 inactive",
 						Bits:        0x0002, // Bit 1
 						IsAbstain:   false,
 						IsNo:        true,
 					}, {
 						Id:          "yes",
-						Description: "change to the new consensus rules",
+						Description: "activate SKA-2 for use",
 						Bits:        0x0004, // Bit 2
 						IsAbstain:   false,
 						IsNo:        false,
 					}},
 				},
-				ForcedChoiceID: "yes",
-				StartTime:      0,             // Always available for vote
-				ExpireTime:     math.MaxInt64, // Never expires
+				StartTime:  0,             // Immediately available for vote
+				ExpireTime: math.MaxInt64, // Never expires
 			}},
 		},
 
@@ -567,7 +570,7 @@ func SimNetParams() *Params {
 		StakeDiffAlpha:          1,
 		StakeDiffWindowSize:     8,
 		StakeDiffWindows:        8,
-		StakeVersionInterval:    8 * 2 * 7,
+		StakeVersionInterval:    8 * 2 * 7,     // 112 blocks
 		MaxFreshStakePerBlock:   20,            // 4*TicketsPerBlock
 		StakeEnabledHeight:      16 + 16,       // CoinbaseMaturity + TicketMaturity
 		StakeValidationHeight:   16 + (64 * 2), // CoinbaseMaturity + TicketPoolSize*2
@@ -603,10 +606,10 @@ func SimNetParams() *Params {
 		//   SkQn8ervNvAUEX5Ua3Lwjc6BAuTXRznDoDzsyxgjYqX58znY7w9e4
 		//   SkQkfkHZeBbMW8129tZ3KspEh1XBFC1btbkgzs6cjSyPbrgxzsKqk
 		//
-		// Organization address is ScuQxvveKGfpG1ypt6u27F99Anf7EW3cqhq
-		OrganizationPkScript:        hexDecode("a914cbb08d6ca783b533b2c7d24a51fbca92d937bf9987"),
+		// Monetarium has no treasury (BlockTaxProportion = 0)
+		OrganizationPkScript:        nil,
 		OrganizationPkScriptVersion: 0,
-		BlockOneLedger:              tokenPayouts_SimNetParams(),
+		BlockOneLedger:              nil,
 
 		// Commands to generate simnet Pi keys:
 		// $ treasurykey.go -simnet
@@ -636,5 +639,70 @@ func SimNetParams() *Params {
 		TreasuryVoteRequiredDivisor:    5,
 
 		seeders: nil, // NOTE: There must NOT be any seeds.
+
+		// SKA coin type configurations for simnet testing
+		// NOTE: Simnet uses same 900 trillion supply as mainnet for realistic testing.
+		// All amounts use big.Int via TxOut.SKAValue for large emissions.
+		SKACoins: map[cointype.CoinType]*SKACoinConfig{
+			1: {
+				CoinType:         1,
+				Name:             "Skarb-1",
+				Symbol:           "SKA-1",
+				MaxSupply:        mustParseBigInt("900000000000000000000000000000000"), // 900T * 1e18 atoms (900 trillion SKA coins)
+				AtomsPerCoin:     mustParseBigInt("1000000000000000000"),               // 1e18
+				EmissionHeight:   150,                                                  // After stake validation (144)
+				EmissionWindow:   100,                                                  // 100-block emission window for testing
+				Active:           true,
+				Description:      "Primary SKA coin type for simnet testing",
+				MinRelayTxFee:    mustParseBigInt("4000000000000000000"), // 4 SKA per KB (4e18 atoms/KB)
+				MaxFeeMultiplier: 2500,                                   // Max fee is 2500x min fee
+				// Governance-approved emission distribution for simnet testing
+				EmissionAddresses: []string{
+					"SsWKp7wtdTZYabYFYSc9cnxhwFEjA5g4pFc", // Full amount to treasury for testing
+					// Priv key: PsUQzmmSVH2Ry6tGp9NygLRdLAXsRGio9EV4B23sqdYHFer3j7Fhb
+				},
+				EmissionAmounts: bigIntSlice(
+					"900000000000000000000000000000000", // 900T * 1e18 atoms (900 trillion SKA coins) to treasury
+				),
+				// SIMNET TEST KEY - NOT FOR PRODUCTION USE
+				EmissionKey: mustParseHexPubKeySimnet("02f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9"),
+			},
+			2: {
+				CoinType:         2,
+				Name:             "Skarb-2",
+				Symbol:           "SKA-2",
+				MaxSupply:        mustParseBigInt("500000000000000000"),  // 5e17 atoms (0.5 SKA for testing)
+				AtomsPerCoin:     mustParseBigInt("1000000000000000000"), // 1e18
+				EmissionHeight:   200,                                    // After vote activation and test script completion
+				EmissionWindow:   100,                                    // 100-block emission window for testing
+				Active:           false,                                  // Initially inactive, activated by stakeholder vote
+				Description:      "Secondary SKA coin type requiring stakeholder vote activation for simnet testing",
+				MinRelayTxFee:    mustParseBigInt("4000000000000000000"), // 4 SKA per KB (4e18 atoms/KB)
+				MaxFeeMultiplier: 2500,                                   // Max fee is 2500x min fee
+				// Governance-approved emission distribution for simnet testing
+				EmissionAddresses: []string{
+					"SsWKp7wtdTZYabYFYSc9cnxhwFEjA5g4pFc", // Full amount to treasury
+				},
+				EmissionAmounts: bigIntSlice(
+					"500000000000000000", // 5e17 atoms (0.5 SKA) to treasury
+				),
+				// SIMNET TEST KEY - NOT FOR PRODUCTION USE
+				EmissionKey: mustParseHexPubKeySimnet("02e493dbf1c10d80f3581e4904930b1404cc6c13900ee0758474fa94abe8c4cd13"),
+			},
+		},
+
+		// Initial SKA types to activate at simnet genesis
+		InitialSKATypes: []cointype.CoinType{1}, // Only SKA-1 initially active
 	}
+}
+
+// mustParseHexPubKeySimnet parses a hex-encoded public key for simnet testing.
+// SIMNET ONLY - These are test keys and must not be used in production.
+func mustParseHexPubKeySimnet(hexStr string) *secp256k1.PublicKey {
+	keyBytes := mustParseHex(hexStr)
+	pubKey, err := secp256k1.ParsePubKey(keyBytes)
+	if err != nil {
+		panic("failed to parse simnet test public key: " + err.Error())
+	}
+	return pubKey
 }

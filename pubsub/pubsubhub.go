@@ -20,13 +20,13 @@ import (
 	"github.com/monetarium/monetarium-node/txscript/stdscript"
 	"github.com/monetarium/monetarium-node/wire"
 
-	"github.com/decred/dcrdata/v8/blockdata"
-	"github.com/decred/dcrdata/v8/db/dbtypes"
-	exptypes "github.com/decred/dcrdata/v8/explorer/types"
-	"github.com/decred/dcrdata/v8/mempool"
-	pstypes "github.com/decred/dcrdata/v8/pubsub/types"
-	"github.com/decred/dcrdata/v8/semver"
-	"github.com/decred/dcrdata/v8/txhelpers"
+	"github.com/monetarium/monetarium-explorer/blockdata"
+	"github.com/monetarium/monetarium-explorer/db/dbtypes"
+	exptypes "github.com/monetarium/monetarium-explorer/explorer/types"
+	"github.com/monetarium/monetarium-explorer/mempool"
+	pstypes "github.com/monetarium/monetarium-explorer/pubsub/types"
+	"github.com/monetarium/monetarium-explorer/semver"
+	"github.com/monetarium/monetarium-explorer/txhelpers"
 	"golang.org/x/net/websocket"
 )
 

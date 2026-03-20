@@ -1,22 +1,17 @@
-module github.com/decred/dcrdata/cmd/dcrdata
+module github.com/monetarium/monetarium-explorer/cmd/dcrdata
 
 go 1.23
 
 replace (
-	github.com/decred/dcrdata/db/dcrpg/v8 => ../../db/dcrpg/
-	github.com/decred/dcrdata/exchanges/v3 => ../../exchanges/
-	github.com/decred/dcrdata/gov/v6 => ../../gov/
-	github.com/decred/dcrdata/v8 => ../../
+	github.com/monetarium/monetarium-explorer => ../../
+	github.com/monetarium/monetarium-explorer/db/dcrpg => ../../db/dcrpg/
+	github.com/monetarium/monetarium-explorer/exchanges => ../../exchanges/
+	github.com/monetarium/monetarium-explorer/gov => ../../gov/
 	github.com/monetarium/monetarium-node/chaincfg => ../../chaincfg
 )
 
 require (
 	github.com/caarlos0/env/v6 v6.10.1
-	github.com/decred/dcrd/rpcclient/v8 v8.1.0
-	github.com/decred/dcrdata/db/dcrpg/v8 v8.0.0
-	github.com/decred/dcrdata/exchanges/v3 v3.1.0
-	github.com/decred/dcrdata/gov/v6 v6.0.0
-	github.com/decred/dcrdata/v8 v8.0.0
 	github.com/decred/politeia v1.5.0
 	github.com/decred/slog v1.2.0
 	github.com/didip/tollbooth/v6 v6.1.3-0.20220606152938-a7634c70944a
@@ -27,6 +22,10 @@ require (
 	github.com/googollee/go-socket.io v1.4.4
 	github.com/jessevdk/go-flags v1.5.0
 	github.com/jrick/logrotate v1.0.0
+	github.com/monetarium/monetarium-explorer v1.0.0
+	github.com/monetarium/monetarium-explorer/db/dcrpg v1.0.0
+	github.com/monetarium/monetarium-explorer/exchanges v1.0.0
+	github.com/monetarium/monetarium-explorer/gov v1.0.0
 	github.com/monetarium/monetarium-node/blockchain/stake v1.1.0
 	github.com/monetarium/monetarium-node/blockchain/standalone v1.1.0
 	github.com/monetarium/monetarium-node/chaincfg v1.1.0
@@ -119,6 +118,7 @@ require (
 	github.com/decred/dcrd/lru v1.1.2 // indirect
 	github.com/decred/dcrd/mixing v0.5.0 // indirect
 	github.com/decred/dcrd/rpc/jsonrpc/types/v4 v4.4.0 // indirect
+	github.com/decred/dcrd/rpcclient/v8 v8.1.0 // indirect
 	github.com/decred/dcrd/txscript/v3 v3.0.0 // indirect
 	github.com/decred/dcrd/txscript/v4 v4.1.2 // indirect
 	github.com/decred/dcrd/wire v1.7.1 // indirect

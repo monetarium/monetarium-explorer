@@ -1,13 +1,13 @@
-module github.com/decred/dcrdata/exchanges/rateserver
+module github.com/monetarium/monetarium-explorer/exchanges/rateserver
 
 go 1.22
 
-replace github.com/decred/dcrdata/exchanges/v3 => ../
+replace github.com/monetarium/monetarium-explorer/exchanges => ../
 
 require (
 	github.com/decred/dcrd/certgen v1.2.0
 	github.com/decred/dcrd/dcrutil/v4 v4.0.2
-	github.com/decred/dcrdata/exchanges/v3 v3.0.0
+	github.com/monetarium/monetarium-explorer/exchanges v1.0.0
 	github.com/decred/slog v1.2.0
 	github.com/jessevdk/go-flags v1.5.0
 	github.com/jrick/logrotate v1.0.0

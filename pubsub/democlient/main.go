@@ -15,10 +15,10 @@ import (
 	"github.com/decred/slog"
 	survey "gopkg.in/AlecAivazis/survey.v1"
 
-	exptypes "github.com/decred/dcrdata/v8/explorer/types"
-	"github.com/decred/dcrdata/v8/pubsub/psclient"
-	pstypes "github.com/decred/dcrdata/v8/pubsub/types"
-	"github.com/decred/dcrdata/v8/semver"
+	exptypes "github.com/monetarium/monetarium-explorer/explorer/types"
+	"github.com/monetarium/monetarium-explorer/pubsub/psclient"
+	pstypes "github.com/monetarium/monetarium-explorer/pubsub/types"
+	"github.com/monetarium/monetarium-explorer/semver"
 )
 
 var cfg *config
