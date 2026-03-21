@@ -116,11 +116,14 @@ so that I can inspect individual SKA token activity without leaving the home pag
    token type present in the block, immediately following the corresponding Block_Row.
 2. THE Sub_Row SHALL be hidden by default.
 3. THE Sub_Row SHALL span all 13 columns.
-4. THE Sub_Row cells for columns 1–10 (Overview_Group and VAR_Group) SHALL be visually
-   empty, preserving the column alignment of the parent row.
-5. THE Sub_Row cells for columns 11–13 (SKA_Group) SHALL be populated with the per-SKA-type
+4. THE Sub_Row cells for columns 1–7 (Overview_Group) SHALL be visually empty, preserving
+   the column alignment of the parent row.
+5. THE Sub_Row SHALL render a single cell spanning all 3 VAR_Group columns (cols 8–10)
+   containing the SKA token type name (e.g. "SKA-1"), right-aligned, so that it appears
+   immediately to the left of the three SKA_Group value cells.
+6. THE Sub_Row cells for columns 11–13 (SKA_Group) SHALL be populated with the per-SKA-type
    Transactions, Amount, and Size values formatted by Amount_Formatter.
-6. WHEN mock data is used, THE Explorer SHALL render at least two Sub_Rows per Block_Row
+7. WHEN mock data is used, THE Explorer SHALL render at least two Sub_Rows per Block_Row
    (representing two distinct SKA token types) so that accordion interaction can be tested
    visually.
 

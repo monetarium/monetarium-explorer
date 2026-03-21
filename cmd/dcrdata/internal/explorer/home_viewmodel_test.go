@@ -123,6 +123,28 @@ func TestBuildHomeBlockRows_HasSKAData(t *testing.T) {
 	}
 }
 
+// TestSKASubRow_TokenTypeNonEmpty verifies that every SKASubRow.TokenType is
+// non-empty for any block that has HasSKAData = true.
+// Requirements: 5.5
+func TestSKASubRow_TokenTypeNonEmpty(t *testing.T) {
+	// Use a range of heights to cover both SKA-present and SKA-absent cases.
+	for height := int64(0); height <= 20; height++ {
+		rows := buildHomeBlockRows([]*types.BlockBasic{{Height: height}})
+		if len(rows) != 1 {
+			t.Fatalf("height=%d: expected 1 row, got %d", height, len(rows))
+		}
+		r := rows[0]
+		if !r.HasSKAData {
+			continue
+		}
+		for i, sub := range r.SKASubRows {
+			if sub.TokenType == "" {
+				t.Errorf("height=%d sub-row[%d]: TokenType is empty", height, i)
+			}
+		}
+	}
+}
+
 // --- Property-based tests (optional subtasks 10.2, 10.3) ---
 
 // Feature: home-block-table-redesign, Property 1: BlockBasic to HomeBlockRow field preservation

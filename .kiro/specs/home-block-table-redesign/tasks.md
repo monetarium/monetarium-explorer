@@ -69,8 +69,10 @@ direct access to `threeSigFigs` in `templates.go` without any additional imports
       `{{if .HasSKAData}}`.
     - `{{range .SKASubRows}}` — emit one Sub_Row `<tr class="ska-sub-row">`
       with `data-ska-accordion-target="subRow"` and `data-block-id` matching the parent;
-      first 10 `<td>` empty, last 3 populated from `.TxCount`, `.Amount`, `.Size`.
-  - _Requirements: 3.1, 3.2, 3.3, 3.4, 4.1, 4.2, 4.3, 4.4, 4.5, 5.1, 5.2, 5.3, 5.4, 5.5, 8.1, 8.2_
+      7 empty Overview `<td>` cells; one `<td colspan="3" class="text-end">{{.TokenType}}</td>`
+      spanning the full VAR group; last 3 `<td>` cells populated from `.TxCount`, `.Amount`,
+      `.Size`.
+  - _Requirements: 3.1, 3.2, 3.3, 3.4, 4.1, 4.2, 4.3, 4.4, 4.5, 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 8.1, 8.2_
 
 - [x] 6. Update home.tmpl to include the partial
   - In `cmd/dcrdata/views/home.tmpl`, replace the existing block table markup with
@@ -170,6 +172,15 @@ direct access to `threeSigFigs` in `templates.go` without any additional imports
   - Run `go test ./...` in `cmd/dcrdata` and confirm all Go tests pass.
   - Run `npm run lint` in `cmd/dcrdata` and confirm no ESLint errors.
   - Ask the user if any questions arise.
+
+- [x] 13. Add SKA token name to sub-rows — update template and test
+  - In `cmd/dcrdata/views/home_latest_blocks.tmpl`, update the `{{range .SKASubRows}}`
+    block: replace the 10 individual empty `<td>` cells with 7 empty Overview `<td>` cells
+    followed by `<td colspan="3" class="text-end">{{.TokenType}}</td>` spanning the VAR
+    group. The last 3 SKA `<td>` cells remain unchanged.
+  - In `cmd/dcrdata/internal/explorer/home_viewmodel_test.go`, add a unit test asserting
+    that each `SKASubRow.TokenType` is non-empty for any block with `HasSKAData = true`.
+  - _Requirements: 5.5_
 
 ## Notes
 

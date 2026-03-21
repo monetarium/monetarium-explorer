@@ -294,6 +294,11 @@ Each Block_Row `<tr>` carries `data-ska-accordion-target="blockRow"` and
 `data-ska-accordion-target="subRow"` and `data-block-id="{{.Height}}"`, and start with the
 `ska-sub-row` CSS class (hidden by default).
 
+Sub-row cell layout: 7 empty Overview cells, then one `<td colspan="3">` spanning the full
+VAR group displaying `.TokenType` right-aligned, then 3 SKA cells populated from `.TxCount`,
+`.Amount`, `.Size`. The colspan approach gives the token name the full VAR section width and
+avoids any column-count mismatch.
+
 The existing `data-blocklist-target="table"` is preserved on `<tbody>` so the WebSocket
 block prepend in `blocklist_controller.js` continues to work. A follow-up task will update
 that controller to handle the new column structure.
@@ -472,9 +477,10 @@ allowing both UI states to be tested visually on every page load.
 ### Property 5: Sub-row structure integrity
 
 _For any_ `HomeBlockRow` with `HasSKAData = true`, the rendered HTML shall contain exactly
-`len(SKASubRows)` sub-rows, each carrying the `ska-sub-row` CSS class (hidden by default),
-and each sub-row shall have its first 10 cells empty and its last 3 cells populated with
-non-empty strings.
+`len(SKASubRows)` sub-rows, each carrying the `ska-sub-row` CSS class (hidden by default).
+Each sub-row shall have 7 empty Overview cells, one `<td colspan="3">` in the VAR group
+position containing the non-empty token type name, and 3 SKA cells populated with non-empty
+strings. The total effective column span shall equal 13.
 
 **Validates: Requirements 5.1, 5.2, 5.3, 5.4, 5.5**
 
