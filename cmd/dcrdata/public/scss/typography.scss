@@ -217,26 +217,28 @@ a.grayed {
   padding: 0;
   margin: 0;
 
-  // Typography (same as Bootstrap links)
+  // Typography
   font: inherit;
   line-height: inherit;
 
-  // Link appearance
-  color: var(--bs-link-color);
-  text-decoration: var(--bs-link-decoration);
+  // Inherit body text color — not a link color variable
+  color: inherit;
+  text-decoration: none;
+  border-bottom: 1px dotted color-mix(in srgb, currentColor 50%, transparent);
   cursor: pointer;
 
   // Remove default button quirks
   display: inline;
 
   &:hover {
-    color: var(--bs-link-hover-color);
-    text-decoration: var(--bs-link-hover-decoration);
+    color: var(--bs-primary);
+    border-bottom: 1px solid currentColor;
+    cursor: pointer;
   }
 
   &:focus {
     outline: 0;
-    text-decoration: var(--bs-link-hover-decoration);
+    border-bottom: 1px solid currentColor;
   }
 
   &:focus-visible {
@@ -249,7 +251,7 @@ a.grayed {
   }
 
   &:active {
-    color: var(--bs-link-hover-color);
+    color: var(--bs-primary);
   }
 
   &:disabled {

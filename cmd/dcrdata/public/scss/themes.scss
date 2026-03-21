@@ -165,7 +165,7 @@ body.darkBG {
   }
 
   select,
-  input[type=number] {
+  input[type="number"] {
     color: #fff;
     background: #2a2a2a;
     border-color: #191919;
@@ -210,5 +210,10 @@ body.darkBG {
 
   .block-banner .text-secondary:hover {
     color: #fff !important;
+  }
+
+  .link-button:hover,
+  .link-button:active {
+    color: $dark-link-hover-color;
   }
 }
