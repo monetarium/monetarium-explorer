@@ -5,9 +5,11 @@
 
 package explorer
 
+import "fmt"
+
 var mockSKATokens = []struct {
 	name   string
-	txs    float64
+	txs    int
 	amount float64
 	size   float64
 }{
@@ -23,22 +25,23 @@ func mockSKAData(height int64) (txCount, amount, size string, subRows []SKASubRo
 	if height%9 == 0 {
 		return "0", "0", "0", nil
 	}
-	offset := float64(height % 10)
-	var aggTx, aggAmt, aggSz float64
+	offset := int(height % 10)
+	var aggTx int
+	var aggAmt, aggSz float64
 	subRows = make([]SKASubRow, 0, len(mockSKATokens))
 	for _, tok := range mockSKATokens {
 		tx := tok.txs + offset
-		amt := tok.amount * (1 + offset/100)
-		sz := tok.size + offset*10
+		amt := tok.amount * (1 + float64(offset)/100)
+		sz := tok.size + float64(offset)*10
 		aggTx += tx
 		aggAmt += amt
 		aggSz += sz
 		subRows = append(subRows, SKASubRow{
 			TokenType: tok.name,
-			TxCount:   threeSigFigs(tx),
+			TxCount:   fmt.Sprintf("%d", tx),
 			Amount:    threeSigFigs(amt),
 			Size:      threeSigFigs(sz),
 		})
 	}
-	return threeSigFigs(aggTx), threeSigFigs(aggAmt), threeSigFigs(aggSz), subRows
+	return fmt.Sprintf("%d", aggTx), threeSigFigs(aggAmt), threeSigFigs(aggSz), subRows
 }
