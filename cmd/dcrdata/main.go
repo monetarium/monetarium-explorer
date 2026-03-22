@@ -478,6 +478,7 @@ func _main(ctx context.Context) error {
 		AppVersion:    Version(),
 		DevPrefetch:   !cfg.NoDevPrefetch,
 		Viewsfolder:   "views",
+		AssetManifestPath: "public/dist/manifest.json",
 		XcBot:         xcBot,
 		AgendasSource: agendaDB,
 		Tracker:       tracker,
