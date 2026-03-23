@@ -285,21 +285,21 @@ func (exp *explorerUI) StopWebsocketHub() {
 
 // ExplorerConfig is the configuration settings for explorerUI.
 type ExplorerConfig struct {
-	DataSource    explorerDataSource
-	ChartSource   ChartDataSource
-	UseRealIP     bool
-	AppVersion    string
-	DevPrefetch   bool
-	Viewsfolder   string
-	XcBot         *exchanges.ExchangeBot
-	AgendasSource agendaBackend
-	Tracker       *agendas.VoteTracker
-	Proposals     PoliteiaBackend
-	PoliteiaURL   string
-	MainnetLink   string
-	TestnetLink   string
-	OnionAddress  string
-	ReloadHTML    bool
+	DataSource        explorerDataSource
+	ChartSource       ChartDataSource
+	UseRealIP         bool
+	AppVersion        string
+	DevPrefetch       bool
+	Viewsfolder       string
+	XcBot             *exchanges.ExchangeBot
+	AgendasSource     agendaBackend
+	Tracker           *agendas.VoteTracker
+	Proposals         PoliteiaBackend
+	PoliteiaURL       string
+	MainnetLink       string
+	TestnetLink       string
+	OnionAddress      string
+	ReloadHTML        bool
 	AssetManifestPath string
 }
 

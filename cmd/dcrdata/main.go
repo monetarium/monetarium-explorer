@@ -472,22 +472,22 @@ func _main(ctx context.Context) error {
 
 	// Create the explorer system.
 	explore := explorer.New(&explorer.ExplorerConfig{
-		DataSource:    chainDB,
-		ChartSource:   charts,
-		UseRealIP:     cfg.UseRealIP,
-		AppVersion:    Version(),
-		DevPrefetch:   !cfg.NoDevPrefetch,
-		Viewsfolder:   "views",
+		DataSource:        chainDB,
+		ChartSource:       charts,
+		UseRealIP:         cfg.UseRealIP,
+		AppVersion:        Version(),
+		DevPrefetch:       !cfg.NoDevPrefetch,
+		Viewsfolder:       "views",
 		AssetManifestPath: "public/dist/manifest.json",
-		XcBot:         xcBot,
-		AgendasSource: agendaDB,
-		Tracker:       tracker,
-		Proposals:     proposalsDB,
-		PoliteiaURL:   cfg.PoliteiaURL,
-		MainnetLink:   cfg.MainnetLink,
-		TestnetLink:   cfg.TestnetLink,
-		ReloadHTML:    cfg.ReloadHTML,
-		OnionAddress:  cfg.OnionAddress,
+		XcBot:             xcBot,
+		AgendasSource:     agendaDB,
+		Tracker:           tracker,
+		Proposals:         proposalsDB,
+		PoliteiaURL:       cfg.PoliteiaURL,
+		MainnetLink:       cfg.MainnetLink,
+		TestnetLink:       cfg.TestnetLink,
+		ReloadHTML:        cfg.ReloadHTML,
+		OnionAddress:      cfg.OnionAddress,
 	})
 	// TODO: allow views config
 	if explore == nil {
