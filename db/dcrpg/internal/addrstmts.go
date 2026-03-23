@@ -19,6 +19,8 @@ const (
 		valid_mainchain BOOLEAN,
 		matching_tx_hash BYTEA, -- the funder if is_funding is FALSE, otherwise any known spender (may be NULL)
 		value INT8,
+		ska_value NUMERIC(48,0),
+		coin_type INT2 NOT NULL DEFAULT 0,
 		block_time TIMESTAMPTZ NOT NULL, -- ugh, so much dup
 		is_funding BOOLEAN,
 		tx_vin_vout_index INT4, -- vout if is_funding is TRUE, vin if FALSE
@@ -29,8 +31,8 @@ const (
 	// insertAddressRow is the basis for several address insert/upsert
 	// statements.
 	insertAddressRow = `INSERT INTO addresses (address, matching_tx_hash, tx_hash,
-		tx_vin_vout_index, tx_vin_vout_row_id, value, block_time, is_funding, valid_mainchain, tx_type)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) `
+		tx_vin_vout_index, tx_vin_vout_row_id, value, ska_value, coin_type, block_time, is_funding, valid_mainchain, tx_type)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) `
 
 	// InsertAddressRow inserts a address block row without checking for unique
 	// index conflicts. This should only be used before the unique indexes are

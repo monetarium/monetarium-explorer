@@ -21,12 +21,14 @@ const (
 		prev_tx_index INT8, -- int8???
 		prev_tx_tree INT2,
 		value_in INT8,
+		ska_value_in NUMERIC(48,0),
+		coin_type INT2 NOT NULL DEFAULT 0,
 		tx_type INT4
 	);`
 
 	// insertVinRow is the basis for several vins insert/upsert statements.
 	insertVinRow = `INSERT INTO vins (tx_hash, tx_index, tx_tree, prev_tx_hash, prev_tx_index, prev_tx_tree,
-		value_in, is_valid, is_mainchain, block_time, tx_type) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) `
+		value_in, ska_value_in, coin_type, is_valid, is_mainchain, block_time, tx_type) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) `
 
 	// InsertVinRow inserts a new vin row without checking for unique index
 	// conflicts. This should only be used before the unique indexes are created
@@ -145,6 +147,8 @@ const (
 		tx_index INT4,
 		tx_tree INT2,
 		value INT8,
+		ska_value NUMERIC(48,0),
+		coin_type INT2 NOT NULL DEFAULT 0,
 		version INT2,
 		-- pkscript BYTEA, -- ask the node
 		script_type TEXT,
@@ -154,9 +158,9 @@ const (
 	);`
 
 	// insertVinRow is the basis for several vout insert/upsert statements.
-	insertVoutRow = `INSERT INTO vouts (tx_hash, tx_index, tx_tree, value,
+	insertVoutRow = `INSERT INTO vouts (tx_hash, tx_index, tx_tree, value, ska_value, coin_type,
 		version, script_type, script_addresses, mixed)
-	VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ` // not with spend_tx_row_id
+	VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) ` // not with spend_tx_row_id
 
 	// InsertVoutRow inserts a new vout row without checking for unique index
 	// conflicts. This should only be used before the unique indexes are created

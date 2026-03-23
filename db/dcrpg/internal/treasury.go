@@ -8,7 +8,9 @@ const (
 	CreateTreasuryTable = `CREATE TABLE IF NOT EXISTS treasury (
 		tx_hash BYTEA,
 		tx_type INT4,
-		value NUMERIC(32,8),
+		value INT8,
+		ska_value NUMERIC(48,0),
+		coin_type INT2 NOT NULL DEFAULT 0,
 		block_hash BYTEA,
 		block_height INT8,
 		block_time TIMESTAMPTZ NOT NULL,
@@ -29,8 +31,8 @@ const (
 	// index conflicts. This should only be used before the unique indexes are
 	// created or there may be constraint violations (errors).
 	InsertTreasuryRow = `INSERT INTO treasury (
-		tx_hash, tx_type, value, block_hash, block_height, block_time, is_mainchain)
-	VALUES ($1, $2, $3,	$4, $5, $6, $7) `
+		tx_hash, tx_type, value, ska_value, coin_type, block_hash, block_height, block_time, is_mainchain)
+	VALUES ($1, $2, $3,	$4, $5, $6, $7, $8, $9) `
 
 	// UpsertTreasuryRow is an upsert (insert or update on conflict), returning
 	// the inserted/updated treasury row id. is_mainchain is updated as this

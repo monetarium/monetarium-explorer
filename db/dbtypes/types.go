@@ -16,6 +16,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"math/big"
 
 	"github.com/monetarium/monetarium-node/chaincfg/chainhash"
 	"github.com/monetarium/monetarium-node/dcrutil"
@@ -1219,6 +1220,8 @@ type Vout struct {
 	TxTree           int8             `json:"tx_tree"`
 	TxType           int16            `json:"tx_type"`
 	Value            uint64           `json:"value"`
+	SKAValue         *big.Int         `json:"ska_value,omitempty"`
+	CoinType         uint8            `json:"coin_type"`
 	Version          uint16           `json:"version"`
 	ScriptPubKeyData ScriptPubKeyData `json:"pkScript"`
 	Mixed            bool             `json:"mixed"`
@@ -2032,6 +2035,8 @@ type VinTxProperty struct {
 	PrevTxTree  uint16    `json:"tree"`
 	Sequence    uint32    `json:"sequence"`
 	ValueIn     int64     `json:"amountin"`
+	SKAValueIn  *big.Int  `json:"ska_value_in,omitempty"`
+	CoinType    uint8     `json:"coin_type"`
 	TxID        ChainHash `json:"tx_hash"`
 	TxIndex     uint32    `json:"tx_index"`
 	TxTree      uint16    `json:"tx_tree"`
@@ -2109,6 +2114,10 @@ type Tx struct {
 	Spent       int64     `json:"spent"`
 	Sent        int64     `json:"sent"`
 	Fees        int64     `json:"fees"`
+	SKASpent       *big.Int     `json:"ska_spent,omitempty"`
+	SKASent        *big.Int     `json:"ska_sent,omitempty"`
+	SKAFees        *big.Int     `json:"ska_fees,omitempty"`
+	CoinType       uint8     `json:"coin_type"`
 	MixCount    int32     `json:"mix_count"`
 	MixDenom    int64     `json:"mix_denom"`
 	NumVin      uint32    `json:"numvin"`

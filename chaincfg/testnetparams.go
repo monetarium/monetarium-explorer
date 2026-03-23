@@ -532,7 +532,9 @@ func TestNet3Params() *Params {
 		StakeMajorityDivisor:    4,
 
 		// Monetarium has no treasury (BlockTaxProportion = 0)
-		OrganizationPkScript:        nil,
+		//OrganizationPkScript:        nil,
+		//TODO test address
+		OrganizationPkScript:        hexDecode("a914d585cd7426d25b4ea5faf1e6987aacfeda3db94287"),
 		OrganizationPkScriptVersion: 0,
 		BlockOneLedger:              nil, // Monetarium has no premine
 

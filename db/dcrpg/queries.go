@@ -280,18 +280,39 @@ func insertTreasuryTxns(db *sql.DB, dbTxns []*dbtypes.Tx, checked, updateExistin
 	// Insert each treasury txn.
 	for _, tx := range dbTxns {
 		var value int64
-		switch tx.TxType {
-		case int16(stake.TxTypeTreasuryBase):
-			value = tx.Sent // == tx.Spent because fees are 0
-		case int16(stake.TxTypeTSpend):
-			value = -tx.Spent
-		case int16(stake.TxTypeTAdd):
-			value = int64(tx.Vouts[0].Value)
-		default:
-			continue // not a treasury tx
+		var skaValue *string
+		coinType := tx.CoinType
+		if coinType != 0 {
+			// SKA path
+		        switch tx.TxType {
+		        case int16(stake.TxTypeTreasuryBase):
+				s := tx.SKASent.String()
+				skaValue = &s
+		        case int16(stake.TxTypeTSpend):
+				neg := new(big.Int).Neg(tx.SKASpent)
+				s := neg.String()
+				skaValue = &s
+		        case int16(stake.TxTypeTAdd):
+				s := tx.Vouts[0].SKAValue.String()
+				skaValue = &s
+		        default:
+		        	continue
+		        }
+		} else {
+			// VAR path
+		        switch tx.TxType {
+		        case int16(stake.TxTypeTreasuryBase):
+		        	value = tx.Sent // == tx.Spent because fees are 0
+		        case int16(stake.TxTypeTSpend):
+		        	value = -tx.Spent
+		        case int16(stake.TxTypeTAdd):
+		        	value = int64(tx.Vouts[0].Value)
+		        default:
+		        	continue // not a treasury tx
+		        }
 		}
 
-		_, err = stmt.Exec(tx.TxID, tx.TxType, value, tx.BlockHash, tx.BlockHeight,
+		_, err = stmt.Exec(tx.TxID, tx.TxType, value, skaValue, coinType, tx.BlockHash, tx.BlockHeight,
 			tx.BlockTime, tx.IsMainchainBlock)
 		if err != nil {
 			if err == sql.ErrNoRows {
@@ -2054,7 +2075,7 @@ func insertVoutsStmt(stmt *sql.Stmt, dbVouts []*dbtypes.Vout) ([]uint64, []dbtyp
 	for _, vout := range dbVouts {
 		var id uint64
 		err := stmt.QueryRow(
-			vout.TxHash, vout.TxIndex, vout.TxTree, vout.Value, int32(vout.Version),
+			vout.TxHash, vout.TxIndex, vout.TxTree, vout.Value, vout.SKAValue, vout.CoinType, int32(vout.Version),
 			// vout.ScriptPubKey, int32(vout.ScriptPubKeyData.ReqSigs),
 			vout.ScriptPubKeyData.Type,
 			addressList(vout.ScriptPubKeyData.Addresses), vout.Mixed).Scan(&id)

@@ -19,11 +19,15 @@ const (
 		lock_time INT4,
 		expiry INT4,
 		size INT4,
-		spent NUMERIC(32,8),
-		sent NUMERIC(32,8),
-		fees NUMERIC(32,8),
+		spent INT8,
+		sent INT8,
+		fees INT8,
 		mix_count INT4,
 		mix_denom NUMERIC(32,8),
+		ska_spent NUMERIC(48,0),
+		ska_sent NUMERIC(48,0),
+		ska_fees NUMERIC(48,0),
+		coin_type INT2 NOT NULL DEFAULT 0,
 		num_vin INT4,
 		vin_db_ids INT8[],
 		num_vout INT4,
@@ -38,6 +42,8 @@ const (
 		tx_type, version, tree, tx_hash, block_index,
 		lock_time, expiry, size, spent, sent, fees,
 		mix_count, mix_denom,
+		ska_spent, ska_sent, ska_fees,
+		coin_type,
 		num_vin, vin_db_ids, num_vout, vout_db_ids,
 		is_valid, is_mainchain)
 	VALUES (
@@ -46,7 +52,7 @@ const (
 		$9, $10, $11, $12, $13, $14,
 		$15, $16,
 		$17, $18, $19, $20,
-		$21, $22) `
+		$21, $22, $23, $24, $25, $26) `
 
 	// InsertTxRow inserts a new transaction row without checking for unique
 	// index conflicts. This should only be used before the unique indexes are

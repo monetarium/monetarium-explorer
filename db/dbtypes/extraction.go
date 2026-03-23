@@ -7,7 +7,9 @@ import (
 	"github.com/monetarium/monetarium-node/chaincfg"
 	"github.com/monetarium/monetarium-node/txscript/stdscript"
 	"github.com/monetarium/monetarium-node/wire"
+	"github.com/monetarium/monetarium-node/cointype"
 	"github.com/monetarium/monetarium-explorer/txhelpers"
+	"math/big"
 )
 
 // DevSubsidyAddress returns the development subsidy address for the specified
@@ -79,11 +81,27 @@ func processTransactions(msgBlock *wire.MsgBlock, tree int8, chainParams *chainc
 			}
 		}
 		var spent, sent int64
-		for _, txin := range tx.TxIn {
-			spent += txin.ValueIn
+		var skaSpent, skaSent *big.Int
+		txCoinType := cointype.CoinTypeVAR
+		if len(tx.TxOut) > 0 {
+			txCoinType = tx.TxOut[0].CoinType
 		}
-		for _, txout := range tx.TxOut {
-			sent += txout.Value
+		if txCoinType.IsSKA() {
+			skaSpent = new(big.Int)
+			skaSent = new(big.Int)
+		        for _, txin := range tx.TxIn {
+		        	skaSpent.Add(skaSpent, txin.SKAValueIn)
+		        }
+		        for _, txout := range tx.TxOut {
+		        	skaSent.Add(skaSent, txout.SKAValue)
+		        }
+		} else {
+		        for _, txin := range tx.TxIn {
+		        	spent += txin.ValueIn
+		        }
+		        for _, txout := range tx.TxOut {
+		        	sent += txout.Value
+		        }
 		}
 		fees := spent - sent
 		dbTx := &Tx{
@@ -101,12 +119,20 @@ func processTransactions(msgBlock *wire.MsgBlock, tree int8, chainParams *chainc
 			Spent:            spent,
 			Sent:             sent,
 			Fees:             fees,
+			SKASpent:         skaSpent,
+			SKASent:          skaSent,
+			SKAFees:          nil,
+			CoinType:         uint8(txCoinType),
 			MixCount:         int32(mixCount),
 			MixDenom:         mixDenom,
 			NumVin:           uint32(len(tx.TxIn)),
 			NumVout:          uint32(len(tx.TxOut)),
 			IsValid:          isValid || tree == wire.TxTreeStake,
 			IsMainchainBlock: isMainchain,
+		}
+		if txCoinType.IsSKA() && skaSpent != nil && skaSent != nil {
+			skaFees := new(big.Int).Sub(skaSpent, skaSent)
+			dbTx.SKAFees = skaFees
 		}
 
 		//dbTx.Vins = make([]VinTxProperty, 0, dbTx.NumVin)
@@ -118,6 +144,8 @@ func processTransactions(msgBlock *wire.MsgBlock, tree int8, chainParams *chainc
 				PrevTxTree:  uint16(txin.PreviousOutPoint.Tree),
 				Sequence:    txin.Sequence,
 				ValueIn:     txin.ValueIn,
+				SKAValueIn:     txin.SKAValueIn,
+				CoinType:     uint8(txCoinType),
 				TxID:        dbTx.TxID,
 				TxIndex:     uint32(idx),
 				TxType:      dbTx.TxType,
@@ -143,6 +171,8 @@ func processTransactions(msgBlock *wire.MsgBlock, tree int8, chainParams *chainc
 				TxTree:  tree,
 				TxType:  dbTx.TxType,
 				Value:   uint64(txout.Value),
+				SKAValue:   txout.SKAValue,
+				CoinType:   uint8(txout.CoinType),
 				Version: txout.Version,
 				Mixed:   mixDenom > 0 && mixDenom == txout.Value, // later, check ticket and vote outputs against the spent outputs' mixed status
 			}

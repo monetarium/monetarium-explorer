@@ -15,8 +15,11 @@ const (
 		is_multisig BOOLEAN, -- historically false always, but actually indicates is_p2sh
 		is_split BOOLEAN,
 		num_inputs INT2,
-		price NUMERIC(32,8),
-		fee NUMERIC(32,8),
+		price FLOAT8,
+		fee FLOAT8,
+		ska_price NUMERIC(48,18),
+		ska_fee NUMERIC(48,18),
+		coin_type INT2 NOT NULL DEFAULT 0,
 		spend_type INT2,
 		pool_status INT2,
 		is_mainchain BOOLEAN,
@@ -28,13 +31,13 @@ const (
 	insertTicketRow = `INSERT INTO tickets (
 		tx_hash, block_hash, block_height, purchase_tx_db_id,
 		stakesubmission_address, is_multisig, is_split,
-		num_inputs, price, fee, spend_type, pool_status,
+		num_inputs, price, fee, ska_price, ska_fee, coin_type, spend_type, pool_status,
 		is_mainchain)
 	VALUES (
 		$1, $2, $3,	$4,
 		$5, $6, $7,
 		$8, $9, $10, $11, $12,
-		$13) `
+		$13, $14, $15, $16) `
 
 	// InsertTicketRow inserts a new ticket row without checking for unique
 	// index conflicts. This should only be used before the unique indexes are
@@ -169,8 +172,11 @@ const (
 		block_valid BOOLEAN,
 		ticket_hash BYTEA,
 		ticket_tx_db_id INT8,
-		ticket_price NUMERIC(32,8),
-		vote_reward NUMERIC(32,8),
+		ticket_price FLOAT8,
+		vote_reward FLOAT8,
+		ska_ticket_price NUMERIC(48,18),
+		ska_vote_reward NUMERIC(48,18),
+		coin_type INT2 NOT NULL DEFAULT 0,
 		is_mainchain BOOLEAN,
 		block_time TIMESTAMPTZ
 	);`
@@ -181,13 +187,14 @@ const (
 		block_hash, candidate_block_hash,
 		version, vote_bits, block_valid,
 		ticket_hash, ticket_tx_db_id, ticket_price, vote_reward,
+		ska_ticket_price, ska_vote_reward, coin_type,
 		is_mainchain, block_time)
 	VALUES (
 		$1, $2,
 		$3, $4,
 		$5, $6, $7,
 		$8, $9, $10, $11,
-		$12, $13) `
+		$12, $13, $14, $15, $16) `
 
 	// InsertVoteRow inserts a new vote row without checking for unique index
 	// conflicts. This should only be used before the unique indexes are created
