@@ -378,15 +378,31 @@ func insertTickets(db *sql.DB, dbTxns []*dbtypes.Tx, txDbIDs []uint64, checked, 
 			// p2sh tickets, or just remove the is_multisig column entirely.
 		}
 
-		price := toCoin(tx.Vouts[0].Value)
-		fee := toCoin(tx.Fees)
+		// Prepare VAR and SKA price/fee fields
+		var price, fee float64
+		var skaPrice, skaFee *string
+		if tx.CoinType != 0 {
+			// SKA path
+			if tx.Vouts[0].SKAValue != nil {
+				s := tx.Vouts[0].SKAValue.String()
+				skaPrice = &s
+			}
+			if tx.SKAFees != nil {
+				s := tx.SKAFees.String()
+				skaFee = &s
+			}
+		} else {
+			// VAR path
+			price = toCoin(tx.Vouts[0].Value)
+			fee = toCoin(tx.Fees)
+		}
 		isSplit := tx.NumVin > 1
 
 		var id uint64
 		err := stmt.QueryRow(
 			tx.TxID, tx.BlockHash, tx.BlockHeight, ticketDbIDs[i],
 			stakesubmissionAddress, isScriptHash, isSplit, tx.NumVin,
-			price, fee, dbtypes.TicketUnspent, dbtypes.PoolStatusLive,
+			price, fee, skaPrice, skaFee, tx.CoinType, dbtypes.TicketUnspent, dbtypes.PoolStatusLive,
 			tx.IsMainchainBlock).Scan(&id)
 		if err != nil {
 			if err == sql.ErrNoRows {
@@ -559,9 +575,24 @@ func insertVotes(db *sql.DB, dbTxns []*dbtypes.Tx, _ /*txDbIDs*/ []uint64, fTx *
 			bail()
 			return nil, nil, nil, nil, nil, err
 		}
+		// Prepare SKA VAr and SKA fields for vote reward and stake submission amount
+		var voteReward, stakeSubmissionAmount float64
+		var skaVoteReward, skaTicketPrice *string
+		coinType := tx.CoinType
+		if coinType != 0 {
+			if msgTx.TxIn[0].SKAValueIn != nil {
+				s := msgTx.TxIn[0].SKAValueIn.String()
+				skaVoteReward = &s
+			}
+			if msgTx.TxIn[1].SKAValueIn != nil {
+				s := msgTx.TxIn[1].SKAValueIn.String()
+				skaTicketPrice = &s
+			}
+		} else {
+		        voteReward = toCoin(msgTx.TxIn[0].ValueIn)
+		        stakeSubmissionAmount = toCoin(msgTx.TxIn[1].ValueIn)
+		}
 
-		voteReward := toCoin(msgTx.TxIn[0].ValueIn)
-		stakeSubmissionAmount := toCoin(msgTx.TxIn[1].ValueIn)
 		stakeSubmissionTxHash := dbtypes.ChainHash(msgTx.TxIn[1].PreviousOutPoint.Hash)
 		spentTicketHashes = append(spentTicketHashes, stakeSubmissionTxHash)
 
@@ -587,11 +618,12 @@ func insertVotes(db *sql.DB, dbTxns []*dbtypes.Tx, _ /*txDbIDs*/ []uint64, fTx *
 
 		// votes table insert
 		var votesRowID uint64
+		//TODO 13
 		err = voteStmt.QueryRow(
 			tx.BlockHeight, tx.TxID, tx.BlockHash, candidateBlockHash,
 			int32(voteVersion), int16(voteBits), validBlock.Validity,
 			stakeSubmissionTxHash, ticketTxDbID, stakeSubmissionAmount,
-			voteReward, tx.IsMainchainBlock, tx.BlockTime).Scan(&votesRowID)
+			voteReward, skaTicketPrice, skaVoteReward, coinType, tx.IsMainchainBlock, tx.BlockTime).Scan(&votesRowID)
 		if err != nil {
 			if err == sql.ErrNoRows {
 				continue
@@ -1355,8 +1387,13 @@ func insertAddressRowsDbTx(dbTx *sql.Tx, dbAs []*dbtypes.AddressRow, dupCheck, u
 	ids := make([]uint64, 0, len(dbAs))
 	for _, dbA := range dbAs {
 		var id uint64
+		var skaValue *string
+		if dbA.CoinType != 0 && dbA.SKAValue != nil {
+			s := dbA.SKAValue.String()
+			skaValue = &s
+		}
 		err := stmt.QueryRow(dbA.Address, dbA.MatchingTxHash, dbA.TxHash,
-			dbA.TxVinVoutIndex, dbA.VinVoutDbID, dbA.Value, dbA.TxBlockTime,
+			dbA.TxVinVoutIndex, dbA.VinVoutDbID, dbA.Value, skaValue, dbA.CoinType, dbA.TxBlockTime,
 			dbA.IsFunding, dbA.ValidMainChain, dbA.TxType).Scan(&id)
 		if err != nil {
 			if err == sql.ErrNoRows {
@@ -1950,9 +1987,15 @@ func insertVinsStmt(stmt *sql.Stmt, dbVins dbtypes.VinTxPropertyARRAY) ([]uint64
 	ids := make([]uint64, 0, len(dbVins))
 	for _, vin := range dbVins {
 		var id uint64
+		// Prepare SKA fields - nil for VAR string for SKA
+		var skaValueIn *string
+		if vin.CoinType != 0 && vin.SKAValueIn != nil {
+			s := vin.SKAValueIn.String()
+			skaValueIn = &s
+		}
 		err := stmt.QueryRow(vin.TxID, vin.TxIndex, vin.TxTree,
 			vin.PrevTxHash, vin.PrevTxIndex, vin.PrevTxTree,
-			vin.ValueIn, vin.IsValid, vin.IsMainchain, vin.Time, vin.TxType).Scan(&id)
+			vin.ValueIn, skaValueIn, vin.CoinType, vin.IsValid, vin.IsMainchain, vin.Time, vin.TxType).Scan(&id)
 		if err != nil {
 			return ids, fmt.Errorf("InsertVins INSERT exec failed: %w", err)
 		}
@@ -2074,8 +2117,13 @@ func insertVoutsStmt(stmt *sql.Stmt, dbVouts []*dbtypes.Vout) ([]uint64, []dbtyp
 	ids := make([]uint64, 0, len(dbVouts))
 	for _, vout := range dbVouts {
 		var id uint64
+		var skaValue *string
+		if vout.CoinType != 0 && vout.SKAValue != nil {
+			s := vout.SKAValue.String()
+			skaValue = &s
+		}
 		err := stmt.QueryRow(
-			vout.TxHash, vout.TxIndex, vout.TxTree, vout.Value, vout.SKAValue, vout.CoinType, int32(vout.Version),
+			vout.TxHash, vout.TxIndex, vout.TxTree, vout.Value, skaValue, vout.CoinType, int32(vout.Version),
 			// vout.ScriptPubKey, int32(vout.ScriptPubKeyData.ReqSigs),
 			vout.ScriptPubKeyData.Type,
 			addressList(vout.ScriptPubKeyData.Addresses), vout.Mixed).Scan(&id)
@@ -2094,6 +2142,8 @@ func insertVoutsStmt(stmt *sql.Stmt, dbVouts []*dbtypes.Vout) ([]uint64, []dbtyp
 				VinVoutDbID:    id,
 				TxType:         vout.TxType,
 				Value:          vout.Value,
+				SKAValue:       vout.SKAValue,
+				CoinType:       vout.CoinType,
 				// Not set here are: ValidMainchain, MatchingTxHash, IsFunding,
 				// AtomsCredit, AtomsDebit, and TxBlockTime.
 			})
@@ -2730,6 +2780,14 @@ func insertSpendingAddressRow(tx *sql.Tx, fundingTxHash dbtypes.ChainHash, fundi
 	mixed = spentUtxoData.Mixed
 	voutDbID = spentUtxoData.VoutDbID
 
+	// Prepare SKA fields from UTXOData
+	var skaValue *string
+	coinType := spentUtxoData.CoinType
+	if coinType != 0 && spentUtxoData.SKAValue!= nil {
+		s := spentUtxoData.SKAValue.String()
+		skaValue = &s
+	}
+
 	// Check if the block time was provided.
 	var blockTime dbtypes.TimeDef
 	if len(blockT) > 0 {
@@ -2748,7 +2806,7 @@ func insertSpendingAddressRow(tx *sql.Tx, fundingTxHash dbtypes.ChainHash, fundi
 		var isFunding bool // spending
 		var rowID uint64
 		err := tx.QueryRow(sqlStmt, addrs[i], fundingTxHash, spendingTxHash,
-			spendingTxVinIndex, vinDbID, value, blockTime, isFunding,
+			spendingTxVinIndex, vinDbID, value, skaValue, coinType, blockTime, isFunding,
 			mainchain && valid, txType).Scan(&rowID)
 		if err != nil {
 			return nil, 0, 0, mixed, fmt.Errorf("InsertAddressRow: %w", err)
@@ -2884,11 +2942,29 @@ func insertTxnsStmt(stmt *sql.Stmt, dbTxns []*dbtypes.Tx) ([]uint64, error) {
 	ids := make([]uint64, 0, len(dbTxns))
 	for _, tx := range dbTxns {
 		var id uint64
+		// Prepare SKA fields - nil for VAR string for SKA
+		var skaSpent, skaSent, skaFees *string
+		if tx.CoinType!= 0 {
+			if tx.SKASpent != nil {
+				s := tx.SKASpent.String()
+				skaSpent = &s
+			}
+			if tx.SKASent != nil {
+				s := tx.SKASent.String()
+				skaSent = &s
+			}
+			if tx.SKAFees != nil {
+				s := tx.SKAFees.String()
+				skaFees = &s
+			}
+		}
 		err := stmt.QueryRow(
 			tx.BlockHash, tx.BlockHeight, tx.BlockTime,
 			tx.TxType, int16(tx.Version), tx.Tree, tx.TxID, tx.BlockIndex,
 			int32(tx.Locktime), int32(tx.Expiry), tx.Size, tx.Spent, tx.Sent, tx.Fees,
 			tx.MixCount, tx.MixDenom,
+			skaSpent, skaSent, skaFees,
+			tx.CoinType,
 			tx.NumVin, dbtypes.UInt64Array(tx.VinDbIds),
 			tx.NumVout, dbtypes.UInt64Array(tx.VoutDbIds), tx.IsValid,
 			tx.IsMainchainBlock).Scan(&id)

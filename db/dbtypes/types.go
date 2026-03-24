@@ -1231,6 +1231,8 @@ type Vout struct {
 type UTXOData struct {
 	Addresses []string
 	Value     int64
+	SKAValue  *big.Int
+	CoinType  uint8
 	Mixed     bool
 	VoutDbID  int64
 }
@@ -1255,6 +1257,8 @@ type AddressRow struct {
 	TxHash         ChainHash
 	TxVinVoutIndex uint32
 	Value          uint64
+	SKAValue       *big.Int
+	CoinType       uint8
 	VinVoutDbID    uint64
 	MergedCount    uint64
 	TxType         int16
@@ -1263,6 +1267,8 @@ type AddressRow struct {
 	// IsFunding should true if AtomsCredit > AtomsDebit
 	AtomsCredit uint64
 	AtomsDebit  uint64
+	SKAAtomsCredit *big.Int
+	SKAAtomsDebit  *big.Int
 }
 
 // IsMerged indicates if the AddressRow represents data for a "merged" address
