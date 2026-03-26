@@ -31,35 +31,40 @@ let baseSubsidy, subsidyInterval, subsidyExponent, windowSize, avgBlockTime
 let rawCoinSupply, rawPoolValue
 let yFormatter, legendEntry, legendMarker, legendElement
 
-function usesWindowUnits (chart) {
+function usesWindowUnits(chart) {
   return windowScales.indexOf(chart) > -1
 }
 
-function usesHybridUnits (chart) {
+function usesHybridUnits(chart) {
   return hybridScales.indexOf(chart) > -1
 }
 
-function isScaleDisabled (chart) {
+function isScaleDisabled(chart) {
   return lineScales.indexOf(chart) > -1
 }
 
-function isModeEnabled (chart) {
+function isModeEnabled(chart) {
   return modeScales.includes(chart)
 }
 
-function hasMultipleVisibility (chart) {
+function hasMultipleVisibility(chart) {
   return multiYAxisChart.indexOf(chart) > -1
 }
 
-function intComma (amount) {
+function intComma(amount) {
   if (!amount) return ''
   return amount.toLocaleString(undefined, { maximumFractionDigits: 0 })
 }
 
-function axesToRestoreYRange (chartName, origYRange, newYRange) {
+function axesToRestoreYRange(chartName, origYRange, newYRange) {
   const axesIndexes = yValueRanges[chartName]
-  if (!Array.isArray(origYRange) || !Array.isArray(newYRange) ||
-    origYRange.length !== newYRange.length || !axesIndexes) return
+  if (
+    !Array.isArray(origYRange) ||
+    !Array.isArray(newYRange) ||
+    origYRange.length !== newYRange.length ||
+    !axesIndexes
+  )
+    return
 
   let axes
   for (let i = 0; i < axesIndexes.length; i++) {
@@ -77,35 +82,36 @@ function axesToRestoreYRange (chartName, origYRange, newYRange) {
   return axes
 }
 
-function withBigUnits (v, units) {
+function withBigUnits(v, units) {
   const i = v === 0 ? 0 : Math.floor(Math.log10(v) / 3)
   return (v / Math.pow(1000, i)).toFixed(3) + ' ' + units[i]
 }
 
-function blockReward (height) {
-  if (height >= stakeValHeight) return baseSubsidy * Math.pow(subsidyExponent, Math.floor(height / subsidyInterval))
+function blockReward(height) {
+  if (height >= stakeValHeight)
+    return baseSubsidy * Math.pow(subsidyExponent, Math.floor(height / subsidyInterval))
   if (height > 1) return baseSubsidy * (1 - stakeShare)
   if (height === 1) return premine
   return 0
 }
 
-function addLegendEntryFmt (div, series, fmt) {
+function addLegendEntryFmt(div, series, fmt) {
   div.appendChild(legendEntry(`${series.dashHTML} ${series.labelHTML}: ${fmt(series.y)}`))
 }
 
-function addLegendEntry (div, series) {
+function addLegendEntry(div, series) {
   div.appendChild(legendEntry(`${series.dashHTML} ${series.labelHTML}: ${series.yHTML}`))
 }
 
-function defaultYFormatter (div, data) {
+function defaultYFormatter(div, data) {
   addLegendEntry(div, data.series[0])
 }
 
-function customYFormatter (fmt) {
+function customYFormatter(fmt) {
   return (div, data) => addLegendEntryFmt(div, data.series[0], fmt)
 }
 
-function legendFormatter (data) {
+function legendFormatter(data) {
   if (data.x == null) return legendElement.classList.add('d-hide')
   legendElement.classList.remove('d-hide')
   const div = document.createElement('div')
@@ -119,7 +125,7 @@ function legendFormatter (data) {
   return div.innerHTML
 }
 
-function nightModeOptions (nightModeOn) {
+function nightModeOptions(nightModeOn) {
   if (nightModeOn) {
     return {
       rangeSelectorAlpha: 0.3,
@@ -134,7 +140,7 @@ function nightModeOptions (nightModeOn) {
   }
 }
 
-function zipWindowHvYZ (ys, zs, winSize, yMult, zMult, offset) {
+function zipWindowHvYZ(ys, zs, winSize, yMult, zMult, offset) {
   yMult = yMult || 1
   zMult = zMult || 1
   offset = offset || 0
@@ -143,7 +149,7 @@ function zipWindowHvYZ (ys, zs, winSize, yMult, zMult, offset) {
   })
 }
 
-function zipWindowHvY (ys, winSize, yMult, offset) {
+function zipWindowHvY(ys, winSize, yMult, offset) {
   yMult = yMult || 1
   offset = offset || 0
   return ys.map((y, i) => {
@@ -151,7 +157,7 @@ function zipWindowHvY (ys, winSize, yMult, offset) {
   })
 }
 
-function zipWindowTvYZ (times, ys, zs, yMult, zMult) {
+function zipWindowTvYZ(times, ys, zs, yMult, zMult) {
   yMult = yMult || 1
   zMult = zMult || 1
   return times.map((t, i) => {
@@ -159,21 +165,21 @@ function zipWindowTvYZ (times, ys, zs, yMult, zMult) {
   })
 }
 
-function zipWindowTvY (times, ys, yMult) {
+function zipWindowTvY(times, ys, yMult) {
   yMult = yMult || 1
   return times.map((t, i) => {
     return [new Date(t * 1000), ys[i] * yMult]
   })
 }
 
-function zipTvY (times, ys, yMult) {
+function zipTvY(times, ys, yMult) {
   yMult = yMult || 1
   return times.map((t, i) => {
     return [new Date(t * 1000), ys[i] * yMult]
   })
 }
 
-function zipIvY (ys, yMult, offset) {
+function zipIvY(ys, yMult, offset) {
   yMult = yMult || 1
   offset = offset || 1 // TODO: check for why offset is set to a default value of 1 when genesis block has a height of 0
   return ys.map((y, i) => {
@@ -181,7 +187,7 @@ function zipIvY (ys, yMult, offset) {
   })
 }
 
-function zipHvY (heights, ys, yMult, offset) {
+function zipHvY(heights, ys, yMult, offset) {
   yMult = yMult || 1
   offset = offset || 1
   return ys.map((y, i) => {
@@ -189,7 +195,7 @@ function zipHvY (heights, ys, yMult, offset) {
   })
 }
 
-function zip2D (data, ys, yMult, offset) {
+function zip2D(data, ys, yMult, offset) {
   yMult = yMult || 1
   if (data.axis === 'height') {
     if (data.bin === 'block') return zipIvY(ys, yMult)
@@ -198,7 +204,7 @@ function zip2D (data, ys, yMult, offset) {
   return zipTvY(data.t, ys, yMult)
 }
 
-function anonymitySetFunc (data) {
+function anonymitySetFunc(data) {
   let d
   let start = -1
   let end = 0
@@ -232,12 +238,12 @@ function anonymitySetFunc (data) {
   return { data: d, limits: [start, end] }
 }
 
-function ticketPriceFunc (data) {
+function ticketPriceFunc(data) {
   if (data.t) return zipWindowTvYZ(data.t, data.price, data.count, atomsToDCR)
   return zipWindowHvYZ(data.price, data.count, data.window, atomsToDCR)
 }
 
-function poolSizeFunc (data) {
+function poolSizeFunc(data) {
   let out = []
   if (data.axis === 'height') {
     if (data.bin === 'block') out = zipIvY(data.count)
@@ -245,7 +251,7 @@ function poolSizeFunc (data) {
   } else {
     out = zipTvY(data.t, data.count)
   }
-  out.forEach(pt => pt.push(null))
+  out.forEach((pt) => pt.push(null))
   if (out.length) {
     out[0][2] = ticketPoolSizeTarget
     out[out.length - 1][2] = ticketPoolSizeTarget
@@ -253,10 +259,10 @@ function poolSizeFunc (data) {
   return out
 }
 
-function percentStakedFunc (data) {
-  rawCoinSupply = data.circulation.map(v => v * atomsToDCR)
-  rawPoolValue = data.poolval.map(v => v * atomsToDCR)
-  const ys = rawPoolValue.map((v, i) => [v / rawCoinSupply[i] * 100])
+function percentStakedFunc(data) {
+  rawCoinSupply = data.circulation.map((v) => v * atomsToDCR)
+  rawPoolValue = data.poolval.map((v) => v * atomsToDCR)
+  const ys = rawPoolValue.map((v, i) => [(v / rawCoinSupply[i]) * 100])
   if (data.axis === 'height') {
     if (data.bin === 'block') return zipIvY(ys)
     return zipHvY(data.h, ys)
@@ -264,12 +270,12 @@ function percentStakedFunc (data) {
   return zipTvY(data.t, ys)
 }
 
-function powDiffFunc (data) {
+function powDiffFunc(data) {
   if (data.t) return zipWindowTvY(data.t, data.diff)
   return zipWindowHvY(data.diff, data.window)
 }
 
-function circulationFunc (chartData) {
+function circulationFunc(chartData) {
   let yMax = 0
   let h = -1
   const addDough = (newHeight) => {
@@ -285,11 +291,11 @@ function circulationFunc (chartData) {
   const isHeightAxis = chartData.axis === 'height'
   let xFunc, hFunc
   if (chartData.bin === 'day') {
-    xFunc = isHeightAxis ? i => heights[i] : i => new Date(times[i] * 1000)
-    hFunc = i => heights[i]
+    xFunc = isHeightAxis ? (i) => heights[i] : (i) => new Date(times[i] * 1000)
+    hFunc = (i) => heights[i]
   } else {
-    xFunc = isHeightAxis ? i => i : i => new Date(times[i] * 1000)
-    hFunc = i => i
+    xFunc = isHeightAxis ? (i) => i : (i) => new Date(times[i] * 1000)
+    hFunc = (i) => i
   }
 
   const inflation = []
@@ -306,7 +312,11 @@ function circulationFunc (chartData) {
   // Set yMax to the start at last actual supply for the prediction line.
   yMax = lastPt[1]
   if (!isHeightAxis) x = x.getTime()
-  xFunc = isHeightAxis ? xx => xx : xx => { return new Date(xx) }
+  xFunc = isHeightAxis
+    ? (xx) => xx
+    : (xx) => {
+        return new Date(xx)
+      }
   const xIncrement = isHeightAxis ? dailyBlocks : aDay
   const projection = 6 * aMonth
   data.push([xFunc(x), null, yMax, null])
@@ -318,24 +328,27 @@ function circulationFunc (chartData) {
   return { data, inflation }
 }
 
-function missedVotesFunc (data) {
+function missedVotesFunc(data) {
   if (data.t) return zipWindowTvY(data.t, data.missed)
   return zipWindowHvY(data.missed, data.window, 1, data.offset * data.window)
 }
 
-function mapDygraphOptions (data, labelsVal, isDrawPoint, yLabel, labelsMG, labelsMG2) {
-  return merge({
-    file: data,
-    labels: labelsVal,
-    drawPoints: isDrawPoint,
-    ylabel: yLabel,
-    labelsKMB: labelsMG2 && labelsMG ? false : labelsMG,
-    labelsKMG2: labelsMG2 && labelsMG ? false : labelsMG2
-  }, nightModeOptions(darkEnabled()))
+function mapDygraphOptions(data, labelsVal, isDrawPoint, yLabel, labelsMG, labelsMG2) {
+  return merge(
+    {
+      file: data,
+      labels: labelsVal,
+      drawPoints: isDrawPoint,
+      ylabel: yLabel,
+      labelsKMB: labelsMG2 && labelsMG ? false : labelsMG,
+      labelsKMG2: labelsMG2 && labelsMG ? false : labelsMG2
+    },
+    nightModeOptions(darkEnabled())
+  )
 }
 
 export default class extends Controller {
-  static get targets () {
+  static get targets() {
     return [
       'chartWrapper',
       'labels',
@@ -361,7 +374,7 @@ export default class extends Controller {
     ]
   }
 
-  async connect () {
+  async connect() {
     this.query = new TurboQuery()
     ticketPoolSizeTarget = parseInt(this.data.get('tps'))
     premine = parseInt(this.data.get('premine'))
@@ -369,7 +382,8 @@ export default class extends Controller {
     stakeShare = parseInt(this.data.get('pos')) / 10.0
     baseSubsidy = parseInt(this.data.get('bs'))
     subsidyInterval = parseInt(this.data.get('sri'))
-    subsidyExponent = parseFloat(this.data.get('mulSubsidy')) / parseFloat(this.data.get('divSubsidy'))
+    subsidyExponent =
+      parseFloat(this.data.get('mulSubsidy')) / parseFloat(this.data.get('divSubsidy'))
     windowSize = parseInt(this.data.get('windowSize'))
     avgBlockTime = parseInt(this.data.get('blockTime')) * 1000
     legendElement = this.labelsTarget
@@ -386,7 +400,7 @@ export default class extends Controller {
     const le = this.legendEntryTarget
     le.remove()
     le.removeAttribute('data-charts-target')
-    legendEntry = s => {
+    legendEntry = (s) => {
       const node = le.cloneNode()
       node.innerHTML = s
       return node
@@ -402,7 +416,7 @@ export default class extends Controller {
     this.lastZoom = null
     this.visibility = []
     if (this.settings.visibility) {
-      this.settings.visibility.split('-', -1).forEach(s => {
+      this.settings.visibility.split('-', -1).forEach((s) => {
         this.visibility.push(s === 'true')
       })
     }
@@ -411,14 +425,12 @@ export default class extends Controller {
     )
     this.drawInitialGraph()
     this.processNightMode = (params) => {
-      this.chartsView.updateOptions(
-        nightModeOptions(params.nightMode)
-      )
+      this.chartsView.updateOptions(nightModeOptions(params.nightMode))
     }
     globalEventBus.on('NIGHT_MODE', this.processNightMode)
   }
 
-  disconnect () {
+  disconnect() {
     globalEventBus.off('NIGHT_MODE', this.processNightMode)
     if (this.chartsView !== undefined) {
       this.chartsView.destroy()
@@ -426,7 +438,7 @@ export default class extends Controller {
     selectedChart = null
   }
 
-  drawInitialGraph () {
+  drawInitialGraph() {
     const options = {
       axes: { y: { axisLabelWidth: 70 }, y2: { axisLabelWidth: 70 } },
       labels: ['Date', 'Ticket Price', 'Tickets Bought'],
@@ -449,7 +461,10 @@ export default class extends Controller {
 
     this.chartsView = new Dygraph(
       this.chartsViewTarget,
-      [[1, 1, 5], [2, 5, 11]],
+      [
+        [1, 1, 5],
+        [2, 5, 11]
+      ],
       options
     )
     this.chartSelectTarget.value = this.settings.chart
@@ -468,7 +483,7 @@ export default class extends Controller {
     this.selectChart()
   }
 
-  plotGraph (chartName, data) {
+  plotGraph(chartName, data) {
     let d = []
     const gOptions = {
       zoomCallback: null,
@@ -490,8 +505,17 @@ export default class extends Controller {
     switch (chartName) {
       case 'ticket-price': // price graph
         d = ticketPriceFunc(data)
-        assign(gOptions, mapDygraphOptions(d, [xlabel, 'Price', 'Tickets Bought'], true,
-          'Price (DCR)', true, false))
+        assign(
+          gOptions,
+          mapDygraphOptions(
+            d,
+            [xlabel, 'Price', 'Tickets Bought'],
+            true,
+            'Price (DCR)',
+            true,
+            false
+          )
+        )
         gOptions.y2label = 'Tickets Bought'
         gOptions.series = { 'Tickets Bought': { axis: 'y2' } }
         this.visibility = [this.ticketsPriceTarget.checked, this.ticketsPurchaseTarget.checked]
@@ -500,13 +524,22 @@ export default class extends Controller {
           valueRange: [0, windowSize * 20 * 8],
           axisLabelFormatter: (y) => Math.round(y)
         }
-        yFormatter = customYFormatter(y => y.toFixed(8) + ' DCR')
+        yFormatter = customYFormatter((y) => y.toFixed(8) + ' DCR')
         break
 
       case 'ticket-pool-size': // pool size graph
         d = poolSizeFunc(data)
-        assign(gOptions, mapDygraphOptions(d, [xlabel, 'Ticket Pool Size', 'Network Target'],
-          false, 'Ticket Pool Size', true, false))
+        assign(
+          gOptions,
+          mapDygraphOptions(
+            d,
+            [xlabel, 'Ticket Pool Size', 'Network Target'],
+            false,
+            'Ticket Pool Size',
+            true,
+            false
+          )
+        )
         gOptions.series = {
           'Network Target': {
             strokePattern: [5, 3],
@@ -515,53 +548,104 @@ export default class extends Controller {
             color: '#888'
           }
         }
-        yFormatter = customYFormatter(y => `${intComma(y)} tickets &nbsp;&nbsp; (network target ${intComma(ticketPoolSizeTarget)})`)
+        yFormatter = customYFormatter(
+          (y) =>
+            `${intComma(y)} tickets &nbsp;&nbsp; (network target ${intComma(ticketPoolSizeTarget)})`
+        )
         break
 
       case 'stake-participation':
         d = percentStakedFunc(data)
-        assign(gOptions, mapDygraphOptions(d, [xlabel, 'Stake Participation'], true,
-          'Stake Participation (%)', true, false))
+        assign(
+          gOptions,
+          mapDygraphOptions(
+            d,
+            [xlabel, 'Stake Participation'],
+            true,
+            'Stake Participation (%)',
+            true,
+            false
+          )
+        )
         yFormatter = (div, data, i) => {
-          addLegendEntryFmt(div, data.series[0], y => y.toFixed(4) + '%')
-          div.appendChild(legendEntry(`${legendMarker()} Ticket Pool Value: ${intComma(rawPoolValue[i])} DCR`))
-          div.appendChild(legendEntry(`${legendMarker()} Coin Supply: ${intComma(rawCoinSupply[i])} DCR`))
+          addLegendEntryFmt(div, data.series[0], (y) => y.toFixed(4) + '%')
+          div.appendChild(
+            legendEntry(`${legendMarker()} Ticket Pool Value: ${intComma(rawPoolValue[i])} DCR`)
+          )
+          div.appendChild(
+            legendEntry(`${legendMarker()} Coin Supply: ${intComma(rawCoinSupply[i])} DCR`)
+          )
         }
         break
 
       case 'ticket-pool-value': // pool value graph
         d = zip2D(data, data.poolval, atomsToDCR)
-        assign(gOptions, mapDygraphOptions(d, [xlabel, 'Ticket Pool Value'], true,
-          'Ticket Pool Value (DCR)', true, false))
-        yFormatter = customYFormatter(y => intComma(y) + ' DCR')
+        assign(
+          gOptions,
+          mapDygraphOptions(
+            d,
+            [xlabel, 'Ticket Pool Value'],
+            true,
+            'Ticket Pool Value (DCR)',
+            true,
+            false
+          )
+        )
+        yFormatter = customYFormatter((y) => intComma(y) + ' DCR')
         break
 
       case 'block-size': // block size graph
         d = zip2D(data, data.size)
-        assign(gOptions, mapDygraphOptions(d, [xlabel, 'Block Size'], false, 'Block Size', true, false))
+        assign(
+          gOptions,
+          mapDygraphOptions(d, [xlabel, 'Block Size'], false, 'Block Size', true, false)
+        )
         break
 
       case 'blockchain-size': // blockchain size graph
         d = zip2D(data, data.size)
-        assign(gOptions, mapDygraphOptions(d, [xlabel, 'Blockchain Size'], true,
-          'Blockchain Size', false, true))
+        assign(
+          gOptions,
+          mapDygraphOptions(d, [xlabel, 'Blockchain Size'], true, 'Blockchain Size', false, true)
+        )
         break
 
       case 'tx-count': // tx per block graph
         d = zip2D(data, data.count)
-        assign(gOptions, mapDygraphOptions(d, [xlabel, 'Number of Transactions'], false,
-          '# of Transactions', false, false))
+        assign(
+          gOptions,
+          mapDygraphOptions(
+            d,
+            [xlabel, 'Number of Transactions'],
+            false,
+            '# of Transactions',
+            false,
+            false
+          )
+        )
         break
 
       case 'pow-difficulty': // difficulty graph
         d = powDiffFunc(data)
-        assign(gOptions, mapDygraphOptions(d, [xlabel, 'Difficulty'], true, 'Difficulty', true, false))
+        assign(
+          gOptions,
+          mapDygraphOptions(d, [xlabel, 'Difficulty'], true, 'Difficulty', true, false)
+        )
         break
 
       case 'coin-supply': // supply graph
         d = circulationFunc(data)
-        assign(gOptions, mapDygraphOptions(d.data, [xlabel, 'Coin Supply', 'Inflation Limit', 'Mix Rate'],
-          true, 'Coin Supply (DCR)', true, false))
+        assign(
+          gOptions,
+          mapDygraphOptions(
+            d.data,
+            [xlabel, 'Coin Supply', 'Inflation Limit', 'Mix Rate'],
+            true,
+            'Coin Supply (DCR)',
+            true,
+            false
+          )
+        )
         gOptions.y2label = 'Inflation Limit'
         gOptions.y3label = 'Mix Rate'
         gOptions.series = { 'Inflation Limit': { axis: 'y2' }, 'Mix Rate': { axis: 'y3' } }
@@ -579,63 +663,110 @@ export default class extends Controller {
         }
         gOptions.inflation = d.inflation
         yFormatter = (div, data, i) => {
-          addLegendEntryFmt(div, data.series[0], y => intComma(y) + ' DCR')
+          addLegendEntryFmt(div, data.series[0], (y) => intComma(y) + ' DCR')
           let change = 0
           if (i < d.inflation.length) {
             const supply = data.series[0].y
             if (this.anonymitySetTarget.checked) {
               const mixed = data.series[2].y
               const mixedPercentage = ((mixed / supply) * 100).toFixed(2)
-              div.appendChild(legendEntry(`${legendMarker()} Mixed: ${intComma(mixed)} DCR (${mixedPercentage}%)`))
+              div.appendChild(
+                legendEntry(`${legendMarker()} Mixed: ${intComma(mixed)} DCR (${mixedPercentage}%)`)
+              )
             }
             const predicted = d.inflation[i]
             const unminted = predicted - data.series[0].y
             change = ((unminted / predicted) * 100).toFixed(2)
-            div.appendChild(legendEntry(`${legendMarker()} Unminted: ${intComma(unminted)} DCR (${change}%)`))
+            div.appendChild(
+              legendEntry(`${legendMarker()} Unminted: ${intComma(unminted)} DCR (${change}%)`)
+            )
           }
         }
         break
 
       case 'fees': // block fee graph
         d = zip2D(data, data.fees, atomsToDCR)
-        assign(gOptions, mapDygraphOptions(d, [xlabel, 'Total Fee'], false, 'Total Fee (DCR)', true, false))
+        assign(
+          gOptions,
+          mapDygraphOptions(d, [xlabel, 'Total Fee'], false, 'Total Fee (DCR)', true, false)
+        )
         break
 
-      case 'privacy-participation': { // anonymity set graph
+      case 'privacy-participation': {
+        // anonymity set graph
         d = anonymitySetFunc(data)
         this.customLimits = d.limits
         const label = 'Mix Rate'
-        assign(gOptions, mapDygraphOptions(d.data, [xlabel, label], false, `${label} (DCR)`, true, false))
+        assign(
+          gOptions,
+          mapDygraphOptions(d.data, [xlabel, label], false, `${label} (DCR)`, true, false)
+        )
 
         yFormatter = (div, data, i) => {
-          addLegendEntryFmt(div, data.series[0], y => y > 0 ? intComma(y) : '0' + ' DCR')
+          addLegendEntryFmt(div, data.series[0], (y) => (y > 0 ? intComma(y) : '0' + ' DCR'))
         }
         break
       }
       case 'duration-btw-blocks': // Duration between blocks graph
         d = zip2D(data, data.duration, 1, 1)
-        assign(gOptions, mapDygraphOptions(d, [xlabel, 'Duration Between Blocks'], false,
-          'Duration Between Blocks (seconds)', false, false))
+        assign(
+          gOptions,
+          mapDygraphOptions(
+            d,
+            [xlabel, 'Duration Between Blocks'],
+            false,
+            'Duration Between Blocks (seconds)',
+            false,
+            false
+          )
+        )
         break
 
       case 'chainwork': // Total chainwork over time
         d = zip2D(data, data.work)
-        assign(gOptions, mapDygraphOptions(d, [xlabel, 'Cumulative Chainwork (exahash)'],
-          false, 'Cumulative Chainwork (exahash)', true, false))
-        yFormatter = customYFormatter(y => withBigUnits(y, chainworkUnits))
+        assign(
+          gOptions,
+          mapDygraphOptions(
+            d,
+            [xlabel, 'Cumulative Chainwork (exahash)'],
+            false,
+            'Cumulative Chainwork (exahash)',
+            true,
+            false
+          )
+        )
+        yFormatter = customYFormatter((y) => withBigUnits(y, chainworkUnits))
         break
 
       case 'hashrate': // Total chainwork over time
         d = zip2D(data, data.rate, 1e-3, data.offset)
-        assign(gOptions, mapDygraphOptions(d, [xlabel, 'Network Hashrate (petahash/s)'],
-          false, 'Network Hashrate (petahash/s)', true, false))
-        yFormatter = customYFormatter(y => withBigUnits(y * 1e3, hashrateUnits))
+        assign(
+          gOptions,
+          mapDygraphOptions(
+            d,
+            [xlabel, 'Network Hashrate (petahash/s)'],
+            false,
+            'Network Hashrate (petahash/s)',
+            true,
+            false
+          )
+        )
+        yFormatter = customYFormatter((y) => withBigUnits(y * 1e3, hashrateUnits))
         break
 
       case 'missed-votes':
         d = missedVotesFunc(data)
-        assign(gOptions, mapDygraphOptions(d, [xlabel, 'Missed Votes'], false,
-          'Missed Votes per Window', true, false))
+        assign(
+          gOptions,
+          mapDygraphOptions(
+            d,
+            [xlabel, 'Missed Votes'],
+            false,
+            'Missed Votes per Window',
+            true,
+            false
+          )
+        )
         break
     }
 
@@ -648,8 +779,8 @@ export default class extends Controller {
     this.validateZoom()
   }
 
-  async selectChart () {
-    const selection = this.settings.chart = this.chartSelectTarget.value
+  async selectChart() {
+    const selection = (this.settings.chart = this.chartSelectTarget.value)
     this.customLimits = null
     this.chartWrapperTarget.classList.add('loading')
     if (isScaleDisabled(selection)) {
@@ -669,8 +800,11 @@ export default class extends Controller {
     } else {
       this.vSelectorTarget.classList.add('d-hide')
     }
-    if (selectedChart !== selection || this.settings.bin !== this.selectedBin() ||
-      this.settings.axis !== this.selectedAxis()) {
+    if (
+      selectedChart !== selection ||
+      this.settings.bin !== this.selectedBin() ||
+      this.settings.axis !== this.selectedAxis()
+    ) {
       let url = '/api/chart/' + selection
       if (usesWindowUnits(selection) && !usesHybridUnits(selection)) {
         this.binSelectorTarget.classList.add('d-hide')
@@ -678,7 +812,7 @@ export default class extends Controller {
       } else {
         this.binSelectorTarget.classList.remove('d-hide')
         this.settings.bin = this.selectedBin()
-        this.binSizeTargets.forEach(el => {
+        this.binSizeTargets.forEach((el) => {
           if (el.dataset.option !== 'window') return
           if (usesHybridUnits(selection)) {
             el.classList.remove('d-hide')
@@ -706,7 +840,7 @@ export default class extends Controller {
     }
   }
 
-  async validateZoom () {
+  async validateZoom() {
     await animationFrame()
     this.chartWrapperTarget.classList.add('loading')
     await animationFrame()
@@ -714,8 +848,12 @@ export default class extends Controller {
     this.limits = this.chartsView.xAxisExtremes()
     const selected = this.selectedZoom()
     if (selected && !(selectedChart === 'privacy-participation' && selected === 'all')) {
-      this.lastZoom = Zoom.validate(selected, this.limits,
-        this.isTimeAxis() ? avgBlockTime : 1, this.isTimeAxis() ? 1 : avgBlockTime)
+      this.lastZoom = Zoom.validate(
+        selected,
+        this.limits,
+        this.isTimeAxis() ? avgBlockTime : 1,
+        this.isTimeAxis() ? 1 : avgBlockTime
+      )
     } else {
       // if this is for the privacy-participation chart, then zoom to the beginning of the record
       if (selectedChart === 'privacy-participation') {
@@ -740,23 +878,26 @@ export default class extends Controller {
     })
   }
 
-  _zoomCallback (start, end) {
+  _zoomCallback(start, end) {
     this.lastZoom = Zoom.object(start, end)
     this.settings.zoom = Zoom.encode(this.lastZoom)
     this.query.replace(this.settings)
     const ex = this.chartsView.xAxisExtremes()
     const option = Zoom.mapKey(this.settings.zoom, ex, this.isTimeAxis() ? 1 : avgBlockTime)
     this.setActiveOptionBtn(option, this.zoomOptionTargets)
-    const axesData = axesToRestoreYRange(this.settings.chart,
-      this.supportedYRange, this.chartsView.yAxisRanges())
+    const axesData = axesToRestoreYRange(
+      this.settings.chart,
+      this.supportedYRange,
+      this.chartsView.yAxisRanges()
+    )
     if (axesData) this.chartsView.updateOptions({ axes: axesData })
   }
 
-  isTimeAxis () {
+  isTimeAxis() {
     return this.selectedAxis() === 'time'
   }
 
-  _drawCallback (graph, first) {
+  _drawCallback(graph, first) {
     if (first) return
     const [start, end] = this.chartsView.xAxisRange()
     if (start === end) return
@@ -764,7 +905,7 @@ export default class extends Controller {
     this._zoomCallback(start, end)
   }
 
-  setZoom (e) {
+  setZoom(e) {
     const target = e.srcElement || e.target
     let option
     if (!target) {
@@ -778,7 +919,7 @@ export default class extends Controller {
     this.validateZoom()
   }
 
-  setBin (e) {
+  setBin(e) {
     const target = e.srcElement || e.target
     const option = target ? target.dataset.option : e
     if (!option) return
@@ -790,7 +931,7 @@ export default class extends Controller {
     this.selectChart()
   }
 
-  setScale (e) {
+  setScale(e) {
     const target = e.srcElement || e.target
     const option = target ? target.dataset.option : e
     if (!option) return
@@ -803,7 +944,7 @@ export default class extends Controller {
     this.query.replace(this.settings)
   }
 
-  setMode (e) {
+  setMode(e) {
     const target = e.srcElement || e.target
     const option = target ? target.dataset.option : e
     if (!option) return
@@ -816,7 +957,7 @@ export default class extends Controller {
     this.query.replace(this.settings)
   }
 
-  setAxis (e) {
+  setAxis(e) {
     const target = e.srcElement || e.target
     const option = target ? target.dataset.option : e
     if (!option) return
@@ -826,13 +967,13 @@ export default class extends Controller {
     this.selectChart()
   }
 
-  updateVSelector (chart) {
+  updateVSelector(chart) {
     if (!chart) {
       chart = this.chartSelectTarget.value
     }
     const that = this
     let showWrapper = false
-    this.vSelectorItemTargets.forEach(el => {
+    this.vSelectorItemTargets.forEach((el) => {
       let show = el.dataset.charts.indexOf(chart) > -1
       if (el.dataset.bin && el.dataset.bin.indexOf(that.selectedBin()) === -1) {
         show = false
@@ -852,7 +993,7 @@ export default class extends Controller {
     this.setVisibilityFromSettings()
   }
 
-  setVisibilityFromSettings () {
+  setVisibilityFromSettings() {
     switch (this.chartSelectTarget.value) {
       case 'ticket-price':
         if (this.visibility.length !== 2) {
@@ -880,7 +1021,7 @@ export default class extends Controller {
     this.query.replace(this.settings)
   }
 
-  setVisibility (e) {
+  setVisibility(e) {
     switch (this.chartSelectTarget.value) {
       case 'ticket-price':
         if (!this.ticketsPriceTarget.checked && !this.ticketsPurchaseTarget.checked) {
@@ -903,8 +1044,8 @@ export default class extends Controller {
     this.query.replace(this.settings)
   }
 
-  setActiveOptionBtn (opt, optTargets) {
-    optTargets.forEach(li => {
+  setActiveOptionBtn(opt, optTargets) {
+    optTargets.forEach((li) => {
       if (li.dataset.option === opt) {
         li.classList.add('active')
       } else {
@@ -913,12 +1054,23 @@ export default class extends Controller {
     })
   }
 
-  selectedZoom () { return this.selectedOption(this.zoomOptionTargets) }
-  selectedBin () { return this.selectedOption(this.binSizeTargets) }
-  selectedScale () { return this.selectedOption(this.scaleTypeTargets) }
-  selectedAxis () { return this.selectedOption(this.axisOptionTargets) }
+  selectedZoom() {
+    return this.selectedOption(this.zoomOptionTargets)
+  }
 
-  selectedOption (optTargets) {
+  selectedBin() {
+    return this.selectedOption(this.binSizeTargets)
+  }
+
+  selectedScale() {
+    return this.selectedOption(this.scaleTypeTargets)
+  }
+
+  selectedAxis() {
+    return this.selectedOption(this.axisOptionTargets)
+  }
+
+  selectedOption(optTargets) {
     let key = false
     optTargets.forEach((el) => {
       if (el.classList.contains('active')) key = el.dataset.option

@@ -7,19 +7,19 @@ import { keyNav } from '../services/keyboard_navigation_service'
 import Mempool from '../helpers/mempool_helper'
 import { copyIcon, alertArea } from './clipboard_controller'
 
-function incrementValue (el) {
+function incrementValue(el) {
   if (!el) return
   el.textContent = parseInt(el.textContent) + 1
 }
 
-function rowNode (rowText) {
+function rowNode(rowText) {
   const tbody = document.createElement('tbody')
   tbody.innerHTML = rowText
   dompurify.sanitize(tbody, { IN_PLACE: true, FORBID_TAGS: ['svg', 'math'] })
   return tbody.firstElementChild
 }
 
-function txTableRow (tx) {
+function txTableRow(tx) {
   return rowNode(`<tr class="flash">
         <td class="break-word clipboard">
           <a class="hash" href="/tx/${tx.hash}" title="${tx.hash}">${tx.hash}</a>
@@ -33,7 +33,7 @@ function txTableRow (tx) {
     </tr>`)
 }
 
-function treasuryTxTableRow (tx) {
+function treasuryTxTableRow(tx) {
   return rowNode(`<tr class="flash">
         <td class="break-word clipboard">
           <a class="hash" href="/tx/${tx.hash}" title="${tx.hash}">${tx.hash}</a>
@@ -45,7 +45,7 @@ function treasuryTxTableRow (tx) {
     </tr>`)
 }
 
-function voteTxTableRow (tx) {
+function voteTxTableRow(tx) {
   return rowNode(`<tr class="flash" data-height="${tx.vote_info.block_validation.height}" data-blockhash="${tx.vote_info.block_validation.hash}">
         <td class="break-word clipboard">
           <a class="hash" href="/tx/${tx.hash}">${tx.hash}</a>
@@ -62,18 +62,18 @@ function voteTxTableRow (tx) {
     </tr>`)
 }
 
-function buildTable (target, txType, txns, rowFn) {
+function buildTable(target, txType, txns, rowFn) {
   while (target.firstChild) target.removeChild(target.firstChild)
   if (txns && txns.length > 0) {
     map(txns, rowFn).forEach((tr) => {
       target.appendChild(tr)
     })
   } else {
-    target.innerHTML = `<tr class="no-tx-tr"><td colspan="${(txType === 'votes' ? 8 : 4)}">No ${txType} in mempool.</td></tr>`
+    target.innerHTML = `<tr class="no-tx-tr"><td colspan="${txType === 'votes' ? 8 : 4}">No ${txType} in mempool.</td></tr>`
   }
 }
 
-function addTxRow (tx, target, rowFn) {
+function addTxRow(tx, target, rowFn) {
   if (target.childElementCount === 1 && target.firstElementChild.classList.contains('no-tx-tr')) {
     target.removeChild(target.firstElementChild)
   }
@@ -81,7 +81,7 @@ function addTxRow (tx, target, rowFn) {
 }
 
 export default class extends Controller {
-  static get targets () {
+  static get targets() {
     return [
       'bestBlock',
       'bestBlockTime',
@@ -106,7 +106,7 @@ export default class extends Controller {
     ]
   }
 
-  connect () {
+  connect() {
     // from txhelpers.DetermineTxTypeString
     const mempoolData = this.mempoolTarget.dataset
     ws.send('getmempooltxs', mempoolData.id)
@@ -118,7 +118,8 @@ export default class extends Controller {
       Revocation: this.revocationTransactionsTarget,
       Regular: this.regularTransactionsTarget
     }
-    if (this.hasTaddTransactionsTarget) this.txTargetMap['Treasury Add'] = this.taddTransactionsTarget
+    if (this.hasTaddTransactionsTarget)
+      this.txTargetMap['Treasury Add'] = this.taddTransactionsTarget
     this.countTargetMap = {
       Vote: this.numVoteTarget,
       Ticket: this.numTicketTarget,
@@ -152,20 +153,20 @@ export default class extends Controller {
     })
   }
 
-  disconnect () {
+  disconnect() {
     ws.deregisterEvtHandlers('newtxs')
     ws.deregisterEvtHandlers('mempool')
     ws.deregisterEvtHandlers('getmempooltxsResp')
   }
 
-  updateBlock (m) {
+  updateBlock(m) {
     this.bestBlockTarget.textContent = m.block_height
     this.bestBlockTarget.dataset.hash = m.block_hash
     this.bestBlockTarget.href = `/block/${m.block_hash}`
     this.bestBlockTimeTarget.dataset.age = m.block_time
   }
 
-  setMempoolFigures () {
+  setMempoolFigures() {
     const totals = this.mempool.totals()
     const counts = this.mempool.counts()
     this.regTotalTarget.textContent = humanize.threeSigFigs(totals.regular)
@@ -178,7 +179,9 @@ export default class extends Controller {
 
     const ct = this.voteCountTarget
     while (ct.firstChild) ct.removeChild(ct.firstChild)
-    this.mempool.voteSpans(counts.vote).forEach((span) => { ct.appendChild(span) })
+    this.mempool.voteSpans(counts.vote).forEach((span) => {
+      ct.appendChild(span)
+    })
 
     this.revTotalTarget.textContent = humanize.threeSigFigs(totals.rev)
     this.revCountTarget.textContent = counts.rev
@@ -190,16 +193,17 @@ export default class extends Controller {
     // this.setVotes()
   }
 
-  handleTxsResp (m) {
+  handleTxsResp(m) {
     buildTable(this.regularTransactionsTarget, 'regular transactions', m.tx, txTableRow)
     buildTable(this.revocationTransactionsTarget, 'revocations', m.revs, txTableRow)
     buildTable(this.voteTransactionsTarget, 'votes', m.votes, voteTxTableRow)
     buildTable(this.ticketTransactionsTarget, 'tickets', m.tickets, txTableRow)
     buildTable(this.tspendTransactionsTarget, 'tspends', m.tspends, treasuryTxTableRow)
-    if (this.hasTaddTransactionsTarget) buildTable(this.taddTransactionsTarget, 'tadds', m.tadds, treasuryTxTableRow)
+    if (this.hasTaddTransactionsTarget)
+      buildTable(this.taddTransactionsTarget, 'tadds', m.tadds, treasuryTxTableRow)
   }
 
-  renderNewTxns (txs) {
+  renderNewTxns(txs) {
     each(txs, (tx) => {
       incrementValue(this.countTargetMap[tx.Type])
       let rowFn
@@ -221,7 +225,7 @@ export default class extends Controller {
     })
   }
 
-  labelVotes () {
+  labelVotes() {
     const bestBlockHash = this.bestBlockTarget.dataset.hash
     const bestBlockHeight = parseInt(this.bestBlockTarget.textContent)
     this.voteTransactionsTarget.querySelectorAll('tr').forEach((tr) => {
@@ -247,18 +251,20 @@ export default class extends Controller {
     })
   }
 
-  sortVotesTable () {
+  sortVotesTable() {
     const rows = Array.from(this.voteTransactionsTarget.querySelectorAll('tr'))
     rows.sort(function (a, b) {
       if (a.dataset.height === b.dataset.height) {
         const indexA = parseInt(a.dataset.ticketIndex)
         const indexB = parseInt(b.dataset.ticketIndex)
-        return (indexA - indexB)
+        return indexA - indexB
       } else {
-        return (b.dataset.height - a.dataset.height)
+        return b.dataset.height - a.dataset.height
       }
     })
     this.voteTransactionsTarget.innerHTML = ''
-    rows.forEach((row) => { this.voteTransactionsTarget.appendChild(row) })
+    rows.forEach((row) => {
+      this.voteTransactionsTarget.appendChild(row)
+    })
   }
 }

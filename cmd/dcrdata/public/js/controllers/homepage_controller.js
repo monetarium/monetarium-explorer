@@ -9,13 +9,13 @@ import { fadeIn } from '../helpers/animation_helper'
 import Mempool from '../helpers/mempool_helper'
 import { copyIcon, alertArea } from './clipboard_controller'
 
-function incrementValue (element) {
+function incrementValue(element) {
   if (element) {
     element.textContent = parseInt(element.textContent) + 1
   }
 }
 
-function mempoolTableRow (tx) {
+function mempoolTableRow(tx) {
   const tbody = document.createElement('tbody')
   const link = `/tx/${tx.hash}`
   tbody.innerHTML = `<tr>
@@ -34,23 +34,61 @@ function mempoolTableRow (tx) {
 }
 
 export default class extends Controller {
-  static get targets () {
-    return ['transactions', 'difficulty',
-      'bsubsidyTotal', 'bsubsidyPow', 'bsubsidyPos', 'bsubsidyDev',
-      'coinSupply', 'blocksdiff', 'devFund', 'windowIndex', 'posBar',
-      'rewardIdx', 'powBar', 'poolSize', 'poolValue', 'ticketReward',
-      'targetPct', 'poolSizePct', 'hashrate', 'hashrateDelta',
-      'nextExpectedSdiff', 'nextExpectedMin', 'nextExpectedMax', 'mempool',
-      'mpRegTotal', 'mpRegCount', 'mpTicketTotal', 'mpTicketCount', 'mpVoteTotal', 'mpVoteCount',
-      'mpRevTotal', 'mpRevCount', 'mpRegBar', 'mpVoteBar', 'mpTicketBar',
-      'mpRevBar', 'voteTally', 'blockVotes', 'blockHeight', 'blockSize',
-      'blockTotal', 'consensusMsg', 'powConverted', 'convertedDev',
-      'convertedSupply', 'convertedDevSub', 'exchangeRate', 'convertedStake',
+  static get targets() {
+    return [
+      'transactions',
+      'difficulty',
+      'bsubsidyTotal',
+      'bsubsidyPow',
+      'bsubsidyPos',
+      'bsubsidyDev',
+      'coinSupply',
+      'blocksdiff',
+      'devFund',
+      'windowIndex',
+      'posBar',
+      'rewardIdx',
+      'powBar',
+      'poolSize',
+      'poolValue',
+      'ticketReward',
+      'targetPct',
+      'poolSizePct',
+      'hashrate',
+      'hashrateDelta',
+      'nextExpectedSdiff',
+      'nextExpectedMin',
+      'nextExpectedMax',
+      'mempool',
+      'mpRegTotal',
+      'mpRegCount',
+      'mpTicketTotal',
+      'mpTicketCount',
+      'mpVoteTotal',
+      'mpVoteCount',
+      'mpRevTotal',
+      'mpRevCount',
+      'mpRegBar',
+      'mpVoteBar',
+      'mpTicketBar',
+      'mpRevBar',
+      'voteTally',
+      'blockVotes',
+      'blockHeight',
+      'blockSize',
+      'blockTotal',
+      'consensusMsg',
+      'powConverted',
+      'convertedDev',
+      'convertedSupply',
+      'convertedDevSub',
+      'exchangeRate',
+      'convertedStake',
       'mixedPct'
     ]
   }
 
-  connect () {
+  connect() {
     this.ticketsPerBlock = parseInt(this.mpVoteCountTarget.dataset.ticketsPerBlock)
     const mempoolData = this.mempoolTarget.dataset
     ws.send('getmempooltxs', mempoolData.id)
@@ -82,14 +120,14 @@ export default class extends Controller {
     globalEventBus.on('BLOCK_RECEIVED', this.processBlock)
   }
 
-  disconnect () {
+  disconnect() {
     ws.deregisterEvtHandlers('newtxs')
     ws.deregisterEvtHandlers('mempool')
     ws.deregisterEvtHandlers('getmempooltxsResp')
     globalEventBus.off('BLOCK_RECEIVED', this.processBlock)
   }
 
-  setMempoolFigures () {
+  setMempoolFigures() {
     const totals = this.mempool.totals()
     const counts = this.mempool.counts()
     this.mpRegTotalTarget.textContent = humanize.threeSigFigs(totals.regular)
@@ -102,7 +140,9 @@ export default class extends Controller {
 
     const ct = this.mpVoteCountTarget
     while (ct.firstChild) ct.removeChild(ct.firstChild)
-    this.mempool.voteSpans(counts.vote).forEach((span) => { ct.appendChild(span) })
+    this.mempool.voteSpans(counts.vote).forEach((span) => {
+      ct.appendChild(span)
+    })
 
     this.mpRevTotalTarget.textContent = humanize.threeSigFigs(totals.rev)
     this.mpRevCountTarget.textContent = counts.rev
@@ -112,14 +152,14 @@ export default class extends Controller {
     this.setVotes()
   }
 
-  setBars (totals) {
-    this.mpRegBarTarget.style.width = `${totals.regular / totals.total * 100}%`
-    this.mpVoteBarTarget.style.width = `${totals.vote / totals.total * 100}%`
-    this.mpTicketBarTarget.style.width = `${totals.ticket / totals.total * 100}%`
-    this.mpRevBarTarget.style.width = `${totals.rev / totals.total * 100}%`
+  setBars(totals) {
+    this.mpRegBarTarget.style.width = `${(totals.regular / totals.total) * 100}%`
+    this.mpVoteBarTarget.style.width = `${(totals.vote / totals.total) * 100}%`
+    this.mpTicketBarTarget.style.width = `${(totals.ticket / totals.total) * 100}%`
+    this.mpRevBarTarget.style.width = `${(totals.rev / totals.total) * 100}%`
   }
 
-  setVotes () {
+  setVotes() {
     const hash = this.blockVotesTarget.dataset.hash
     const votes = this.mempool.blockVoteTally(hash)
     this.blockVotesTarget.querySelectorAll('div').forEach((div, i) => {
@@ -147,7 +187,7 @@ export default class extends Controller {
     }
   }
 
-  renderLatestTransactions (txs, incremental) {
+  renderLatestTransactions(txs, incremental) {
     each(txs, (tx) => {
       if (incremental) {
         const targetKey = `num${tx.Type}Target`
@@ -165,16 +205,36 @@ export default class extends Controller {
     })
   }
 
-  _processBlock (blockData) {
+  _processBlock(blockData) {
     const ex = blockData.extra
     this.difficultyTarget.innerHTML = humanize.threeSigFigs(ex.difficulty)
-    this.bsubsidyPowTarget.innerHTML = humanize.decimalParts(ex.subsidy.pow / 100000000, false, 8, 2)
-    this.bsubsidyPosTarget.innerHTML = humanize.decimalParts((ex.subsidy.pos / 500000000), false, 8, 2) // 5 votes per block (usually)
-    this.bsubsidyDevTarget.innerHTML = humanize.decimalParts(ex.subsidy.dev / 100000000, false, 8, 2)
+    this.bsubsidyPowTarget.innerHTML = humanize.decimalParts(
+      ex.subsidy.pow / 100000000,
+      false,
+      8,
+      2
+    )
+    this.bsubsidyPosTarget.innerHTML = humanize.decimalParts(
+      ex.subsidy.pos / 500000000,
+      false,
+      8,
+      2
+    ) // 5 votes per block (usually)
+    this.bsubsidyDevTarget.innerHTML = humanize.decimalParts(
+      ex.subsidy.dev / 100000000,
+      false,
+      8,
+      2
+    )
     this.coinSupplyTarget.innerHTML = humanize.decimalParts(ex.coin_supply / 100000000, true, 0)
     this.mixedPctTarget.innerHTML = ex.mixed_percent.toFixed(0)
     this.blocksdiffTarget.innerHTML = humanize.decimalParts(ex.sdiff, false, 8, 2)
-    this.nextExpectedSdiffTarget.innerHTML = humanize.decimalParts(ex.next_expected_sdiff, false, 2, 2)
+    this.nextExpectedSdiffTarget.innerHTML = humanize.decimalParts(
+      ex.next_expected_sdiff,
+      false,
+      2,
+      2
+    )
     this.nextExpectedMinTarget.innerHTML = humanize.decimalParts(ex.next_expected_min, false, 2, 2)
     this.nextExpectedMaxTarget.innerHTML = humanize.decimalParts(ex.next_expected_max, false, 2, 2)
     this.windowIndexTarget.textContent = ex.window_idx
@@ -202,16 +262,16 @@ export default class extends Controller {
       const xcRate = ex.exchange_rate.value
       const index = ex.exchange_rate.index
       if (this.hasPowConvertedTarget) {
-        this.powConvertedTarget.textContent = `${humanize.twoDecimals(ex.subsidy.pow / 1e8 * xcRate)} ${index}`
+        this.powConvertedTarget.textContent = `${humanize.twoDecimals((ex.subsidy.pow / 1e8) * xcRate)} ${index}`
       }
       if (this.hasConvertedDevTarget) {
-        this.convertedDevTarget.textContent = `${humanize.threeSigFigs(treasuryTotal / 1e8 * xcRate)} ${index}`
+        this.convertedDevTarget.textContent = `${humanize.threeSigFigs((treasuryTotal / 1e8) * xcRate)} ${index}`
       }
       if (this.hasConvertedSupplyTarget) {
-        this.convertedSupplyTarget.textContent = `${humanize.threeSigFigs(ex.coin_supply / 1e8 * xcRate)} ${index}`
+        this.convertedSupplyTarget.textContent = `${humanize.threeSigFigs((ex.coin_supply / 1e8) * xcRate)} ${index}`
       }
       if (this.hasConvertedDevSubTarget) {
-        this.convertedDevSubTarget.textContent = `${humanize.twoDecimals(ex.subsidy.dev / 1e8 * xcRate)} ${index}`
+        this.convertedDevSubTarget.textContent = `${humanize.twoDecimals((ex.subsidy.dev / 1e8) * xcRate)} ${index}`
       }
       if (this.hasExchangeRateTarget) {
         this.exchangeRateTarget.textContent = humanize.twoDecimals(xcRate)

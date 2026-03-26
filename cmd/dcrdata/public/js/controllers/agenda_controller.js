@@ -16,7 +16,7 @@ const chartLayout = {
   labelsUTC: true
 }
 
-function agendasLegendFormatter (data) {
+function agendasLegendFormatter(data) {
   if (data.x == null) return ''
   let html
   if (this.getLabels()[0] === 'Date') {
@@ -35,45 +35,32 @@ function agendasLegendFormatter (data) {
   return html
 }
 
-function cumulativeVoteChoicesData (d) {
+function cumulativeVoteChoicesData(d) {
   if (d == null || !(d.yes instanceof Array)) return [[0, 0, 0, 0]]
   return d.yes.map((n, i) => {
-    return [
-      new Date(d.time[i]),
-      n,
-      d.abstain[i],
-      d.no[i]
-    ]
+    return [new Date(d.time[i]), n, d.abstain[i], d.no[i]]
   })
 }
 
-function voteChoicesByBlockData (d) {
+function voteChoicesByBlockData(d) {
   if (d == null || !(d.yes instanceof Array)) return [[0, 0, 0, 0]]
   return d.yes.map((n, i) => {
-    return [
-      d.height[i],
-      n,
-      d.abstain[i],
-      d.no[i]
-    ]
+    return [d.height[i], n, d.abstain[i], d.no[i]]
   })
 }
 
 export default class extends Controller {
-  static get targets () {
-    return [
-      'cumulativeVoteChoices',
-      'voteChoicesByBlock'
-    ]
+  static get targets() {
+    return ['cumulativeVoteChoices', 'voteChoicesByBlock']
   }
 
-  initialize () {
+  initialize() {
     this.emptydata = [[0, 0, 0, 0]]
     this.cumulativeVoteChoicesChart = false
     this.voteChoicesByBlockChart = false
   }
 
-  async connect () {
+  async connect() {
     this.agendaId = this.data.get('id')
     this.element.classList.add('loading')
     this.Dygraph = await getDefault(
@@ -91,40 +78,30 @@ export default class extends Controller {
     this.element.classList.remove('loading')
   }
 
-  disconnect () {
+  disconnect() {
     this.cumulativeVoteChoicesChart.destroy()
     this.voteChoicesByBlockChart.destroy()
   }
 
-  drawCharts () {
-    this.cumulativeVoteChoicesChart = this.drawChart(
-      this.cumulativeVoteChoicesTarget,
-      {
-        labels: ['Date', 'Yes', 'Abstain', 'No'],
-        ylabel: 'Cumulative Vote Choices Cast',
-        title: 'Cumulative Vote Choices',
-        labelsKMB: true
-      }
-    )
-    this.voteChoicesByBlockChart = this.drawChart(
-      this.voteChoicesByBlockTarget,
-      {
-        labels: ['Block Height', 'Yes', 'Abstain', 'No'],
-        ylabel: 'Vote Choices Cast',
-        title: 'Vote Choices By Block',
-        plotter: barChartPlotter
-      }
-    )
+  drawCharts() {
+    this.cumulativeVoteChoicesChart = this.drawChart(this.cumulativeVoteChoicesTarget, {
+      labels: ['Date', 'Yes', 'Abstain', 'No'],
+      ylabel: 'Cumulative Vote Choices Cast',
+      title: 'Cumulative Vote Choices',
+      labelsKMB: true
+    })
+    this.voteChoicesByBlockChart = this.drawChart(this.voteChoicesByBlockTarget, {
+      labels: ['Block Height', 'Yes', 'Abstain', 'No'],
+      ylabel: 'Vote Choices Cast',
+      title: 'Vote Choices By Block',
+      plotter: barChartPlotter
+    })
   }
 
-  drawChart (el, options, Dygraph) {
-    return new this.Dygraph(
-      el,
-      this.emptydata,
-      {
-        ...chartLayout,
-        ...options
-      }
-    )
+  drawChart(el, options, Dygraph) {
+    return new this.Dygraph(el, this.emptydata, {
+      ...chartLayout,
+      ...options
+    })
   }
 }

@@ -3,11 +3,11 @@ import { Controller } from '@hotwired/stimulus'
 import Url from 'url-parse'
 
 export default class extends Controller {
-  static get targets () {
+  static get targets() {
     return ['pagesize', 'votestatus', 'listview']
   }
 
-  setPageSize () {
+  setPageSize() {
     const url = Url(window.location.href)
     const q = Url.qs.parse(url.query)
     delete q.offset
@@ -21,7 +21,7 @@ export default class extends Controller {
     Turbolinks.visit(url.toString())
   }
 
-  setFilterbyVoteStatus () {
+  setFilterbyVoteStatus() {
     const url = Url(window.location.href)
     const q = {}
     q.byvotestatus = this.votestatusTarget.selectedOptions[0].value
@@ -29,7 +29,7 @@ export default class extends Controller {
     Turbolinks.visit(url.toString())
   }
 
-  setListView () {
+  setListView() {
     const url = Url(window.location.href, true)
     const newPeriod = this.listviewTarget.selectedOptions[0].value
     if (url.pathname !== newPeriod) {

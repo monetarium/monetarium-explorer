@@ -14,42 +14,42 @@ let jumpToIndexOnLoad
 const keyNavCookieName = 'dcrdataKeyNav'
 let searchBar, keyNavToggle, menuToggle
 
-function bindElements () {
+function bindElements() {
   searchBar = document.getElementById('search')
   keyNavToggle = document.getElementById('keynav-toggle')
   menuToggle = document.getElementById('menu-toggle').querySelector('input')
 }
 bindElements()
 
-function keyNavEnabled () {
+function keyNavEnabled() {
   return document.cookie.includes(keyNavCookieName)
 }
 
-function setToggleText (txt) {
+function setToggleText(txt) {
   keyNavToggle.querySelector('.text').textContent = txt
 }
 
-function clearTargets () {
+function clearTargets() {
   document.querySelectorAll('.keynav-target').forEach((el) => {
     el.classList.remove('keynav-target', 'pulsate')
   })
 }
 
-function enableKeyNav () {
+function enableKeyNav() {
   setCookie(keyNavCookieName, 1, 525600)
   Mousetrap.unpause()
   setToggleText('Disable Hot Keys')
   keyNav()
 }
 
-function disableKeyNav () {
+function disableKeyNav() {
   setCookie(keyNavCookieName, '', 0)
   clearTargets()
   setToggleText('Enable Hot Keys')
   Mousetrap.pause()
 }
 
-function toggleKeyNav () {
+function toggleKeyNav() {
   if (keyNavEnabled()) {
     disableKeyNav()
   } else {
@@ -57,7 +57,7 @@ function toggleKeyNav () {
   }
 }
 
-export function keyNav (event, pulsate, preserveIndex) {
+export function keyNav(event, pulsate, preserveIndex) {
   if (!keyNavEnabled()) return
   bindElements()
   if (menuToggle.checked) {
@@ -167,7 +167,9 @@ if (keyNavEnabled()) {
   Mousetrap.pause()
 }
 
-keyNavToggle.querySelector('.text').textContent = keyNavEnabled() ? 'Disable Hot Keys' : 'Enable Hot Keys'
+keyNavToggle.querySelector('.text').textContent = keyNavEnabled()
+  ? 'Disable Hot Keys'
+  : 'Enable Hot Keys'
 
 document.addEventListener('turbolinks:load', function (e) {
   closeMenu(e)

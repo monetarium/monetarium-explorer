@@ -15,7 +15,7 @@ const blockDuration = 5 * 60000
 const maxAddrRows = 160
 let Dygraph // lazy loaded on connect
 
-function txTypesFunc (d, binSize) {
+function txTypesFunc(d, binSize) {
   const p = []
 
   d.time.map((n, i) => {
@@ -27,7 +27,7 @@ function txTypesFunc (d, binSize) {
   return p
 }
 
-function amountFlowProcessor (d, binSize) {
+function amountFlowProcessor(d, binSize) {
   const flowData = []
   const balanceData = []
   let balance = 0
@@ -37,7 +37,7 @@ function amountFlowProcessor (d, binSize) {
     let netReceived = 0
     let netSent = 0
 
-    v > 0 ? (netReceived = v) : (netSent = (v * -1))
+    v > 0 ? (netReceived = v) : (netSent = v * -1)
     flowData.push([new Date(n), d.received[i], d.sent[i], netReceived, netSent])
     balance += v
     balanceData.push([new Date(n), balance])
@@ -52,7 +52,7 @@ function amountFlowProcessor (d, binSize) {
   }
 }
 
-function formatter (data) {
+function formatter(data) {
   let xHTML = ''
   if (data.xHTML !== undefined) {
     xHTML = humanize.date(data.x, false, true)
@@ -69,7 +69,7 @@ function formatter (data) {
   return html
 }
 
-function customizedFormatter (data) {
+function customizedFormatter(data) {
   let xHTML = ''
   if (data.xHTML !== undefined) {
     xHTML = humanize.date(data.x, false, true)
@@ -81,12 +81,13 @@ function customizedFormatter (data) {
     if (series.y === 0) return ''
     const l = '<span style="color: ' + series.color + ';"> ' + series.labelHTML
     html = '<span style="color:#2d2d2d;">' + html + '</span>'
-    html += '<br>' + series.dashHTML + l + ': ' + (isNaN(series.y) ? '' : series.y + ' DCR') + '</span> '
+    html +=
+      '<br>' + series.dashHTML + l + ': ' + (isNaN(series.y) ? '' : series.y + ' DCR') + '</span> '
   })
   return html
 }
 
-function setTxnCountText (el, count) {
+function setTxnCountText(el, count) {
   if (el.dataset.formatted) {
     el.textContent = count + ' transaction' + (count > 1 ? 's' : '')
   } else {
@@ -96,7 +97,7 @@ function setTxnCountText (el, count) {
 
 let commonOptions, typesGraphOptions, amountFlowGraphOptions, balanceGraphOptions
 // Cannot set these until DyGraph is fetched.
-function createOptions () {
+function createOptions() {
   commonOptions = {
     digitsAfterDecimal: 8,
     showRangeSelector: true,
@@ -150,18 +151,48 @@ function createOptions () {
 let ctrl = null
 
 export default class extends Controller {
-  static get targets () {
-    return ['options', 'addr', 'balance',
-      'flow', 'zoom', 'interval', 'numUnconfirmed',
-      'pagesize', 'txntype', 'txnCount', 'qricon', 'qrimg', 'qrbox',
-      'paginator', 'pageplus', 'pageminus', 'listbox', 'table',
-      'range', 'chartbox', 'noconfirms', 'chart', 'pagebuttons',
-      'pending', 'hash', 'matchhash', 'view', 'mergedMsg',
-      'chartLoader', 'listLoader', 'expando', 'littlechart', 'bigchart',
-      'fullscreen', 'tablePagination', 'paginationheader']
+  static get targets() {
+    return [
+      'options',
+      'addr',
+      'balance',
+      'flow',
+      'zoom',
+      'interval',
+      'numUnconfirmed',
+      'pagesize',
+      'txntype',
+      'txnCount',
+      'qricon',
+      'qrimg',
+      'qrbox',
+      'paginator',
+      'pageplus',
+      'pageminus',
+      'listbox',
+      'table',
+      'range',
+      'chartbox',
+      'noconfirms',
+      'chart',
+      'pagebuttons',
+      'pending',
+      'hash',
+      'matchhash',
+      'view',
+      'mergedMsg',
+      'chartLoader',
+      'listLoader',
+      'expando',
+      'littlechart',
+      'bigchart',
+      'fullscreen',
+      'tablePagination',
+      'paginationheader'
+    ]
   }
 
-  async connect () {
+  async connect() {
     ctrl = this
     ctrl.retrievedData = {}
     ctrl.ajaxing = false
@@ -178,8 +209,15 @@ export default class extends Controller {
 
     // These two are templates for query parameter sets.
     // When url query parameters are set, these will also be updated.
-    const settings = ctrl.settings = TurboQuery.nullTemplate(['chart', 'zoom', 'bin', 'flow',
-      'n', 'start', 'txntype'])
+    const settings = (ctrl.settings = TurboQuery.nullTemplate([
+      'chart',
+      'zoom',
+      'bin',
+      'flow',
+      'n',
+      'start',
+      'txntype'
+    ]))
 
     ctrl.state = Object.assign({}, settings)
 
@@ -216,7 +254,7 @@ export default class extends Controller {
     ctrl.drawGraph()
   }
 
-  disconnect () {
+  disconnect() {
     if (this.graph !== undefined) {
       this.graph.destroy()
     }
@@ -225,7 +263,7 @@ export default class extends Controller {
   }
 
   // Request the initial chart data, grabbing the Dygraph script if necessary.
-  initializeChart () {
+  initializeChart() {
     createOptions()
     // If no chart data has been requested, e.g. when initially on the
     // list tab, then fetch the initial chart data.
@@ -234,15 +272,17 @@ export default class extends Controller {
     }
   }
 
-  bindElements () {
+  bindElements() {
     this.flowBoxes = this.flowTarget.querySelectorAll('input')
     // pagesizeTarget is not available for dummy addresses
-    this.pageSizeOptions = this.hasPagesizeTarget ? this.pagesizeTarget.querySelectorAll('option') : []
+    this.pageSizeOptions = this.hasPagesizeTarget
+      ? this.pagesizeTarget.querySelectorAll('option')
+      : []
     this.zoomButtons = this.zoomTarget.querySelectorAll('button')
     this.binputs = this.intervalTarget.querySelectorAll('button')
   }
 
-  bindEvents () {
+  bindEvents() {
     globalEventBus.on('BLOCK_RECEIVED', this.confirmMempoolTxs)
     ctrl.paginatorTargets.forEach((link) => {
       link.addEventListener('click', (e) => {
@@ -251,21 +291,17 @@ export default class extends Controller {
     })
   }
 
-  async showQRCode () {
+  async showQRCode() {
     this.qrboxTarget.classList.remove('d-hide')
     if (this.qrCode) {
       await fadeIn(this.qrimgTarget)
     } else {
-      const QRCode = await getDefault(
-        import(/* webpackChunkName: "qrcode" */ 'qrcode')
-      )
-      const qrCodeImg = await QRCode.toDataURL(this.dcrAddress,
-        {
-          errorCorrectionLevel: 'H',
-          scale: 6,
-          margin: 0
-        }
-      )
+      const QRCode = await getDefault(import(/* webpackChunkName: "qrcode" */ 'qrcode'))
+      const qrCodeImg = await QRCode.toDataURL(this.dcrAddress, {
+        errorCorrectionLevel: 'H',
+        scale: 6,
+        margin: 0
+      })
       this.qrimgTarget.innerHTML = `<img src="${qrCodeImg}"/>`
       await fadeIn(this.qrimgTarget)
       if (this.graph) this.graph.resize()
@@ -273,7 +309,7 @@ export default class extends Controller {
     this.qriconTarget.classList.add('d-hide')
   }
 
-  async hideQRCode () {
+  async hideQRCode() {
     this.qriconTarget.classList.remove('d-hide')
     this.qrboxTarget.classList.add('d-hide')
     this.qrimgTarget.style.opacity = 0
@@ -281,28 +317,29 @@ export default class extends Controller {
     if (this.graph) this.graph.resize()
   }
 
-  makeTableUrl (txType, count, offset) {
-    const root = this.dcrAddress === 'treasury' ? 'treasurytable' : `addresstable/${this.dcrAddress}`
+  makeTableUrl(txType, count, offset) {
+    const root =
+      this.dcrAddress === 'treasury' ? 'treasurytable' : `addresstable/${this.dcrAddress}`
     return `/${root}?txntype=${txType}&n=${count}&start=${offset}`
   }
 
-  changePageSize () {
+  changePageSize() {
     this.fetchTable(this.txnType, this.pageSize, this.paginationParams.offset)
   }
 
-  changeTxType () {
+  changeTxType() {
     this.fetchTable(this.txnType, this.pageSize, 0)
   }
 
-  nextPage () {
+  nextPage() {
     this.toPage(1)
   }
 
-  prevPage () {
+  prevPage() {
     this.toPage(-1)
   }
 
-  pageNumberLink (e) {
+  pageNumberLink(e) {
     e.preventDefault()
     const url = e.target.href
     const parser = new URL(url)
@@ -312,7 +349,7 @@ export default class extends Controller {
     this.fetchTable(txntype, pagesize, start)
   }
 
-  toPage (direction) {
+  toPage(direction) {
     const params = ctrl.paginationParams
     const count = ctrl.pageSize
     const txType = ctrl.txnType
@@ -322,7 +359,7 @@ export default class extends Controller {
     ctrl.fetchTable(txType, count, requestedOffset)
   }
 
-  async fetchTable (txType, count, offset) {
+  async fetchTable(txType, count, offset) {
     ctrl.listLoaderTarget.classList.add('loading')
     const requestCount = count > 20 ? count : 20
     const tableResponse = await requestJSON(ctrl.makeTableUrl(txType, requestCount, offset))
@@ -349,7 +386,7 @@ export default class extends Controller {
     ctrl.listLoaderTarget.classList.remove('loading')
   }
 
-  setPageability () {
+  setPageability() {
     const params = ctrl.paginationParams
     const rowMax = params.count
     const count = ctrl.pageSize
@@ -389,19 +426,22 @@ export default class extends Controller {
     const suffix = rowMax > 1 ? 's' : ''
     let rangeEnd = params.offset + count
     if (rangeEnd > rowMax) rangeEnd = rowMax
-    ctrl.rangeTarget.innerHTML = 'showing ' + (params.offset + 1) + ' &ndash; ' +
-    rangeEnd + ' of ' + rowMax.toLocaleString() + ' transaction' + suffix
+    ctrl.rangeTarget.innerHTML =
+      'showing ' +
+      (params.offset + 1) +
+      ' &ndash; ' +
+      rangeEnd +
+      ' of ' +
+      rowMax.toLocaleString() +
+      ' transaction' +
+      suffix
   }
 
-  createGraph (processedData, otherOptions) {
-    return new Dygraph(
-      this.chartTarget,
-      processedData,
-      { ...commonOptions, ...otherOptions }
-    )
+  createGraph(processedData, otherOptions) {
+    return new Dygraph(this.chartTarget, processedData, { ...commonOptions, ...otherOptions })
   }
 
-  setTablePaginationLinks () {
+  setTablePaginationLinks() {
     const tablePagesLink = ctrl.tablePaginationParams
     if (tablePagesLink.length === 0) return ctrl.tablePaginationTarget.classList.add('d-hide')
     ctrl.tablePaginationTarget.classList.remove('d-hide')
@@ -414,24 +454,30 @@ export default class extends Controller {
     const root = this.dcrAddress === 'treasury' ? 'treasury' : `address/${this.dcrAddress}`
 
     if (typeof offset !== 'undefined' && offset > 0) {
-      links = `<a href="/${root}?start=${offset - pageSize}&n=${pageSize}&txntype=${txnType}" ` +
-      'class="d-inline-block dcricon-arrow-left m-1 fz20" data-action="click->address#pageNumberLink"></a>' + '\n'
+      links =
+        `<a href="/${root}?start=${offset - pageSize}&n=${pageSize}&txntype=${txnType}" ` +
+        'class="d-inline-block dcricon-arrow-left m-1 fz20" data-action="click->address#pageNumberLink"></a>' +
+        '\n'
     }
 
-    links += tablePagesLink.map(d => {
-      if (!d.link) return `<span>${d.str}</span>`
-      return `<a href="${d.link}" class="fs18 pager px-1${d.active ? ' active' : ''}" data-action="click->address#pageNumberLink">${d.str}</a>`
-    }).join('\n')
+    links += tablePagesLink
+      .map((d) => {
+        if (!d.link) return `<span>${d.str}</span>`
+        return `<a href="${d.link}" class="fs18 pager px-1${d.active ? ' active' : ''}" data-action="click->address#pageNumberLink">${d.str}</a>`
+      })
+      .join('\n')
 
-    if ((txCount - offset) > pageSize) {
-      links += '\n' + `<a href="/${root}?start=${(offset + pageSize)}&n=${pageSize}&txntype=${txnType}" ` +
-      'class="d-inline-block dcricon-arrow-right m-1 fs20" data-action="click->address#pageNumberLink"></a>'
+    if (txCount - offset > pageSize) {
+      links +=
+        '\n' +
+        `<a href="/${root}?start=${offset + pageSize}&n=${pageSize}&txntype=${txnType}" ` +
+        'class="d-inline-block dcricon-arrow-right m-1 fs20" data-action="click->address#pageNumberLink"></a>'
     }
 
     ctrl.tablePaginationTarget.innerHTML = dompurify.sanitize(links)
   }
 
-  drawGraph () {
+  drawGraph() {
     const settings = ctrl.settings
 
     ctrl.noconfirmsTarget.classList.add('d-hide')
@@ -454,7 +500,7 @@ export default class extends Controller {
     ctrl.fetchGraphData(settings.chart, settings.bin)
   }
 
-  async fetchGraphData (chart, bin) {
+  async fetchGraphData(chart, bin) {
     const cacheKey = chart + '-' + bin
     if (ctrl.ajaxing === cacheKey) {
       return
@@ -487,7 +533,7 @@ export default class extends Controller {
     ctrl.chartLoaderTarget.classList.remove('loading')
   }
 
-  processData (chart, bin, data) {
+  processData(chart, bin, data) {
     if (isEmpty(data)) {
       ctrl.noDataAvailable()
       return
@@ -506,12 +552,10 @@ export default class extends Controller {
     }, 0)
   }
 
-  popChartCache (chart, bin) {
+  popChartCache(chart, bin) {
     const cacheKey = chart + '-' + bin
     const binSize = Zoom.mapValue(bin) || blockDuration
-    if (!ctrl.retrievedData[cacheKey] ||
-        ctrl.requestedChart !== cacheKey
-    ) {
+    if (!ctrl.retrievedData[cacheKey] || ctrl.requestedChart !== cacheKey) {
       return
     }
     const data = ctrl.retrievedData[cacheKey]
@@ -551,17 +595,17 @@ export default class extends Controller {
     ctrl.validateZoom(binSize)
   }
 
-  noDataAvailable () {
+  noDataAvailable() {
     this.noconfirmsTarget.classList.remove('d-hide')
     this.chartTarget.classList.add('d-hide')
     this.chartLoaderTarget.classList.remove('loading')
   }
 
-  validChartType (chart) {
+  validChartType(chart) {
     return this.optionsTarget.namedItem(chart) || false
   }
 
-  validGraphInterval (interval) {
+  validGraphInterval(interval) {
     const bin = interval || this.settings.bin || this.activeBin
     let b = false
     this.binputs.forEach((button) => {
@@ -570,7 +614,7 @@ export default class extends Controller {
     return b
   }
 
-  validateZoom (binSize) {
+  validateZoom(binSize) {
     ctrl.setButtonVisibility()
     const zoom = Zoom.validate(ctrl.activeZoomKey || ctrl.settings.zoom, ctrl.xRange, binSize)
     ctrl.setZoom(zoom.start, zoom.end)
@@ -580,13 +624,13 @@ export default class extends Controller {
     })
   }
 
-  changeGraph (e) {
+  changeGraph(e) {
     this.settings.chart = this.chartType
     this.setGraphQuery()
     this.drawGraph()
   }
 
-  changeBin (e) {
+  changeBin(e) {
     const target = e.srcElement || e.target
     if (target.nodeName !== 'BUTTON') return
     ctrl.settings.bin = target.name
@@ -595,11 +639,11 @@ export default class extends Controller {
     this.drawGraph()
   }
 
-  setGraphQuery () {
+  setGraphQuery() {
     this.query.replace(this.settings)
   }
 
-  updateFlow () {
+  updateFlow() {
     const bitmap = ctrl.flow
     if (bitmap === 0) {
       // If all boxes are unchecked, just leave the last view
@@ -619,14 +663,14 @@ export default class extends Controller {
     })
   }
 
-  setFlowChecks () {
+  setFlowChecks() {
     const bitmap = this.settings.flow
     this.flowBoxes.forEach((box) => {
       box.checked = bitmap & parseInt(box.value)
     })
   }
 
-  onZoom (e) {
+  onZoom(e) {
     const target = e.srcElement || e.target
     if (target.nodeName !== 'BUTTON') return
     ctrl.zoomButtons.forEach((button) => {
@@ -643,7 +687,7 @@ export default class extends Controller {
     ctrl.setZoom(start, end)
   }
 
-  setZoom (start, end) {
+  setZoom(start, end) {
     ctrl.chartLoaderTarget.classList.add('loading')
     ctrl.graph.updateOptions({
       dateWindow: [start, end]
@@ -654,7 +698,7 @@ export default class extends Controller {
     ctrl.chartLoaderTarget.classList.remove('loading')
   }
 
-  getBin () {
+  getBin() {
     let bin = ctrl.query.get('bin')
     if (!ctrl.setIntervalButton(bin)) {
       bin = ctrl.activeBin
@@ -662,7 +706,7 @@ export default class extends Controller {
     return bin
   }
 
-  setIntervalButton (interval) {
+  setIntervalButton(interval) {
     const button = ctrl.validGraphInterval(interval)
     if (!button) return false
     ctrl.binputs.forEach((button) => {
@@ -671,7 +715,7 @@ export default class extends Controller {
     button.classList.add('btn-selected')
   }
 
-  setViewButton (view) {
+  setViewButton(view) {
     this.viewTargets.forEach((button) => {
       if (button.name === view) {
         button.classList.add('btn-active')
@@ -681,14 +725,14 @@ export default class extends Controller {
     })
   }
 
-  setChartType () {
+  setChartType() {
     const chart = this.settings.chart
     if (this.validChartType(chart)) {
       this.optionsTarget.value = chart
     }
   }
 
-  setSelectedZoom (zoomKey) {
+  setSelectedZoom(zoomKey) {
     this.zoomButtons.forEach(function (button) {
       if (button.name === zoomKey) {
         button.classList.add('btn-selected')
@@ -698,7 +742,7 @@ export default class extends Controller {
     })
   }
 
-  _drawCallback (graph, first) {
+  _drawCallback(graph, first) {
     if (first) return
     const [start, end] = ctrl.graph.xAxisRange()
     if (start === end) return
@@ -709,7 +753,7 @@ export default class extends Controller {
     ctrl.setSelectedZoom(Zoom.mapKey(ctrl.settings.zoom, ctrl.graph.xAxisExtremes()))
   }
 
-  _zoomCallback (start, end) {
+  _zoomCallback(start, end) {
     ctrl.zoomButtons.forEach((button) => {
       button.classList.remove('btn-selected')
     })
@@ -718,7 +762,7 @@ export default class extends Controller {
     ctrl.setSelectedZoom(Zoom.mapKey(ctrl.settings.zoom, ctrl.graph.xAxisExtremes()))
   }
 
-  setButtonVisibility () {
+  setButtonVisibility() {
     const duration = ctrl.chartDuration
     const buttonSets = [ctrl.zoomButtons, ctrl.binputs]
     buttonSets.forEach((buttonSet) => {
@@ -734,7 +778,7 @@ export default class extends Controller {
     })
   }
 
-  _confirmMempoolTxs (blockData) {
+  _confirmMempoolTxs(blockData) {
     const block = blockData.block
     if (this.hasPendingTarget) {
       this.pendingTargets.forEach((row) => {
@@ -768,7 +812,7 @@ export default class extends Controller {
     }
   }
 
-  hashOver (e) {
+  hashOver(e) {
     const target = e.srcElement || e.target
     const href = target.href
     this.hashTargets.forEach((link) => {
@@ -780,7 +824,7 @@ export default class extends Controller {
     })
   }
 
-  hashOut (e) {
+  hashOut(e) {
     const target = e.srcElement || e.target
     const href = target.href
     this.hashTargets.forEach((link) => {
@@ -790,7 +834,7 @@ export default class extends Controller {
     })
   }
 
-  toggleExpand (e) {
+  toggleExpand(e) {
     const btn = this.expandoTarget
     if (btn.classList.contains('dcricon-expand')) {
       btn.classList.remove('dcricon-expand')
@@ -803,7 +847,7 @@ export default class extends Controller {
     if (this.graph) this.graph.resize()
   }
 
-  putChartBack () {
+  putChartBack() {
     const btn = this.expandoTarget
     btn.classList.add('dcricon-expand')
     btn.classList.remove('dcricon-collapse')
@@ -812,16 +856,16 @@ export default class extends Controller {
     if (this.graph) this.graph.resize()
   }
 
-  exitFullscreen (e) {
+  exitFullscreen(e) {
     if (e.target !== this.fullscreenTarget) return
     this.putChartBack()
   }
 
-  get chartType () {
+  get chartType() {
     return this.optionsTarget.value
   }
 
-  get activeView () {
+  get activeView() {
     let view = null
     this.viewTargets.forEach((button) => {
       if (button.classList.contains('btn-active')) view = button.name
@@ -829,25 +873,25 @@ export default class extends Controller {
     return view
   }
 
-  get activeZoomDuration () {
+  get activeZoomDuration() {
     return this.activeZoomKey ? Zoom.mapValue(this.activeZoomKey) : false
   }
 
-  get activeZoomKey () {
+  get activeZoomKey() {
     const activeButtons = this.zoomTarget.getElementsByClassName('btn-selected')
     if (activeButtons.length === 0) return null
     return activeButtons[0].name
   }
 
-  get chartDuration () {
+  get chartDuration() {
     return this.xRange[1] - this.xRange[0]
   }
 
-  get activeBin () {
+  get activeBin() {
     return this.intervalTarget.getElementsByClassName('btn-selected')[0].name
   }
 
-  get flow () {
+  get flow() {
     let base10 = 0
     this.flowBoxes.forEach((box) => {
       if (box.checked) base10 += parseInt(box.value)
@@ -855,11 +899,11 @@ export default class extends Controller {
     return base10
   }
 
-  get txnType () {
+  get txnType() {
     return this.txntypeTarget.selectedOptions[0].value
   }
 
-  get pageSize () {
+  get pageSize() {
     const selected = this.pagesizeTarget.selectedOptions
     return selected.length ? parseInt(selected[0].value) : 20
   }

@@ -5,13 +5,13 @@ import ws from '../services/messagesocket_service'
 
 const conversionRate = 100000000
 
-function makeNode (html) {
+function makeNode(html) {
   const div = document.createElement('div')
   div.innerHTML = dompurify.sanitize(html, { FORBID_TAGS: ['svg', 'math'] })
   return div.firstChild
 }
 
-function makeMempoolBlock (block) {
+function makeMempoolBlock(block) {
   let fees = 0
   if (!block.Transactions) return
   for (const tx of block.Transactions) {
@@ -32,11 +32,10 @@ function makeMempoolBlock (block) {
                     ${makeTicketAndRevocationElements(block.Tickets, block.Revocations, '/mempool')}
                     ${makeTransactionElements(block.Transactions, '/mempool')}
                 </div>
-            </div>`
-  )
+            </div>`)
 }
 
-function newBlockHtmlElement (block) {
+function newBlockHtmlElement(block) {
   let rewardTxId
   for (const tx of block.Transactions) {
     if (tx.Coinbase) {
@@ -53,11 +52,10 @@ function newBlockHtmlElement (block) {
                     ${makeTicketAndRevocationElements(block.Tickets, block.Revocations, `/block/${block.Height}`)}
                     ${makeTransactionElements(block.Transactions, `/block/${block.Height}`)}
                 </div>
-            </div>`
-  )
+            </div>`)
 }
 
-function makeBlockSummary (blockHeight, totalSent, time) {
+function makeBlockSummary(blockHeight, totalSent, time) {
   return `<div class="block-info">
                 <a class="color-code" href="/block/${blockHeight}">${blockHeight}</a>
                 <div class="mono" style="line-height: 1;">${Math.floor(totalSent)} DCR</div>
@@ -67,7 +65,7 @@ function makeBlockSummary (blockHeight, totalSent, time) {
             </div>`
 }
 
-function makeRewardsElement (subsidy, fee, voteCount, rewardTxId) {
+function makeRewardsElement(subsidy, fee, voteCount, rewardTxId) {
   if (!subsidy) {
     return `<div class="block-rewards">
                     <span class="pow"><span class="paint" style="width:100%;"></span></span>
@@ -111,9 +109,9 @@ function makeRewardsElement (subsidy, fee, voteCount, rewardTxId) {
             </div>`
 }
 
-function makeVoteElements (votes) {
+function makeVoteElements(votes) {
   let totalDCR = 0
-  const voteElements = (votes || []).map(vote => {
+  const voteElements = (votes || []).map((vote) => {
     totalDCR += vote.Total
     return `<span style="background-color: ${vote.VoteValid ? '#2971ff' : 'rgba(253, 113, 74, 0.8)'}"
                     title='{"object": "Vote", "total": "${vote.Total}", "voteValid": "${vote.VoteValid}"}'>
@@ -133,10 +131,10 @@ function makeVoteElements (votes) {
             </div>`
 }
 
-function makeTicketAndRevocationElements (tickets, revocations, blockHref) {
+function makeTicketAndRevocationElements(tickets, revocations, blockHref) {
   let totalDCR = 0
 
-  const ticketElements = (tickets || []).map(ticket => {
+  const ticketElements = (tickets || []).map((ticket) => {
     totalDCR += ticket.Total
     return makeTxElement(ticket, 'block-ticket', 'Ticket')
   })
@@ -147,7 +145,7 @@ function makeTicketAndRevocationElements (tickets, revocations, blockHref) {
                                 <a class="block-element-link" href="${blockHref}">+ ${total - 30}</a>
                             </span>`)
   }
-  const revocationElements = (revocations || []).map(revocation => {
+  const revocationElements = (revocations || []).map((revocation) => {
     totalDCR += revocation.Total
     return makeTxElement(revocation, 'block-rev', 'Revocation')
   })
@@ -166,9 +164,9 @@ function makeTicketAndRevocationElements (tickets, revocations, blockHref) {
             </div>`
 }
 
-function makeTransactionElements (transactions, blockHref) {
+function makeTransactionElements(transactions, blockHref) {
   let totalDCR = 0
-  const transactionElements = (transactions || []).map(tx => {
+  const transactionElements = (transactions || []).map((tx) => {
     totalDCR += tx.Total
     return makeTxElement(tx, 'block-tx', 'Transaction', true)
   })
@@ -188,7 +186,7 @@ function makeTransactionElements (transactions, blockHref) {
             </div>`
 }
 
-function makeTxElement (tx, className, type, appendFlexGrow) {
+function makeTxElement(tx, className, type, appendFlexGrow) {
   // const style = [ `opacity: ${(tx.VinCount + tx.VoutCount) / 10}` ];
   const style = []
   if (appendFlexGrow) {
@@ -202,11 +200,11 @@ function makeTxElement (tx, className, type, appendFlexGrow) {
 }
 
 export default class extends Controller {
-  static get targets () {
+  static get targets() {
     return ['box', 'title', 'showmore', 'root', 'txs', 'tooltip', 'block']
   }
 
-  connect () {
+  connect() {
     this.handleVisualBlocksUpdate = this._handleVisualBlocksUpdate.bind(this)
     globalEventBus.on('BLOCK_RECEIVED', this.handleVisualBlocksUpdate)
 
@@ -227,17 +225,17 @@ export default class extends Controller {
     setTimeout(this.refreshBlocksDisplay, 500)
   }
 
-  disconnect () {
+  disconnect() {
     ws.deregisterEvtHandlers('getmempooltrimmedResp')
     ws.deregisterEvtHandlers('mempool')
     globalEventBus.off('BLOCK_RECEIVED', this.handleVisualBlocksUpdate)
     window.removeEventListener('resize', this.refreshBlocksDisplay)
   }
 
-  _handleVisualBlocksUpdate (newBlock) {
+  _handleVisualBlocksUpdate(newBlock) {
     const block = newBlock.block
     // show only regular tx in block.Transactions, exclude coinbase (reward) transactions
-    const transactions = block.Tx.filter(tx => !tx.Coinbase)
+    const transactions = block.Tx.filter((tx) => !tx.Coinbase)
     // trim unwanted data in this block
     const trimmedBlockInfo = {
       Time: block.time,
@@ -261,14 +259,14 @@ export default class extends Controller {
     this.setupTooltips()
   }
 
-  handleMempoolUpdate (evt) {
+  handleMempoolUpdate(evt) {
     const mempool = JSON.parse(evt)
-    mempool.Time = Math.round((new Date()).getTime() / 1000)
+    mempool.Time = Math.round(new Date().getTime() / 1000)
     this.boxTarget.replaceChild(makeMempoolBlock(mempool), this.boxTarget.firstChild)
     this.setupTooltips()
   }
 
-  _refreshBlocksDisplay () {
+  _refreshBlocksDisplay() {
     const visibleBlockElements = this.visibleBlocks()
     const currentlyDisplayedBlockCount = visibleBlockElements.length
     const maxBlockElements = this.calculateMaximumNumberOfBlocksToDisplay(visibleBlockElements[0])
@@ -287,7 +285,7 @@ export default class extends Controller {
     this.setupTooltips()
   }
 
-  calculateMaximumNumberOfBlocksToDisplay (blockElement) {
+  calculateMaximumNumberOfBlocksToDisplay(blockElement) {
     const blocksSection = this.rootTarget.getBoundingClientRect()
     const margin = 20
     const blocksSectionFirstChildHeight = this.titleTarget.offsetHeight + margin
@@ -298,7 +296,8 @@ export default class extends Controller {
     const blocksSectionHeight = blocksSection.height + extraSpace
 
     const totalAvailableWidth = blocksSection.width
-    const totalAvailableHeight = blocksSectionHeight - blocksSectionFirstChildHeight - blocksSectionLastChildHeight
+    const totalAvailableHeight =
+      blocksSectionHeight - blocksSectionFirstChildHeight - blocksSectionLastChildHeight
 
     const rect = blockElement.getBoundingClientRect()
     const blockWidth = rect.width
@@ -317,7 +316,7 @@ export default class extends Controller {
     return maxBlockElements
   }
 
-  setupTooltips () {
+  setupTooltips() {
     // check for empty tx rows and set custom tooltip
     this.txsTargets.forEach((div) => {
       if (div.childeElementCount === 0) {
@@ -344,7 +343,7 @@ export default class extends Controller {
       } catch (error) {}
     })
 
-    import(/* webpackChunkName: "tippy" */ '../vendor/tippy.all').then(module => {
+    import(/* webpackChunkName: "tippy" */ '../vendor/tippy.all').then((module) => {
       const tippy = module.default
       tippy('.block-rows [title]', {
         allowTitleHTML: true,
@@ -361,7 +360,7 @@ export default class extends Controller {
     })
   }
 
-  visibleBlocks () {
+  visibleBlocks() {
     return this.boxTarget.querySelectorAll('.visible')
   }
 }

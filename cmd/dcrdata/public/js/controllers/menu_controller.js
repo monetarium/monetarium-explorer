@@ -1,7 +1,7 @@
 import { Controller } from '@hotwired/stimulus'
 import { closeMenu, toggleSun } from '../services/theme_service'
 
-function closest (el, id) {
+function closest(el, id) {
   // https://stackoverflow.com/a/48726873/1124661
   if (el.id === id) {
     return el
@@ -13,21 +13,21 @@ function closest (el, id) {
 }
 
 export default class extends Controller {
-  static get targets () {
+  static get targets() {
     return ['toggle', 'darkModeToggle', 'form']
   }
 
-  connect () {
+  connect() {
     this.clickout = this._clickout.bind(this)
-    this.formTargets.forEach(form => {
-      form.addEventListener('submit', e => {
+    this.formTargets.forEach((form) => {
+      form.addEventListener('submit', (e) => {
         e.preventDefault()
         return false
       })
     })
   }
 
-  _clickout (e) {
+  _clickout(e) {
     const target = e.target || e.srcElement
     if (!closest(target, 'hamburger-menu')) {
       document.removeEventListener('click', this.clickout)
@@ -35,13 +35,13 @@ export default class extends Controller {
     }
   }
 
-  toggle (e) {
+  toggle(e) {
     if (this.toggleTarget.checked) {
       document.addEventListener('click', this.clickout)
     }
   }
 
-  onSunClick () {
+  onSunClick() {
     toggleSun()
   }
 }

@@ -52,11 +52,7 @@
   bottom: 0;
   width: 100%;
   overflow: hidden;
-  background:
-    rgba(214 225 231 / 30%)
-    url("/images/loader.gif")
-    50% 50%
-    no-repeat;
+  background: rgba(214 225 231 / 30%) url("/images/loader.gif") 50% 50% no-repeat;
 }
 
 .loading .modal {
@@ -161,7 +157,13 @@
   background-image: -khtml-gradient(linear, left top, left bottom, from(#56c5eb), to(#1798c4));
   background-image: -moz-linear-gradient(top, #56c5eb, #1798c4);
   background-image: -ms-linear-gradient(top, #56c5eb, #1798c4);
-  background-image: -webkit-gradient(linear, left top, left bottom, color-stop(0%, #56c5eb), color-stop(100%, #1798c4));
+  background-image: -webkit-gradient(
+    linear,
+    left top,
+    left bottom,
+    color-stop(0%, #56c5eb),
+    color-stop(100%, #1798c4)
+  );
   background-image: -webkit-linear-gradient(top, #56c5eb, #1798c4);
   background-image: -o-linear-gradient(top, #56c5eb, #1798c4);
   background-image: linear-gradient(#56c5eb, #1798c4);
@@ -531,9 +533,13 @@ body.darkBG .customcheck input:checked ~ .total-mixed {
 }
 
 @keyframes spin {
-  0% { transform: rotate(0deg); }
+  0% {
+    transform: rotate(0deg);
+  }
 
-  100% { transform: rotate(480deg); }
+  100% {
+    transform: rotate(480deg);
+  }
 }
 
 .d-val {

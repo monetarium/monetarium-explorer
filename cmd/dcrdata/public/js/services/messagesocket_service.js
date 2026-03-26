@@ -16,7 +16,7 @@
 //
 // Based on ws_events_dispatcher.js by Ismael Celis
 
-function forward (event, message, handlers) {
+function forward(event, message, handlers) {
   if (typeof handlers[event] === 'undefined') return
   // call each handler
   for (let i = 0; i < handlers[event].length; i++) {
@@ -25,7 +25,7 @@ function forward (event, message, handlers) {
 }
 
 class MessageSocket {
-  constructor () {
+  constructor() {
     this.uri = undefined
     this.connection = undefined
     this.handlers = {}
@@ -33,17 +33,17 @@ class MessageSocket {
     this.maxQlength = 5
   }
 
-  registerEvtHandler (eventID, handler) {
+  registerEvtHandler(eventID, handler) {
     this.handlers[eventID] = this.handlers[eventID] || []
     this.handlers[eventID].push(handler)
   }
 
-  deregisterEvtHandlers (eventID) {
+  deregisterEvtHandlers(eventID) {
     this.handlers[eventID] = []
   }
 
   // send a message back to the server
-  send (eventID, message) {
+  send(eventID, message) {
     if (this.connection === undefined) {
       while (this.queue.length > this.maxQlength - 1) this.queue.shift()
       this.queue.push([eventID, message])
@@ -58,7 +58,7 @@ class MessageSocket {
     this.connection.send(payload)
   }
 
-  connect (uri) {
+  connect(uri) {
     this.uri = uri
     this.connection = new window.WebSocket(uri)
 

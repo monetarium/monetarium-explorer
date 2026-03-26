@@ -1,14 +1,14 @@
 // shared functions for related to charts
 
-export function barChartPlotter (e) {
+export function barChartPlotter(e) {
   plotChart(e, findWidth(findMinSep(e.points, Infinity)))
 }
 
-function findWidth (sep) {
-  return Math.floor(2.0 / 3 * sep * 10000) / 10000 // to 4 decimal places
+function findWidth(sep) {
+  return Math.floor((2.0 / 3) * sep * 10000) / 10000 // to 4 decimal places
 }
 
-function findMinSep (points, minSep) {
+function findMinSep(points, minSep) {
   for (let i = 1; i < points.length; i++) {
     const sep = points[i].canvasx - points[i - 1].canvasx
     if (sep < minSep) minSep = sep
@@ -16,19 +16,19 @@ function findMinSep (points, minSep) {
   return minSep
 }
 
-function findLineWidth (barWidth) {
-  const width = 0.2 + (0.08 * barWidth)
+function findLineWidth(barWidth) {
+  const width = 0.2 + 0.08 * barWidth
   return width > 1 ? 1 : width
 }
 
-export function sizedBarPlotter (binSize) {
+export function sizedBarPlotter(binSize) {
   return (e) => {
     const canvasBin = e.dygraph.toDomXCoord(binSize) - e.dygraph.toDomXCoord(0)
     plotChart(e, findWidth(canvasBin))
   }
 }
 
-function plotChart (e, barWidth) {
+function plotChart(e, barWidth) {
   const ctx = e.drawingContext
   const yBottom = e.dygraph.toDomYCoord(0)
 
@@ -44,7 +44,7 @@ function plotChart (e, barWidth) {
   })
 }
 
-export function multiColumnBarPlotter (e) {
+export function multiColumnBarPlotter(e) {
   if (e.seriesIndex !== 0) return
 
   const g = e.dygraph
@@ -53,7 +53,9 @@ export function multiColumnBarPlotter (e) {
   const yBottom = e.dygraph.toDomYCoord(0)
 
   let minSep = Infinity
-  sets.map((bar) => { minSep = findMinSep(bar, minSep) })
+  sets.map((bar) => {
+    minSep = findMinSep(bar, minSep)
+  })
   const barWidth = findWidth(minSep)
   const strokeColors = g.getColors()
   const fillColors = g.getOption('fillColors')
@@ -75,7 +77,7 @@ export function multiColumnBarPlotter (e) {
   })
 }
 
-export function padPoints (pts, binSize, sustain) {
+export function padPoints(pts, binSize, sustain) {
   let pad = binSize / 2.0
   const lastPt = pts[pts.length - 1]
   const firstPt = pts[0]
@@ -95,7 +97,7 @@ export function padPoints (pts, binSize, sustain) {
   pts.push(back)
 }
 
-export function isEqual (a, b) {
+export function isEqual(a, b) {
   if (!Array.isArray(a) || !Array.isArray(b)) return false
   let i = a.length
   if (i !== b.length) return false
@@ -105,7 +107,7 @@ export function isEqual (a, b) {
   return true
 }
 
-function minViewValueRange (chartIndex) {
+function minViewValueRange(chartIndex) {
   if (chartIndex === 0) {
     return 70
   } else if (chartIndex === 1) {
@@ -114,89 +116,95 @@ function minViewValueRange (chartIndex) {
   return 0
 }
 
-function attachZoomHandlers (gs, prevCallbacks) {
+function attachZoomHandlers(gs, prevCallbacks) {
   let block = false
   gs.map((g) => {
-    g.updateOptions({
-      drawCallback: function (me, initial) {
-        if (block || initial) return
-        block = true
-        const opts = { dateWindow: me.xAxisRange() }
+    g.updateOptions(
+      {
+        drawCallback: function (me, initial) {
+          if (block || initial) return
+          block = true
+          const opts = { dateWindow: me.xAxisRange() }
 
-        gs.map((gCopy, j) => {
-          if (gCopy === me) {
-            if (prevCallbacks[j] && prevCallbacks[j].drawCallback) {
-              prevCallbacks[j].drawCallback.apply(this, arguments)
+          gs.map((gCopy, j) => {
+            if (gCopy === me) {
+              if (prevCallbacks[j] && prevCallbacks[j].drawCallback) {
+                prevCallbacks[j].drawCallback.apply(this, arguments)
+              }
+              return
             }
-            return
-          }
 
-          if (isEqual(opts.dateWindow, gCopy.getOption('dateWindow'))) {
-            return
-          }
-
-          const yMinRange = minViewValueRange(j)
-          if (yMinRange > 0) {
-            const yRange = gCopy.yAxisRange()
-            if (yRange && yMinRange > yRange[1]) {
-              opts.valueRange = [yRange[0], yMinRange]
-            } else if (yRange && yMinRange < yRange[1]) {
-              opts.valueRange = yRange
+            if (isEqual(opts.dateWindow, gCopy.getOption('dateWindow'))) {
+              return
             }
-          }
 
-          gCopy.updateOptions(opts)
-
-          delete opts.valueRange
-        })
-        block = false
-      }
-    }, true)
-  })
-}
-
-function attachSelectionHandlers (gs, prevCallbacks) {
-  let block = false
-  gs.map((g) => {
-    g.updateOptions({
-      highlightCallback: function (event, x, points, row, seriesName) {
-        if (block) return
-        block = true
-        const me = this
-        gs.map((gCopy, i) => {
-          if (me === gCopy) {
-            if (prevCallbacks[i] && prevCallbacks[i].highlightCallback) {
-              prevCallbacks[i].highlightCallback.apply(this, arguments)
+            const yMinRange = minViewValueRange(j)
+            if (yMinRange > 0) {
+              const yRange = gCopy.yAxisRange()
+              if (yRange && yMinRange > yRange[1]) {
+                opts.valueRange = [yRange[0], yMinRange]
+              } else if (yRange && yMinRange < yRange[1]) {
+                opts.valueRange = yRange
+              }
             }
-            return
-          }
-          const idx = gCopy.getRowForX(x)
-          if (idx !== null) {
-            gCopy.setSelection(idx, seriesName)
-          }
-        })
-        block = false
+
+            gCopy.updateOptions(opts)
+
+            delete opts.valueRange
+          })
+          block = false
+        }
       },
-      unhighlightCallback: function (event) {
-        if (block) return
-        block = true
-        const me = this
-        gs.map((gCopy, i) => {
-          if (me === gCopy) {
-            if (prevCallbacks[i] && prevCallbacks[i].unhighlightCallback) {
-              prevCallbacks[i].unhighlightCallback.apply(this, arguments)
-            }
-            return
-          }
-          gCopy.clearSelection()
-        })
-        block = false
-      }
-    }, true)
+      true
+    )
   })
 }
 
-export function synchronize (dygraphs, syncOptions) {
+function attachSelectionHandlers(gs, prevCallbacks) {
+  let block = false
+  gs.map((g) => {
+    g.updateOptions(
+      {
+        highlightCallback: function (event, x, points, row, seriesName) {
+          if (block) return
+          block = true
+          const me = this
+          gs.map((gCopy, i) => {
+            if (me === gCopy) {
+              if (prevCallbacks[i] && prevCallbacks[i].highlightCallback) {
+                prevCallbacks[i].highlightCallback.apply(this, arguments)
+              }
+              return
+            }
+            const idx = gCopy.getRowForX(x)
+            if (idx !== null) {
+              gCopy.setSelection(idx, seriesName)
+            }
+          })
+          block = false
+        },
+        unhighlightCallback: function (event) {
+          if (block) return
+          block = true
+          const me = this
+          gs.map((gCopy, i) => {
+            if (me === gCopy) {
+              if (prevCallbacks[i] && prevCallbacks[i].unhighlightCallback) {
+                prevCallbacks[i].unhighlightCallback.apply(this, arguments)
+              }
+              return
+            }
+            gCopy.clearSelection()
+          })
+          block = false
+        }
+      },
+      true
+    )
+  })
+}
+
+export function synchronize(dygraphs, syncOptions) {
   const prevCallbacks = []
 
   dygraphs.map((g, index) => {

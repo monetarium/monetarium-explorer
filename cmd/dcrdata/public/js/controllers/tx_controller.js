@@ -6,13 +6,25 @@ import { MiniMeter } from '../helpers/meters.js'
 import { darkEnabled } from '../services/theme_service'
 
 export default class extends Controller {
-  static get targets () {
-    return ['unconfirmed', 'confirmations', 'formattedAge', 'age', 'progressBar',
-      'ticketStage', 'expiryChance', 'mempoolTd', 'ticketMsg',
-      'expiryMsg', 'statusMsg', 'spendingTx', 'approvalMeter']
+  static get targets() {
+    return [
+      'unconfirmed',
+      'confirmations',
+      'formattedAge',
+      'age',
+      'progressBar',
+      'ticketStage',
+      'expiryChance',
+      'mempoolTd',
+      'ticketMsg',
+      'expiryMsg',
+      'statusMsg',
+      'spendingTx',
+      'approvalMeter'
+    ]
   }
 
-  connect () {
+  connect() {
     this.txid = this.data.get('txid')
     this.processBlock = this._processBlock.bind(this)
     this.targetBlockTime = parseInt(document.getElementById('navBar').dataset.blocktime)
@@ -32,18 +44,20 @@ export default class extends Controller {
     this.approvalMeter = new MiniMeter(this.approvalMeterTarget, opts)
   }
 
-  disconnect () {
+  disconnect() {
     globalEventBus.off('BLOCK_RECEIVED', this.processBlock)
   }
 
-  _processBlock (blockData) {
+  _processBlock(blockData) {
     const block = blockData.block
     const extra = blockData.extra
     // If this is a transaction in mempool, it will have an unconfirmedTarget.
     if (this.hasUnconfirmedTarget) {
       const txid = this.unconfirmedTarget.dataset.txid
       if (txInBlock(txid, block)) {
-        this.confirmationsTarget.textContent = this.confirmationsTarget.dataset.yes.replace('#', '1').replace('@', '')
+        this.confirmationsTarget.textContent = this.confirmationsTarget.dataset.yes
+          .replace('#', '1')
+          .replace('@', '')
         this.confirmationsTarget.classList.add('confirmed')
         // Set the block link
         const link = this.unconfirmedTarget.querySelector('.mp-unconfirmed-link')
@@ -156,7 +170,9 @@ export default class extends Controller {
       case 'LiveTicket': {
         barMsg.textContent = `block ${confirmations} of ${complete} (${(remainingTime / 86400.0).toFixed(1)} days remaining)`
         // Chance of expiring is (1-P)^N where P := single-block probability of being picked, N := blocks remaining.
-        const pctChance = Math.pow(1 - parseFloat(bar.dataset.ticketsPerBlock) / extra.pool_info.size, blocksLeft) * 100
+        const pctChance =
+          Math.pow(1 - parseFloat(bar.dataset.ticketsPerBlock) / extra.pool_info.size, blocksLeft) *
+          100
         this.expiryChanceTarget.textContent = `${pctChance.toFixed(2)}%`
         break
       }
@@ -167,17 +183,17 @@ export default class extends Controller {
         barMsg.textContent = `Immature, spendable in ${blocksLeft} blocks (${(remainingTime / 3600.0).toFixed(1)} hours remaining)`
     }
     bar.setAttribute('aria-valuenow', confirmations)
-    bar.style.width = `${(confirmations / complete * 100).toString()}%`
+    bar.style.width = `${((confirmations / complete) * 100).toString()}%`
   }
 
-  toggleScriptData (e) {
+  toggleScriptData(e) {
     const target = e.srcElement || e.target
     const scriptData = target.querySelector('div.script-data')
     if (!scriptData) return
     scriptData.classList.toggle('d-hide')
   }
 
-  _setNightMode (state) {
+  _setNightMode(state) {
     if (this.approvalMeter) {
       this.approvalMeter.setDarkMode(state.nightMode)
     }

@@ -1,8 +1,8 @@
 // helpers for dynamic module imports
 
-export async function getDefault (dynamicImportPromise) {
+export async function getDefault(dynamicImportPromise) {
   const module = await dynamicImportPromise
-  return new Promise(resolve => {
+  return new Promise((resolve) => {
     resolve(module.default)
   })
 }

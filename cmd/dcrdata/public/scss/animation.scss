@@ -5,7 +5,11 @@
 }
 
 @keyframes flash-bg {
-  0% { background: transparent; }
+  0% {
+    background: transparent;
+  }
 
-  100% { background: #afafaf14; }
+  100% {
+    background: #afafaf14;
+  }
 }
