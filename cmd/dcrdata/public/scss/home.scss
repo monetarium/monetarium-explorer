@@ -132,91 +132,30 @@ $col-min-widths: (
   }
 }
 
-// Sticky Height column — base rules must come before expandable overrides
-.sticky-col {
-  position: sticky;
-  left: 0;
-  z-index: 1;
-
-  &::after {
-    content: "";
-    position: absolute;
-    top: 0;
-    right: -8px;
-    bottom: 0;
-    width: 8px;
-    pointer-events: none;
-    box-shadow: inset 4px 0 6px -4px rgba($black, 0.15);
-    opacity: 0;
-    transition: opacity 0.15s ease;
-  }
-}
-
-.last-blocks-table th.sticky-col {
-  background-color: inherit;
-}
-
-// Collapsed parent rows and all default td states — explicit white so the
-// sticky cell is opaque and matches the table background in light mode.
-.last-blocks-table td.sticky-col {
-  background-color: #fff;
-}
-
-// Sub-rows have a tinted background; the sticky cell must match so it doesn't
-// show the page background through the sticky layer in light mode.
-.last-blocks-table .ska-sub-row--visible td.sticky-col {
-  background-color: $card-bg-secondary;
-}
-
-body.darkBG .last-blocks-table th.sticky-col {
-  background-color: #2d2d2d;
-}
-
-body.darkBG .last-blocks-table td.sticky-col {
-  background-color: $inverse-bg-white;
-}
-
-.last-blocks-table-wrap.is-scrolled .sticky-col::after {
-  opacity: 1;
-}
-
-body.darkBG .last-blocks-table-wrap.is-scrolled .sticky-col::after {
-  box-shadow: inset 4px 0 6px -4px rgba($black, 0.5);
-}
-
 // Expandable block rows — whole row is the click target
 .block-row-expandable {
   cursor: pointer;
 }
 
-// Hover and expanded backgrounds — placed after sticky-col base rules to win on specificity
+// Hover and expanded backgrounds
 /* stylelint-disable no-descending-specificity */
-.last-blocks-table .block-row-expandable:hover td,
-.last-blocks-table .block-row-expandable:hover td.sticky-col {
+.last-blocks-table .block-row-expandable:hover td {
   background-color: $block-row-hover;
 }
 
-.last-blocks-table .block-row-expandable.is-expanded td,
-.last-blocks-table .block-row-expandable.is-expanded td.sticky-col {
+.last-blocks-table .block-row-expandable.is-expanded td {
   border-bottom-color: transparent;
 }
 
-.last-blocks-table .block-row-expandable.is-expanded:hover td,
-.last-blocks-table .block-row-expandable.is-expanded:hover td.sticky-col {
+.last-blocks-table .block-row-expandable.is-expanded:hover td {
   background-color: $block-row-hover;
 }
 
-body.darkBG .last-blocks-table .block-row-expandable:hover td,
-body.darkBG .last-blocks-table .block-row-expandable:hover td.sticky-col {
+body.darkBG .last-blocks-table .block-row-expandable:hover td {
   background-color: $block-row-hover-dark;
 }
 
-body.darkBG .last-blocks-table .ska-sub-row--visible td.sticky-col {
-  background-color: $card-bg-secondary-dark;
-}
-
-body.darkBG .last-blocks-table .block-row-expandable.is-expanded:hover td,
-body.darkBG .last-blocks-table .block-row-expandable.is-expanded:hover td.sticky-col {
+body.darkBG .last-blocks-table .block-row-expandable.is-expanded:hover td {
   background-color: $block-row-hover-dark;
 }
 /* stylelint-enable no-descending-specificity */

@@ -52,7 +52,7 @@ function insertVARSubRow(tbody, newRow, block) {
   tr.dataset.skaAccordionTarget = 'subRow'
   tr.dataset.blockId = String(block.height)
 
-  const labelTd = makeTd('text-start ps-1 sticky-col')
+  const labelTd = makeTd('text-start ps-1')
   const labelSpan = document.createElement('span')
   labelSpan.className = 'sub-row-label'
   labelSpan.textContent = 'VAR'
@@ -85,7 +85,7 @@ function insertSKASubRows(tbody, insertRef, subRows, blockHeight) {
     tr.dataset.skaAccordionTarget = 'subRow'
     tr.dataset.blockId = String(blockHeight)
 
-    const labelTd = makeTd('text-start ps-1 sticky-col')
+    const labelTd = makeTd('text-start ps-1')
     const badge = document.createElement('span')
     badge.className = 'sub-row-label'
     badge.textContent = sub.tokenType

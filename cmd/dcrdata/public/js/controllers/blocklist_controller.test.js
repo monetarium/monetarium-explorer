@@ -46,7 +46,7 @@ function appendBlock(tbody, height) {
   for (const dt of DATA_TYPES) {
     const td = document.createElement('td')
     td.dataset.type = dt
-    if (dt === 'height') td.className = 'text-start ps-1 sticky-col'
+    if (dt === 'height') td.className = 'text-start ps-1'
     blockRow.appendChild(td)
   }
   tbody.appendChild(blockRow)
@@ -221,7 +221,7 @@ describe('blocklist_controller — Property 8: WebSocket block prepend matches s
       const row = tbody.querySelector(
         'tr[data-block-id="1001"][data-ska-accordion-target="blockRow"]'
       )
-      const labelCell = row.nextElementSibling.querySelector('td.sticky-col')
+      const labelCell = row.nextElementSibling.querySelector('td.text-start')
       expect(labelCell).not.toBeNull()
       expect(labelCell.textContent.trim()).toBe('VAR')
     })
@@ -265,7 +265,7 @@ describe('blocklist_controller — Property 8: WebSocket block prepend matches s
       ).slice(1) // skip VAR row
       subs.forEach((r) => {
         expect(r.querySelectorAll('td').length).toBe(9)
-        const label = r.querySelector('td.sticky-col')
+        const label = r.querySelector('td.text-start')
         expect(label).not.toBeNull()
         expect(label.textContent.trim()).toMatch(/^SKA-\d+$/)
       })

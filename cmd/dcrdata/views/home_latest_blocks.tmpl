@@ -1,9 +1,9 @@
 {{define "home_latest_blocks"}}
-<div class="table-responsive last-blocks-table-wrap" data-controller="sticky-col">
+<div class="table-responsive last-blocks-table-wrap">
   <table class="table w-100 mt-2 mx-auto mb-0 last-blocks-table">
     <thead>
       <tr>
-        <th class="text-start ps-2 sticky-col" title="block height">Height</th>
+        <th class="text-start ps-2" title="block height">Height</th>
         <th class="text-end" title="number of transactions">Txn</th>
         <th class="text-end" title="total VAR amount">VAR</th>
         <th class="text-end" title="total SKA amount">SKA</th>
@@ -25,7 +25,7 @@
         data-link-class="fs18"
         data-action="click->ska-accordion#toggle"
       >
-        <td class="text-start ps-1 sticky-col" data-type="height">
+        <td class="text-start ps-1" data-type="height">
           <a href="/block/{{.Height}}" class="fs18">{{.Height}}</a>
         </td>
         <td class="text-end num" data-type="tx">{{.Transactions}}</td>
@@ -40,7 +40,7 @@
         </td>
       </tr>
       <tr class="ska-sub-row" data-ska-accordion-target="subRow" data-block-id="{{$blockHeight}}">
-        <td class="text-start ps-1 sticky-col"><span class="sub-row-label">VAR</span></td>
+        <td class="text-start ps-1"><span class="sub-row-label">VAR</span></td>
         <td class="text-end num">{{.VARTxCount}}</td>
         <td class="text-end num">{{.VARAmount}}</td>
         <td class="text-end">—</td>
@@ -52,7 +52,7 @@
       </tr>
       {{range .SKASubRows}}
       <tr class="ska-sub-row" data-ska-accordion-target="subRow" data-block-id="{{$blockHeight}}">
-        <td class="text-start ps-1 sticky-col"><span class="sub-row-label">{{.TokenType}}</span></td>
+        <td class="text-start ps-1"><span class="sub-row-label">{{.TokenType}}</span></td>
         <td class="text-end num">{{.TxCount}}</td>
         <td class="text-end">—</td>
         <td class="text-end num">{{.Amount}}</td>
