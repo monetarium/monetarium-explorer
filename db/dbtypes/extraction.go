@@ -90,10 +90,14 @@ func processTransactions(msgBlock *wire.MsgBlock, tree int8, chainParams *chainc
 			skaSpent = new(big.Int)
 			skaSent = new(big.Int)
 		        for _, txin := range tx.TxIn {
-		        	skaSpent.Add(skaSpent, txin.SKAValueIn)
+				if txin.SKAValueIn != nil {
+					skaSpent.Add(skaSpent, txin.SKAValueIn)
+				}
 		        }
 		        for _, txout := range tx.TxOut {
-		        	skaSent.Add(skaSent, txout.SKAValue)
+				if txout.SKAValue != nil {
+					skaSent.Add(skaSent, txout.SKAValue)
+				}
 		        }
 		} else {
 		        for _, txin := range tx.TxIn {
