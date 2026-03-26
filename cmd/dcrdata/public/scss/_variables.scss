@@ -64,6 +64,15 @@ $rev-light: #ed6d47;
 /// a darkBG override in themes.scss
 $card-bg-secondary: #f8f8f9;
 $card-bg-secondary-dark: #222326;
+// Expanded accordion parent row — one step darker than the sub-row tint.
+$card-bg-expanded: #efeff1;
+$card-bg-expanded-dark: #2a2b2e;
+// Hover states for expanded parent row.
+$card-bg-expanded-hover: #e0e0e3;
+$card-bg-expanded-hover-dark: #222326;
+// Hover state for collapsed block rows.
+$block-row-hover: #ececec;
+$block-row-hover-dark: #363b40;
 
 // links
 $link-decoration: none;

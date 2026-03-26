@@ -193,23 +193,23 @@ body.darkBG .last-blocks-table-wrap.is-scrolled .sticky-col::after {
 /* stylelint-disable no-descending-specificity */
 .last-blocks-table .block-row-expandable:hover td,
 .last-blocks-table .block-row-expandable:hover td.sticky-col {
-  background-color: #ececec; // #fff + rgba(0,0,0,0.075) — Bootstrap table-hover-bg blended
+  background-color: $block-row-hover;
 }
 
 .last-blocks-table .block-row-expandable.is-expanded td,
 .last-blocks-table .block-row-expandable.is-expanded td.sticky-col {
-  background-color: $card-bg-secondary;
+  background-color: $card-bg-expanded;
   border-bottom-color: transparent;
 }
 
 .last-blocks-table .block-row-expandable.is-expanded:hover td,
 .last-blocks-table .block-row-expandable.is-expanded:hover td.sticky-col {
-  background-color: #ededee; // $card-bg-secondary darkened ~3%
+  background-color: $card-bg-expanded-hover;
 }
 
 body.darkBG .last-blocks-table .block-row-expandable:hover td,
 body.darkBG .last-blocks-table .block-row-expandable:hover td.sticky-col {
-  background-color: #363b40; // $inverse-bg-white + rgba(255,255,255,0.075) — Bootstrap dark hover blended
+  background-color: $block-row-hover-dark;
 }
 
 body.darkBG .last-blocks-table .ska-sub-row--visible td.sticky-col {
@@ -218,11 +218,11 @@ body.darkBG .last-blocks-table .ska-sub-row--visible td.sticky-col {
 
 body.darkBG .last-blocks-table .block-row-expandable.is-expanded td,
 body.darkBG .last-blocks-table .block-row-expandable.is-expanded td.sticky-col {
-  background-color: $card-bg-secondary-dark;
+  background-color: $card-bg-expanded-dark;
 }
 
 body.darkBG .last-blocks-table .block-row-expandable.is-expanded:hover td,
 body.darkBG .last-blocks-table .block-row-expandable.is-expanded:hover td.sticky-col {
-  background-color: #2a2b2e;
+  background-color: $card-bg-expanded-hover-dark;
 }
 /* stylelint-enable no-descending-specificity */
