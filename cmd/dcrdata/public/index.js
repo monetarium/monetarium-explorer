@@ -21,7 +21,7 @@ document.addEventListener('turbolinks:load', function (e) {
   })
 })
 
-export function notifyNewBlock (newBlock) {
+export function notifyNewBlock(newBlock) {
   if (window.Notification.permission !== 'granted') return
   const block = newBlock.block
   const newBlockNtfn = new window.Notification('New Decred Block Mined', {
@@ -32,16 +32,16 @@ export function notifyNewBlock (newBlock) {
   setTimeout(() => newBlockNtfn.close(), 3000)
 }
 
-function getSocketURI (loc) {
+function getSocketURI(loc) {
   const protocol = loc.protocol === 'https:' ? 'wss' : 'ws'
   return protocol + '://' + loc.host + '/ws'
 }
 
-function sleep (ms) {
+function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-async function createWebSocket (loc) {
+async function createWebSocket(loc) {
   // wait a bit to prevent websocket churn from drive by page loads
   const uri = getSocketURI(loc)
   await sleep(300)

@@ -8,13 +8,28 @@ import (
 
 // --- Unit tests for mockSKAData ---
 
-// TestMockSKAData_SubRowCount verifies that non-multiples of 9 produce >= 2 sub-rows.
+// TestMockSKAData_SubRowCount verifies that non-multiples of 9 produce exactly 3 sub-rows
+// (one per entry in mockSKATokens).
 func TestMockSKAData_SubRowCount(t *testing.T) {
 	heights := []int64{1, 2, 5, 7, 8, 10, 100, 1000}
 	for _, h := range heights {
 		_, _, _, subRows := mockSKAData(h)
-		if len(subRows) < 2 {
-			t.Errorf("height=%d: expected >= 2 sub-rows, got %d", h, len(subRows))
+		if len(subRows) != 3 {
+			t.Errorf("height=%d: expected exactly 3 sub-rows, got %d", h, len(subRows))
+		}
+	}
+}
+
+// TestSKASubRow_TokenTypeNonEmpty verifies that all sub-rows returned by
+// mockSKAData have a non-empty TokenType field.
+func TestSKASubRow_TokenTypeNonEmpty(t *testing.T) {
+	_, _, _, subRows := mockSKAData(1) // height=1 is not a multiple of 9
+	if len(subRows) == 0 {
+		t.Fatal("expected non-empty sub-rows for height=1")
+	}
+	for i, sr := range subRows {
+		if sr.TokenType == "" {
+			t.Errorf("sub-row[%d]: TokenType is empty", i)
 		}
 	}
 }

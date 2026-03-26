@@ -8,7 +8,7 @@ const mockSKATokens = [
   { name: 'SKA-3', txs: 5, amount: 2_100_000_000, size: 1_100 }
 ]
 
-function mockSKAData (height) {
+function mockSKAData(height) {
   if (height % 9 === 0) {
     return { skaTx: '0', skaAmt: '0', skaSz: '0', subRows: [] }
   }
@@ -37,104 +37,113 @@ function mockSKAData (height) {
   return { skaTx, skaAmt, skaSz, subRows }
 }
 
-function buildSKACell (newTd, value, hasSKAData) {
-  if (hasSKAData) {
-    newTd.classList.add('ska-clickable')
-    newTd.dataset.action = 'click->ska-accordion#toggle'
-    const btn = document.createElement('button')
-    btn.type = 'button'
-    btn.className = 'link-button'
-    btn.textContent = value
-    newTd.appendChild(btn)
-  } else {
-    newTd.textContent = value
-  }
+function makeTd(className, text) {
+  const td = document.createElement('td')
+  td.className = className
+  if (text !== undefined) td.textContent = text
+  return td
 }
 
-function insertSKASubRows (tbody, newRow, subRows, blockHeight) {
-  let insertRef = newRow.nextSibling
+// Insert a VAR sub-row immediately after newRow (10-column layout).
+function insertVARSubRow(tbody, newRow, block) {
+  const tr = document.createElement('tr')
+  tr.className = 'ska-sub-row'
+  tr.dataset.skaAccordionTarget = 'subRow'
+  tr.dataset.blockId = String(block.height)
+
+  tr.appendChild(makeTd('sticky-col'))
+  const labelTd = makeTd('token-label-col')
+  const labelSpan = document.createElement('span')
+  labelSpan.className = 'sub-row-label'
+  labelSpan.textContent = 'VAR'
+  labelTd.appendChild(labelSpan)
+  tr.appendChild(labelTd)
+  tr.appendChild(makeTd('text-end num', String(block.tx)))
+  tr.appendChild(makeTd('text-end num', humanize.threeSigFigs(block.total)))
+  tr.appendChild(makeTd('text-end', '—'))
+  tr.appendChild(makeTd('text-end num', humanize.bytes(block.size)))
+  tr.appendChild(makeTd('text-end', '—'))
+  tr.appendChild(makeTd('text-end', '—'))
+  tr.appendChild(makeTd('text-end', '—'))
+  tr.appendChild(makeTd('text-end', '—'))
+
+  tbody.insertBefore(tr, newRow.nextSibling)
+  return tr
+}
+
+// Insert SKA sub-rows after insertRef (10-column layout).
+function insertSKASubRows(tbody, insertRef, subRows, blockHeight) {
+  const ref = insertRef.nextSibling
   for (const sub of subRows) {
     const tr = document.createElement('tr')
     tr.className = 'ska-sub-row'
     tr.dataset.skaAccordionTarget = 'subRow'
     tr.dataset.blockId = String(blockHeight)
 
-    // 7 spacer cells (sticky-col, tx, votes, tickets, rev, size, age)
-    for (let i = 0; i < 7; i++) {
-      const spacer = document.createElement('td')
-      if (i === 0) spacer.className = 'sticky-col'
-      tr.appendChild(spacer)
-    }
-
-    // token label spanning VAR columns
-    const labelTd = document.createElement('td')
-    labelTd.colSpan = 3
-    labelTd.className = 'text-end fs13 fw-medium'
-    labelTd.textContent = sub.tokenType
+    tr.appendChild(makeTd('sticky-col'))
+    const labelTd = makeTd('token-label-col')
+    const badge = document.createElement('span')
+    badge.className = 'sub-row-label'
+    badge.textContent = sub.tokenType
+    labelTd.appendChild(badge)
     tr.appendChild(labelTd)
+    tr.appendChild(makeTd('text-end num', sub.txCount))
+    tr.appendChild(makeTd('text-end', '—'))
+    tr.appendChild(makeTd('text-end num', sub.amount))
+    tr.appendChild(makeTd('text-end num', sub.size))
+    tr.appendChild(makeTd('text-end', '—'))
+    tr.appendChild(makeTd('text-end', '—'))
+    tr.appendChild(makeTd('text-end', '—'))
+    tr.appendChild(makeTd('text-end', '—'))
 
-    // SKA tx count
-    const txTd = document.createElement('td')
-    txTd.className = 'text-center group-ska-col'
-    txTd.textContent = sub.txCount
-    tr.appendChild(txTd)
-
-    // SKA amount
-    const amtTd = document.createElement('td')
-    amtTd.className = 'text-end'
-    amtTd.textContent = sub.amount
-    tr.appendChild(amtTd)
-
-    // SKA size
-    const szTd = document.createElement('td')
-    szTd.className = 'text-end pe-2'
-    szTd.textContent = sub.size
-    tr.appendChild(szTd)
-
-    tbody.insertBefore(tr, insertRef)
-    insertRef = tr.nextSibling
+    tbody.insertBefore(tr, ref)
   }
 }
 
 export default class extends Controller {
-  static get targets () {
+  static get targets() {
     return ['table']
   }
 
-  connect () {
+  connect() {
     this.processBlock = this._processBlock.bind(this)
     globalEventBus.on('BLOCK_RECEIVED', this.processBlock)
     this.pageOffset = this.data.get('initialOffset')
   }
 
-  disconnect () {
+  disconnect() {
     globalEventBus.off('BLOCK_RECEIVED', this.processBlock)
   }
 
-  _processBlock (blockData) {
+  _processBlock(blockData) {
     if (!this.hasTableTarget) return
     const block = blockData.block
-    // Grab a copy of the first row.
-    const rows = this.tableTarget.querySelectorAll('tr')
-    if (rows.length === 0) return
-    const tr = rows[0]
-    const lastHeight = parseInt(tr.dataset.height)
-    // Make sure this block belongs on the top of this table.
+
+    const blockRows = this.tableTarget.querySelectorAll('tr[data-ska-accordion-target="blockRow"]')
+    if (blockRows.length === 0) return
+    const firstBlockRow = blockRows[0]
+    const lastHeight = parseInt(firstBlockRow.dataset.height)
+
     if (block.height === lastHeight) {
-      this.tableTarget.removeChild(tr)
+      const toRemove = this.tableTarget.querySelectorAll(`tr[data-block-id="${lastHeight}"]`)
+      toRemove.forEach((r) => this.tableTarget.removeChild(r))
     } else if (block.height === lastHeight + 1) {
-      this.tableTarget.removeChild(rows[rows.length - 1])
+      const lastBlockRow = blockRows[blockRows.length - 1]
+      const oldHeight = lastBlockRow.dataset.blockId
+      const toRemove = this.tableTarget.querySelectorAll(`tr[data-block-id="${oldHeight}"]`)
+      toRemove.forEach((r) => this.tableTarget.removeChild(r))
     } else return
-    // Set the td contents based on the order of the existing row.
-    const { skaTx, skaAmt, skaSz, subRows } = mockSKAData(block.height)
-    const hasSKAData = subRows.length > 0
+
+    const { skaAmt, subRows } = mockSKAData(block.height)
     const newRow = document.createElement('tr')
     newRow.dataset.height = block.height
-    newRow.dataset.linkClass = tr.dataset.linkClass
+    newRow.dataset.linkClass = firstBlockRow.dataset.linkClass
     newRow.dataset.skaAccordionTarget = 'blockRow'
     newRow.dataset.blockId = String(block.height)
-    const tds = tr.querySelectorAll('td')
-    tds.forEach((td) => {
+    newRow.classList.add('block-row-expandable')
+    newRow.dataset.action = 'click->ska-accordion#toggle'
+
+    firstBlockRow.querySelectorAll('td').forEach((td) => {
       const newTd = document.createElement('td')
       newTd.className = td.className
       const dataType = td.dataset.type
@@ -149,43 +158,41 @@ export default class extends Controller {
           const link = document.createElement('a')
           link.href = `/block/${block.height}`
           link.textContent = block.height
-          link.classList.add(tr.dataset.linkClass)
+          link.classList.add(firstBlockRow.dataset.linkClass)
           newTd.appendChild(link)
           break
         }
-        case 'size':
-          newTd.textContent = humanize.bytes(block.size)
+        case 'token-label':
           break
-        case 'value':
-          newTd.textContent = humanize.threeSigFigs(block.TotalSent)
-          break
-        case 'time':
-          newTd.textContent = humanize.date(block.time, false)
-          break
-        case 'var-tx':
+        case 'tx':
           newTd.textContent = String(block.tx)
           break
         case 'var-amount':
           newTd.textContent = humanize.threeSigFigs(block.total)
           break
-        case 'var-size':
+        case 'ska-amount':
+          newTd.textContent = skaAmt
+          break
+        case 'size':
           newTd.textContent = humanize.bytes(block.size)
           break
-        case 'ska-tx':
-          buildSKACell(newTd, skaTx, hasSKAData)
+        case 'votes':
+          newTd.textContent = block.votes
           break
-        case 'ska-amount':
-          buildSKACell(newTd, skaAmt, hasSKAData)
+        case 'tickets':
+          newTd.textContent = block.tickets
           break
-        case 'ska-size':
-          buildSKACell(newTd, skaSz, hasSKAData)
+        case 'revocations':
+          newTd.textContent = block.revocations
           break
         default:
           newTd.textContent = block[dataType]
       }
       newRow.appendChild(newTd)
     })
+
     this.tableTarget.insertBefore(newRow, this.tableTarget.firstChild)
-    insertSKASubRows(this.tableTarget, newRow, subRows, block.height)
+    const varSubRow = insertVARSubRow(this.tableTarget, newRow, block)
+    insertSKASubRows(this.tableTarget, varSubRow, subRows, block.height)
   }
 }

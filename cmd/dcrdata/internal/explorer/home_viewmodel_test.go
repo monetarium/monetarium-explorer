@@ -123,10 +123,10 @@ func TestBuildHomeBlockRows_HasSKAData(t *testing.T) {
 	}
 }
 
-// TestSKASubRow_TokenTypeNonEmpty verifies that every SKASubRow.TokenType is
-// non-empty for any block that has HasSKAData = true.
+// TestBuildHomeBlockRows_SKASubRowTokenTypeNonEmpty verifies that every
+// SKASubRow.TokenType is non-empty for any block that has HasSKAData = true.
 // Requirements: 5.5
-func TestSKASubRow_TokenTypeNonEmpty(t *testing.T) {
+func TestBuildHomeBlockRows_SKASubRowTokenTypeNonEmpty(t *testing.T) {
 	// Use a range of heights to cover both SKA-present and SKA-absent cases.
 	for height := int64(0); height <= 20; height++ {
 		rows := buildHomeBlockRows([]*types.BlockBasic{{Height: height}})

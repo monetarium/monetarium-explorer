@@ -96,33 +96,12 @@ body.darkBG .ska-sub-row--visible {
   background-color: $card-bg-secondary-dark;
 }
 
-.ska-clickable {
-  cursor: pointer;
-}
-
 .last-blocks-table td,
 .last-blocks-table th {
   white-space: nowrap;
 }
 
-.group-header {
-  border-bottom: 2px solid $progress-bg;
-  font-size: 0.75rem;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.group-var-col,
-.group-var {
-  border-left: 2px solid $progress-bg;
-}
-
-.group-ska-col,
-.group-ska {
-  border-left: 2px solid $progress-bg;
-}
-
-// Sticky Height column
+// Sticky Height column — base rules must come before expandable overrides
 .sticky-col {
   position: sticky;
   left: 0;
@@ -148,7 +127,7 @@ body.darkBG .ska-sub-row--visible {
 }
 
 .last-blocks-table td.sticky-col {
-  background-color: #fff;
+  background-color: var(--bs-table-bg, #fff);
 }
 
 .last-blocks-table td.sticky-col:empty {
@@ -174,3 +153,41 @@ body.darkBG .last-blocks-table td.sticky-col:empty {
 body.darkBG .last-blocks-table-wrap.is-scrolled .sticky-col::after {
   box-shadow: inset 4px 0 6px -4px rgba($black, 0.5);
 }
+
+// Expandable block rows — whole row is the click target
+.block-row-expandable {
+  cursor: pointer;
+
+  td.token-label-col {
+    vertical-align: middle;
+  }
+}
+
+// Hover and expanded backgrounds — placed after sticky-col base rules to win on specificity
+/* stylelint-disable no-descending-specificity */
+.last-blocks-table .block-row-expandable:hover td,
+.last-blocks-table .block-row-expandable:hover td.sticky-col {
+  background-color: var(--bs-table-hover-bg);
+}
+
+.last-blocks-table .block-row-expandable.is-expanded td,
+.last-blocks-table .block-row-expandable.is-expanded td.sticky-col {
+  background-color: $card-bg-secondary;
+  border-bottom-color: transparent;
+}
+
+.last-blocks-table .block-row-expandable.is-expanded:hover td,
+.last-blocks-table .block-row-expandable.is-expanded:hover td.sticky-col {
+  background-color: #ededee; // $card-bg-secondary darkened ~3%
+}
+
+body.darkBG .last-blocks-table .block-row-expandable.is-expanded td,
+body.darkBG .last-blocks-table .block-row-expandable.is-expanded td.sticky-col {
+  background-color: $card-bg-secondary-dark;
+}
+
+body.darkBG .last-blocks-table .block-row-expandable.is-expanded:hover td,
+body.darkBG .last-blocks-table .block-row-expandable.is-expanded:hover td.sticky-col {
+  background-color: #2a2b2e;
+}
+/* stylelint-enable no-descending-specificity */

@@ -3,161 +3,72 @@
   <table class="table w-100 mt-2 mx-auto mb-0 last-blocks-table">
     <thead>
       <tr>
-        <th colspan="7">Overview</th>
-        <th colspan="3" class="group-var">VAR</th>
-        <th colspan="3" class="group-ska">SKA</th>
-      </tr>
-      <tr>
-        <th class="text-start ps-2 sticky-col">Height</th>
-        <th
-          class="text-center position-relative"
-          data-tooltip="regular transactions"
-        >
-          Txn
-        </th>
-        <th
-          class="text-center position-relative"
-          data-tooltip="vote transactions"
-        >
-          Vote
-        </th>
-        <th
-          class="text-center position-relative"
-          data-tooltip="ticket transactions"
-        >
-          Tkt
-        </th>
-        <th
-          class="text-center position-relative"
-          data-tooltip="ticket revocations"
-        >
-          Rev
-        </th>
-        <th class="text-end">Size</th>
-        <th class="text-end" data-time-target="header" data-jstitle="Age">
-          Age
-        </th>
-        <th
-          class="text-center group-var-col position-relative"
-          data-tooltip="VAR transactions"
-        >
-          Txn
-        </th>
-        <th class="text-end position-relative" data-tooltip="total VAR sent">
-          VAR
-        </th>
-        <th class="text-end">Size</th>
-        <th
-          class="text-center group-ska-col position-relative"
-          data-tooltip="SKA transactions"
-        >
-          Txn
-        </th>
-        <th class="text-end position-relative" data-tooltip="total SKA sent">
-          SKA
-        </th>
-        <th class="text-end pe-2">Size</th>
+        <th class="text-start ps-2 sticky-col" title="block height">Height</th>
+        <th class="token-label-col"></th>
+        <th class="text-end" title="number of transactions">Txn</th>
+        <th class="text-end" title="total VAR amount">VAR</th>
+        <th class="text-end" title="total SKA amount">SKA</th>
+        <th class="text-end" title="total block size">Size</th>
+        <th class="text-end" title="tickets voted">Vote</th>
+        <th class="text-end" title="tickets purchased">Tkt</th>
+        <th class="text-end" title="tickets revoked">Rev</th>
+        <th class="text-end" data-time-target="header" data-jstitle="Age" title="block age">Age</th>
       </tr>
     </thead>
     <tbody data-controller="ska-accordion" data-blocklist-target="table">
-      {{
-        range.Blocks
-      }}
+      {{range .Blocks}}
       {{$blockHeight := .Height}}
       <tr
+        class="block-row-expandable"
         data-ska-accordion-target="blockRow"
         data-block-id="{{.Height}}"
         data-height="{{.Height}}"
         data-link-class="fs18"
+        data-action="click->ska-accordion#toggle"
       >
         <td class="text-start ps-1 sticky-col" data-type="height">
           <a href="/block/{{.Height}}" class="fs18">{{.Height}}</a>
         </td>
-        <td class="text-center" data-type="tx">{{.Transactions}}</td>
-        <td class="text-center" data-type="votes">{{.Voters}}</td>
-        <td class="text-center" data-type="tickets">{{.FreshStake}}</td>
-        <td class="text-center" data-type="revocations">{{.Revocations}}</td>
-        <td class="text-end" data-type="size">{{.FormattedBytes}}</td>
-        <td
-          class="text-end"
-          data-type="age"
-          data-time-target="age"
-          data-age="{{.BlockTime.UNIX}}"
-        >
+        <td class="token-label-col" data-type="token-label"></td>
+        <td class="text-end num" data-type="tx">{{.Transactions}}</td>
+        <td class="text-end num" data-type="var-amount">{{.VARAmount}}</td>
+        <td class="text-end num" data-type="ska-amount">{{.SKAAmount}}</td>
+        <td class="text-end num" data-type="size">{{.FormattedBytes}}</td>
+        <td class="text-end num" data-type="votes">{{.Voters}}</td>
+        <td class="text-end num" data-type="tickets">{{.FreshStake}}</td>
+        <td class="text-end num" data-type="revocations">{{.Revocations}}</td>
+        <td class="text-end num" data-type="age" data-time-target="age" data-age="{{.BlockTime.UNIX}}">
           {{.BlockTime.DatetimeWithoutTZ}}
         </td>
-        <td class="text-center group-var-col" data-type="var-tx">
-          {{.VARTxCount}}
-        </td>
-        <td class="text-end" data-type="var-amount">{{.VARAmount}}</td>
-        <td class="text-end" data-type="var-size">{{.VARSize}}</td>
-        {{if .HasSKAData}}
-        <td
-          class="text-center group-ska-col ska-clickable"
-          data-type="ska-tx"
-          data-action="click->ska-accordion#toggle"
-        >
-          <button type="button" class="link-button">
-            {{.SKATxCount}}
-          </button>
-        </td>
-
-        <td
-          class="text-end ska-clickable"
-          data-type="ska-amount"
-          data-action="click->ska-accordion#toggle"
-        >
-          <button type="button" class="link-button">
-            {{.SKAAmount}}
-          </button>
-        </td>
-
-        <td
-          class="text-end pe-2 ska-clickable"
-          data-type="ska-size"
-          data-action="click->ska-accordion#toggle"
-        >
-          <button type="button" class="link-button">
-            {{.SKASize}}
-          </button>
-        </td>
-        {{else}}
-        <td class="text-center group-ska-col" data-type="ska-tx">
-          {{.SKATxCount}}
-        </td>
-        <td class="text-end" data-type="ska-amount">{{.SKAAmount}}</td>
-        <td class="text-end pe-2" data-type="ska-size">{{.SKASize}}</td>
-        {{
-          end
-        }}
       </tr>
-      {{
-        range.SKASubRows
-      }}
-      <tr
-        class="ska-sub-row"
-        data-ska-accordion-target="subRow"
-        data-block-id="{{ $blockHeight }}"
-      >
+      <tr class="ska-sub-row" data-ska-accordion-target="subRow" data-block-id="{{$blockHeight}}">
         <td class="sticky-col"></td>
-        <td></td>
-        <td></td>
-        <td></td>
-        <td></td>
-        <td></td>
-        <td></td>
-        <td colspan="3" class="text-end fs13 fw-medium">{{.TokenType}}</td>
-        <td class="text-center group-ska-col">{{.TxCount}}</td>
-        <td class="text-end">{{.Amount}}</td>
-        <td class="text-end pe-2">{{.Size}}</td>
+        <td class="token-label-col"><span class="sub-row-label">VAR</span></td>
+        <td class="text-end num">{{.VARTxCount}}</td>
+        <td class="text-end num">{{.VARAmount}}</td>
+        <td class="text-end">—</td>
+        <td class="text-end num">{{.VARSize}}</td>
+        <td class="text-end">—</td>
+        <td class="text-end">—</td>
+        <td class="text-end">—</td>
+        <td class="text-end">—</td>
       </tr>
-      {{
-        end
-      }}
-      {{
-        end
-      }}
+      {{range .SKASubRows}}
+      <tr class="ska-sub-row" data-ska-accordion-target="subRow" data-block-id="{{$blockHeight}}">
+        <td class="sticky-col"></td>
+        <td class="token-label-col"><span class="sub-row-label">{{.TokenType}}</span></td>
+        <td class="text-end num">{{.TxCount}}</td>
+        <td class="text-end">—</td>
+        <td class="text-end num">{{.Amount}}</td>
+        <td class="text-end num">{{.Size}}</td>
+        <td class="text-end">—</td>
+        <td class="text-end">—</td>
+        <td class="text-end">—</td>
+        <td class="text-end">—</td>
+      </tr>
+      {{end}}
+      {{end}}
     </tbody>
   </table>
 </div>
-{{ end }}
+{{end}}

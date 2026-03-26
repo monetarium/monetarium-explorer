@@ -10,14 +10,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 // Stub the @hotwired/stimulus import so the controller module loads in jsdom.
 vi.mock('@hotwired/stimulus', () => ({
   Controller: class {
-    constructor (element) {
+    constructor(element) {
       this.element = element
     }
   }
 }))
 
-const { default: SkaAccordionController } =
-  await import('./ska_accordion_controller.js')
+const { default: SkaAccordionController } = await import('./ska_accordion_controller.js')
 
 /**
  * Build a minimal DOM fragment for one block and attach a controller instance.
@@ -26,7 +25,7 @@ const { default: SkaAccordionController } =
  * @param {number} subRowCount  number of sub-rows to create (0 = no SKA data)
  * @returns {{ tbody, blockRow, subRows, ctrl }}
  */
-function buildDOM (blockId, subRowCount) {
+function buildDOM(blockId, subRowCount) {
   const tbody = document.createElement('tbody')
 
   // Block row
@@ -58,9 +57,7 @@ function buildDOM (blockId, subRowCount) {
   ctrl.blockRowTargets = Array.from(
     tbody.querySelectorAll('[data-ska-accordion-target="blockRow"]')
   )
-  ctrl.subRowTargets = Array.from(
-    tbody.querySelectorAll('[data-ska-accordion-target="subRow"]')
-  )
+  ctrl.subRowTargets = Array.from(tbody.querySelectorAll('[data-ska-accordion-target="subRow"]'))
 
   return { tbody, blockRow, subRows, ctrl }
 }
@@ -68,7 +65,7 @@ function buildDOM (blockId, subRowCount) {
 /**
  * Simulate a click on the first SKA cell of a block row, as toggle() expects.
  */
-function clickSKACell (blockRow, ctrl) {
+function clickSKACell(blockRow, ctrl) {
   const td = blockRow.querySelector('td.ska-clickable') || blockRow
   const event = { currentTarget: td }
   // toggle() calls event.currentTarget.closest('tr') — make it work for both cases
@@ -105,14 +102,12 @@ describe('ska_accordion_controller — unit tests', () => {
     let blockRow, subRows, ctrl
 
     beforeEach(() => {
-      ({ blockRow, subRows, ctrl } = buildDOM(7, 2))
+      ;({ blockRow, subRows, ctrl } = buildDOM(7, 2))
     })
 
     it('adds ska-sub-row--visible to all sub-rows on first click', () => {
       clickSKACell(blockRow, ctrl)
-      subRows.forEach((r) =>
-        expect(r.classList.contains('ska-sub-row--visible')).toBe(true)
-      )
+      subRows.forEach((r) => expect(r.classList.contains('ska-sub-row--visible')).toBe(true))
     })
 
     it('adds is-expanded to the block row on first click', () => {
@@ -123,9 +118,7 @@ describe('ska_accordion_controller — unit tests', () => {
     it('removes ska-sub-row--visible on second click (collapse)', () => {
       clickSKACell(blockRow, ctrl)
       clickSKACell(blockRow, ctrl)
-      subRows.forEach((r) =>
-        expect(r.classList.contains('ska-sub-row--visible')).toBe(false)
-      )
+      subRows.forEach((r) => expect(r.classList.contains('ska-sub-row--visible')).toBe(false))
     })
 
     it('removes is-expanded on second click (collapse)', () => {
@@ -140,7 +133,7 @@ describe('ska_accordion_controller — unit tests', () => {
       // Build two blocks sharing the same controller / tbody
       const tbody = document.createElement('tbody')
 
-      function addBlock (id, subRowCount) {
+      function addBlock(id, subRowCount) {
         const blockRow = document.createElement('tr')
         blockRow.dataset.blockId = String(id)
         blockRow.dataset.skaAccordionTarget = 'blockRow'
@@ -176,15 +169,11 @@ describe('ska_accordion_controller — unit tests', () => {
       clickSKACell(row1, ctrl)
 
       // Block 100 sub-rows expanded
-      subs1.forEach((r) =>
-        expect(r.classList.contains('ska-sub-row--visible')).toBe(true)
-      )
+      subs1.forEach((r) => expect(r.classList.contains('ska-sub-row--visible')).toBe(true))
       expect(row1.classList.contains('is-expanded')).toBe(true)
 
       // Block 200 sub-rows untouched
-      subs2.forEach((r) =>
-        expect(r.classList.contains('ska-sub-row--visible')).toBe(false)
-      )
+      subs2.forEach((r) => expect(r.classList.contains('ska-sub-row--visible')).toBe(false))
       expect(row2.classList.contains('is-expanded')).toBe(false)
     })
   })
@@ -210,9 +199,7 @@ describe('ska_accordion_controller — property tests', () => {
         clickSKACell(blockRow, ctrl)
 
         // All classes must be restored
-        subRows.forEach((r, i) =>
-          expect(r.className).toBe(initialSubRowClasses[i])
-        )
+        subRows.forEach((r, i) => expect(r.className).toBe(initialSubRowClasses[i]))
         expect(blockRow.className).toBe(initialBlockRowClass)
       })
     )
