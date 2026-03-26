@@ -198,13 +198,12 @@ body.darkBG .last-blocks-table-wrap.is-scrolled .sticky-col::after {
 
 .last-blocks-table .block-row-expandable.is-expanded td,
 .last-blocks-table .block-row-expandable.is-expanded td.sticky-col {
-  background-color: $card-bg-expanded;
   border-bottom-color: transparent;
 }
 
 .last-blocks-table .block-row-expandable.is-expanded:hover td,
 .last-blocks-table .block-row-expandable.is-expanded:hover td.sticky-col {
-  background-color: $card-bg-expanded-hover;
+  background-color: $block-row-hover;
 }
 
 body.darkBG .last-blocks-table .block-row-expandable:hover td,
@@ -216,13 +215,8 @@ body.darkBG .last-blocks-table .ska-sub-row--visible td.sticky-col {
   background-color: $card-bg-secondary-dark;
 }
 
-body.darkBG .last-blocks-table .block-row-expandable.is-expanded td,
-body.darkBG .last-blocks-table .block-row-expandable.is-expanded td.sticky-col {
-  background-color: $card-bg-expanded-dark;
-}
-
 body.darkBG .last-blocks-table .block-row-expandable.is-expanded:hover td,
 body.darkBG .last-blocks-table .block-row-expandable.is-expanded:hover td.sticky-col {
-  background-color: $card-bg-expanded-hover-dark;
+  background-color: $block-row-hover-dark;
 }
 /* stylelint-enable no-descending-specificity */
