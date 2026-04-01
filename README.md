@@ -17,7 +17,7 @@ Monetarium Explorer is a block explorer for the [Monetarium](https://monetarium.
 
 ## Repository Overview
 
-none
+```none
 ../monetarium-explorer         The main Go MODULE. See cmd/dcrdata for the explorer executable.
 ├── api/types                  The exported structures used by the dcrdata and Insight APIs.
 ├── blockdata                  Package blockdata is the primary data collection and
@@ -57,6 +57,7 @@ none
 │   ├── apiload                HTTP API load testing application.
 │   └── dbload                 DB load testing application.
 └── txhelpers                  Functions and types for processing blocks, transactions, etc.
+```
 
 ## Requirements
 
@@ -98,39 +99,41 @@ The `public` and `views` folders must remain in the same directory as the `monet
 
 Create `~/.monetarium-node/monetarium-node.conf`:
 
-ini
+```ini
 testnet=1
 rpcuser=monuser
 rpcpass=monpass
 rpclisten=127.0.0.1:19509
 txindex=1
+```
 
 Start and wait for full sync:
 
-sh
+```sh
 ./monetarium-node --testnet
-
+```
 Wait until the log shows `New best block` at the current testnet height before proceeding.
 
 ---
 
 ### Step 2: Create the PostgreSQL database
 
-sh
+```sh
 createuser -P monetarium_testnet    # enter a password, e.g. "testpass"
 createdb -O monetarium_testnet monetarium_testnet
-
+```
 ---
 
 ### Step 3: Configure monetarium-explorer
 
-sh
+```sh
 mkdir -p ~/.monetarium-explorer
 cp cmd/dcrdata/sample-dcrdata.conf ~/.monetarium-explorer/monetarium-explorer.conf
+```
 
 Edit `~/.monetarium-explorer/monetarium-explorer.conf`:
 
-ini
+```ini
 testnet=1
 
 ; monetarium-node RPC credentials (must match Step 1)
@@ -151,14 +154,16 @@ apilisten=127.0.0.1:7777
 apiproto=http
 
 debuglevel=debug
+```
 
 ---
 
 ### Step 4: Run monetarium-explorer
 
-sh
+```sh
 cd cmd/dcrdata
 ./monetarium-explorer
+```
 
 On first run the explorer will create the DB schema and begin syncing all blocks. **Do not interrupt the initial sync.**
 
@@ -173,8 +178,9 @@ http://127.0.0.1:7777
 
 Check the API:
 
-sh
+```sh
 curl http://127.0.0.1:7777/api/block/best
+```
 
 ---
 
