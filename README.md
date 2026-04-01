@@ -70,16 +70,18 @@ Monetarium Explorer is a block explorer for the [Monetarium](https://monetarium.
 
 ### 1. Bundle static web assets
 
-sh
+```sh
 cd cmd/dcrdata
 npm clean-install
 npm run build
+```
 
 ### 2. Build the executable
 
-sh
+```sh
 cd cmd/dcrdata
 go build -o monetarium-explorer .
+```
 
 The `public` and `views` folders must remain in the same directory as the `monetarium-explorer` binary.
 
