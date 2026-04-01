@@ -137,18 +137,19 @@ func _main(ctx context.Context) error {
 	}()
 
 	// Display connected network (e.g. mainnet, testnet, simnet).
-	curnet, err := dcrdClient.GetCurrentNet(ctx)
-	if err != nil {
-		return fmt.Errorf("Unable to get current network from dcrd: %v", err)
-	}
-	log.Infof("Connected to dcrd (JSON-RPC API v%s) on %v",
-		nodeVer.String(), curnet.String())
+        chainInfo, err := dcrdClient.GetBlockChainInfo(ctx)
+        if err != nil {
+            return fmt.Errorf("unable to get chain info from dcrd: %v", err)
+        }
+        log.Infof("Connected to dcrd (JSON-RPC API v%s) on %s",
+            nodeVer.String(), chainInfo.Chain)
 
-	if curnet != activeNet.Net {
-		log.Criticalf("Network of connected node, %s, does not match expected "+
-			"network, %s.", activeNet.Net, curnet)
-		return fmt.Errorf("expected network %s, got %s", activeNet.Net, curnet)
-	}
+	// TODO make sure it works without the hack.
+        if chainInfo.Chain != activeNet.Name {
+            log.Criticalf("Network of connected node, %s, does not match expected "+
+                "network, %s.", chainInfo.Chain, activeNet.Name)
+            return fmt.Errorf("expected network %s, got %s", activeNet.Name, chainInfo.Chain)
+        }
 
 	// Wrap the rpcclient to satisfy the TransactionPromiseGetter and
 	// VerboseTransactionPromiseGetter interfaces in txhelpers. Both stakedb and
