@@ -17,21 +17,21 @@ import (
 	"strings"
 	"time"
 
-	"github.com/decred/dcrd/blockchain/stake/v5"
-	"github.com/decred/dcrd/chaincfg/chainhash"
-	"github.com/decred/dcrd/chaincfg/v3"
+	"github.com/monetarium/monetarium-node/blockchain/stake"
+	"github.com/monetarium/monetarium-node/chaincfg"
+	"github.com/monetarium/monetarium-node/chaincfg/chainhash"
 
-	"github.com/decred/dcrd/dcrutil/v4"
-	"github.com/decred/dcrd/txscript/v4/stdaddr"
-	"github.com/decred/dcrd/txscript/v4/stdscript"
+	"github.com/monetarium/monetarium-node/dcrutil"
+	"github.com/monetarium/monetarium-node/txscript/stdaddr"
+	"github.com/monetarium/monetarium-node/txscript/stdscript"
 
-	"github.com/decred/dcrdata/exchanges/v3"
-	"github.com/decred/dcrdata/gov/v6/agendas"
-	pitypes "github.com/decred/dcrdata/gov/v6/politeia/types"
-	"github.com/decred/dcrdata/v8/db/dbtypes"
-	"github.com/decred/dcrdata/v8/explorer/types"
-	"github.com/decred/dcrdata/v8/txhelpers"
 	ticketvotev1 "github.com/decred/politeia/politeiawww/api/ticketvote/v1"
+	"github.com/monetarium/monetarium-explorer/db/dbtypes"
+	"github.com/monetarium/monetarium-explorer/exchanges"
+	"github.com/monetarium/monetarium-explorer/explorer/types"
+	"github.com/monetarium/monetarium-explorer/gov/agendas"
+	pitypes "github.com/monetarium/monetarium-explorer/gov/politeia/types"
+	"github.com/monetarium/monetarium-explorer/txhelpers"
 
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
@@ -2526,7 +2526,7 @@ func (exp *explorerUI) commonData(r *http.Request) *CommonPageData {
 	}
 	darkMode, err := r.Cookie(darkModeCoookie)
 	if err != nil && err != http.ErrNoCookie {
-		log.Errorf("Cookie dcrdataDarkBG retrieval error: %v", err)
+		log.Errorf("Cookie monetariumDarkBG retrieval error: %v", err)
 	}
 
 	scheme := r.URL.Scheme

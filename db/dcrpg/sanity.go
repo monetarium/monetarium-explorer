@@ -7,7 +7,7 @@ import (
 	"context"
 	"database/sql"
 
-	"github.com/decred/dcrdata/db/dcrpg/v8/internal"
+	"github.com/monetarium/monetarium-explorer/db/dcrpg/internal"
 )
 
 // CheckUnmatchedSpending checks the addresses table for spending rows where the

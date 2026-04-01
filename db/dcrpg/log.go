@@ -5,8 +5,8 @@
 package dcrpg
 
 import (
-	"github.com/decred/dcrdata/v8/db/cache"
 	"github.com/decred/slog"
+	"github.com/monetarium/monetarium-explorer/db/cache"
 )
 
 // log is a logger that is initialized with no output filters.  This

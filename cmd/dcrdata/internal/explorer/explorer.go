@@ -21,22 +21,22 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/decred/dcrd/blockchain/stake/v5"
-	"github.com/decred/dcrd/chaincfg/chainhash"
-	"github.com/decred/dcrd/chaincfg/v3"
-	"github.com/decred/dcrd/dcrutil/v4"
-	chainjson "github.com/decred/dcrd/rpc/jsonrpc/types/v4"
-	"github.com/decred/dcrd/wire"
+	"github.com/monetarium/monetarium-node/blockchain/stake"
+	"github.com/monetarium/monetarium-node/chaincfg"
+	"github.com/monetarium/monetarium-node/chaincfg/chainhash"
+	"github.com/monetarium/monetarium-node/dcrutil"
+	chainjson "github.com/monetarium/monetarium-node/rpc/jsonrpc/types"
+	"github.com/monetarium/monetarium-node/wire"
 
-	"github.com/decred/dcrdata/exchanges/v3"
-	"github.com/decred/dcrdata/gov/v6/agendas"
-	pitypes "github.com/decred/dcrdata/gov/v6/politeia/types"
-	"github.com/decred/dcrdata/v8/blockdata"
-	"github.com/decred/dcrdata/v8/db/dbtypes"
-	"github.com/decred/dcrdata/v8/explorer/types"
-	"github.com/decred/dcrdata/v8/mempool"
-	pstypes "github.com/decred/dcrdata/v8/pubsub/types"
-	"github.com/decred/dcrdata/v8/txhelpers"
+	"github.com/monetarium/monetarium-explorer/blockdata"
+	"github.com/monetarium/monetarium-explorer/db/dbtypes"
+	"github.com/monetarium/monetarium-explorer/exchanges"
+	"github.com/monetarium/monetarium-explorer/explorer/types"
+	"github.com/monetarium/monetarium-explorer/gov/agendas"
+	pitypes "github.com/monetarium/monetarium-explorer/gov/politeia/types"
+	"github.com/monetarium/monetarium-explorer/mempool"
+	pstypes "github.com/monetarium/monetarium-explorer/pubsub/types"
+	"github.com/monetarium/monetarium-explorer/txhelpers"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -448,6 +448,15 @@ func (exp *explorerUI) MempoolSignal() chan<- pstypes.HubMessage {
 // []types.MempoolTx so that it may be modified (e.g. sorted) without affecting
 // other MempoolDataSavers.
 func (exp *explorerUI) StoreMPData(_ *mempool.StakeData, _ []types.MempoolTx, inv *types.MempoolInfo) {
+	// Compute per-coin fill bars. VAR occupies 10% of the bar; SKA types share
+	// the remaining 90%. Fill = min(size/maxBlockSize, 1.0).
+	const maxBlockSize = 393216.0
+	varFill := math.Min(float64(inv.LikelyMineable.Size)/maxBlockSize, 1.0)
+	inv.CoinFills = []types.CoinFillData{
+		{Symbol: "VAR", FillPct: varFill * 0.10, Color: fillColor(varFill)},
+	}
+	// SKA fills are zero until per-coin mempool tracking is implemented.
+
 	// Get exclusive access to the Mempool field.
 	exp.invsMtx.Lock()
 	exp.invs = inv
@@ -916,4 +925,15 @@ func generateRandomString() string {
 		bytes[i] = letters[num.Int64()]
 	}
 	return string(bytes)
+}
+
+// fillColor returns "green", "yellow", or "red" based on fill fraction.
+// green: fits in guaranteed space (<= 1.0), yellow: borrowed space, red: won't fit.
+func fillColor(fill float64) string {
+	if fill <= 1.0 {
+		return "green"
+	} else if fill <= 1.5 {
+		return "yellow"
+	}
+	return "red"
 }

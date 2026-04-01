@@ -14,8 +14,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/decred/dcrd/chaincfg/chainhash"
-	"github.com/decred/dcrdata/v8/db/dbtypes"
+	"github.com/monetarium/monetarium-explorer/db/dbtypes"
+	"github.com/monetarium/monetarium-node/chaincfg/chainhash"
 )
 
 const (

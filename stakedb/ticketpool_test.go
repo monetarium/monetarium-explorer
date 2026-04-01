@@ -6,8 +6,8 @@ import (
 	"os"
 	"testing"
 
-	"github.com/decred/dcrd/chaincfg/chainhash"
 	"github.com/decred/slog"
+	"github.com/monetarium/monetarium-node/chaincfg/chainhash"
 )
 
 func randomHash() chainhash.Hash {

@@ -25,13 +25,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/decred/dcrd/chaincfg/chainhash"
-	chainjson "github.com/decred/dcrd/rpc/jsonrpc/types/v4"
-	"github.com/decred/dcrd/rpcclient/v8"
-	"github.com/decred/dcrd/wire"
+	"github.com/monetarium/monetarium-node/chaincfg/chainhash"
+	chainjson "github.com/monetarium/monetarium-node/rpc/jsonrpc/types"
+	"github.com/monetarium/monetarium-node/rpcclient"
+	"github.com/monetarium/monetarium-node/wire"
 
-	"github.com/decred/dcrdata/v8/rpcutils"
-	"github.com/decred/dcrdata/v8/txhelpers"
+	"github.com/monetarium/monetarium-explorer/rpcutils"
+	"github.com/monetarium/monetarium-explorer/txhelpers"
 )
 
 // SyncHandlerDeadline is a hard deadline for handlers to finish handling before

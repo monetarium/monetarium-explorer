@@ -22,6 +22,7 @@ const (
 		spent INT8,
 		sent INT8,
 		fees INT8,
+		ska_fees JSONB,
 		mix_count INT4,
 		mix_denom INT8,
 		num_vin INT4,
@@ -36,17 +37,17 @@ const (
 	insertTxRow = `INSERT INTO transactions (
 		block_hash, block_height, block_time,
 		tx_type, version, tree, tx_hash, block_index,
-		lock_time, expiry, size, spent, sent, fees,
+		lock_time, expiry, size, spent, sent, fees, ska_fees,
 		mix_count, mix_denom,
 		num_vin, vin_db_ids, num_vout, vout_db_ids,
 		is_valid, is_mainchain)
 	VALUES (
 		$1, $2, $3,
 		$4, $5, $6, $7, $8,
-		$9, $10, $11, $12, $13, $14,
-		$15, $16,
-		$17, $18, $19, $20,
-		$21, $22) `
+		$9, $10, $11, $12, $13, $14, $15,
+		$16, $17,
+		$18, $19, $20, $21,
+		$22, $23) `
 
 	// InsertTxRow inserts a new transaction row without checking for unique
 	// index conflicts. This should only be used before the unique indexes are
@@ -56,7 +57,7 @@ const (
 	// UpsertTxRow is an upsert (insert or update on conflict), returning the
 	// inserted/updated transaction row id.
 	UpsertTxRow = insertTxRow + `ON CONFLICT (tx_hash, block_hash) DO UPDATE
-		SET is_valid = $21, is_mainchain = $22 RETURNING id;`
+		SET is_valid = $22, is_mainchain = $23 RETURNING id;`
 
 	// InsertTxRowOnConflictDoNothing allows an INSERT with a DO NOTHING on
 	// conflict with transactions' unique tx index, while returning the row id
@@ -128,7 +129,7 @@ const (
 
 	SelectFullTxByHash = `SELECT id, block_hash, block_height, block_time,
 			tx_type, version, tree, tx_hash, block_index, lock_time, expiry,
-			size, spent, sent, fees, mix_count, mix_denom, num_vin, vin_db_ids,
+			size, spent, sent, fees, ska_fees, mix_count, mix_denom, num_vin, vin_db_ids,
 			num_vout, vout_db_ids, is_valid, is_mainchain
 		FROM transactions WHERE tx_hash = $1
 		ORDER BY is_mainchain DESC, is_valid DESC, block_time DESC
@@ -136,7 +137,7 @@ const (
 
 	SelectFullTxsByHash = `SELECT id, block_hash, block_height, block_time,
 			tx_type, version, tree, tx_hash, block_index, lock_time, expiry,
-			size, spent, sent, fees, mix_count, mix_denom, num_vin, vin_db_ids,
+			size, spent, sent, fees, ska_fees, mix_count, mix_denom, num_vin, vin_db_ids,
 			num_vout, vout_db_ids, is_valid, is_mainchain
 		FROM transactions WHERE tx_hash = $1
 		ORDER BY is_mainchain DESC, is_valid DESC, block_time DESC;`

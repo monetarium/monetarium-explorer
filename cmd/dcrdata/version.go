@@ -23,7 +23,7 @@ const (
 // These constants define the application version and follow the semantic
 // versioning 2.0.0 spec (http://semver.org/).
 const (
-	AppName  string = "dcrdata"
+	AppName  string = "monetarium-explorer"
 	AppMajor uint   = 6
 	AppMinor uint   = 2
 	AppPatch uint   = 0

@@ -6,9 +6,9 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/decred/dcrd/chaincfg/v3"
-	"github.com/decred/dcrd/dcrjson/v4"
-	chainjson "github.com/decred/dcrd/rpc/jsonrpc/types/v4"
+	"github.com/monetarium/monetarium-node/chaincfg"
+	"github.com/monetarium/monetarium-node/dcrjson"
+	chainjson "github.com/monetarium/monetarium-node/rpc/jsonrpc/types"
 )
 
 type dataSourceStub struct{}

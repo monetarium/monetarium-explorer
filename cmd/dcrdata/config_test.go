@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/decred/dcrd/dcrutil/v4"
+	"github.com/monetarium/monetarium-node/dcrutil"
 )
 
 var tempConfigFile *os.File
@@ -147,7 +147,7 @@ func TestDefaultConfigAPIListenWithEnv(t *testing.T) {
 }
 
 func TestDefaultConfigAppDataDir(t *testing.T) {
-	expected := dcrutil.AppDataDir("dcrdata", false)
+	expected := dcrutil.AppDataDir("monetarium-explorer", false)
 	cfg, err := loadConfig()
 	if err != nil {
 		t.Fatalf("Failed to load dcrdata config: %v", err)

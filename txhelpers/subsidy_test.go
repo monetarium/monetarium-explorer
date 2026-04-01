@@ -7,12 +7,12 @@ package txhelpers
 import (
 	"testing"
 
-	"github.com/decred/dcrd/chaincfg/v3"
+	"github.com/monetarium/monetarium-node/chaincfg"
 )
 
 func TestUltimateSubsidy(t *testing.T) {
 	// Mainnet
-	wantMainnetSubsidy := int64(2099999999800912)
+	wantMainnetSubsidy := int64(5373397288355628)
 	totalSubsidy := UltimateSubsidy(chaincfg.MainNetParams(), -1, -1)
 
 	if totalSubsidy != wantMainnetSubsidy {
@@ -27,17 +27,8 @@ func TestUltimateSubsidy(t *testing.T) {
 			totalSubsidy, totalSubsidy2)
 	}
 
-	// Mainnet with dcp0010 activating at 638976
-	wantMainnetSubsidy = int64(2100000000015952)
-	totalSubsidyDCP0010 := UltimateSubsidy(chaincfg.MainNetParams(), 638976, -1)
-
-	if totalSubsidyDCP0010 != wantMainnetSubsidy {
-		t.Fatalf("Bad total subsidy; want %d, got %d",
-			wantMainnetSubsidy, totalSubsidyDCP0010)
-	}
-
 	// Testnet
-	wantTestnetSubsidy := int64(526540305161472)
+	wantTestnetSubsidy := int64(274833064358028)
 	totalTNSubsidy := UltimateSubsidy(chaincfg.TestNet3Params(), -1, -1)
 
 	if totalTNSubsidy != wantTestnetSubsidy {
@@ -57,22 +48,6 @@ func TestUltimateSubsidy(t *testing.T) {
 	if totalSubsidy != totalSubsidy3 {
 		t.Errorf("Bad total subsidy; want %d, got %d",
 			totalSubsidy, totalSubsidy3)
-	}
-
-	// re-verify mainnet cache (dcp0010)
-	totalSubsidy4 := UltimateSubsidy(chaincfg.MainNetParams(), 638976, -1)
-	if totalSubsidyDCP0010 != totalSubsidy4 {
-		t.Errorf("Bad total subsidy; want %d, got %d",
-			totalSubsidyDCP0010, totalSubsidy4)
-	}
-
-	// Mainnet with dcp0010 activating at 657280, and dcp0012 at 794368.
-	wantMainnetSubsidy = int64(2099999998394320)
-	totalSubsidyDCP0010and12 := UltimateSubsidy(chaincfg.MainNetParams(), 657280, 794368)
-
-	if totalSubsidyDCP0010and12 != wantMainnetSubsidy {
-		t.Fatalf("Bad total subsidy; want %d, got %d",
-			wantMainnetSubsidy, totalSubsidyDCP0010and12)
 	}
 }
 

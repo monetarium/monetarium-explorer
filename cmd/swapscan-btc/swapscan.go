@@ -14,7 +14,7 @@ import (
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcd/rpcclient"
-	"github.com/decred/dcrdata/cmd/swapscan-btc/swap"
+	"github.com/monetarium/monetarium-explorer/cmd/swapscan-btc/swap"
 )
 
 var host = flag.String("host", "127.0.0.1:8332", "node RPC host:port")

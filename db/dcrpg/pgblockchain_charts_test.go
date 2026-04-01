@@ -7,8 +7,8 @@ import (
 	"database/sql"
 	"testing"
 
-	"github.com/decred/dcrd/chaincfg/v3"
-	"github.com/decred/dcrdata/v8/db/cache"
+	"github.com/monetarium/monetarium-explorer/db/cache"
+	"github.com/monetarium/monetarium-node/chaincfg"
 )
 
 func registerDummyFeeAndPoolInfo(charts *cache.ChartData) {

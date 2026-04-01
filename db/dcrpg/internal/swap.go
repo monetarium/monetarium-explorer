@@ -9,6 +9,7 @@ const (
 		spend_height INT8,
 		p2sh_addr TEXT,
 		value INT8,
+		coin_type INT2 NOT NULL DEFAULT 0,
 		secret_hash BYTEA,
 		secret BYTEA,        -- NULL for refund
 		lock_time INT8,
@@ -18,9 +19,9 @@ const (
 	CreateAtomicSwapTable = CreateAtomicSwapTableV0
 
 	InsertContractSpend = `INSERT INTO swaps (contract_tx, contract_vout, spend_tx, spend_vin, spend_height,
-		p2sh_addr, value, secret_hash, secret, lock_time)
+		p2sh_addr, value, secret_hash, secret, lock_time, coin_type)
 	VALUES ($1, $2, $3, $4, $5,
-		$6, $7, $8, $9, $10) 
+		$6, $7, $8, $9, $10, $11)
 	ON CONFLICT (spend_tx, spend_vin)
 		DO UPDATE SET spend_height = $5;`
 

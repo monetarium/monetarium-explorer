@@ -16,31 +16,31 @@ import (
 	"sync"
 	"time"
 
-	"github.com/decred/dcrd/blockchain/stake/v5"
-	"github.com/decred/dcrd/blockchain/standalone/v2"
-	"github.com/decred/dcrd/chaincfg/chainhash"
-	"github.com/decred/dcrd/chaincfg/v3"
-	"github.com/decred/dcrd/dcrec/secp256k1/v4"
-	"github.com/decred/dcrd/dcrutil/v4"
-	chainjson "github.com/decred/dcrd/rpc/jsonrpc/types/v4"
-	"github.com/decred/dcrd/rpcclient/v8"
-	"github.com/decred/dcrd/txscript/v4"
-	"github.com/decred/dcrd/txscript/v4/stdaddr"
-	"github.com/decred/dcrd/txscript/v4/stdscript"
-	"github.com/decred/dcrd/wire"
 	humanize "github.com/dustin/go-humanize"
+	"github.com/monetarium/monetarium-node/blockchain/stake"
+	"github.com/monetarium/monetarium-node/blockchain/standalone"
+	"github.com/monetarium/monetarium-node/chaincfg"
+	"github.com/monetarium/monetarium-node/chaincfg/chainhash"
+	"github.com/monetarium/monetarium-node/dcrec/secp256k1"
+	"github.com/monetarium/monetarium-node/dcrutil"
+	chainjson "github.com/monetarium/monetarium-node/rpc/jsonrpc/types"
+	"github.com/monetarium/monetarium-node/rpcclient"
+	"github.com/monetarium/monetarium-node/txscript"
+	"github.com/monetarium/monetarium-node/txscript/stdaddr"
+	"github.com/monetarium/monetarium-node/txscript/stdscript"
+	"github.com/monetarium/monetarium-node/wire"
 
-	"github.com/decred/dcrdata/db/dcrpg/v8/internal"
-	apitypes "github.com/decred/dcrdata/v8/api/types"
-	"github.com/decred/dcrdata/v8/blockdata"
-	"github.com/decred/dcrdata/v8/db/cache"
-	"github.com/decred/dcrdata/v8/db/dbtypes"
-	exptypes "github.com/decred/dcrdata/v8/explorer/types"
-	"github.com/decred/dcrdata/v8/mempool"
-	"github.com/decred/dcrdata/v8/rpcutils"
-	"github.com/decred/dcrdata/v8/stakedb"
-	"github.com/decred/dcrdata/v8/trylock"
-	"github.com/decred/dcrdata/v8/txhelpers"
+	apitypes "github.com/monetarium/monetarium-explorer/api/types"
+	"github.com/monetarium/monetarium-explorer/blockdata"
+	"github.com/monetarium/monetarium-explorer/db/cache"
+	"github.com/monetarium/monetarium-explorer/db/dbtypes"
+	"github.com/monetarium/monetarium-explorer/db/dcrpg/internal"
+	exptypes "github.com/monetarium/monetarium-explorer/explorer/types"
+	"github.com/monetarium/monetarium-explorer/mempool"
+	"github.com/monetarium/monetarium-explorer/rpcutils"
+	"github.com/monetarium/monetarium-explorer/stakedb"
+	"github.com/monetarium/monetarium-explorer/trylock"
+	"github.com/monetarium/monetarium-explorer/txhelpers"
 )
 
 var (
@@ -1819,61 +1819,8 @@ func (pgb *ChainDB) TSpendVotes(ctx context.Context, tspendID *chainhash.Hash) (
 
 // TreasuryBalance calculates the *dbtypes.TreasuryBalance.
 func (pgb *ChainDB) TreasuryBalance(ctx context.Context) (*dbtypes.TreasuryBalance, error) {
-	var addCount, added, immatureCount, immature, spendCount, spent, baseCount, base int64
-
 	_, tipHeight := pgb.BestBlock()
-	maturityHeight := tipHeight - int64(pgb.chainParams.CoinbaseMaturity)
-
-	rows, err := pgb.db.QueryContext(ctx, internal.SelectTreasuryBalance, maturityHeight)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var txType, matureCount, allCount, matureValue, allValue sql.NullInt64
-		if err = rows.Scan(&txType, &matureCount, &allCount, &matureValue, &allValue); err != nil {
-			return nil, err
-		}
-
-		imCount := allCount.Int64 - matureCount.Int64
-		imValue := allValue.Int64 - matureValue.Int64
-
-		switch stake.TxType(txType.Int64) {
-		case stake.TxTypeTSpend:
-			spendCount = allCount.Int64
-			spent = -matureValue.Int64
-		case stake.TxTypeTAdd:
-			immatureCount += imCount
-			immature += imValue
-			addCount = allCount.Int64
-			added = matureValue.Int64
-		case stake.TxTypeTreasuryBase:
-			immatureCount += imCount
-			immature += imValue
-			baseCount = allCount.Int64
-			base = matureValue.Int64
-		}
-	}
-
-	if err = rows.Err(); err != nil {
-		return nil, err
-	}
-
-	return &dbtypes.TreasuryBalance{
-		Height:         tipHeight,
-		MaturityHeight: maturityHeight,
-		Balance:        added + base - spent,
-		TxCount:        addCount + spendCount + baseCount,
-		AddCount:       addCount,
-		Added:          added,
-		SpendCount:     spendCount,
-		Spent:          spent,
-		TBaseCount:     baseCount,
-		TBase:          base,
-		ImmatureCount:  immatureCount,
-		Immature:       immature,
-	}, nil
+	return &dbtypes.TreasuryBalance{Height: tipHeight}, nil
 }
 
 // TreasuryTxns fetches filtered treasury transactions.
@@ -5974,6 +5921,11 @@ func (pgb *ChainDB) GetExplorerBlock(ctx context.Context, hash string) *exptypes
 		Subsidy:               pgb.BlockSubsidy(ctx, b.Height, b.Voters),
 	}
 
+	// Populate per-coin amounts from the block summary (computed at collection time).
+	if summary := pgb.GetSummaryByHash(ctx, hash, false); summary != nil && summary.CoinAmounts != nil {
+		block.CoinAmounts = summary.CoinAmounts
+	}
+
 	if data.PoWHash != "" {
 		block.PoWHash = data.PoWHash
 	} else if pgb.IsDCP0011Active(b.Height) {
@@ -6122,6 +6074,10 @@ func (pgb *ChainDB) GetExplorerBlocks(ctx context.Context, start int, end int) [
 		block := new(exptypes.BlockBasic)
 		if data != nil {
 			block = makeExplorerBlockBasic(data, pgb.chainParams)
+			// Populate per-coin rows from the stored block summary.
+			if summary := pgb.GetSummaryByHash(ctx, data.Hash, false); summary != nil {
+				block.CoinRows = coinRowsFromAmounts(summary.CoinAmounts)
+			}
 		}
 		summaries = append(summaries, block)
 	}
@@ -6707,4 +6663,29 @@ func (pgb *ChainDB) SignalHeight(height uint32) {
 			pgb.shutdownDcrdata()
 		}
 	}
+}
+
+// coinRowsFromAmounts converts a CoinAmounts map to []CoinRowData for the
+// blocks table. Returns nil when amounts is nil or empty.
+func coinRowsFromAmounts(amounts map[uint8]string) []exptypes.CoinRowData {
+	if len(amounts) == 0 {
+		return nil
+	}
+	rows := make([]exptypes.CoinRowData, 0, len(amounts))
+	for ct, atomsStr := range amounts {
+		var symbol string
+		if ct == 0 {
+			symbol = "VAR"
+		} else {
+			symbol = fmt.Sprintf("SKA-%d", ct)
+		}
+		rows = append(rows, exptypes.CoinRowData{
+			CoinType: ct,
+			Symbol:   symbol,
+			Amount:   atomsStr, // raw atoms; template formats with threeSigFigs
+		})
+	}
+	// Sort: VAR first, then SKA by type number.
+	sort.Slice(rows, func(i, j int) bool { return rows[i].CoinType < rows[j].CoinType })
+	return rows
 }

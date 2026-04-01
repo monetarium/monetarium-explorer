@@ -8,10 +8,10 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/decred/dcrd/chaincfg/chainhash"
-	chainjson "github.com/decred/dcrd/rpc/jsonrpc/types/v4"
-	"github.com/decred/dcrd/rpcclient/v8"
-	"github.com/decred/dcrd/wire"
+	"github.com/monetarium/monetarium-node/chaincfg/chainhash"
+	chainjson "github.com/monetarium/monetarium-node/rpc/jsonrpc/types"
+	"github.com/monetarium/monetarium-node/rpcclient"
+	"github.com/monetarium/monetarium-node/wire"
 )
 
 const (

@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/decred/dcrdata/v8/db/dbtypes"
+	"github.com/monetarium/monetarium-explorer/db/dbtypes"
 )
 
 func TestChainHash_ScanValue(t *testing.T) {

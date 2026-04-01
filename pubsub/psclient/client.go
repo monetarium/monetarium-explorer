@@ -8,10 +8,10 @@ import (
 	"sync"
 	"time"
 
-	exptypes "github.com/decred/dcrdata/v8/explorer/types"
-	pubsub "github.com/decred/dcrdata/v8/pubsub"
-	pstypes "github.com/decred/dcrdata/v8/pubsub/types"
-	"github.com/decred/dcrdata/v8/semver"
+	exptypes "github.com/monetarium/monetarium-explorer/explorer/types"
+	pubsub "github.com/monetarium/monetarium-explorer/pubsub"
+	pstypes "github.com/monetarium/monetarium-explorer/pubsub/types"
+	"github.com/monetarium/monetarium-explorer/semver"
 	"golang.org/x/net/websocket"
 )
 

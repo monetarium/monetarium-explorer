@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/decred/dcrdata/exchanges/v3"
-	dcrrates "github.com/decred/dcrdata/exchanges/v3/ratesproto"
+	"github.com/monetarium/monetarium-explorer/exchanges"
+	dcrrates "github.com/monetarium/monetarium-explorer/exchanges/ratesproto"
 	grpcPeer "google.golang.org/grpc/peer"
 )
 

@@ -19,18 +19,18 @@ import (
 	"time"
 
 	"github.com/caarlos0/env/v6"
-	"github.com/decred/dcrd/chaincfg/v3"
-	"github.com/decred/dcrd/dcrutil/v4"
 	"github.com/decred/slog"
 	flags "github.com/jessevdk/go-flags"
+	"github.com/monetarium/monetarium-node/chaincfg"
+	"github.com/monetarium/monetarium-node/dcrutil"
 
-	"github.com/decred/dcrdata/v8/db/dbtypes"
-	"github.com/decred/dcrdata/v8/netparams"
+	"github.com/monetarium/monetarium-explorer/db/dbtypes"
+	"github.com/monetarium/monetarium-explorer/netparams"
 )
 
 const (
-	defaultConfigFilename = "dcrdata.conf"
-	defaultLogFilename    = "dcrdata.log"
+	defaultConfigFilename = "monetarium-explorer.conf"
+	defaultLogFilename    = "monetarium-explorer.log"
 	defaultDataDirname    = "data"
 	defaultLogLevel       = "info"
 	defaultLogDirname     = "logs"
@@ -40,7 +40,7 @@ var activeNet = &netparams.MainNetParams
 var activeChain = chaincfg.MainNetParams()
 
 var (
-	defaultHomeDir           = dcrutil.AppDataDir("dcrdata", false)
+	defaultHomeDir           = dcrutil.AppDataDir("monetarium-explorer", false)
 	defaultConfigFile        = filepath.Join(defaultHomeDir, defaultConfigFilename)
 	defaultLogDir            = filepath.Join(defaultHomeDir, defaultLogDirname)
 	defaultDataDir           = filepath.Join(defaultHomeDir, defaultDataDirname)
@@ -58,7 +58,7 @@ var (
 	defaultCacheControlMaxAge  = 86400
 	defaultInsightReqRateLimit = 20.0
 	defaultMaxCSVAddrs         = 25
-	defaultServerHeader        = "dcrdata"
+	defaultServerHeader        = "monetarium-explorer"
 
 	defaultMempoolMinInterval = 2
 	defaultMempoolMaxInterval = 120
@@ -70,9 +70,9 @@ var (
 	defaultChartsCacheDump   = "chartscache.gob"
 
 	defaultPGHost           = "127.0.0.1:5432"
-	defaultPGUser           = "dcrdata"
+	defaultPGUser           = "monetarium"
 	defaultPGPass           = ""
-	defaultPGDBName         = "dcrdata"
+	defaultPGDBName         = "monetarium"
 	defaultPGQueryTimeout   = 20 * time.Minute
 	defaultAddrCacheCap     = 1 << 29 // 512 MiB
 	defaultAddrCacheLimit   = 4096
@@ -82,8 +82,8 @@ var (
 	defaultDisabledExchanges = ""
 	defaultRateCertFile      = filepath.Join(defaultHomeDir, "rpc.cert")
 
-	defaultMainnetLink  = "https://explorer.dcrdata.org/"
-	defaultTestnetLink  = "https://testnet.dcrdata.org/"
+	defaultMainnetLink  = "https://explorer.monetarium.io/"
+	defaultTestnetLink  = "https://testnet.monetarium.io/"
 	defaultOnionAddress = ""
 
 	maxSyncStatusLimit = 5000
@@ -167,8 +167,8 @@ type config struct {
 	RateCertificate   string `long:"ratecert" description:"File containing DCRRates TLS certificate file." env:"DCRDATA_RATE_MASTER"`
 
 	// Links
-	MainnetLink  string `long:"mainnet-link" description:"When dcrdata is on testnet, this address will be used to direct a user to a dcrdata on mainnet when appropriate." env:"DCRDATA_MAINNET_LINK"`
-	TestnetLink  string `long:"testnet-link" description:"When dcrdata is on mainnet, this address will be used to direct a user to a dcrdata on testnet when appropriate." env:"DCRDATA_TESTNET_LINK"`
+	MainnetLink  string `long:"mainnet-link" description:"When monetarium-explorer is on testnet, this address will be used to direct a user to a monetarium-explorer on mainnet when appropriate." env:"MONETARIUM_MAINNET_LINK"`
+	TestnetLink  string `long:"testnet-link" description:"When monetarium-explorer is on mainnet, this address will be used to direct a user to a monetarium-explorer on testnet when appropriate." env:"MONETARIUM_TESTNET_LINK"`
 	OnionAddress string `long:"onion-address" description:"Hidden service address" env:"DCRDATA_ONION_ADDRESS"`
 }
 

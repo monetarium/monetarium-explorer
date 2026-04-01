@@ -17,13 +17,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/decred/dcrd/chaincfg/chainhash"
-	"github.com/decred/dcrd/dcrutil/v4"
-	"github.com/decred/dcrd/txscript/v4/stdscript"
 	"github.com/lib/pq"
+	"github.com/monetarium/monetarium-node/chaincfg/chainhash"
+	"github.com/monetarium/monetarium-node/dcrutil"
+	"github.com/monetarium/monetarium-node/txscript/stdscript"
 
-	"github.com/decred/dcrdata/v8/db/dbtypes/internal"
-	"github.com/decred/dcrdata/v8/txhelpers"
+	"github.com/monetarium/monetarium-explorer/db/dbtypes/internal"
+	"github.com/monetarium/monetarium-explorer/txhelpers"
 )
 
 var scriptClassNames map[string]ScriptClass
@@ -1218,7 +1218,9 @@ type Vout struct {
 	TxIndex          uint32           `json:"tx_index"`
 	TxTree           int8             `json:"tx_tree"`
 	TxType           int16            `json:"tx_type"`
-	Value            uint64           `json:"value"`
+	Value            uint64           `json:"value"`               // VAR atoms (int64 range)
+	CoinType         uint8            `json:"coin_type"`           // 0=VAR, 1-255=SKA
+	SKAValue         string           `json:"ska_value,omitempty"` // SKA atoms as decimal string
 	Version          uint16           `json:"version"`
 	ScriptPubKeyData ScriptPubKeyData `json:"pkScript"`
 	Mixed            bool             `json:"mixed"`
@@ -1230,6 +1232,8 @@ type UTXOData struct {
 	Value     int64
 	Mixed     bool
 	VoutDbID  int64
+	CoinType  uint8
+	SKAValue  string
 }
 
 // UTXO represents a transaction output, but it is intended to help track
@@ -1260,6 +1264,8 @@ type AddressRow struct {
 	// IsFunding should true if AtomsCredit > AtomsDebit
 	AtomsCredit uint64
 	AtomsDebit  uint64
+	CoinType    uint8  `json:"coin_type"`
+	SKAValue    string `json:"ska_value,omitempty"`
 }
 
 // IsMerged indicates if the AddressRow represents data for a "merged" address
@@ -2032,6 +2038,7 @@ type VinTxProperty struct {
 	PrevTxTree  uint16    `json:"tree"`
 	Sequence    uint32    `json:"sequence"`
 	ValueIn     int64     `json:"amountin"`
+	CoinType    uint8     `json:"coin_type"`
 	TxID        ChainHash `json:"tx_hash"`
 	TxIndex     uint32    `json:"tx_index"`
 	TxTree      uint16    `json:"tx_tree"`
@@ -2106,20 +2113,37 @@ type Tx struct {
 	Locktime    uint32    `json:"locktime"`
 	Expiry      uint32    `json:"expiry"`
 	Size        uint32    `json:"size"`
-	Spent       int64     `json:"spent"`
-	Sent        int64     `json:"sent"`
-	Fees        int64     `json:"fees"`
-	MixCount    int32     `json:"mix_count"`
-	MixDenom    int64     `json:"mix_denom"`
-	NumVin      uint32    `json:"numvin"`
-	VinDbIds    []uint64  `json:"vindbids"`
-	NumVout     uint32    `json:"numvout"`
-	Vouts       []*Vout   `json:"vouts"`
-	VoutDbIds   []uint64  `json:"voutdbids"`
+	Spent       int64     `json:"spent"` // VAR atoms only
+	Sent        int64     `json:"sent"`  // VAR atoms only
+	Fees        int64     `json:"fees"`  // VAR atoms only
+	// Per-coin totals for multi-coin blocks (SKA amounts as decimal atom strings)
+	SpentByCoin map[uint8]string `json:"spent_by_coin,omitempty"`
+	SentByCoin  map[uint8]string `json:"sent_by_coin,omitempty"`
+	FeesByCoin  map[uint8]string `json:"fees_by_coin,omitempty"`
+	MixCount    int32            `json:"mix_count"`
+	MixDenom    int64            `json:"mix_denom"`
+	NumVin      uint32           `json:"numvin"`
+	VinDbIds    []uint64         `json:"vindbids"`
+	NumVout     uint32           `json:"numvout"`
+	Vouts       []*Vout          `json:"vouts"`
+	VoutDbIds   []uint64         `json:"voutdbids"`
 	// NOTE: VoutDbIds may not be needed if there is a vout table since each
 	// vout will have a tx_dbid
 	IsValid          bool `json:"valid"`
 	IsMainchainBlock bool `json:"mainchain"`
+}
+
+// ToJSONB marshals v to JSON bytes for use as a PostgreSQL JSONB parameter.
+// Returns nil on marshal error (stored as SQL NULL).
+func ToJSONB(v interface{}) []byte {
+	if v == nil {
+		return nil
+	}
+	b, err := json.Marshal(v)
+	if err != nil {
+		return nil
+	}
+	return b
 }
 
 // Block models a Decred block.

@@ -21,15 +21,15 @@ import (
 	"sync"
 
 	"github.com/decred/base58"
-	"github.com/decred/dcrd/blockchain/stake/v5"
-	"github.com/decred/dcrd/blockchain/standalone/v2"
-	"github.com/decred/dcrd/chaincfg/chainhash"
-	"github.com/decred/dcrd/chaincfg/v3"
-	"github.com/decred/dcrd/dcrutil/v4"
-	chainjson "github.com/decred/dcrd/rpc/jsonrpc/types/v4"
-	"github.com/decred/dcrd/txscript/v4/stdaddr"
-	"github.com/decred/dcrd/txscript/v4/stdscript"
-	"github.com/decred/dcrd/wire"
+	"github.com/monetarium/monetarium-node/blockchain/stake"
+	"github.com/monetarium/monetarium-node/blockchain/standalone"
+	"github.com/monetarium/monetarium-node/chaincfg"
+	"github.com/monetarium/monetarium-node/chaincfg/chainhash"
+	"github.com/monetarium/monetarium-node/dcrutil"
+	chainjson "github.com/monetarium/monetarium-node/rpc/jsonrpc/types"
+	"github.com/monetarium/monetarium-node/txscript/stdaddr"
+	"github.com/monetarium/monetarium-node/txscript/stdscript"
+	"github.com/monetarium/monetarium-node/wire"
 )
 
 var (
@@ -37,7 +37,7 @@ var (
 	zeroHashStringBytes = []byte(chainhash.Hash{}.String())
 )
 
-var CoinbaseFlags = "/dcrd/"
+var CoinbaseFlags = "/monetarium-node/"
 var CoinbaseScript = append([]byte{0x00, 0x00}, []byte(CoinbaseFlags)...)
 
 const (
@@ -498,8 +498,10 @@ func TxPrevOutsByAddr(txAddrOuts MempoolAddressStore, txnsStore TxnsStore, msgTx
 		// prevOut.Index indicates which output.
 		txOut := prevTx.TxOut[prevOut.Index]
 
-		// Get the values.
-		valsIn[inIdx] = txOut.Value
+		// Get the values (VAR only; SKA inputs are tracked separately via SKAValueIn).
+		if txOut.CoinType == 0 { // cointype.CoinTypeVAR
+			valsIn[inIdx] = txOut.Value
+		}
 
 		// Extract the addresses from this output's PkScript.
 		_, txAddrs := stdscript.ExtractAddrs(txOut.Version, txOut.PkScript, params)
@@ -756,6 +758,7 @@ func OutPointAddresses(outPoint *wire.OutPoint, c RawTransactionGetter,
 	// For the TxOut of interest, extract the list of addresses
 	txOut := txOuts[outPoint.Index]
 	_, txAddrs := stdscript.ExtractAddrs(txOut.Version, txOut.PkScript, params)
+	// Return VAR amount; SKA outputs have Value=0 (use txOut.SKAValue for big.Int precision).
 	value := dcrutil.Amount(txOut.Value)
 	addresses := make([]string, 0, len(txAddrs))
 	for _, txAddr := range txAddrs {
@@ -1069,7 +1072,10 @@ func FeeRateInfoBlock(block *dcrutil.Block) *chainjson.FeeInfoBlock {
 			amtIn += msgTx.TxIn[iv].ValueIn
 		}
 		for iv := range msgTx.TxOut {
-			amtOut += msgTx.TxOut[iv].Value
+			// Stake tickets are VAR-only; guard anyway.
+			if msgTx.TxOut[iv].CoinType == 0 { // cointype.CoinTypeVAR
+				amtOut += msgTx.TxOut[iv].Value
+			}
 		}
 		fee := dcrutil.Amount(1000*(amtIn-amtOut)).ToCoin() / float64(msgTx.SerializeSize())
 		if fee < minFee {

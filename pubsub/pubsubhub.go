@@ -14,19 +14,19 @@ import (
 	"sync"
 	"time"
 
-	"github.com/decred/dcrd/chaincfg/v3"
-	"github.com/decred/dcrd/dcrutil/v4"
-	chainjson "github.com/decred/dcrd/rpc/jsonrpc/types/v4"
-	"github.com/decred/dcrd/txscript/v4/stdscript"
-	"github.com/decred/dcrd/wire"
+	"github.com/monetarium/monetarium-node/chaincfg"
+	"github.com/monetarium/monetarium-node/dcrutil"
+	chainjson "github.com/monetarium/monetarium-node/rpc/jsonrpc/types"
+	"github.com/monetarium/monetarium-node/txscript/stdscript"
+	"github.com/monetarium/monetarium-node/wire"
 
-	"github.com/decred/dcrdata/v8/blockdata"
-	"github.com/decred/dcrdata/v8/db/dbtypes"
-	exptypes "github.com/decred/dcrdata/v8/explorer/types"
-	"github.com/decred/dcrdata/v8/mempool"
-	pstypes "github.com/decred/dcrdata/v8/pubsub/types"
-	"github.com/decred/dcrdata/v8/semver"
-	"github.com/decred/dcrdata/v8/txhelpers"
+	"github.com/monetarium/monetarium-explorer/blockdata"
+	"github.com/monetarium/monetarium-explorer/db/dbtypes"
+	exptypes "github.com/monetarium/monetarium-explorer/explorer/types"
+	"github.com/monetarium/monetarium-explorer/mempool"
+	pstypes "github.com/monetarium/monetarium-explorer/pubsub/types"
+	"github.com/monetarium/monetarium-explorer/semver"
+	"github.com/monetarium/monetarium-explorer/txhelpers"
 	"golang.org/x/net/websocket"
 )
 
@@ -109,7 +109,7 @@ func NewPubSubHub(dataSource DataSource) (*PubSubHub, error) {
 	// Development subsidy address of the current network
 	devSubsidyAddress, err := dbtypes.DevSubsidyAddress(params)
 	if err != nil {
-		return nil, fmt.Errorf("bad project fund address: %v", err)
+		log.Warnf("NewPubSubHub: bad project fund address: %v", err)
 	}
 
 	psh.state = &State{
@@ -510,7 +510,7 @@ loop:
 			pushMsg.Message = buff.Bytes()
 
 		case sigByeNow:
-			pushMsg.Message = []byte(`"The dcrdata server is shutting down. Bye!"`)
+			pushMsg.Message = []byte(`"The monetarium-explorer server is shutting down. Bye!"`)
 			log.Tracef("Sending %v", string(pushMsg.Message))
 
 		// case sigSyncStatus:

@@ -1,4 +1,4 @@
-module github.com/decred/dcrdata/testutil/apiload
+module github.com/monetarium/monetarium-explorer/testutil/apiload
 
 go 1.21
 

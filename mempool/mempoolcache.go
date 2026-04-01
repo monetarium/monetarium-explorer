@@ -8,12 +8,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/decred/dcrd/dcrutil/v4"
-	chainjson "github.com/decred/dcrd/rpc/jsonrpc/types/v4"
+	"github.com/monetarium/monetarium-node/dcrutil"
+	chainjson "github.com/monetarium/monetarium-node/rpc/jsonrpc/types"
 
-	apitypes "github.com/decred/dcrdata/v8/api/types"
-	"github.com/decred/dcrdata/v8/db/dbtypes"
-	exptypes "github.com/decred/dcrdata/v8/explorer/types"
+	apitypes "github.com/monetarium/monetarium-explorer/api/types"
+	"github.com/monetarium/monetarium-explorer/db/dbtypes"
+	exptypes "github.com/monetarium/monetarium-explorer/explorer/types"
 )
 
 // DataCache models the basic data for the mempool cache.

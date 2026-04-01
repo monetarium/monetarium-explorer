@@ -9,9 +9,9 @@ import (
 	"math"
 	"sync"
 
-	"github.com/decred/dcrd/blockchain/standalone/v2"
-	"github.com/decred/dcrd/chaincfg/v3"
-	"github.com/decred/dcrd/wire"
+	"github.com/monetarium/monetarium-node/blockchain/standalone"
+	"github.com/monetarium/monetarium-node/chaincfg"
+	"github.com/monetarium/monetarium-node/wire"
 )
 
 type netHeight struct {

@@ -14,8 +14,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/decred/dcrdata/v8/db/dbtypes"
 	"github.com/go-chi/chi/v5"
+	"github.com/monetarium/monetarium-explorer/db/dbtypes"
 )
 
 type contextKey int
@@ -93,7 +93,7 @@ func ProxyHeaders(next http.Handler) http.Handler {
 }
 
 const (
-	darkModeCoookie   = "dcrdataDarkBG"
+	darkModeCoookie   = "monetariumDarkBG"
 	darkModeFormKey   = "darkmode"
 	requestURIFormKey = "requestURI"
 )
@@ -296,7 +296,7 @@ func MenuFormParser(next http.Handler) http.Handler {
 		if r.FormValue(darkModeFormKey) != "" {
 			cookie, err := r.Cookie(darkModeCoookie)
 			if err != nil && err != http.ErrNoCookie {
-				log.Errorf("Cookie dcrdataDarkBG retrieval error: %v", err)
+				log.Errorf("Cookie monetariumDarkBG retrieval error: %v", err)
 			} else {
 				if err == http.ErrNoCookie {
 					cookie = &http.Cookie{

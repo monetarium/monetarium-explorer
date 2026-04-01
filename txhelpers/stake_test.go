@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/decred/dcrd/chaincfg/v3"
+	"github.com/monetarium/monetarium-node/chaincfg"
 )
 
 type networkRewardPeriod struct {

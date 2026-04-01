@@ -2,17 +2,22 @@ package dbtypes
 
 import (
 	"fmt"
+	"math/big"
 
-	"github.com/decred/dcrd/blockchain/stake/v5"
-	"github.com/decred/dcrd/chaincfg/v3"
-	"github.com/decred/dcrd/txscript/v4/stdscript"
-	"github.com/decred/dcrd/wire"
-	"github.com/decred/dcrdata/v8/txhelpers"
+	"github.com/monetarium/monetarium-explorer/txhelpers"
+	"github.com/monetarium/monetarium-node/blockchain/stake"
+	"github.com/monetarium/monetarium-node/chaincfg"
+	"github.com/monetarium/monetarium-node/cointype"
+	"github.com/monetarium/monetarium-node/txscript/stdscript"
+	"github.com/monetarium/monetarium-node/wire"
 )
 
 // DevSubsidyAddress returns the development subsidy address for the specified
 // network.
 func DevSubsidyAddress(params *chaincfg.Params) (string, error) {
+	if len(params.OrganizationPkScript) == 0 {
+		return "", nil
+	}
 	_, devSubsidyAddresses := stdscript.ExtractAddrs(
 		params.OrganizationPkScriptVersion, params.OrganizationPkScript, params) // legacy org pkScript is not a treasury script
 	if len(devSubsidyAddresses) != 1 {
@@ -33,6 +38,27 @@ func ExtractBlockTransactions(msgBlock *wire.MsgBlock, txTree int8,
 		fmt.Printf("Invalid transaction tree: %v", txTree)
 	}
 	return dbTxs, dbTxVouts, dbTxVins
+}
+
+// bigIntMapAdd adds v to the big.Int accumulator map at key k.
+func bigIntMapAdd(m map[uint8]*big.Int, k uint8, v *big.Int) {
+	if cur, ok := m[k]; ok {
+		cur.Add(cur, v)
+	} else {
+		m[k] = new(big.Int).Set(v)
+	}
+}
+
+// bigIntMapToStrings converts a map[uint8]*big.Int to map[uint8]string (decimal atom strings).
+func bigIntMapToStrings(m map[uint8]*big.Int) map[uint8]string {
+	if len(m) == 0 {
+		return nil
+	}
+	out := make(map[uint8]string, len(m))
+	for k, v := range m {
+		out[k] = v.String()
+	}
+	return out
 }
 
 func processTransactions(msgBlock *wire.MsgBlock, tree int8, chainParams *chaincfg.Params,
@@ -66,8 +92,6 @@ func processTransactions(msgBlock *wire.MsgBlock, tree int8, chainParams *chainc
 		if isStake && !stakeTree {
 			fmt.Printf(" ***************** INCONSISTENT TREE: txn %v, type = %v", tx.TxHash(), txType)
 			continue
-			// You are doing it wrong
-			// return nil, nil, nil
 		}
 
 		var mixDenom int64
@@ -78,14 +102,57 @@ func processTransactions(msgBlock *wire.MsgBlock, tree int8, chainParams *chainc
 				_, mixDenom, mixCount = txhelpers.IsMixedSplitTx(tx, int64(txhelpers.DefaultRelayFeePerKb), ticketPrice)
 			}
 		}
-		var spent, sent int64
+
+		// Per-coin accumulators: VAR uses int64, SKA uses big.Int.
+		var varSpent, varSent int64
+		skaSpent := make(map[uint8]*big.Int)
+		skaSent := make(map[uint8]*big.Int)
+
 		for _, txin := range tx.TxIn {
-			spent += txin.ValueIn
+			if txin.SKAValueIn != nil {
+				// Determine coin type from outputs (inputs don't carry CoinType directly).
+				// We accumulate SKA inputs under a temporary key; the coin type will be
+				// resolved per-output below. For now accumulate all SKA inputs together.
+				// This is sufficient for fee calculation since a tx is single-coin.
+				bigIntMapAdd(skaSpent, 0xff, txin.SKAValueIn) // 0xff = placeholder
+			} else {
+				varSpent += txin.ValueIn
+			}
 		}
+
 		for _, txout := range tx.TxOut {
-			sent += txout.Value
+			ct := txout.CoinType
+			if ct == cointype.CoinTypeVAR {
+				varSent += txout.Value
+			} else if ct.IsSKA() && txout.SKAValue != nil {
+				bigIntMapAdd(skaSent, uint8(ct), txout.SKAValue)
+			}
 		}
-		fees := spent - sent
+
+		// Resolve SKA spent: move placeholder to the actual SKA coin type.
+		// A tx is single-coin, so find the SKA type from outputs.
+		if placeholder, ok := skaSpent[0xff]; ok {
+			delete(skaSpent, 0xff)
+			for ct := range skaSent {
+				bigIntMapAdd(skaSpent, ct, placeholder)
+				break
+			}
+		}
+
+		// Compute per-coin fees.
+		varFees := varSpent - varSent
+		skaFees := make(map[uint8]*big.Int)
+		for ct, spent := range skaSpent {
+			sent, hasSent := skaSent[ct]
+			fee := new(big.Int).Set(spent)
+			if hasSent {
+				fee.Sub(fee, sent)
+			}
+			if fee.Sign() > 0 {
+				skaFees[ct] = fee
+			}
+		}
+
 		dbTx := &Tx{
 			BlockHash:        blockHash,
 			BlockHeight:      int64(blockHeight),
@@ -98,9 +165,9 @@ func processTransactions(msgBlock *wire.MsgBlock, tree int8, chainParams *chainc
 			Locktime:         tx.LockTime,
 			Expiry:           tx.Expiry,
 			Size:             uint32(tx.SerializeSize()),
-			Spent:            spent,
-			Sent:             sent,
-			Fees:             fees,
+			Spent:            varSpent,
+			Sent:             varSent,
+			Fees:             varFees,
 			MixCount:         int32(mixCount),
 			MixDenom:         mixDenom,
 			NumVin:           uint32(len(tx.TxIn)),
@@ -109,7 +176,13 @@ func processTransactions(msgBlock *wire.MsgBlock, tree int8, chainParams *chainc
 			IsMainchainBlock: isMainchain,
 		}
 
-		//dbTx.Vins = make([]VinTxProperty, 0, dbTx.NumVin)
+		// Attach per-SKA maps only when SKA coins are present.
+		if len(skaSpent) > 0 || len(skaSent) > 0 || len(skaFees) > 0 {
+			dbTx.SpentByCoin = bigIntMapToStrings(skaSpent)
+			dbTx.SentByCoin = bigIntMapToStrings(skaSent)
+			dbTx.FeesByCoin = bigIntMapToStrings(skaFees)
+		}
+
 		dbTxVins[txIndex] = make(VinTxPropertyARRAY, 0, len(tx.TxIn))
 		for idx, txin := range tx.TxIn {
 			dbTxVins[txIndex] = append(dbTxVins[txIndex], VinTxProperty{
@@ -131,23 +204,25 @@ func processTransactions(msgBlock *wire.MsgBlock, tree int8, chainParams *chainc
 			})
 		}
 
-		//dbTx.VinDbIds = make([]uint64, int(dbTx.NumVin))
-
-		// Vouts and their db IDs
 		dbTxVouts[txIndex] = make([]*Vout, 0, len(tx.TxOut))
-		//dbTx.Vouts = make([]*Vout, 0, len(tx.TxOut))
 		for io, txout := range tx.TxOut {
+			ct := txout.CoinType
 			vout := Vout{
-				TxHash:  dbTx.TxID,
-				TxIndex: uint32(io),
-				TxTree:  tree,
-				TxType:  dbTx.TxType,
-				Value:   uint64(txout.Value),
-				Version: txout.Version,
-				Mixed:   mixDenom > 0 && mixDenom == txout.Value, // later, check ticket and vote outputs against the spent outputs' mixed status
+				TxHash:   dbTx.TxID,
+				TxIndex:  uint32(io),
+				TxTree:   tree,
+				TxType:   dbTx.TxType,
+				CoinType: uint8(ct),
+				Version:  txout.Version,
+				// Mixed only applies to VAR CoinJoin outputs.
+				Mixed: ct == cointype.CoinTypeVAR && mixDenom > 0 && mixDenom == txout.Value,
+			}
+			if ct == cointype.CoinTypeVAR {
+				vout.Value = uint64(txout.Value)
+			} else if ct.IsSKA() && txout.SKAValue != nil {
+				vout.SKAValue = txout.SKAValue.String()
 			}
 			scriptClass, scriptAddrs := stdscript.ExtractAddrs(vout.Version, txout.PkScript, chainParams)
-			// reqSigs := stdscript.DetermineRequiredSigs(vout.Version, vout.ScriptPubKey)
 			addys := make([]string, 0, len(scriptAddrs))
 			for ia := range scriptAddrs {
 				addys = append(addys, scriptAddrs[ia].String())
@@ -155,10 +230,7 @@ func processTransactions(msgBlock *wire.MsgBlock, tree int8, chainParams *chainc
 			vout.ScriptPubKeyData.Type = NewScriptClass(scriptClass)
 			vout.ScriptPubKeyData.Addresses = addys
 			dbTxVouts[txIndex] = append(dbTxVouts[txIndex], &vout)
-			//dbTx.Vouts = append(dbTx.Vouts, &vout)
 		}
-
-		//dbTx.VoutDbIds = make([]uint64, len(dbTxVouts[txIndex]))
 
 		dbTransactions = append(dbTransactions, dbTx)
 	}
