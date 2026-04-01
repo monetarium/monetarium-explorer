@@ -1819,61 +1819,8 @@ func (pgb *ChainDB) TSpendVotes(ctx context.Context, tspendID *chainhash.Hash) (
 
 // TreasuryBalance calculates the *dbtypes.TreasuryBalance.
 func (pgb *ChainDB) TreasuryBalance(ctx context.Context) (*dbtypes.TreasuryBalance, error) {
-	var addCount, added, immatureCount, immature, spendCount, spent, baseCount, base int64
-
 	_, tipHeight := pgb.BestBlock()
-	maturityHeight := tipHeight - int64(pgb.chainParams.CoinbaseMaturity)
-
-	rows, err := pgb.db.QueryContext(ctx, internal.SelectTreasuryBalance, maturityHeight)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var txType, matureCount, allCount, matureValue, allValue sql.NullInt64
-		if err = rows.Scan(&txType, &matureCount, &allCount, &matureValue, &allValue); err != nil {
-			return nil, err
-		}
-
-		imCount := allCount.Int64 - matureCount.Int64
-		imValue := allValue.Int64 - matureValue.Int64
-
-		switch stake.TxType(txType.Int64) {
-		case stake.TxTypeTSpend:
-			spendCount = allCount.Int64
-			spent = -matureValue.Int64
-		case stake.TxTypeTAdd:
-			immatureCount += imCount
-			immature += imValue
-			addCount = allCount.Int64
-			added = matureValue.Int64
-		case stake.TxTypeTreasuryBase:
-			immatureCount += imCount
-			immature += imValue
-			baseCount = allCount.Int64
-			base = matureValue.Int64
-		}
-	}
-
-	if err = rows.Err(); err != nil {
-		return nil, err
-	}
-
-	return &dbtypes.TreasuryBalance{
-		Height:         tipHeight,
-		MaturityHeight: maturityHeight,
-		Balance:        added + base - spent,
-		TxCount:        addCount + spendCount + baseCount,
-		AddCount:       addCount,
-		Added:          added,
-		SpendCount:     spendCount,
-		Spent:          spent,
-		TBaseCount:     baseCount,
-		TBase:          base,
-		ImmatureCount:  immatureCount,
-		Immature:       immature,
-	}, nil
+	return &dbtypes.TreasuryBalance{Height: tipHeight}, nil
 }
 
 // TreasuryTxns fetches filtered treasury transactions.

@@ -19,6 +19,8 @@ const (
 		valid_mainchain BOOLEAN,
 		matching_tx_hash BYTEA, -- the funder if is_funding is FALSE, otherwise any known spender (may be NULL)
 		value INT8,
+		coin_type INT2 NOT NULL DEFAULT 0,
+		ska_value TEXT,
 		block_time TIMESTAMPTZ NOT NULL, -- ugh, so much dup
 		is_funding BOOLEAN,
 		tx_vin_vout_index INT4, -- vout if is_funding is TRUE, vin if FALSE
@@ -29,8 +31,8 @@ const (
 	// insertAddressRow is the basis for several address insert/upsert
 	// statements.
 	insertAddressRow = `INSERT INTO addresses (address, matching_tx_hash, tx_hash,
-		tx_vin_vout_index, tx_vin_vout_row_id, value, block_time, is_funding, valid_mainchain, tx_type)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) `
+		tx_vin_vout_index, tx_vin_vout_row_id, value, block_time, is_funding, valid_mainchain, tx_type, coin_type, ska_value)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) `
 
 	// InsertAddressRow inserts a address block row without checking for unique
 	// index conflicts. This should only be used before the unique indexes are
@@ -144,7 +146,7 @@ const (
 		LIMIT $2 OFFSET $3;`
 
 	addrsColumnNames = `id, address, matching_tx_hash, tx_hash, tx_type, valid_mainchain,
-		tx_vin_vout_index, block_time, tx_vin_vout_row_id, value, is_funding`
+		tx_vin_vout_index, block_time, tx_vin_vout_row_id, value, is_funding, coin_type, ska_value`
 
 	/* unused
 	SelectAddressAllByAddress = `SELECT ` + addrsColumnNames + ` FROM addresses
@@ -217,6 +219,7 @@ const (
 	// logically "any" empty matching is actually no_empty_matching.
 	SelectAddressSpentUnspentCountAndValue = `SELECT
 			(tx_type = 0) AS is_regular,
+			coin_type,
 			COUNT(*),
 			SUM(value),
 			is_funding,
@@ -224,7 +227,7 @@ const (
 			-- NOT BOOL_AND(matching_tx_hash IS NULL) AS no_empty_matching
 		FROM addresses
 		WHERE address = $1 AND valid_mainchain
-		GROUP BY tx_type=0, is_funding, 
+		GROUP BY tx_type=0, coin_type, is_funding,
 			matching_tx_hash IS NULL  -- separate spent and unspent
 		ORDER BY count, is_funding;`
 

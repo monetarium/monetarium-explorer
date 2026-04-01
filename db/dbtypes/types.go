@@ -1232,6 +1232,8 @@ type UTXOData struct {
 	Value     int64
 	Mixed     bool
 	VoutDbID  int64
+	CoinType  uint8
+	SKAValue  string
 }
 
 // UTXO represents a transaction output, but it is intended to help track
@@ -1262,6 +1264,8 @@ type AddressRow struct {
 	// IsFunding should true if AtomsCredit > AtomsDebit
 	AtomsCredit uint64
 	AtomsDebit  uint64
+	CoinType    uint8  `json:"coin_type"`
+	SKAValue    string `json:"ska_value,omitempty"`
 }
 
 // IsMerged indicates if the AddressRow represents data for a "merged" address
@@ -2034,6 +2038,7 @@ type VinTxProperty struct {
 	PrevTxTree  uint16    `json:"tree"`
 	Sequence    uint32    `json:"sequence"`
 	ValueIn     int64     `json:"amountin"`
+	CoinType    uint8     `json:"coin_type"`
 	TxID        ChainHash `json:"tx_hash"`
 	TxIndex     uint32    `json:"tx_index"`
 	TxTree      uint16    `json:"tx_tree"`
@@ -2126,6 +2131,13 @@ type Tx struct {
 	// vout will have a tx_dbid
 	IsValid          bool `json:"valid"`
 	IsMainchainBlock bool `json:"mainchain"`
+}
+
+// ToJSONB marshals v to JSON bytes for use as a PostgreSQL JSONB parameter.
+// Returns nil on marshal error (stored as SQL NULL).
+func ToJSONB(v interface{}) []byte {
+	b, _ := json.Marshal(v)
+	return b
 }
 
 // Block models a Decred block.

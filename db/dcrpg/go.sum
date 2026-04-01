@@ -92,8 +92,8 @@ github.com/monetarium/monetarium-node/chaincfg v1.0.14 h1:Cs+0xoIqA6cQr0V6cGoPA1
 github.com/monetarium/monetarium-node/chaincfg v1.0.14/go.mod h1:AlIruAK4tSiR3vKq+apPYUUYsIJzdx2XS8HuhcmQnpY=
 github.com/monetarium/monetarium-node/chaincfg/chainhash v1.0.14 h1:x/5AsyR8N2H/Hl2c1KAC1BU9PFlwH3kTPT8b/wP5FuI=
 github.com/monetarium/monetarium-node/chaincfg/chainhash v1.0.14/go.mod h1:cqnSD4BRqRNBWsMMUERlzpQWHJdF7TPYvmZUBnCXEYo=
-github.com/monetarium/monetarium-node/cointype v1.0.11 h1:t2wbWdaYGicNvO0zvaYo+efZEMdI3E2o+JzAqbgbjrQ=
-github.com/monetarium/monetarium-node/cointype v1.0.11/go.mod h1:yhixKskK9FBKjKoH07NzgvEGPCOjW5iaLhgtfAO7808=
+github.com/monetarium/monetarium-node/cointype v1.0.14 h1:IbtK+9p9PhQyi1RLokiiDrms7bCR31WcSjOapnHEAv0=
+github.com/monetarium/monetarium-node/cointype v1.0.14/go.mod h1:yhixKskK9FBKjKoH07NzgvEGPCOjW5iaLhgtfAO7808=
 github.com/monetarium/monetarium-node/crypto/blake256 v1.0.14 h1:k9pUeDsNPYVBBmq7d7yiX4SZf7kisGr/NHrOi5mS3LY=
 github.com/monetarium/monetarium-node/crypto/blake256 v1.0.14/go.mod h1:+dUk+/kJYZCEfhySioeBRQD7l8yHVm3Q3g7Gd3lRjHk=
 github.com/monetarium/monetarium-node/crypto/rand v1.0.14 h1:JBdTiU2K2dJnVYxzCsCVfKXb2SOeExHUj7Cx2mc2sds=

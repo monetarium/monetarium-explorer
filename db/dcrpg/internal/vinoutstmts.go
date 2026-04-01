@@ -21,12 +21,13 @@ const (
 		prev_tx_index INT8, -- int8???
 		prev_tx_tree INT2,
 		value_in INT8,
+		coin_type INT2 NOT NULL DEFAULT 0,
 		tx_type INT4
 	);`
 
 	// insertVinRow is the basis for several vins insert/upsert statements.
 	insertVinRow = `INSERT INTO vins (tx_hash, tx_index, tx_tree, prev_tx_hash, prev_tx_index, prev_tx_tree,
-		value_in, is_valid, is_mainchain, block_time, tx_type) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) `
+		value_in, coin_type, is_valid, is_mainchain, block_time, tx_type) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) `
 
 	// InsertVinRow inserts a new vin row without checking for unique index
 	// conflicts. This should only be used before the unique indexes are created
@@ -36,7 +37,7 @@ const (
 	// UpsertVinRow is an upsert (insert or update on conflict), returning the
 	// inserted/updated vin row id.
 	UpsertVinRow = insertVinRow + `ON CONFLICT (tx_hash, tx_index, tx_tree) DO UPDATE
-		SET is_valid = $8, is_mainchain = $9, block_time = $10,
+		SET is_valid = $9, is_mainchain = $10, block_time = $11,
 			prev_tx_hash = $4, prev_tx_index = $5, prev_tx_tree = $6
 		RETURNING id;`
 
@@ -98,8 +99,8 @@ const (
 		WHERE prev_tx_hash=$1 AND prev_tx_index=$2 ORDER BY is_valid DESC, is_mainchain DESC, block_time DESC;`
 
 	SelectFundingOutpointIndxByVinID = `SELECT prev_tx_index FROM vins WHERE id=$1;`
-	SelectAllVinInfoByID             = `SELECT tx_hash, tx_index, tx_tree, is_valid, is_mainchain, block_time,  --- could easily do this by tx_hash and tx_index
-		prev_tx_hash, prev_tx_index, prev_tx_tree, value_in, tx_type FROM vins WHERE id = $1;`
+	SelectAllVinInfoByID = `SELECT tx_hash, tx_index, tx_tree, is_valid, is_mainchain, block_time,  --- could easily do this by tx_hash and tx_index
+		prev_tx_hash, prev_tx_index, prev_tx_tree, value_in, coin_type, tx_type FROM vins WHERE id = $1;`
 
 	/* alt without spend_tx_row_id
 	SelectUTXOsViaVinsMatch = `SELECT vouts.id, vouts.tx_hash, vouts.tx_index,   -- row ID and outpoint
@@ -114,7 +115,7 @@ const (
 			AND transactions.is_mainchain AND transactions.is_valid;`
 	*/
 
-	SelectUTXOs = `SELECT vouts.id, vouts.tx_hash, vouts.tx_index, vouts.script_addresses, vouts.value, vouts.mixed
+	SelectUTXOs = `SELECT vouts.id, vouts.tx_hash, vouts.tx_index, vouts.script_addresses, vouts.value, vouts.mixed, vouts.coin_type, vouts.ska_value
 		FROM vouts
 		JOIN transactions ON transactions.tx_hash=vouts.tx_hash
 		WHERE vouts.spend_tx_row_id IS NULL AND vouts.value>0
@@ -126,14 +127,15 @@ const (
 		WHERE id = $1;`
 
 	// SelectCoinSupply fetches the newly minted atoms per block by filtering
-	// for stakebase, treasurybase, and stake-validated coinbase transactions.
+	// for stakebase and stake-validated coinbase transactions (VAR only).
 	SelectCoinSupply = `SELECT vins.block_time, sum(vins.value_in)
 		FROM vins JOIN transactions
 		ON vins.tx_hash = transactions.tx_hash
 		WHERE vins.prev_tx_hash = '\x0000000000000000000000000000000000000000000000000000000000000000'::bytea
 		AND transactions.block_height > $1
 		AND vins.is_mainchain AND (vins.is_valid OR vins.tx_tree != 0)
-		AND vins.tx_type = ANY(ARRAY[0,2,6])   --- coinbase(regular),ssgen,treasurybase, but NOT tspend, same as =ANY('{0,2,6}') or IN(0,2,6)
+		AND vins.coin_type = 0
+		AND vins.tx_type = ANY(ARRAY[0,2,6])   --- coinbase(regular),ssgen, but NOT tspend
 		GROUP BY vins.block_time, transactions.block_height
 		ORDER BY transactions.block_height;`
 
@@ -145,18 +147,20 @@ const (
 		tx_index INT4,
 		tx_tree INT2,
 		value INT8,
+		coin_type INT2 NOT NULL DEFAULT 0,
 		version INT2,
 		-- pkscript BYTEA, -- ask the node
 		script_type TEXT,
 		script_addresses TEXT, -- but the addresses table... (!)
 		mixed BOOLEAN DEFAULT FALSE,
+		ska_value TEXT,
 		spend_tx_row_id INT8
 	);`
 
-	// insertVinRow is the basis for several vout insert/upsert statements.
-	insertVoutRow = `INSERT INTO vouts (tx_hash, tx_index, tx_tree, value,
-		version, script_type, script_addresses, mixed)
-	VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ` // not with spend_tx_row_id
+	// insertVoutRow is the basis for several vout insert/upsert statements.
+	insertVoutRow = `INSERT INTO vouts (tx_hash, tx_index, tx_tree, value, coin_type,
+		version, script_type, script_addresses, mixed, ska_value)
+	VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) ` // not with spend_tx_row_id
 
 	// InsertVoutRow inserts a new vout row without checking for unique index
 	// conflicts. This should only be used before the unique indexes are created
@@ -166,7 +170,7 @@ const (
 	// UpsertVoutRow is an upsert (insert or update on conflict), returning the
 	// inserted/updated vout row id.
 	UpsertVoutRow = insertVoutRow + `ON CONFLICT (tx_hash, tx_index, tx_tree) DO UPDATE
-		SET version = $5 RETURNING id;`
+		SET version = $6 RETURNING id;`
 
 	UpdateVoutSpendTxRowID  = `UPDATE vouts SET spend_tx_row_id = $1 WHERE id = $2;`
 	UpdateVoutsSpendTxRowID = `UPDATE vouts SET spend_tx_row_id = $1 WHERE id = ANY($2);`
@@ -229,7 +233,7 @@ const (
 		` ON vouts(spend_tx_row_id);`
 	DeindexVoutTableOnSpendTxID = `DROP INDEX IF EXISTS ` + IndexOfVoutsTableOnSpendTxID + ` CASCADE;`
 
-	SelectVoutAddressesByTxOut = `SELECT id, script_addresses, value, mixed FROM vouts
+	SelectVoutAddressesByTxOut = `SELECT id, script_addresses, value, mixed, coin_type, ska_value FROM vouts
 		WHERE tx_hash = $1 AND tx_index = $2 AND tx_tree = $3;`
 
 	SelectVoutByID = `SELECT id, tx_hash, tx_index, tx_tree, is_valid, is_mainchain,
@@ -238,7 +242,7 @@ const (
 
 	// TEST ONLY REMOVE
 	RetrieveVoutValue  = `SELECT value FROM vouts WHERE tx_hash=$1 and tx_index=$2;`
-	RetrieveVoutValues = `SELECT value, tx_index, tx_tree FROM vouts WHERE tx_hash=$1;`
+	RetrieveVoutValues = `SELECT value, tx_index, tx_tree, coin_type FROM vouts WHERE tx_hash=$1;`
 )
 
 // MakeVinInsertStatement returns the appropriate vins insert statement for the
