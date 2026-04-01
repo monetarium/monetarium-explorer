@@ -109,7 +109,7 @@ func NewPubSubHub(dataSource DataSource) (*PubSubHub, error) {
 	// Development subsidy address of the current network
 	devSubsidyAddress, err := dbtypes.DevSubsidyAddress(params)
 	if err != nil {
-		return nil, fmt.Errorf("bad project fund address: %v", err)
+		log.Warnf("NewPubSubHub: bad project fund address: %v", err)
 	}
 
 	psh.state = &State{

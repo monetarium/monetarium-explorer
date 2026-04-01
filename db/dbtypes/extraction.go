@@ -15,6 +15,9 @@ import (
 // DevSubsidyAddress returns the development subsidy address for the specified
 // network.
 func DevSubsidyAddress(params *chaincfg.Params) (string, error) {
+	if len(params.OrganizationPkScript) == 0 {
+		return "", nil
+	}
 	_, devSubsidyAddresses := stdscript.ExtractAddrs(
 		params.OrganizationPkScriptVersion, params.OrganizationPkScript, params) // legacy org pkScript is not a treasury script
 	if len(devSubsidyAddresses) != 1 {
