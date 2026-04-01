@@ -6127,6 +6127,10 @@ func (pgb *ChainDB) GetExplorerBlocks(ctx context.Context, start int, end int) [
 		block := new(exptypes.BlockBasic)
 		if data != nil {
 			block = makeExplorerBlockBasic(data, pgb.chainParams)
+			// Populate per-coin rows from the stored block summary.
+			if summary := pgb.GetSummaryByHash(ctx, data.Hash, false); summary != nil {
+				block.CoinRows = coinRowsFromAmounts(summary.CoinAmounts)
+			}
 		}
 		summaries = append(summaries, block)
 	}
@@ -6712,4 +6716,29 @@ func (pgb *ChainDB) SignalHeight(height uint32) {
 			pgb.shutdownDcrdata()
 		}
 	}
+}
+
+// coinRowsFromAmounts converts a CoinAmounts map to []CoinRowData for the
+// blocks table. Returns nil when amounts is nil or empty.
+func coinRowsFromAmounts(amounts map[uint8]string) []exptypes.CoinRowData {
+	if len(amounts) == 0 {
+		return nil
+	}
+	rows := make([]exptypes.CoinRowData, 0, len(amounts))
+	for ct, atomsStr := range amounts {
+		var symbol string
+		if ct == 0 {
+			symbol = "VAR"
+		} else {
+			symbol = fmt.Sprintf("SKA-%d", ct)
+		}
+		rows = append(rows, exptypes.CoinRowData{
+			CoinType: ct,
+			Symbol:   symbol,
+			Amount:   atomsStr, // raw atoms; template formats with threeSigFigs
+		})
+	}
+	// Sort: VAR first, then SKA by type number.
+	sort.Slice(rows, func(i, j int) bool { return rows[i].CoinType < rows[j].CoinType })
+	return rows
 }

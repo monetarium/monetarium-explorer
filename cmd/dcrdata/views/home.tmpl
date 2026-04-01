@@ -68,23 +68,42 @@
                                         <th class="text-center"
                                           ><span class="d-sm-none position-relative" data-tooltip="ticket revocations">Rev</span
                                           ><span class="d-none d-sm-inline">Revokes</span></th>
-                                        <th class="text-end" data-tooltip="total DCR sent">DCR</th>
+                                        <th class="text-end" data-tooltip="total VAR sent">VAR</th>
+                                        <th class="text-end d-none d-sm-table-cell" data-tooltip="SKA coin totals (click row to expand)">SKA</th>
                                         <th class="d-none d-sm-table-cell d-md-none d-lg-table-cell text-end">Size</th>
                                         <th class="text-end pe-2" data-time-target="header" data-jstitle="Age">Time (UTC)</th>
                                     </tr>
                                 </thead>
                                 <tbody data-blocklist-target="table">
                                     {{range .Blocks -}}
-                                    <tr data-height="{{.Height}}" data-link-class="fs18">
+                                    <tr data-height="{{.Height}}" data-link-class="fs18" {{if .CoinRows}}style="cursor:pointer" onclick="mnToggleCoinRows(this)"{{end}}>
                                         <td class="text-start ps-1" data-type="height"><a href="/block/{{.Height}}" class="fs18">{{.Height}}</a></td>
                                         <td class="text-center" data-type="tx">{{.Transactions}}</td>
                                         <td class="text-center" data-type="votes">{{.Voters}}</td>
                                         <td class="text-center" data-type="tickets">{{.FreshStake}}</td>
                                         <td class="text-center" data-type="revocations">{{.Revocations}}</td>
                                         <td class="text-end" data-type="value">{{threeSigFigs .Total}}</td>
+                                        <td class="text-end d-none d-sm-table-cell" data-type="ska-count">{{if .CoinRows}}+{{end}}</td>
                                         <td class="text-end d-none d-sm-table-cell d-md-none d-lg-table-cell text-nowrap" data-type="size">{{.FormattedBytes}}</td>
                                         <td class="text-end pe-1 text-nowrap" data-type="age" data-time-target="age" data-age="{{.BlockTime.UNIX}}">{{.BlockTime.DatetimeWithoutTZ}}</td>
                                     </tr>
+                                    {{- if .CoinRows}}
+                                    <tr class="mn-coin-rows" style="display:none">
+                                        <td colspan="9" class="p-0">
+                                            <table class="table table-sm mb-0 ms-3">
+                                                <tbody>
+                                                {{- range .CoinRows}}
+                                                <tr>
+                                                    <td class="text-muted ps-2">{{.Symbol}}</td>
+                                                    <td class="text-end">{{.Amount}}</td>
+                                                    <td class="text-end text-muted">{{.TxCount}} tx</td>
+                                                </tr>
+                                                {{- end}}
+                                                </tbody>
+                                            </table>
+                                        </td>
+                                    </tr>
+                                    {{- end}}
                                     {{- end}}
                                 </tbody>
                             </table>
@@ -431,6 +450,14 @@
     </div>
     <!-- end wrapper -->
     {{  template "footer" . }}
+<script>
+function mnToggleCoinRows(row) {
+  var next = row.nextElementSibling;
+  if (next && next.classList.contains('mn-coin-rows')) {
+    next.style.display = next.style.display === 'none' ? '' : 'none';
+  }
+}
+</script>
 </body>
 </html>
 {{- end}}

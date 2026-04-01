@@ -129,6 +129,9 @@ type BlockBasic struct {
 	BlockTime      TimeDef `json:"time"`
 	FormattedBytes string  `json:"formatted_bytes"`
 	Total          float64 `json:"total"`
+	// CoinRows holds per-coin row data for the expandable blocks table.
+	// Populated when available; nil means VAR-only (use Total).
+	CoinRows []CoinRowData `json:"coin_rows,omitempty"`
 }
 
 // WebBasicBlock is used for quick DB data without rpc calls
