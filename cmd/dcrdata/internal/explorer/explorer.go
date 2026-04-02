@@ -162,8 +162,8 @@ var explorerLinks = &links{
 	POSExplanation:  "https://docs.decred.org/proof-of-stake/overview/",
 	APIDocs:         "https://github.com/decred/dcrdata#apis",
 	InsightAPIDocs:  "https://github.com/decred/dcrdata/blob/master/docs/Insight_API_documentation.md",
-	Github:          "https://github.com/decred/dcrdata",
-	License:         "https://github.com/decred/dcrdata/blob/master/LICENSE",
+	Github:          "https://github.com/monetarium/monetarium-explorer",
+	License:         "https://github.com/monetarium/monetarium-explorer/blob/main/LICENSE",
 	NetParams:       "https://github.com/decred/dcrd/blob/master/chaincfg/params.go",
 	DownloadLink:    "https://decred.org/wallets/",
 }
