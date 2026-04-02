@@ -1,16 +1,16 @@
 # Project Structure
 
-dcrdata is organized as multiple Go modules in a single repository.
+monetarium-explorer is organized as multiple Go modules in a single repository.
 
 ## Go Modules
 
-| Path          | Module                                   | Purpose                                                                                        |
-| ------------- | ---------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| `.`           | `github.com/decred/dcrdata/v8`           | Root module — shared packages (blockdata, mempool, pubsub, txhelpers, stakedb, rpcutils, etc.) |
-| `cmd/dcrdata` | `github.com/decred/dcrdata/cmd/dcrdata`  | Main executable — block explorer + APIs                                                        |
-| `db/dcrpg`    | `github.com/decred/dcrdata/db/dcrpg/v8`  | PostgreSQL backend                                                                             |
-| `exchanges`   | `github.com/decred/dcrdata/exchanges/v3` | Exchange rate bot                                                                              |
-| `gov`         | `github.com/decred/dcrdata/gov/v6`       | Governance (agendas, Politeia)                                                                 |
+| Path          | Module                                                  | Purpose                                                                                        |
+| ------------- | ------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `.`           | `github.com/monetarium/monetarium-explorer`             | Root module — shared packages (blockdata, mempool, pubsub, txhelpers, stakedb, rpcutils, etc.) |
+| `cmd/dcrdata` | `github.com/monetarium/monetarium-explorer/cmd/dcrdata` | Main executable — block explorer + APIs                                                        |
+| `db/dcrpg`    | `github.com/monetarium/monetarium-explorer/db/dcrpg`    | PostgreSQL backend                                                                             |
+| `exchanges`   | `github.com/monetarium/monetarium-explorer/exchanges`   | Exchange rate bot                                                                              |
+| `gov`         | `github.com/monetarium/monetarium-explorer/gov`         | Governance (agendas, Politeia)                                                                 |
 
 Dependent modules use `replace` directives in their `go.mod` to point at local paths.
 
