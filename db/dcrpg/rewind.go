@@ -60,6 +60,9 @@ func deleteTicketsForBlock(dbTx SqlExecutor, hash dbtypes.ChainHash) (rowsDelete
 }
 
 func deleteTreasuryTxnsForBlock(dbTx SqlExecutor, hash dbtypes.ChainHash) (rowsDeleted int64, err error) {
+	if internal.DeleteTreasuryTxns == "" {
+		return 0, nil
+	}
 	return sqlExec(dbTx, internal.DeleteTreasuryTxns, "failed to delete treasury txns", hash)
 }
 
