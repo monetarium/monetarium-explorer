@@ -118,8 +118,9 @@ export default class extends Controller {
       Revocation: this.revocationTransactionsTarget,
       Regular: this.regularTransactionsTarget
     }
-    if (this.hasTaddTransactionsTarget)
-      {this.txTargetMap['Treasury Add'] = this.taddTransactionsTarget}
+    if (this.hasTaddTransactionsTarget) {
+      this.txTargetMap['Treasury Add'] = this.taddTransactionsTarget
+    }
     this.countTargetMap = {
       Vote: this.numVoteTarget,
       Ticket: this.numTicketTarget,
@@ -199,8 +200,9 @@ export default class extends Controller {
     buildTable(this.voteTransactionsTarget, 'votes', m.votes, voteTxTableRow)
     buildTable(this.ticketTransactionsTarget, 'tickets', m.tickets, txTableRow)
     buildTable(this.tspendTransactionsTarget, 'tspends', m.tspends, treasuryTxTableRow)
-    if (this.hasTaddTransactionsTarget)
-      {buildTable(this.taddTransactionsTarget, 'tadds', m.tadds, treasuryTxTableRow)}
+    if (this.hasTaddTransactionsTarget) {
+      buildTable(this.taddTransactionsTarget, 'tadds', m.tadds, treasuryTxTableRow)
+    }
   }
 
   renderNewTxns(txs) {

@@ -59,7 +59,7 @@ export default class Zoom {
       end = range.end
       start = range.start
     }
-    return `${parseInt(start).toString(36)  }-${  parseInt(end).toString(36)}`
+    return `${parseInt(start).toString(36)}-${parseInt(end).toString(36)}`
   }
 
   static decode(encoded, limits, scale) {

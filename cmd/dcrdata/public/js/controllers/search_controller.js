@@ -8,6 +8,6 @@ export default class extends Controller {
     if (search === '') {
       return
     }
-    Turbolinks.visit(`/search?search=${  search}`)
+    Turbolinks.visit(`/search?search=${search}`)
   }
 }

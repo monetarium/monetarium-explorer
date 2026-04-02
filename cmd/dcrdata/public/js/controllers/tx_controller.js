@@ -61,7 +61,7 @@ export default class extends Controller {
         this.confirmationsTarget.classList.add('confirmed')
         // Set the block link
         const link = this.unconfirmedTarget.querySelector('.mp-unconfirmed-link')
-        link.href = `/block/${  block.hash}`
+        link.href = `/block/${block.hash}`
         link.textContent = block.height
         this.unconfirmedTarget.querySelector('.mp-unconfirmed-msg').classList.add('d-none')
         // Reset the age and time to be based off of the block time.
