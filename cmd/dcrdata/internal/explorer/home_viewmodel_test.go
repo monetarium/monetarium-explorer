@@ -3,15 +3,14 @@ package explorer
 import (
 	"testing"
 
-	"github.com/decred/dcrdata/v8/explorer/types"
+	"github.com/monetarium/monetarium-explorer/explorer/types"
 	"pgregory.net/rapid"
 )
 
-// --- Unit tests for buildHomeBlockRows (subtask 10.1) ---
+// --- Unit tests for buildHomeBlockRows ---
 
 // TestBuildHomeBlockRows_FieldPreservation verifies that all Overview fields
 // from a known BlockBasic are copied exactly into the resulting HomeBlockRow.
-// Requirements: 1.1, 4.2
 func TestBuildHomeBlockRows_FieldPreservation(t *testing.T) {
 	b := &types.BlockBasic{
 		Height:         123456,
@@ -57,14 +56,10 @@ func TestBuildHomeBlockRows_FieldPreservation(t *testing.T) {
 	}
 }
 
-// TestBuildHomeBlockRows_NilSkipping verifies that nil entries in the input
-// slice are skipped without panicking and the result has the correct length.
-// Requirements: 1.2
+// TestBuildHomeBlockRows_NilSkipping verifies that nil entries are skipped.
 func TestBuildHomeBlockRows_NilSkipping(t *testing.T) {
 	b := &types.BlockBasic{Height: 1, Hash: "abc"}
-	input := []*types.BlockBasic{nil, b, nil}
-
-	rows := buildHomeBlockRows(input)
+	rows := buildHomeBlockRows([]*types.BlockBasic{nil, b, nil})
 
 	if len(rows) != 1 {
 		t.Errorf("expected 1 row after skipping nils, got %d", len(rows))
@@ -74,8 +69,7 @@ func TestBuildHomeBlockRows_NilSkipping(t *testing.T) {
 	}
 }
 
-// TestBuildHomeBlockRows_AllNils verifies that an all-nil slice returns an
-// empty result without panicking.
+// TestBuildHomeBlockRows_AllNils verifies that an all-nil slice returns empty.
 func TestBuildHomeBlockRows_AllNils(t *testing.T) {
 	rows := buildHomeBlockRows([]*types.BlockBasic{nil, nil, nil})
 	if len(rows) != 0 {
@@ -83,8 +77,7 @@ func TestBuildHomeBlockRows_AllNils(t *testing.T) {
 	}
 }
 
-// TestBuildHomeBlockRows_EmptySlice verifies that an empty input returns an
-// empty result.
+// TestBuildHomeBlockRows_EmptySlice verifies that an empty input returns empty.
 func TestBuildHomeBlockRows_EmptySlice(t *testing.T) {
 	rows := buildHomeBlockRows([]*types.BlockBasic{})
 	if len(rows) != 0 {
@@ -92,54 +85,124 @@ func TestBuildHomeBlockRows_EmptySlice(t *testing.T) {
 	}
 }
 
-// TestBuildHomeBlockRows_HasSKAData verifies that HasSKAData is true when
-// sub-rows are non-empty and false when empty.
-// Requirements: 1.2, 4.2
-func TestBuildHomeBlockRows_HasSKAData(t *testing.T) {
-	// height % 9 != 0 → sub-rows present → HasSKAData should be true
-	bWithSKA := &types.BlockBasic{Height: 1}
-	rowsWithSKA := buildHomeBlockRows([]*types.BlockBasic{bWithSKA})
-	if len(rowsWithSKA) != 1 {
-		t.Fatalf("expected 1 row, got %d", len(rowsWithSKA))
+// TestBuildHomeBlockRows_VAROnly verifies that a block with no CoinRows falls
+// back to Total for VARAmount and has no SKA sub-rows.
+func TestBuildHomeBlockRows_VAROnly(t *testing.T) {
+	b := &types.BlockBasic{
+		Height:         10,
+		Transactions:   5,
+		FormattedBytes: "1.2 kB",
+		Total:          500.0,
 	}
-	if len(rowsWithSKA[0].SKASubRows) == 0 {
-		t.Errorf("expected non-empty SKASubRows for height=1")
+	rows := buildHomeBlockRows([]*types.BlockBasic{b})
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
 	}
+	r := rows[0]
+	if r.VARAmount != threeSigFigs(b.Total) {
+		t.Errorf("VARAmount: got %q, want %q", r.VARAmount, threeSigFigs(b.Total))
+	}
+	if r.VARTxCount != b.Transactions {
+		t.Errorf("VARTxCount: got %d, want %d", r.VARTxCount, b.Transactions)
+	}
+	if len(r.SKASubRows) != 0 {
+		t.Errorf("expected no SKASubRows for VAR-only block, got %d", len(r.SKASubRows))
+	}
+	if r.SKAAmount != "" {
+		t.Errorf("expected empty SKAAmount for VAR-only block, got %q", r.SKAAmount)
+	}
+}
 
-	// height % 9 == 0 → no sub-rows → HasSKAData should be false
-	bNoSKA := &types.BlockBasic{Height: 9}
-	rowsNoSKA := buildHomeBlockRows([]*types.BlockBasic{bNoSKA})
-	if len(rowsNoSKA) != 1 {
-		t.Fatalf("expected 1 row, got %d", len(rowsNoSKA))
+// TestBuildHomeBlockRows_WithCoinRows verifies that CoinRows data is correctly
+// mapped to VAR and SKA fields.
+func TestBuildHomeBlockRows_WithCoinRows(t *testing.T) {
+	b := &types.BlockBasic{
+		Height:       20,
+		Transactions: 7,
+		CoinRows: []types.CoinRowData{
+			{CoinType: 0, Symbol: "VAR", TxCount: 5, Amount: "1.23K VAR", Size: 1024},
+			{CoinType: 1, Symbol: "SKA-1", TxCount: 2, Amount: "4.56M SKA-1", Size: 512},
+		},
 	}
-	if len(rowsNoSKA[0].SKASubRows) != 0 {
-		t.Errorf("expected empty SKASubRows for height=9, got %d", len(rowsNoSKA[0].SKASubRows))
+	rows := buildHomeBlockRows([]*types.BlockBasic{b})
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+	r := rows[0]
+
+	if r.VARTxCount != 5 {
+		t.Errorf("VARTxCount: got %d, want 5", r.VARTxCount)
+	}
+	if r.VARAmount != "1.23K VAR" {
+		t.Errorf("VARAmount: got %q, want %q", r.VARAmount, "1.23K VAR")
+	}
+	if len(r.SKASubRows) != 1 {
+		t.Fatalf("expected 1 SKASubRow, got %d", len(r.SKASubRows))
+	}
+	if r.SKASubRows[0].TokenType != "SKA-1" {
+		t.Errorf("SKASubRow TokenType: got %q, want %q", r.SKASubRows[0].TokenType, "SKA-1")
+	}
+	if r.SKASubRows[0].Amount != "4.56M SKA-1" {
+		t.Errorf("SKASubRow Amount: got %q, want %q", r.SKASubRows[0].Amount, "4.56M SKA-1")
+	}
+	// Single SKA type: SKAAmount should equal the sub-row amount.
+	if r.SKAAmount != "4.56M SKA-1" {
+		t.Errorf("SKAAmount: got %q, want %q", r.SKAAmount, "4.56M SKA-1")
+	}
+}
+
+// TestBuildHomeBlockRows_MultipleSKATypes verifies that multiple SKA types
+// produce multiple sub-rows and a count summary in SKAAmount.
+func TestBuildHomeBlockRows_MultipleSKATypes(t *testing.T) {
+	b := &types.BlockBasic{
+		Height: 30,
+		CoinRows: []types.CoinRowData{
+			{CoinType: 0, Symbol: "VAR", TxCount: 3, Amount: "100 VAR", Size: 200},
+			{CoinType: 1, Symbol: "SKA-1", TxCount: 1, Amount: "50 SKA-1", Size: 100},
+			{CoinType: 2, Symbol: "SKA-2", TxCount: 2, Amount: "75 SKA-2", Size: 150},
+		},
+	}
+	rows := buildHomeBlockRows([]*types.BlockBasic{b})
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+	r := rows[0]
+
+	if len(r.SKASubRows) != 2 {
+		t.Fatalf("expected 2 SKASubRows, got %d", len(r.SKASubRows))
+	}
+	// Multiple SKA types: SKAAmount should be a count summary.
+	if r.SKAAmount != "2 SKA types" {
+		t.Errorf("SKAAmount: got %q, want %q", r.SKAAmount, "2 SKA types")
 	}
 }
 
 // TestBuildHomeBlockRows_SKASubRowTokenTypeNonEmpty verifies that every
-// SKASubRow.TokenType is non-empty for any block that has HasSKAData = true.
-// Requirements: 5.5
+// SKASubRow.TokenType is non-empty when CoinRows has SKA entries.
 func TestBuildHomeBlockRows_SKASubRowTokenTypeNonEmpty(t *testing.T) {
-	// Use a range of heights to cover both SKA-present and SKA-absent cases.
-	for height := int64(0); height <= 20; height++ {
-		rows := buildHomeBlockRows([]*types.BlockBasic{{Height: height}})
-		if len(rows) != 1 {
-			t.Fatalf("height=%d: expected 1 row, got %d", height, len(rows))
-		}
-		r := rows[0]
-		for i, sub := range r.SKASubRows {
-			if sub.TokenType == "" {
-				t.Errorf("height=%d sub-row[%d]: TokenType is empty", height, i)
-			}
+	b := &types.BlockBasic{
+		Height: 40,
+		CoinRows: []types.CoinRowData{
+			{CoinType: 0, Symbol: "VAR", Amount: "10 VAR"},
+			{CoinType: 1, Symbol: "SKA-1", Amount: "20 SKA-1"},
+			{CoinType: 3, Symbol: "SKA-3", Amount: "30 SKA-3"},
+		},
+	}
+	rows := buildHomeBlockRows([]*types.BlockBasic{b})
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+	for i, sub := range rows[0].SKASubRows {
+		if sub.TokenType == "" {
+			t.Errorf("sub-row[%d]: TokenType is empty", i)
 		}
 	}
 }
 
-// --- Property-based tests (optional subtasks 10.2, 10.3) ---
+// --- Property-based tests ---
 
-// Feature: home-block-table-redesign, Property 1: BlockBasic to HomeBlockRow field preservation
-// Validates: Requirements 1.1, 4.2
+// TestProp_HomeBlockRowFieldPreservation verifies that Overview fields are
+// always copied verbatim from BlockBasic to HomeBlockRow.
 func TestProp_HomeBlockRowFieldPreservation(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		b := &types.BlockBasic{
@@ -183,8 +246,8 @@ func TestProp_HomeBlockRowFieldPreservation(t *testing.T) {
 	})
 }
 
-// Feature: home-block-table-redesign, Property 3: Monetary fields are pre-formatted
-// Validates: Requirements 1.4, 2.3, 4.3, 4.4
+// TestProp_VARAmountPreFormatted verifies that VARAmount matches threeSigFigs
+// when no CoinRows are present (VAR-only fallback path).
 func TestProp_VARAmountPreFormatted(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		total := rapid.Float64Range(0, 1e9).Draw(t, "total")

@@ -1,12 +1,16 @@
 package explorer
 
-import "github.com/decred/dcrdata/v8/explorer/types"
+import (
+	"fmt"
+
+	"github.com/monetarium/monetarium-explorer/explorer/types"
+)
 
 // HomeBlockRow is the view model for one row in the home page block table.
-// It carries all 13 column values pre-formatted so the template performs no
+// It carries all column values pre-formatted so the template performs no
 // numeric logic.
 type HomeBlockRow struct {
-	// Overview group (cols 1-7) — sourced directly from BlockBasic.
+	// Overview group — sourced directly from BlockBasic.
 	Height         int64
 	Hash           string
 	Transactions   int
@@ -16,43 +20,73 @@ type HomeBlockRow struct {
 	FormattedBytes string
 	BlockTime      types.TimeDef
 
-	// VAR group (cols 8-10) — real chain data, monetary values pre-formatted.
-	VARTxCount int    // same value as Transactions
-	VARAmount  string // threeSigFigs(BlockBasic.Total)
-	VARSize    string // BlockBasic.FormattedBytes (reused)
+	// VAR group — monetary values pre-formatted.
+	VARTxCount int
+	VARAmount  string
+	VARSize    string
 
-	// SKA group — mocked until the SKA backend is available.
-	// Future: replace this string field with a big-number type (e.g.
-	// shopspring/decimal) once the real backend supplies raw SKA amounts.
-	// SKATxCount and SKASize are intentionally omitted: the template shows
-	// only the aggregate SKA amount in the parent row; per-type breakdowns
-	// are in SKASubRows.
-	SKAAmount string // pre-formatted aggregate amount
+	// SKAAmount is the pre-formatted aggregate SKA amount across all SKA types.
+	// Empty when the block has no SKA transactions.
+	SKAAmount string
 
-	// Accordion sub-rows — per-SKA-type breakdown.
-	SKASubRows []SKASubRow // per-SKA-type breakdown rows
+	// SKASubRows holds per-SKA-type accordion breakdown rows.
+	SKASubRows []SKASubRow
 }
 
 // SKASubRow is one accordion detail row for a specific SKA token type.
 // All numeric fields are pre-formatted strings.
-// Future: replace Amount (and Size if needed) with a big-number type once the
-// real SKA backend is available.
 type SKASubRow struct {
-	TokenType string // e.g. "SKA-1", "SKA-2", "SKA-3"
+	TokenType string // e.g. "SKA-1", "SKA-2"
 	TxCount   string // pre-formatted
 	Amount    string // pre-formatted
 	Size      string // pre-formatted
 }
 
 // buildHomeBlockRows converts a slice of BlockBasic pointers into HomeBlockRow
-// view models, attaching mock SKA data. Nil entries are skipped.
+// view models using real CoinRows data. Nil entries are skipped.
 func buildHomeBlockRows(blocks []*types.BlockBasic) []HomeBlockRow {
 	rows := make([]HomeBlockRow, 0, len(blocks))
 	for _, b := range blocks {
 		if b == nil {
 			continue
 		}
-		_, skaAmt, _, subRows := mockSKAData(b.Height)
+
+		var varAmount, varSize string
+		var varTxCount int
+		var skaAmount string
+		var subRows []SKASubRow
+
+		if len(b.CoinRows) > 0 {
+			for _, cr := range b.CoinRows {
+				if cr.CoinType == 0 {
+					// VAR row
+					varTxCount = cr.TxCount
+					varAmount = cr.Amount
+					varSize = fmt.Sprintf("%d B", cr.Size)
+				} else {
+					// SKA row — add to sub-rows
+					subRows = append(subRows, SKASubRow{
+						TokenType: cr.Symbol,
+						TxCount:   fmt.Sprintf("%d", cr.TxCount),
+						Amount:    cr.Amount,
+						Size:      fmt.Sprintf("%d B", cr.Size),
+					})
+				}
+			}
+			// Aggregate SKA amount label: use first SKA row's amount if only one,
+			// or a count summary if multiple.
+			if len(subRows) == 1 {
+				skaAmount = subRows[0].Amount
+			} else if len(subRows) > 1 {
+				skaAmount = fmt.Sprintf("%d SKA types", len(subRows))
+			}
+		} else {
+			// No CoinRows — VAR-only block, fall back to Total.
+			varTxCount = b.Transactions
+			varAmount = threeSigFigs(b.Total)
+			varSize = b.FormattedBytes
+		}
+
 		rows = append(rows, HomeBlockRow{
 			Height:         b.Height,
 			Hash:           b.Hash,
@@ -62,10 +96,10 @@ func buildHomeBlockRows(blocks []*types.BlockBasic) []HomeBlockRow {
 			Revocations:    b.Revocations,
 			FormattedBytes: b.FormattedBytes,
 			BlockTime:      b.BlockTime,
-			VARTxCount:     b.Transactions,
-			VARAmount:      threeSigFigs(b.Total),
-			VARSize:        b.FormattedBytes,
-			SKAAmount:      skaAmt,
+			VARTxCount:     varTxCount,
+			VARAmount:      varAmount,
+			VARSize:        varSize,
+			SKAAmount:      skaAmount,
 			SKASubRows:     subRows,
 		})
 	}

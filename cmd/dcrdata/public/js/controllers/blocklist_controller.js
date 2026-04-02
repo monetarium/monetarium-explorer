@@ -2,40 +2,49 @@ import { Controller } from '@hotwired/stimulus'
 import humanize from '../helpers/humanize_helper'
 import globalEventBus from '../services/event_bus_service'
 
-// TODO: remove mock data once the real SKA backend is wired up.
-const mockSKATokens = [
-  { name: 'SKA-1', txs: 42, amount: 1_250_000, size: 8_400 },
-  { name: 'SKA-2', txs: 17, amount: 450_000, size: 3_200 },
-  { name: 'SKA-3', txs: 5, amount: 2_100_000_000, size: 1_100 }
-]
+// coinRowsToSKAData extracts VAR and SKA display data from a block's coin_rows array.
+// Returns { varTxCount, varAmount, varSize, skaAmount, subRows }.
+function coinRowsToSKAData(block) {
+  const coinRows = block.coin_rows
+  if (!coinRows || coinRows.length === 0) {
+    // VAR-only fallback
+    return {
+      varTxCount: block.tx,
+      varAmount: humanize.threeSigFigs(block.total),
+      varSize: humanize.bytes(block.size),
+      skaAmount: '',
+      subRows: []
+    }
+  }
 
-function mockSKAData(height) {
-  if (height % 9 === 0) {
-    return { skaTx: '0', skaAmt: '0', skaSz: '0', subRows: [] }
-  }
-  const offset = height % 10
-  let aggTx = 0
-  let aggAmt = 0
-  let aggSz = 0
+  let varTxCount = block.tx
+  let varAmount = humanize.threeSigFigs(block.total)
+  let varSize = humanize.bytes(block.size)
   const subRows = []
-  for (const tok of mockSKATokens) {
-    const tx = tok.txs + offset
-    const amt = tok.amount * (1 + offset / 100)
-    const sz = tok.size + offset * 10
-    aggTx += tx
-    aggAmt += amt
-    aggSz += sz
-    subRows.push({
-      tokenType: tok.name,
-      txCount: String(tx),
-      amount: humanize.threeSigFigs(amt),
-      size: humanize.threeSigFigs(sz)
-    })
+
+  for (const cr of coinRows) {
+    if (cr.coin_type === 0) {
+      varTxCount = cr.tx_count
+      varAmount = cr.amount
+      varSize = `${cr.size} B`
+    } else {
+      subRows.push({
+        tokenType: cr.symbol,
+        txCount: String(cr.tx_count),
+        amount: cr.amount,
+        size: `${cr.size} B`
+      })
+    }
   }
-  const skaTx = String(aggTx)
-  const skaAmt = humanize.threeSigFigs(aggAmt)
-  const skaSz = humanize.threeSigFigs(aggSz)
-  return { skaTx, skaAmt, skaSz, subRows }
+
+  let skaAmount = ''
+  if (subRows.length === 1) {
+    skaAmount = subRows[0].amount
+  } else if (subRows.length > 1) {
+    skaAmount = `${subRows.length} SKA types`
+  }
+
+  return { varTxCount, varAmount, varSize, skaAmount, subRows }
 }
 
 function makeTd(className, text) {
@@ -46,11 +55,11 @@ function makeTd(className, text) {
 }
 
 // Insert a VAR sub-row immediately after newRow (9-column layout).
-function insertVARSubRow(tbody, newRow, block) {
+function insertVARSubRow(tbody, newRow, varTxCount, varAmount, varSize) {
   const tr = document.createElement('tr')
   tr.className = 'ska-sub-row'
   tr.dataset.skaAccordionTarget = 'subRow'
-  tr.dataset.blockId = String(block.height)
+  tr.dataset.blockId = newRow.dataset.blockId
 
   const labelTd = makeTd('text-start ps-1')
   const labelSpan = document.createElement('span')
@@ -58,15 +67,10 @@ function insertVARSubRow(tbody, newRow, block) {
   labelSpan.textContent = 'VAR'
   labelTd.appendChild(labelSpan)
   tr.appendChild(labelTd)
-  tr.appendChild(makeTd('text-end num', String(block.tx)))
-  tr.appendChild(makeTd('text-end num', humanize.threeSigFigs(block.total)))
+  tr.appendChild(makeTd('text-end num', String(varTxCount)))
+  tr.appendChild(makeTd('text-end num', varAmount))
   tr.appendChild(makeTd('text-end', '—'))
-  tr.appendChild(
-    makeTd(
-      'text-end num d-none d-sm-table-cell d-md-none d-lg-table-cell',
-      humanize.bytes(block.size)
-    )
-  )
+  tr.appendChild(makeTd('text-end num d-none d-sm-table-cell d-md-none d-lg-table-cell', varSize))
   tr.appendChild(makeTd('text-end', '—'))
   tr.appendChild(makeTd('text-end', '—'))
   tr.appendChild(makeTd('text-end d-none d-sm-table-cell d-md-none d-lg-table-cell', '—'))
@@ -140,7 +144,8 @@ export default class extends Controller {
       toRemove.forEach((r) => this.tableTarget.removeChild(r))
     } else return
 
-    const { skaAmt, subRows } = mockSKAData(block.height)
+    const { varTxCount, varAmount, varSize, skaAmount, subRows } = coinRowsToSKAData(block)
+
     const newRow = document.createElement('tr')
     newRow.dataset.height = block.height
     newRow.dataset.linkClass = firstBlockRow.dataset.linkClass
@@ -172,10 +177,10 @@ export default class extends Controller {
           newTd.textContent = String(block.tx)
           break
         case 'var-amount':
-          newTd.textContent = humanize.threeSigFigs(block.total)
+          newTd.textContent = varAmount
           break
         case 'ska-amount':
-          newTd.textContent = skaAmt
+          newTd.textContent = skaAmount
           break
         case 'size':
           newTd.textContent = humanize.bytes(block.size)
@@ -196,7 +201,7 @@ export default class extends Controller {
     })
 
     this.tableTarget.insertBefore(newRow, this.tableTarget.firstChild)
-    const varSubRow = insertVARSubRow(this.tableTarget, newRow, block)
+    const varSubRow = insertVARSubRow(this.tableTarget, newRow, varTxCount, varAmount, varSize)
     insertSKASubRows(this.tableTarget, varSubRow, subRows, block.height)
   }
 }
