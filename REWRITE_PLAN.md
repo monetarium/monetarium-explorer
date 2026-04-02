@@ -851,3 +851,57 @@ Demo: Navigate to a transaction with SKA-1 outputs — vout amounts show the cor
 shows the SKA-1 amount.
 
 
+### Task 17: Add coin_type and ska_value to API vout responses
+Commit: fix: expose coin_type and ska_value on API vout responses
+
+Objective: GET /api/tx/{txid} returns value: 0 for SKA outputs with no coin type indicator. The node RPC response carries the SKA amount in a separate field on 
+chainjson.Vout; the explorer never reads it. Fix by extending apitypes.Vout and populating it in GetAPITransaction and GetAllTxOut.
+
+api/types/apitypes.go — extend Vout:
+
+go
+type Vout struct {
+    Value               float64      `json:"value"`
+    N                   uint32       `json:"n"`
+    Version             uint16       `json:"version"`
+    ScriptPubKeyDecoded ScriptPubKey `json:"scriptPubKey"`
+    Spend               *TxInputID   `json:"spend,omitempty"`
+    CoinType            uint8        `json:"coin_type,omitempty"`
+    SKAValue            string       `json:"ska_value,omitempty"` // decimal atom string
+}
+
+
+db/dcrpg/pgblockchain.go — GetAPITransaction vout loop:
+
+Check what field chainjson.Vout uses for SKA (it will be something like SKAValue *string or SKAAmount string — confirm from the node's jsonrpc types). Then populate:
+
+go
+tx.Vout[i].Value = vout.Value
+tx.Vout[i].CoinType = uint8(vout.CoinType)   // from chainjson.Vout
+if vout.SKAValue != nil {
+    tx.Vout[i].SKAValue = *vout.SKAValue      // field name TBD from chainjson
+}
+
+
+Apply the same two lines in GetAllTxOut:
+go
+allTxOut = append(allTxOut, &apitypes.TxOut{
+    Value:    txouts[i].Value,
+    Version:  txouts[i].Version,
+    CoinType: uint8(txouts[i].CoinType),
+    SKAValue: ...,
+    ...
+})
+
+
+Note: apitypes.TxOut also needs the same two fields added.
+
+First step: grep chainjson.Vout in the monetarium-node module to find the exact field names for coin type and SKA value on the RPC result struct, then use those names 
+above.
+
+Test: Add a case to cmd/dcrdata/internal/api/apiroutes_test.go that constructs a mock chainjson.GetRawTransactionVerboseResult with a SKA-1 vout and asserts the 
+resulting apitypes.Vout has CoinType == 1 and SKAValue != "".
+
+Demo: GET /api/tx/{ska-tx-id} returns vouts with "coin_type": 1 and "ska_value": "900000000000000000000000000000000" instead of "value": 0.
+
+
