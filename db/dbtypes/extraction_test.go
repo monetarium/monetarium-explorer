@@ -106,6 +106,28 @@ func Test_processTransactions_SKAOnly(t *testing.T) {
 	}
 }
 
+func Test_processTransactions_VinCoinType(t *testing.T) {
+	bigAmt := big.NewInt(1_000_000_000_000_000_000)
+	bigOut := new(big.Int).Sub(bigAmt, big.NewInt(100))
+
+	tx := wire.NewMsgTx()
+	txIn := wire.NewTxIn(&wire.OutPoint{}, 0, nil)
+	txIn.SKAValueIn = bigAmt
+	tx.AddTxIn(txIn)
+	tx.AddTxOut(wire.NewTxOutSKA(bigOut, cointype.CoinType(1), nil))
+
+	blk := syntheticBlock(tx)
+	_, _, vins := processTransactions(blk, wire.TxTreeRegular, chaincfg.SimNetParams(), true, true)
+
+	// vins[1] is our tx (vins[0] is coinbase)
+	if len(vins) < 2 || len(vins[1]) == 0 {
+		t.Fatal("expected vin for SKA tx")
+	}
+	if vins[1][0].CoinType != 1 {
+		t.Errorf("vin CoinType: want 1 (SKA-1), got %d", vins[1][0].CoinType)
+	}
+}
+
 func Test_processTransactions_MixedBlock(t *testing.T) {
 	// VAR tx
 	varTx := wire.NewMsgTx()

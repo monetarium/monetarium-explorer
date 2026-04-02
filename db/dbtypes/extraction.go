@@ -183,6 +183,13 @@ func processTransactions(msgBlock *wire.MsgBlock, tree int8, chainParams *chainc
 			dbTx.FeesByCoin = bigIntMapToStrings(skaFees)
 		}
 
+		// Derive vin coin type from outputs (tx is single-coin).
+		vinCoinType := uint8(cointype.CoinTypeVAR)
+		for ct := range skaSent {
+			vinCoinType = ct
+			break
+		}
+
 		dbTxVins[txIndex] = make(VinTxPropertyARRAY, 0, len(tx.TxIn))
 		for idx, txin := range tx.TxIn {
 			dbTxVins[txIndex] = append(dbTxVins[txIndex], VinTxProperty{
@@ -201,6 +208,7 @@ func processTransactions(msgBlock *wire.MsgBlock, tree int8, chainParams *chainc
 				ScriptSig:   txin.SignatureScript,
 				IsValid:     dbTx.IsValid,
 				IsMainchain: isMainchain,
+				CoinType:    vinCoinType,
 			})
 		}
 
