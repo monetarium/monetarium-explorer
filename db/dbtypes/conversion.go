@@ -3,12 +3,46 @@ package dbtypes
 import (
 	"fmt"
 	"math"
+	"math/big"
 
 	"github.com/monetarium/monetarium-node/chaincfg"
+	"github.com/monetarium/monetarium-node/cointype"
 	"github.com/monetarium/monetarium-node/wire"
 
 	"github.com/monetarium/monetarium-explorer/txhelpers"
 )
+
+// blockCoinAmounts sums TxOut values per coin type across all transactions in
+// the block. VAR (key 0) is stored as a decimal int64 string; SKA-n as a
+// big.Int decimal string.
+func blockCoinAmounts(msgBlock *wire.MsgBlock) map[uint8]string {
+	varTotal := int64(0)
+	skaTotal := make(map[uint8]*big.Int)
+	allTxs := append(msgBlock.Transactions, msgBlock.STransactions...)
+	for _, tx := range allTxs {
+		for _, out := range tx.TxOut {
+			ct := out.CoinType
+			if ct == cointype.CoinTypeVAR {
+				varTotal += out.Value
+			} else if ct.IsSKA() && out.SKAValue != nil {
+				k := uint8(ct)
+				if skaTotal[k] == nil {
+					skaTotal[k] = new(big.Int)
+				}
+				skaTotal[k].Add(skaTotal[k], out.SKAValue)
+			}
+		}
+	}
+	if varTotal == 0 && len(skaTotal) == 0 {
+		return nil
+	}
+	result := make(map[uint8]string, 1+len(skaTotal))
+	result[uint8(cointype.CoinTypeVAR)] = fmt.Sprintf("%d", varTotal)
+	for k, v := range skaTotal {
+		result[k] = v.String()
+	}
+	return result
+}
 
 // MsgBlockToDBBlock creates a dbtypes.Block from a wire.MsgBlock
 func MsgBlockToDBBlock(msgBlock *wire.MsgBlock, chainParams *chaincfg.Params, chainWork string, winners []ChainHash) *Block {
@@ -39,6 +73,7 @@ func MsgBlockToDBBlock(msgBlock *wire.MsgBlock, chainParams *chaincfg.Params, ch
 		PreviousHash: ChainHash(blockHeader.PrevBlock),
 		ChainWork:    chainWork,
 		Winners:      winners,
+		CoinAmounts:  blockCoinAmounts(msgBlock),
 	}
 }
 

@@ -471,6 +471,7 @@ func upgradeSchemaMultiCoin(db *sql.DB) error {
 			THEN ALTER TABLE votes ALTER COLUMN vote_reward TYPE TEXT USING vote_reward::TEXT;
 			END IF;
 		END $$`,
+		`ALTER TABLE blocks ADD COLUMN IF NOT EXISTS coin_amounts JSONB`,
 	}
 	for _, stmt := range stmts {
 		if _, err := db.Exec(stmt); err != nil {

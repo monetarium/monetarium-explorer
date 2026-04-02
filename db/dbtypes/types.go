@@ -2171,6 +2171,7 @@ type Block struct {
 	PreviousHash ChainHash   `json:"previousblockhash"`
 	ChainWork    string      `json:"chainwork"`
 	Winners      []ChainHash `json:"winners"`
+	CoinAmounts  map[uint8]string `json:"coin_amounts,omitempty"`
 }
 
 type BlockDataBasic struct {
