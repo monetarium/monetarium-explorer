@@ -662,3 +662,53 @@ Assert that the resulting VinTxProperty.CoinType == 1.
 
 Demo: After re-syncing, SELECT count(*) FROM vins WHERE coin_type != 0 returns a non-zero count matching the number of SKA inputs in the chain.
 
+
+> ### Task 15: Persist coin_amounts to the blocks table
+Commit: fix: persist coin_amounts in blocks table so SKA data survives restart
+
+Objective: CoinAmounts is computed at sync time and cached in memory, but never written to the DB. After a restart the cache is cold, retrieveBlockSummaryByHash returns 
+CoinAmounts == nil, and no SKA data appears in the UI. Fix by adding a coin_amounts JSONB column to blocks and round-tripping it through all affected insert/select 
+paths.
+
+db/dcrpg/internal/blockstmts.go:
+
+Add column to CreateBlockTable:
+sql
+coin_amounts JSONB
+
+
+Add to insertBlockRow (becomes $26):
+sql
+INSERT INTO blocks (..., coin_amounts) VALUES (..., $26)
+
+
+Add to SelectBlockDataByHash and SelectBlockDataByHeight SELECT lists:
+sql
+, blocks.coin_amounts
+
+
+db/dcrpg/queries.go — wherever insertBlockRow is executed, pass the new arg:
+go
+dbtypes.ToJSONB(blockSummary.CoinAmounts)  // $26
+
+
+In retrieveBlockSummaryByHash and retrieveBlockSummary, scan the new column and unmarshal:
+go
+var coinAmountsJSON []byte
+// add &coinAmountsJSON to the Scan call
+_ = json.Unmarshal(coinAmountsJSON, &bd.CoinAmounts)
+
+
+Do the same in retrieveBlockSummaryRange / retrieveBlockSummaryRangeStepped if they use the same SELECT.
+
+db/dcrpg/upgrades.go:
+sql
+ALTER TABLE blocks ADD COLUMN IF NOT EXISTS coin_amounts JSONB;
+
+
+Test: After a full restart with a cold cache, GET /api/block/{height} for a block containing SKA outputs must return a non-nil coin_amounts field. Assert in the existing
+TestGetBlockSummary_CoinAmounts handler test that the value survives a round-trip through json.Marshal → json.Unmarshal (i.e. no float64 precision loss on the atom 
+strings).
+
+Demo: Restart the explorer against a synced DB; the homepage latest-blocks table shows SKA-1 rows without requiring a re-sync.
+
