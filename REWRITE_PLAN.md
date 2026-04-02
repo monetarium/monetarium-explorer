@@ -613,3 +613,52 @@ Test: go test ./cmd/dcrdata/... passes with zero failures.
 Demo: CI green on the cmd/dcrdata module step.
 
 
+### Task 14: Fix missing coin_type on vins in processTransactions
+Commit: fix: set coin_type on VinTxProperty in processTransactions
+
+Objective: Every vin stored in the vins table has coin_type = 0 (VAR) even when it spends an SKA output, because CoinType is never assigned when building VinTxProperty 
+in processTransactions. Fix it.
+
+Root cause:
+
+In db/dbtypes/extraction.go, the vin construction loop omits CoinType:
+
+go
+dbTxVins[txIndex] = append(dbTxVins[txIndex], VinTxProperty{
+    // ... all fields set ...
+    // CoinType never assigned → defaults to 0 (VAR)
+})
+
+
+The vout loop directly below it correctly reads ct := txout.CoinType. The wire TxIn type has no CoinType field — the coin type of an input is the coin type of the output
+it spends. Since the codebase already assumes transactions are single-coin (see the skaSpent placeholder comment), the tx's coin type can be derived from its outputs.
+
+Fix — db/dbtypes/extraction.go:
+
+Before the vin loop, derive the transaction's coin type from its outputs (reusing the already-computed skaSent map):
+
+go
+// Derive vin coin type from outputs (tx is single-coin).
+vinCoinType := uint8(cointype.CoinTypeVAR)
+for ct := range skaSent {
+    vinCoinType = ct
+    break
+}
+
+
+Then set it in the VinTxProperty literal:
+
+go
+dbTxVins[txIndex] = append(dbTxVins[txIndex], VinTxProperty{
+    // ... existing fields ...
+    CoinType: vinCoinType,
+})
+
+
+No other files need changes — insertVinsStmt in queries.go already passes vin.CoinType as $8 to the SQL statement.
+
+Test: Add a case to db/dbtypes/extraction_test.go Test_processTransactions with a synthetic SKA-1 transaction (one TxIn with SKAValueIn set, one TxOut with CoinType=1). 
+Assert that the resulting VinTxProperty.CoinType == 1.
+
+Demo: After re-syncing, SELECT count(*) FROM vins WHERE coin_type != 0 returns a non-zero count matching the number of SKA inputs in the chain.
+
