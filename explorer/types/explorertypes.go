@@ -132,6 +132,37 @@ type BlockBasic struct {
 	// CoinRows holds per-coin row data for the expandable blocks table.
 	// Populated when available; nil means VAR-only (use Total).
 	CoinRows []CoinRowData `json:"coin_rows,omitempty"`
+	// Flattened fields derived from CoinRows for template rendering.
+	VARAmount  string
+	VARTxCount int
+	VARSize    uint32
+	SKAAmount  string
+	SKASubRows []SKASubRow
+}
+
+// FlattenCoinRows populates the template-facing flattened fields (VARAmount,
+// VARTxCount, VARSize, SKAAmount, SKASubRows) from CoinRows. Call this after
+// setting CoinRows.
+func (b *BlockBasic) FlattenCoinRows() {
+	for _, row := range b.CoinRows {
+		if row.CoinType == 0 {
+			b.VARAmount = row.Amount
+			b.VARTxCount = row.TxCount
+			b.VARSize = row.Size
+		} else {
+			b.SKASubRows = append(b.SKASubRows, SKASubRow{
+				TokenType: row.Symbol,
+				TxCount:   row.TxCount,
+				Amount:    row.Amount,
+				Size:      row.Size,
+			})
+			// Use the first SKA row's amount as the summary; callers may
+			// override SKAAmount with an aggregate if needed.
+			if b.SKAAmount == "" {
+				b.SKAAmount = row.Amount
+			}
+		}
+	}
 }
 
 // WebBasicBlock is used for quick DB data without rpc calls
@@ -442,6 +473,14 @@ type CoinRowData struct {
 	TxCount  int
 	Amount   string // formatted amount string
 	Size     uint32
+}
+
+// SKASubRow holds per-SKA-type data for the accordion sub-rows in the block table.
+type SKASubRow struct {
+	TokenType string
+	TxCount   int
+	Amount    string
+	Size      uint32
 }
 
 // CoinFillData holds per-coin mempool fill bar data.

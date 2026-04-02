@@ -1,15 +1,18 @@
 const { merge } = require('webpack-merge')
-const common = require('./webpack.common.js')
-const CssMinimizerPlugin = require('css-minimizer-webpack-plugin');
-const ESLintPlugin = require('eslint-webpack-plugin');
+const common = require('./webpack.common.cjs')
+const CssMinimizerPlugin = require('css-minimizer-webpack-plugin')
+const ESLintPlugin = require('eslint-webpack-plugin')
 
 module.exports = merge(common, {
   mode: 'production',
   devtool: 'source-map',
-  plugins: [new ESLintPlugin({
-    formatter: 'stylish',
-    threads: true
-  })],
+  plugins: [
+    new ESLintPlugin({
+      formatter: 'stylish',
+      threads: true
+    })
+  ],
+
   optimization: {
     usedExports: true,
     minimize: true,
@@ -18,18 +21,22 @@ module.exports = merge(common, {
       new CssMinimizerPlugin({})
     ]
   },
+
   module: {
     rules: [
       {
         test: /\.js$/,
-        exclude: /node_modules/,
+        exclude: [
+          /node_modules/,
+          /\.test\.js$/ // 👈 exclude test files
+        ],
         use: {
           loader: 'babel-loader',
           options: {
             presets: [
               '@babel/preset-env',
               {
-                "exclude": ["@babel/plugin-transform-regenerator"]
+                exclude: ['@babel/plugin-transform-regenerator']
               }
             ]
           }

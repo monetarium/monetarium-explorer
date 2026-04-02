@@ -44,17 +44,29 @@ body.darkBG .keynav-target {
 }
 
 @keyframes highlight {
-  0% { outline-color: #4582fe29; }
+  0% {
+    outline-color: #4582fe29;
+  }
 
-  50% { outline-color: #2970ff7a; }
+  50% {
+    outline-color: #2970ff7a;
+  }
 
-  100% { outline-color: #4582fe29; }
+  100% {
+    outline-color: #4582fe29;
+  }
 }
 
 @keyframes green-highlight {
-  0% { outline-color: #8defbf3b; }
+  0% {
+    outline-color: #8defbf3b;
+  }
 
-  33% { outline-color: #8defbf99; }
+  33% {
+    outline-color: #8defbf99;
+  }
 
-  100% { outline-color: #8defbf3b; }
+  100% {
+    outline-color: #8defbf3b;
+  }
 }

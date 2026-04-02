@@ -1,14 +1,14 @@
 // For all your value formatting needs...
 
-function logn (n, b) {
+function logn(n, b) {
   return Math.log(n) / Math.log(b)
 }
-function round (value, precision) {
+function round(value, precision) {
   const multiplier = Math.pow(10, precision || 0)
   return Math.round(value * multiplier) / multiplier
 }
 
-function hashParts (hash) {
+function hashParts(hash) {
   const clipLen = 6
   const hashLen = hash.length - clipLen
   if (hashLen < 1) {
@@ -22,7 +22,10 @@ const humanize = {
     if (isNaN(val) || val === 0) return '0'
     if (isNaN(decimal)) decimal = 2
     else if (decimal > 8) decimal = 8
-    return val.toLocaleString(undefined, { minimumFractionDigits: decimal, maximumFractionDigits: decimal })
+    return val.toLocaleString(undefined, {
+      minimumFractionDigits: decimal,
+      maximumFractionDigits: decimal
+    })
   },
   fmtPercentage: function (val) {
     let sign = '+'
@@ -41,7 +44,7 @@ const humanize = {
     const formattedVal = parseFloat(v).toFixed(precision)
     const chunks = formattedVal.split('.')
     const int = useCommas ? parseInt(chunks[0]).toLocaleString() : chunks[0]
-    const decimal = (chunks[1] || '')
+    const decimal = chunks[1] || ''
     let i = decimal.length
     let numTrailingZeros = 0
     while (i--) {
@@ -52,19 +55,21 @@ const humanize = {
       }
     }
     const decimalVals = decimal.slice(0, decimal.length - numTrailingZeros)
-    const trailingZeros = (numTrailingZeros === 0) ? '' : decimal.slice(-(numTrailingZeros))
+    const trailingZeros = numTrailingZeros === 0 ? '' : decimal.slice(-numTrailingZeros)
 
     let htmlString = '<div class="decimal-parts d-inline-block">'
 
     if (!isNaN(lgDecimals) && lgDecimals > 0) {
-      htmlString += `<span class="int">${int}.${decimalVals.substring(0, lgDecimals)}</span>` +
-      `<span class="decimal">${decimalVals.substring(lgDecimals, decimalVals.length)}</span>` +
-      `<span class="decimal trailing-zeroes">${trailingZeros}</span>`
+      htmlString +=
+        `<span class="int">${int}.${decimalVals.substring(0, lgDecimals)}</span>` +
+        `<span class="decimal">${decimalVals.substring(lgDecimals, decimalVals.length)}</span>` +
+        `<span class="decimal trailing-zeroes">${trailingZeros}</span>`
     } else if (precision !== 0) {
-      htmlString += `<span class="int">${int}</span>` +
-      '<span class="decimal dot">.</span>' +
-      `<span class="decimal">${decimalVals}</span>` +
-      `<span class="decimal trailing-zeroes">${trailingZeros}</span>`
+      htmlString +=
+        `<span class="int">${int}</span>` +
+        '<span class="decimal dot">.</span>' +
+        `<span class="decimal">${decimalVals}</span>` +
+        `<span class="decimal trailing-zeroes">${trailingZeros}</span>`
     } else {
       htmlString += `<span class="int">${int}</span>`
     }
@@ -102,45 +107,46 @@ const humanize = {
     return parseFloat(v).toFixed(2)
   },
   subsidyToString: function (x, y = 1) {
-    return (x / 100000000 / y) + ' DCR'
+    return `${x / 100000000 / y} DCR`
   },
-  bytes: function (s) { // from go-humanize
+  bytes: function (s) {
+    // from go-humanize
     const sizes = ['B', 'kB', 'MB', 'GB', 'TB', 'PB', 'EB']
     if (s < 10) {
-      return s + 'B'
+      return `${s}B`
     }
     const e = Math.floor(logn(s, 1000))
     const suffix = sizes[e]
-    const val = Math.floor(s / Math.pow(1000, e) * 10 + 0.5) / 10
-    const precision = (val < 10) ? 1 : 0
-    return round(val, precision) + ' ' + suffix
+    const val = Math.floor((s / Math.pow(1000, e)) * 10 + 0.5) / 10
+    const precision = val < 10 ? 1 : 0
+    return `${round(val, precision)} ${suffix}`
   },
   timeSince: function (unixTime, keepOnly) {
-    const seconds = Math.floor(((new Date().getTime() / 1000) - unixTime))
+    const seconds = Math.floor(new Date().getTime() / 1000 - unixTime)
     let interval = Math.floor(seconds / 31536000)
     if (interval >= 1) {
       const extra = Math.floor((seconds - interval * 31536000) / 2628000)
-      let result = interval + 'y'
+      let result = `${interval}y`
       if (extra > 0 && keepOnly !== 'years') {
-        result = result + ' ' + extra + 'mo'
+        result = `${result} ${extra}mo`
       }
       return result
     }
     interval = Math.floor(seconds / 2628000)
     if (interval >= 1) {
       const extra = Math.floor((seconds - interval * 2628000) / 86400)
-      let result = interval + 'mo'
+      let result = `${interval}mo`
       if (extra > 0 && keepOnly !== 'months') {
-        result = result + ' ' + extra + 'd'
+        result = `${result} ${extra}d`
       }
       return result
     }
     interval = Math.floor(seconds / 86400)
     if (interval >= 1) {
       const extra = Math.floor((seconds - interval * 86400) / 3600)
-      let result = interval + 'd'
+      let result = `${interval}d`
       if (extra > 0 && keepOnly !== 'days') {
-        result = result + ' ' + extra + 'h'
+        result = `${result} ${extra}h`
       }
       return result
     }
@@ -150,22 +156,22 @@ const humanize = {
     interval = Math.floor(seconds / 3600)
     if (interval >= 1) {
       const extra = Math.floor((seconds - interval * 3600) / 60)
-      let result = interval + 'h'
+      let result = `${interval}h`
       if (extra > 0) {
-        result = result + ' ' + pad(extra) + 'm'
+        result = `${result} ${pad(extra)}m`
       }
       return result
     }
     interval = Math.floor(seconds / 60)
     if (interval >= 1) {
       const extra = seconds - interval * 60
-      let result = pad(interval) + 'm'
+      let result = `${pad(interval)}m`
       if (extra > 0) {
-        result = result + ' ' + pad(extra) + 's'
+        result = `${result} ${pad(extra)}s`
       }
       return result
     }
-    return pad(Math.floor(seconds)) + 's'
+    return `${pad(Math.floor(seconds))}s`
   },
   date: function (stamp, withTimezone, hideHisForMidnight) {
     const d = new Date(stamp)

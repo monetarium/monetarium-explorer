@@ -1,0 +1,68 @@
+{{define "home_latest_blocks"}}
+  <table class="table w-100 mt-2 mx-auto mb-0 last-blocks-table">
+    <thead>
+      <tr>
+        <th class="text-start ps-2 position-relative" data-tooltip="block height">Height</th>
+        <th class="text-end position-relative" data-tooltip="number of transactions">Txn</th>
+        <th class="text-end position-relative" data-tooltip="total VAR amount">VAR</th>
+        <th class="text-end position-relative" data-tooltip="total SKA amount">SKA</th>
+        <th class="text-end d-none d-sm-table-cell d-md-none d-lg-table-cell position-relative" data-tooltip="total block size">Size</th>
+        <th class="text-end position-relative" data-tooltip="tickets voted">Vote</th>
+        <th class="text-end position-relative" data-tooltip="tickets purchased">Tkt</th>
+        <th class="text-end d-none d-sm-table-cell d-md-none d-lg-table-cell position-relative" data-tooltip="tickets revoked">Rev</th>
+        <th class="text-end position-relative" data-time-target="header" data-jstitle="Age" data-tooltip="block age">Age</th>
+      </tr>
+    </thead>
+    <tbody data-controller="ska-accordion" data-blocklist-target="table">
+      {{range .Blocks}}
+      {{$blockHeight := .Height}}
+      <tr
+        class="block-row-expandable"
+        data-ska-accordion-target="blockRow"
+        data-block-id="{{.Height}}"
+        data-height="{{.Height}}"
+        data-link-class="fs18"
+        data-action="click->ska-accordion#toggle"
+      >
+        <td class="text-start ps-1" data-type="height">
+          <a href="/block/{{.Height}}" class="fs18">{{.Height}}</a>
+        </td>
+        <td class="text-end num" data-type="tx">{{.Transactions}}</td>
+        <td class="text-end num" data-type="var-amount">{{.VARAmount}}</td>
+        <td class="text-end num" data-type="ska-amount">{{.SKAAmount}}</td>
+        <td class="text-end num d-none d-sm-table-cell d-md-none d-lg-table-cell" data-type="size">{{.FormattedBytes}}</td>
+        <td class="text-end num" data-type="votes">{{.Voters}}</td>
+        <td class="text-end num" data-type="tickets">{{.FreshStake}}</td>
+        <td class="text-end num d-none d-sm-table-cell d-md-none d-lg-table-cell" data-type="revocations">{{.Revocations}}</td>
+        <td class="text-end num" data-type="age" data-time-target="age" data-age="{{.BlockTime.UNIX}}">
+          {{.BlockTime.DatetimeWithoutTZ}}
+        </td>
+      </tr>
+      <tr class="ska-sub-row" data-ska-accordion-target="subRow" data-block-id="{{$blockHeight}}">
+        <td class="text-start ps-1"><span class="sub-row-label">VAR</span></td>
+        <td class="text-end num">{{.VARTxCount}}</td>
+        <td class="text-end num">{{.VARAmount}}</td>
+        <td class="text-end">—</td>
+        <td class="text-end num d-none d-sm-table-cell d-md-none d-lg-table-cell">{{.VARSize}}</td>
+        <td class="text-end">—</td>
+        <td class="text-end">—</td>
+        <td class="text-end d-none d-sm-table-cell d-md-none d-lg-table-cell">—</td>
+        <td class="text-end">—</td>
+      </tr>
+      {{range .SKASubRows}}
+      <tr class="ska-sub-row" data-ska-accordion-target="subRow" data-block-id="{{$blockHeight}}">
+        <td class="text-start ps-1"><span class="sub-row-label">{{.TokenType}}</span></td>
+        <td class="text-end num">{{.TxCount}}</td>
+        <td class="text-end">—</td>
+        <td class="text-end num">{{.Amount}}</td>
+        <td class="text-end num d-none d-sm-table-cell d-md-none d-lg-table-cell">{{.Size}}</td>
+        <td class="text-end">—</td>
+        <td class="text-end">—</td>
+        <td class="text-end d-none d-sm-table-cell d-md-none d-lg-table-cell">—</td>
+        <td class="text-end">—</td>
+      </tr>
+      {{end}}
+      {{end}}
+    </tbody>
+  </table>
+{{end}}

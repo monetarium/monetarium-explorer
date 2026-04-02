@@ -209,3 +209,52 @@ a.grayed {
 .fw-bold .decimal-parts .int {
   padding-right: 0.2em;
 }
+
+.link-button {
+  // Reset button styles
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+
+  // Typography
+  font: inherit;
+  line-height: inherit;
+
+  // Inherit body text color — not a link color variable
+  color: inherit;
+  text-decoration: none;
+  border-bottom: 1px dotted color-mix(in srgb, currentColor 50%, transparent);
+  cursor: pointer;
+
+  // Remove default button quirks
+  display: inline;
+
+  &:hover {
+    color: var(--bs-primary);
+    border-bottom: 1px solid currentColor;
+    cursor: pointer;
+  }
+
+  &:focus {
+    outline: 0;
+    border-bottom: 1px solid currentColor;
+  }
+
+  &:focus-visible {
+    outline: 0;
+    box-shadow: var(--bs-focus-ring-x, 0 0 0 0.25rem rgb(var(--bs-primary-rgb) / 25%));
+    border-radius: 0.25rem;
+  }
+
+  &:active {
+    color: var(--bs-primary);
+  }
+
+  &:disabled {
+    color: var(--bs-link-disabled-color, #6c757d);
+    pointer-events: none;
+    cursor: default;
+    text-decoration: none;
+  }
+}

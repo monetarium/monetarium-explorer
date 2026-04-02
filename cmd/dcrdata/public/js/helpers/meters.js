@@ -1,16 +1,18 @@
 const PIPI = 2 * Math.PI
 
-function makePt (x, y) { return { x, y } }
+function makePt(x, y) {
+  return { x, y }
+}
 
-function addOffset (pt, offset) {
+function addOffset(pt, offset) {
   return {
     x: pt.x + offset.x,
     y: pt.y + offset.y
   }
 }
 
-function sleep (ms) {
-  return new Promise(resolve => setTimeout(resolve, ms))
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 // Meter provides basic drawing and math utilities for a meter object, which
@@ -21,7 +23,7 @@ function sleep (ms) {
 // being a semi-circle. Any contents of parent will be replaced with the Meter.
 // Apply class .lil for a smaller meter.
 class Meter {
-  constructor (parent, opts) {
+  constructor(parent, opts) {
     opts = opts || {}
     this.options = opts
     this.radius = opts.radius || 0.4
@@ -74,23 +76,23 @@ class Meter {
     this.failmark = String.fromCharCode(10008)
   }
 
-  roundCap () {
+  roundCap() {
     this.ctx.lineCap = 'round'
   }
 
-  buttCap () {
+  buttCap() {
     this.ctx.lineCap = 'butt'
   }
 
-  denorm (x) {
+  denorm(x) {
     return x * this.dimension
   }
 
-  norm (x) {
+  norm(x) {
     return x / this.dimension
   }
 
-  normedPolarToCartesian (normed, normedTheta) {
+  normedPolarToCartesian(normed, normedTheta) {
     // maps radius: [0,1] to [0,width], and angle: [0,1] to [0,2PI]
     const r = this.denorm(normed)
     const theta = this.denormTheta(normedTheta)
@@ -100,28 +102,28 @@ class Meter {
     }
   }
 
-  denormTheta (theta) {
+  denormTheta(theta) {
     // [0, 1] to [this.meterSpecs.startTheta, this.meterSpecs.endTheta]
     return this.meterSpecs.startTheta + theta * this.meterSpecs.range
   }
 
-  denormThetaRange (start, end) {
+  denormThetaRange(start, end) {
     return {
       start: this.denormTheta(start),
       end: this.denormTheta(end)
     }
   }
 
-  setDarkMode (nightMode) {
+  setDarkMode(nightMode) {
     this.activeTheme = nightMode ? this.darkTheme : this.lightTheme
     this.draw()
   }
 
-  clear () {
+  clear() {
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height)
   }
 
-  dot (pt, color, radius) {
+  dot(pt, color, radius) {
     pt = addOffset(pt, this.offset)
     const ctx = this.ctx
     ctx.fillStyle = color
@@ -130,17 +132,23 @@ class Meter {
     ctx.fill()
   }
 
-  segment (start, end, color) {
+  segment(start, end, color) {
     // A segment of the strip, where 0 <= start < end <= 1.
     const ctx = this.ctx
     ctx.strokeStyle = color
     const range = this.denormThetaRange(start, end)
     ctx.beginPath()
-    ctx.arc(this.offsetMiddle.x, this.offsetMiddle.y, this.denorm(this.radius), range.start, range.end)
+    ctx.arc(
+      this.offsetMiddle.x,
+      this.offsetMiddle.y,
+      this.denorm(this.radius),
+      range.start,
+      range.end
+    )
     ctx.stroke()
   }
 
-  line (start, end) {
+  line(start, end) {
     // set ctx.lineWidth and ctx.strokeStyle before drawing.
     start = addOffset(start, this.offset)
     end = addOffset(end, this.offset)
@@ -151,13 +159,13 @@ class Meter {
     ctx.stroke()
   }
 
-  write (text, pt, maxWidth) {
+  write(text, pt, maxWidth) {
     // Set ctx.textAlign and ctx.textBaseline for additional alignment options.
     pt = addOffset(pt, this.offset)
     this.ctx.fillText(text, pt.x, pt.y, maxWidth)
   }
 
-  drawIndicator (value, color) {
+  drawIndicator(value, color) {
     const ctx = this.ctx
     const opts = this.options
     const theme = this.activeTheme
@@ -172,7 +180,7 @@ class Meter {
     this.line(start, end)
   }
 
-  async animate (key, target) {
+  async animate(key, target) {
     // key is a string referencing any property of Meter.data.
     const opts = this.options
     this.animationEnd[key] = new Date().getTime() + opts.animationLength
@@ -185,7 +193,7 @@ class Meter {
       const remainingTime = this.animationEnd[key] - now
       const progress = this.data[key]
       const toGo = this.animationTarget[key] - progress
-      const step = toGo * frameDuration / remainingTime
+      const step = (toGo * frameDuration) / remainingTime
       await sleep(frameDuration)
       this.data[key] = progress + step
       this.draw()
@@ -201,7 +209,7 @@ class Meter {
 // should have property parent.dataset.threshold set to the pass threshold [0,1],
 // and parent.dataset.approval set to the current approval rate.
 export class VoteMeter extends Meter {
-  constructor (parent, opts) {
+  constructor(parent, opts) {
     super(parent, opts)
     this.writeCentralPercent = wcp.bind(this)
     this.buttCap()
@@ -239,7 +247,7 @@ export class VoteMeter extends Meter {
     super.animate('approval', progress)
   }
 
-  draw () {
+  draw() {
     super.clear()
     const ctx = this.ctx
     const opts = this.options
@@ -257,10 +265,14 @@ export class VoteMeter extends Meter {
     this.segment(this.approveThreshold, 1, opts.approveColor)
     ctx.strokeStyle = trayColor
     ctx.lineWidth = 2
-    super.line(super.normedPolarToCartesian(this.radius + this.norm(borderWidth / 2), 0),
-      super.normedPolarToCartesian(this.radius - this.norm(borderWidth / 2), 0))
-    super.line(super.normedPolarToCartesian(this.radius + this.norm(borderWidth / 2), 1),
-      super.normedPolarToCartesian(this.radius - this.norm(borderWidth / 2), 1))
+    super.line(
+      super.normedPolarToCartesian(this.radius + this.norm(borderWidth / 2), 0),
+      super.normedPolarToCartesian(this.radius - this.norm(borderWidth / 2), 0)
+    )
+    super.line(
+      super.normedPolarToCartesian(this.radius + this.norm(borderWidth / 2), 1),
+      super.normedPolarToCartesian(this.radius - this.norm(borderWidth / 2), 1)
+    )
 
     // Draw the indicator icon, which is a checkmark if the measure is currently
     // passing.
@@ -297,7 +309,7 @@ export class VoteMeter extends Meter {
 // parent.dataset.threshold set to the progress threshold [0,1], and
 // parent.dataset.progress set to the current value.
 export class ProgressMeter extends Meter {
-  constructor (parent, opts) {
+  constructor(parent, opts) {
     super(parent, opts)
     this.writeCentralPercent = wcp.bind(this)
     this.buttCap()
@@ -329,7 +341,7 @@ export class ProgressMeter extends Meter {
     this.animate('progress', progress)
   }
 
-  draw () {
+  draw() {
     super.clear()
     const ctx = this.ctx
     const opts = this.options
@@ -356,7 +368,7 @@ export class ProgressMeter extends Meter {
 }
 
 // wcp is the writeCentralPercent method used by VoteMeter and ProgressMeter.
-function wcp (v) {
+function wcp(v) {
   const [ctx, opts] = [this.ctx, this.options]
   ctx.save()
   const [whole, fraction] = (v * 100).toFixed(2).split('.')
@@ -389,7 +401,7 @@ function wcp (v) {
 // segment's end. The MiniMeter is designed to work with the .arch.lil CSS
 // classes, but not limited to that particular class.
 export class MiniMeter extends Meter {
-  constructor (parent, opts) {
+  constructor(parent, opts) {
     super(parent, opts)
     this.buttCap()
     opts = this.options
@@ -402,7 +414,7 @@ export class MiniMeter extends Meter {
     this.draw()
   }
 
-  draw () {
+  draw() {
     super.clear()
     const ctx = this.ctx
     const opts = this.options
@@ -411,7 +423,7 @@ export class MiniMeter extends Meter {
 
     // Draw the segments.
     let start = 0
-    opts.segments.forEach(segment => {
+    opts.segments.forEach((segment) => {
       super.segment(start, segment.end, segment.color)
       start = segment.end
     })

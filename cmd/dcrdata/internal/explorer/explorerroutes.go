@@ -178,12 +178,6 @@ func (exp *explorerUI) Home(w http.ResponseWriter, r *http.Request) {
 	}
 
 	blocks := exp.dataSource.GetExplorerBlocks(ctx, int(height), int(height)-8)
-	var bestBlock *types.BlockBasic
-	if blocks == nil {
-		bestBlock = new(types.BlockBasic)
-	} else {
-		bestBlock = blocks[0]
-	}
 
 	// Safely retrieve the current inventory pointer.
 	inv := exp.MempoolInventory()
@@ -191,8 +185,6 @@ func (exp *explorerUI) Home(w http.ResponseWriter, r *http.Request) {
 	// Lock the shared inventory struct from change (e.g. in MempoolMonitor).
 	inv.RLock()
 	exp.pageData.RLock()
-
-	tallys, consensus := inv.VotingInfo.BlockStatus(bestBlock.Hash)
 
 	// Get fiat conversions if available
 	homeInfo := exp.pageData.HomeInfo
@@ -213,20 +205,14 @@ func (exp *explorerUI) Home(w http.ResponseWriter, r *http.Request) {
 		*CommonPageData
 		Info          *types.HomeInfo
 		Mempool       *types.MempoolInfo
-		BestBlock     *types.BlockBasic
-		BlockTally    []int
-		Consensus     int
-		Blocks        []*types.BlockBasic
+		Blocks        []HomeBlockRow
 		Conversions   *homeConversions
 		PercentChange float64
 	}{
 		CommonPageData: exp.commonData(r),
 		Info:           homeInfo,
 		Mempool:        inv,
-		BestBlock:      bestBlock,
-		BlockTally:     tallys,
-		Consensus:      consensus,
-		Blocks:         blocks,
+		Blocks:         buildHomeBlockRows(blocks),
 		Conversions:    conversions,
 		PercentChange:  homeInfo.PoolInfo.PercentTarget - 100,
 	})

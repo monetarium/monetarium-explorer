@@ -81,3 +81,85 @@ body.darkBG .light-card {
 body.darkBG .dark-card {
   background-color: #333;
 }
+
+// SKA accordion sub-rows
+.ska-sub-row {
+  display: none;
+
+  &--visible {
+    display: table-row;
+    background-color: $card-bg-secondary;
+  }
+}
+
+body.darkBG .ska-sub-row--visible {
+  background-color: $card-bg-secondary-dark;
+}
+
+.last-blocks-table td,
+.last-blocks-table th {
+  white-space: nowrap;
+}
+
+// Column minimum widths — single source of truth.
+// Sized to the widest expected content so expanding sub-rows never shift columns.
+// Formula: max-content-chars × 1ch + Bootstrap cell padding (0.5rem/side = 1rem total).
+// Col  Max content
+// 1    "1,878,074" / "SKA-255"
+// 2    Txn "9999"
+// 3    VAR "100.00B"
+// 4    SKA "100.00B"
+// 5    Size "999.9 MB"
+// 6    Vote "5"
+// 7    Tkt  "5"
+// 8    Rev  "3"
+// 9    Age  "22m 48s"
+$col-min-widths: (
+  1: calc(7ch + 1rem),
+  2: calc(2ch + 1rem),
+  3: calc(5ch + 1rem),
+  4: calc(5ch + 1rem),
+  5: calc(6ch + 1rem),
+  6: calc(2ch + 1rem),
+  7: calc(2ch + 1rem),
+  8: calc(2ch + 1rem),
+  9: calc(6ch + 1rem)
+);
+
+@each $n, $w in $col-min-widths {
+  .last-blocks-table th:nth-child(#{$n}) {
+    min-width: $w;
+  }
+}
+
+// Expandable block rows — whole row is the click target
+.block-row-expandable {
+  cursor: pointer;
+}
+
+.last-blocks-table .block-row-expandable.is-expanded td {
+  border-bottom-color: transparent;
+}
+
+// Hover and expanded backgrounds
+// 1. Desktop Hover: Only applies when a real mouse/pointer is used
+@media (hover: hover) and (pointer: fine) {
+  .last-blocks-table .block-row-expandable:hover td {
+    background-color: $block-row-hover;
+  }
+
+  body.darkBG .last-blocks-table .block-row-expandable:hover td {
+    background-color: $block-row-hover-dark;
+  }
+}
+
+// 2. Kill sticky hover on mobile
+@media (hover: none) {
+  .last-blocks-table .block-row-expandable:hover td {
+    background-color: inherit;
+  }
+
+  body.darkBG .last-blocks-table .block-row-expandable:hover td {
+    background-color: inherit;
+  }
+}

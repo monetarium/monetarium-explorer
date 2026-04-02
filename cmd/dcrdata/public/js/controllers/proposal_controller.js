@@ -1,12 +1,12 @@
 import { Controller } from '@hotwired/stimulus'
-import { MiniMeter } from '../helpers/meters.js'
-import { darkEnabled } from '../services/theme_service'
-import globalEventBus from '../services/event_bus_service'
-import { getDefault } from '../helpers/module_helper'
-import { multiColumnBarPlotter, synchronize } from '../helpers/chart_helper'
 import dompurify from 'dompurify'
-import humanize from '../helpers/humanize_helper'
+import { multiColumnBarPlotter, synchronize } from '../helpers/chart_helper'
 import { requestJSON } from '../helpers/http'
+import humanize from '../helpers/humanize_helper'
+import { MiniMeter } from '../helpers/meters.js'
+import { getDefault } from '../helpers/module_helper'
+import globalEventBus from '../services/event_bus_service'
+import { darkEnabled } from '../services/theme_service'
 
 const common = {
   labelsKMB: true,
@@ -61,16 +61,19 @@ const cumulativeConfig = {
   }
 }
 
-function legendFormatter (data) {
+function legendFormatter(data) {
   let html
   if (data.x == null) {
-    html = data.series.map(function (series) {
-      return series.dashHTML + ' <span style="color:' +
-        series.color + ';">' + series.labelHTML + ' </span> '
-    }).join('')
+    html = data.series
+      .map((series) => {
+        return `${series.dashHTML} <span style="color:${series.color};">${
+          series.labelHTML
+        } </span> `
+      })
+      .join('')
   } else {
-    html = this.getLabels()[0] + ': ' + humanize.date(data.x) + ' UTC &nbsp;&nbsp;'
-    data.series.forEach(function (series, index) {
+    html = `${this.getLabels()[0]}: ${humanize.date(data.x)} UTC &nbsp;&nbsp;`
+    data.series.forEach((series, index) => {
       if (!series.isVisible) return
 
       let symbol = ''
@@ -83,9 +86,10 @@ function legendFormatter (data) {
         // html += ' <br> '
       }
 
-      const labeledData = '<span style="color:' + series.color + ';">' +
-        series.labelHTML + ' </span> : ' + Math.abs(series.y)
-      html += series.dashHTML + ' ' + labeledData + '' + symbol + ' &nbsp;'
+      const labeledData = `<span style="color:${series.color};">${
+        series.labelHTML
+      } </span> : ${Math.abs(series.y)}`
+      html += `${series.dashHTML} ${labeledData}${symbol} &nbsp;`
     })
   }
   dompurify.sanitize(html, { FORBID_TAGS: ['svg', 'math'] })
@@ -111,13 +115,20 @@ let percentData
 let cumulativeData
 let hourlyVotesData
 export default class extends Controller {
-  static get targets () {
-    return ['token', 'approvalMeter', 'cumulative', 'cumulativeLegend',
-      'approval', 'approvalLegend', 'log', 'logLegend'
+  static get targets() {
+    return [
+      'token',
+      'approvalMeter',
+      'cumulative',
+      'cumulativeLegend',
+      'approval',
+      'approvalLegend',
+      'log',
+      'logLegend'
     ]
   }
 
-  async connect () {
+  async connect() {
     if (!this.hasApprovalMeterTarget) return // there will be no meter or charts
 
     const d = this.approvalMeterTarget.dataset
@@ -130,7 +141,7 @@ export default class extends Controller {
     }
     this.approvalMeter = new MiniMeter(this.approvalMeterTarget, opts)
 
-    chartData = await requestJSON('/api/proposal/' + this.tokenTarget.dataset.hash)
+    chartData = await requestJSON(`/api/proposal/${this.tokenTarget.dataset.hash}`)
     if (!chartData) return
     Dygraph = await getDefault(
       import(/* webpackChunkName: "dygraphs" */ '../vendor/dygraphs.min.js')
@@ -142,12 +153,14 @@ export default class extends Controller {
     globalEventBus.on('NIGHT_MODE', this.setNightMode)
   }
 
-  disconnect () {
-    gs.map((chart) => { chart.destroy() })
+  disconnect() {
+    gs.forEach((chart) => {
+      chart.destroy()
+    })
     globalEventBus.off('NIGHT_MODE', this.setNightMode)
   }
 
-  setChartsData () {
+  setChartsData() {
     let total = 0
     let yes = 0
     let hourlyYes = 0
@@ -159,10 +172,10 @@ export default class extends Controller {
     cumulativeData = []
     hourlyVotesData = []
 
-    chartData.time.map((n, i) => {
+    chartData.time.forEach((n, i) => {
       const formatedDate = new Date(n * 1000)
       yes += chartData.yes[i]
-      total += (chartData.no[i] + chartData.yes[i])
+      total += chartData.no[i] + chartData.yes[i]
 
       const percent = ((yes * 100) / total).toFixed(2)
 
@@ -192,26 +205,14 @@ export default class extends Controller {
     hourlyVotesData.push([lastDate, 0, 0])
   }
 
-  plotGraph () {
+  plotGraph() {
     percentConfig.labelsDiv = this.approvalLegendTarget
     cumulativeConfig.labelsDiv = this.cumulativeLegendTarget
     hourlyVotesConfig.labelsDiv = this.logLegendTarget
     gs = [
-      new Dygraph(
-        this.approvalTarget,
-        percentData,
-        percentConfig
-      ),
-      new Dygraph(
-        this.cumulativeTarget,
-        cumulativeData,
-        cumulativeConfig
-      ),
-      new Dygraph(
-        this.logTarget,
-        hourlyVotesData,
-        hourlyVotesConfig
-      )
+      new Dygraph(this.approvalTarget, percentData, percentConfig),
+      new Dygraph(this.cumulativeTarget, cumulativeData, cumulativeConfig),
+      new Dygraph(this.logTarget, hourlyVotesData, hourlyVotesConfig)
     ]
 
     const options = {
@@ -222,7 +223,7 @@ export default class extends Controller {
     synchronize(gs, options)
   }
 
-  _setNightMode (state) {
+  _setNightMode(state) {
     if (this.approvalMeter) {
       this.approvalMeter.setDarkMode(state.nightMode)
     }

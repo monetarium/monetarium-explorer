@@ -2,11 +2,11 @@ import { Controller } from '@hotwired/stimulus'
 import ws from '../services/messagesocket_service'
 
 export default class extends Controller {
-  static get targets () {
+  static get targets() {
     return ['indicator', 'status']
   }
 
-  connect () {
+  connect() {
     this.indicatorTarget.classList.remove('hidden')
 
     ws.registerEvtHandler('open', () => {
@@ -29,7 +29,7 @@ export default class extends Controller {
     })
   }
 
-  updateConnectionStatus (msg, connected) {
+  updateConnectionStatus(msg, connected) {
     if (connected) {
       this.indicatorTarget.classList.add('connected')
       this.indicatorTarget.classList.remove('disconnected')
@@ -40,7 +40,7 @@ export default class extends Controller {
     this.statusTarget.textContent = `${msg} `
   }
 
-  requestNotifyPermission () {
+  requestNotifyPermission() {
     if (window.Notification.permission === 'granted') return
     if (window.Notification.permission !== 'denied') window.Notification.requestPermission()
   }

@@ -1,4 +1,4 @@
-export function addPauseToMousetrap (Mousetrap) {
+export function addPauseToMousetrap(Mousetrap) {
   var _originalStopCallback = Mousetrap.prototype.stopCallback
   Mousetrap.prototype.stopCallback = function (e, element, combo) {
     var self = this

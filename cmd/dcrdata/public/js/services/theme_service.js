@@ -4,11 +4,11 @@ import globalEventBus from './event_bus_service'
 const sunIcon = document.getElementById('sun-icon')
 const darkBGCookieName = 'dcrdataDarkBG'
 
-export function darkEnabled () {
+export function darkEnabled() {
   return document.cookie.includes(darkBGCookieName)
 }
 
-function menuToggle () {
+function menuToggle() {
   return document.querySelector('#menu-toggle input')
 }
 
@@ -17,17 +17,17 @@ if (darkEnabled()) {
 } else {
   toggleToLightClasses(document.body)
 }
-function toggleToDarkClasses (body) {
+function toggleToDarkClasses(body) {
   sunIcon.classList.remove('dcricon-sun-fill')
   sunIcon.classList.add('dcricon-sun-stroke')
   body.classList.add('darkBG')
 }
-function toggleToLightClasses (body) {
+function toggleToLightClasses(body) {
   body.classList.remove('darkBG')
   sunIcon.classList.remove('dcricon-sun-stroke')
   sunIcon.classList.add('dcricon-sun-fill')
 }
-export function toggleSun () {
+export function toggleSun() {
   if (darkEnabled()) {
     setCookie(darkBGCookieName, '', 0)
     toggleToLightClasses(document.body)
@@ -39,7 +39,7 @@ export function toggleSun () {
   }
 }
 
-document.addEventListener('turbolinks:before-render', function (event) {
+document.addEventListener('turbolinks:before-render', (event) => {
   if (darkEnabled()) {
     toggleToDarkClasses(event.data.newBody)
   } else {
@@ -47,13 +47,13 @@ document.addEventListener('turbolinks:before-render', function (event) {
   }
 })
 
-export function toggleMenu () {
+export function toggleMenu() {
   const checkbox = menuToggle()
   checkbox.checked = !checkbox.checked
   checkbox.dispatchEvent(new window.Event('change'))
 }
 
-export function closeMenu () {
+export function closeMenu() {
   const checkbox = menuToggle()
   if (!checkbox.checked) return
   checkbox.checked = false

@@ -4,13 +4,11 @@ import { darkEnabled } from '../services/theme_service'
 import { VoteMeter, ProgressMeter } from '../helpers/meters.js'
 
 export default class extends Controller {
-  static get targets () {
-    return [
-      'minerMeter', 'voterMeter'
-    ]
+  static get targets() {
+    return ['minerMeter', 'voterMeter']
   }
 
-  connect () {
+  connect() {
     this.minerMeter = this.voterMeter = null
     this.meters = []
     const opts = {
@@ -36,11 +34,11 @@ export default class extends Controller {
     globalEventBus.on('NIGHT_MODE', this.setNightMode)
   }
 
-  disconnect () {
+  disconnect() {
     globalEventBus.off('NIGHT_MODE', this.setNightMode)
   }
 
-  _setNightMode (state) {
+  _setNightMode(state) {
     this.meters.forEach((meter) => {
       meter.setDarkMode(state.nightMode)
     })

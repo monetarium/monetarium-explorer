@@ -3,17 +3,11 @@ import ws from '../services/messagesocket_service'
 import { fadeIn } from '../helpers/animation_helper'
 
 export default class extends Controller {
-  static get targets () {
-    return [
-      'decode',
-      'broadcast',
-      'rawTransaction',
-      'decodedTransaction',
-      'decodeHeader'
-    ]
+  static get targets() {
+    return ['decode', 'broadcast', 'rawTransaction', 'decodedTransaction', 'decodeHeader']
   }
 
-  connect () {
+  connect() {
     ws.registerEvtHandler('decodetxResp', (evt) => {
       this.decodeHeaderTarget.textContent = 'Decoded tx'
       fadeIn(this.decodedTransactionTarget)
@@ -26,12 +20,12 @@ export default class extends Controller {
     })
   }
 
-  disconnect () {
+  disconnect() {
     ws.deregisterEvtHandlers('decodetxResp')
     ws.deregisterEvtHandlers('sendtxResp')
   }
 
-  send (e) {
+  send(e) {
     if (e.type === 'keypress' && e.keyCode !== 13) {
       return
     }

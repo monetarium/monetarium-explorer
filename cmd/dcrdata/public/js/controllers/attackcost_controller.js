@@ -1,16 +1,21 @@
 import { Controller } from '@hotwired/stimulus'
-import TurboQuery from '../helpers/turbolinks_helper'
-import { getDefault } from '../helpers/module_helper'
-import globalEventBus from '../services/event_bus_service'
 import dompurify from 'dompurify'
+import { getDefault } from '../helpers/module_helper'
+import TurboQuery from '../helpers/turbolinks_helper'
+import globalEventBus from '../services/event_bus_service'
 
-function digitformat (amount, decimalPlaces, noComma) {
+function digitformat(amount, decimalPlaces, noComma) {
   if (!amount) return 0
 
   if (noComma) return amount.toFixed(decimalPlaces)
 
   decimalPlaces = decimalPlaces || 0
-  const result = parseFloat(amount).toLocaleString(undefined, { minimumFractionDigits: decimalPlaces, maximumFractionDigits: decimalPlaces }).replace(/\.0*$/, '')
+  const result = parseFloat(amount)
+    .toLocaleString(undefined, {
+      minimumFractionDigits: decimalPlaces,
+      maximumFractionDigits: decimalPlaces
+    })
+    .replace(/\.0*$/, '')
   if (result.indexOf('.') > -1 && result.endsWith('0')) {
     return removeTrailingZeros(result)
   }
@@ -18,7 +23,7 @@ function digitformat (amount, decimalPlaces, noComma) {
   return result
 }
 
-function removeTrailingZeros (value) {
+function removeTrailingZeros(value) {
   value = value.toString()
   if (value.indexOf('.') === -1) {
     return value
@@ -41,7 +46,7 @@ function removeTrailingZeros (value) {
 let Dygraph // lazy loaded on connect
 let height, dcrPrice, hashrate, tpSize, tpValue, tpPrice, graphData, currentPoint, coinSupply
 
-function rateCalculation (y) {
+function rateCalculation(y) {
   y = y || 0.99 // 0.99 TODO confirm why 0.99 is used as default instead of 1
   const x = 1 - y
 
@@ -49,7 +54,10 @@ function rateCalculation (y) {
   // https://medium.com/decred/decreds-hybrid-protocol-a-superior-deterrent-to-majority-attacks-9421bf486292
   // (6 (1-f_s)⁵ -15(1-f_s) + 10(1-f_s)³) / (6f_s⁵-15f_s⁴ + 10f_s³)
   // (6x⁵-15x⁴ +10x³) / (6y⁵-15y⁴ +10y³) where y = this.value and x = 1-y
-  return ((6 * Math.pow(x, 5)) - (15 * Math.pow(x, 4)) + (10 * Math.pow(x, 3))) / ((6 * Math.pow(y, 5)) - (15 * Math.pow(y, 4)) + (10 * Math.pow(y, 3)))
+  return (
+    (6 * Math.pow(x, 5) - 15 * Math.pow(x, 4) + 10 * Math.pow(x, 3)) /
+    (6 * Math.pow(y, 5) - 15 * Math.pow(y, 4) + 10 * Math.pow(y, 3))
+  )
 }
 
 const deviceList = {
@@ -74,7 +82,7 @@ const deviceList = {
 const externalAttackType = 'external'
 const internalAttackType = 'internal'
 
-function legendFormatter (data) {
+function legendFormatter(data) {
   let html = ''
   if (data.x == null) {
     const dashLabels = data.series.reduce((nodes, series) => {
@@ -94,7 +102,7 @@ function legendFormatter (data) {
   return html
 }
 
-function nightModeOptions (nightModeOn) {
+function nightModeOptions(nightModeOn) {
   if (nightModeOn) {
     return {
       rangeSelectorAlpha: 0.3,
@@ -110,24 +118,83 @@ function nightModeOptions (nightModeOn) {
 }
 
 export default class extends Controller {
-  static get targets () {
+  static get targets() {
     return [
-      'actualHashRate', 'attackPercent', 'attackPeriod', 'blockHeight', 'countDevice', 'device',
-      'deviceCost', 'deviceDesc', 'deviceName', 'devicePronoun', 'deviceSuffix', 'external', 'internal', 'internalHash', 'kwhRate',
-      'kwhRateLabel', 'otherCosts', 'otherCostsValue', 'priceDCR', 'internalAttackText', 'targetHashRate',
-      'externalAttackText', 'externalAttackPosText', 'additionalDcr', 'newTicketPoolValue', 'internalAttackPosText',
-      'additionalHashRate', 'newHashRate', 'targetPos', 'targetPow', 'ticketAttackSize', 'ticketPoolAttack', 'ticketPoolSize',
-      'ticketPoolSizeLabel', 'ticketPoolValue', 'ticketPrice', 'tickets', 'ticketSizeAttack', 'durationUnit', 'durationLongDesc',
-      'total', 'totalDCRPos', 'totalDeviceCost', 'totalElectricity', 'totalExtraCostRate', 'totalKwh', 'totalPos', 'totalPow',
-      'graph', 'labels', 'projectedTicketPrice', 'projectedTicketPriceIncrease', 'projectedTicketPriceSign', 'attackType', 'attackPosPercentAmountLabel',
-      'dcrPriceLabel', 'totalDCRPosLabel', 'projectedPriceDiv', 'attackNotPossibleWrapperDiv', 'coinSupply', 'totalAttackCostContainer'
+      'actualHashRate',
+      'attackPercent',
+      'attackPeriod',
+      'blockHeight',
+      'countDevice',
+      'device',
+      'deviceCost',
+      'deviceDesc',
+      'deviceName',
+      'devicePronoun',
+      'deviceSuffix',
+      'external',
+      'internal',
+      'internalHash',
+      'kwhRate',
+      'kwhRateLabel',
+      'otherCosts',
+      'otherCostsValue',
+      'priceDCR',
+      'internalAttackText',
+      'targetHashRate',
+      'externalAttackText',
+      'externalAttackPosText',
+      'additionalDcr',
+      'newTicketPoolValue',
+      'internalAttackPosText',
+      'additionalHashRate',
+      'newHashRate',
+      'targetPos',
+      'targetPow',
+      'ticketAttackSize',
+      'ticketPoolAttack',
+      'ticketPoolSize',
+      'ticketPoolSizeLabel',
+      'ticketPoolValue',
+      'ticketPrice',
+      'tickets',
+      'ticketSizeAttack',
+      'durationUnit',
+      'durationLongDesc',
+      'total',
+      'totalDCRPos',
+      'totalDeviceCost',
+      'totalElectricity',
+      'totalExtraCostRate',
+      'totalKwh',
+      'totalPos',
+      'totalPow',
+      'graph',
+      'labels',
+      'projectedTicketPrice',
+      'projectedTicketPriceIncrease',
+      'projectedTicketPriceSign',
+      'attackType',
+      'attackPosPercentAmountLabel',
+      'dcrPriceLabel',
+      'totalDCRPosLabel',
+      'projectedPriceDiv',
+      'attackNotPossibleWrapperDiv',
+      'coinSupply',
+      'totalAttackCostContainer'
     ]
   }
 
-  async connect () {
+  async connect() {
     this.query = new TurboQuery()
     this.settings = TurboQuery.nullTemplate([
-      'attack_time', 'target_pow', 'kwh_rate', 'other_costs', 'target_pos', 'price', 'device', 'attack_type'
+      'attack_time',
+      'target_pow',
+      'kwh_rate',
+      'other_costs',
+      'target_pos',
+      'price',
+      'device',
+      'attack_type'
     ])
 
     // Get initial view settings from the url
@@ -152,15 +219,23 @@ export default class extends Controller {
       attack_type: externalAttackType
     }
 
-    if (this.settings.attack_time) this.attackPeriodTarget.value = parseInt(this.settings.attack_time)
+    if (this.settings.attack_time) {
+      this.attackPeriodTarget.value = parseInt(this.settings.attack_time)
+    }
     if (this.settings.target_pow) this.targetPowTarget.value = parseFloat(this.settings.target_pow)
     if (this.settings.kwh_rate) this.kwhRateTarget.value = parseFloat(this.settings.kwh_rate)
-    if (this.settings.other_costs) this.otherCostsTarget.value = parseFloat(this.settings.other_costs)
-    if (this.settings.target_pos) this.setAllInputs(this.targetPosTargets, parseFloat(this.settings.target_pos))
+    if (this.settings.other_costs) {
+      this.otherCostsTarget.value = parseFloat(this.settings.other_costs)
+    }
+    if (this.settings.target_pos) {
+      this.setAllInputs(this.targetPosTargets, parseFloat(this.settings.target_pos))
+    }
     if (this.settings.price) this.priceDCRTarget.value = parseFloat(this.settings.price)
     if (this.settings.device) this.setDevice(this.settings.device)
     if (this.settings.attack_type) this.attackTypeTarget.value = this.settings.attack_type
-    if (this.settings.target_pos) this.attackPercentTarget.value = parseFloat(this.targetPosTarget.value) / 100
+    if (this.settings.target_pos) {
+      this.attackPercentTarget.value = parseFloat(this.targetPosTarget.value) / 100
+    }
 
     if (this.settings.attack_type !== internalAttackType) {
       this.settings.attack_type = externalAttackType
@@ -174,25 +249,23 @@ export default class extends Controller {
 
     // dygraph does not provide a way to disable zoom on y-axis https://code.google.com/archive/p/dygraphs/issues/384
     // this is a hack as doZoomY_ is marked as private
-    Dygraph.prototype.doZoomY_ = function (lowY, highY) {}
+    Dygraph.prototype.doZoomY_ = function (_lowY, _highY) {}
 
     this.plotGraph()
     this.processNightMode = (params) => {
-      this.chartsView.updateOptions(
-        nightModeOptions(params.nightMode)
-      )
+      this.chartsView.updateOptions(nightModeOptions(params.nightMode))
     }
     globalEventBus.on('NIGHT_MODE', this.processNightMode)
   }
 
-  disconnect () {
+  disconnect() {
     globalEventBus.off('NIGHT_MODE', this.processNightMode)
     if (this.chartsView !== undefined) {
       this.chartsView.destroy()
     }
   }
 
-  plotGraph () {
+  plotGraph() {
     const that = this
     graphData = []
     this.ratioTable = new Map()
@@ -226,7 +299,7 @@ export default class extends Controller {
       legend: 'always',
       logscale: true,
       interactionModel: {
-        click: function (e) {
+        click: function (_e) {
           that.attackPercentTarget.value = currentPoint.x
           that.updateSliderData()
         }
@@ -237,16 +310,18 @@ export default class extends Controller {
     }
 
     this.chartsView = new Dygraph(this.graphTarget, graphData, options)
-    this.chartsView.setAnnotations([{
-      series: 'Hashpower multiplier',
-      x: 0.51,
-      shortText: 'L',
-      text: '51% Attack'
-    }])
+    this.chartsView.setAnnotations([
+      {
+        series: 'Hashpower multiplier',
+        x: 0.51,
+        shortText: 'L',
+        text: '51% Attack'
+      }
+    ])
     this.setActivePoint()
   }
 
-  updateQueryString () {
+  updateQueryString() {
     const [query, settings, defaults] = [{}, this.settings, this.defaultSettings]
     for (const k in settings) {
       if (!settings[k] || settings[k].toString() === defaults[k].toString()) continue
@@ -255,20 +330,23 @@ export default class extends Controller {
     this.query.replace(query)
   }
 
-  updateAttackTime () {
+  updateAttackTime() {
     this.settings.attack_time = this.attackPeriodTarget.value
     this.updateSliderData()
   }
 
-  updateTargetPow (e) {
+  updateTargetPow(_e) {
     this.preserveTargetPow = true
-    const targetPercentage = parseFloat(e.currentTarget.value) / 100
+    const targetPercentage = parseFloat(_e.currentTarget.value) / 100
     let target = this.ratioTable.get(targetPercentage)
     if (target === undefined) {
       let previousKey = 0
       let previousValue = 0
       this.ratioTable.forEach((value, key) => {
-        if ((previousKey <= targetPercentage && targetPercentage <= key) || (previousKey >= targetPercentage && targetPercentage >= key)) {
+        if (
+          (previousKey <= targetPercentage && targetPercentage <= key) ||
+          (previousKey >= targetPercentage && targetPercentage >= key)
+        ) {
           const gap = Math.abs(key - targetPercentage)
           const preGap = Math.abs(previousKey - targetPercentage)
           if (gap < preGap) {
@@ -285,27 +363,27 @@ export default class extends Controller {
     this.updateSliderData()
   }
 
-  chooseDevice () {
+  chooseDevice() {
     this.settings.device = this.selectedDevice()
     this.updateSliderData()
   }
 
-  chooseAttackType () {
+  chooseAttackType() {
     this.settings.attack_type = this.selectedAttackType()
     this.updateSliderData()
   }
 
-  updateKwhRate () {
+  updateKwhRate() {
     this.settings.kwh_rate = this.kwhRateTarget.value
     this.updateSliderData()
   }
 
-  updateOtherCosts () {
+  updateOtherCosts() {
     this.settings.other_costs = this.otherCostsTarget.value
     this.updateSliderData()
   }
 
-  updateTargetPos (e) {
+  updateTargetPos(e) {
     this.settings.target_pos = e.currentTarget.value
     this.preserveTargetPoS = true
     this.setAllInputs(this.targetPosTargets, e.currentTarget.value)
@@ -314,39 +392,47 @@ export default class extends Controller {
     this.updateSliderData()
   }
 
-  updatePrice () {
+  updatePrice() {
     this.settings.price = this.priceDCRTarget.value
     dcrPrice = this.priceDCRTarget.value
     this.updateSliderData()
   }
 
-  selectedDevice () { return this.deviceTarget.value }
+  selectedDevice() {
+    return this.deviceTarget.value
+  }
 
-  selectedAttackType () {
+  selectedAttackType() {
     return this.attackTypeTarget.value
   }
 
-  selectOption (options) {
+  selectOption(options) {
     let val = '0'
-    options.map((n) => { if (n.selected) val = n.value })
+    options.forEach((n) => {
+      if (n.selected) val = n.value
+    })
     return val
   }
 
-  setDevicesDesc () {
-    this.deviceDescTargets.map((n) => {
+  setDevicesDesc() {
+    this.deviceDescTargets.forEach((n) => {
       const info = deviceList[n.value]
       if (!info) return
       n.innerHTML = `${info.name} (${info.hashrate} ${info.units}, ${info.power} W, $${digitformat(info.cost)} ea.)`
     })
   }
 
-  setDevice (selectedVal) { return this.setOption(this.deviceTargets, selectedVal) }
-
-  setOption (options, selectedVal) {
-    options.map((n) => { n.selected = n.value === selectedVal })
+  setDevice(selectedVal) {
+    return this.setOption(this.deviceTargets, selectedVal)
   }
 
-  setActivePoint () {
+  setOption(options, selectedVal) {
+    options.forEach((n) => {
+      n.selected = n.value === selectedVal
+    })
+  }
+
+  setActivePoint() {
     // Shows point whose details appear on the legend.
     if (this.chartsView !== undefined) {
       const val = Math.min(parseFloat(this.attackPercentTarget.value) || 0, 0.99)
@@ -355,16 +441,16 @@ export default class extends Controller {
     }
   }
 
-  updateTargetHashRate () {
+  updateTargetHashRate() {
     const ticketPercentage = parseFloat(this.targetPosTarget.value)
     this.targetHashRate = hashrate * rateCalculation(ticketPercentage / 100)
-    const powPercentage = 100 * this.targetHashRate / hashrate
+    const powPercentage = (100 * this.targetHashRate) / hashrate
     if (!this.preserveTargetPow) {
       this.targetPowTarget.value = digitformat(powPercentage, 2, true)
     } else {
       this.preserveTargetPow = false
     }
-    this.setAllValues(this.internalHashTargets, digitformat((this.targetHashRate), 4) + ' Ph/s ')
+    this.setAllValues(this.internalHashTargets, `${digitformat(this.targetHashRate, 4)} Ph/s `)
     switch (this.settings.attack_type) {
       case externalAttackType:
         this.setAllValues(this.newHashRateTargets, digitformat(this.targetHashRate + hashrate, 4))
@@ -386,7 +472,7 @@ export default class extends Controller {
     }
   }
 
-  updateSliderData () {
+  updateSliderData() {
     const val = Math.min(parseFloat(this.attackPercentTarget.value) || 0, 0.99)
     // Makes PoS to be affected by the slider
     // Target PoS value increases when slider moves to the right
@@ -399,7 +485,7 @@ export default class extends Controller {
     this.updateTargetHashRate()
     this.setActivePoint()
 
-    this.ticketsTarget.innerHTML = digitformat(val * tpSize) + ' tickets '
+    this.ticketsTarget.innerHTML = `${digitformat(val * tpSize)} tickets `
     switch (this.settings.attack_type) {
       case externalAttackType:
         this.hideAll(this.internalAttackPosTextTargets)
@@ -414,16 +500,18 @@ export default class extends Controller {
     this.calculate(true)
   }
 
-  calculate (disableHashRateUpdate) {
+  calculate(disableHashRateUpdate) {
     if (!disableHashRateUpdate) this.updateTargetHashRate()
 
     this.updateQueryString()
     const deviceInfo = deviceList[this.selectedDevice()]
     const deviceCount = Math.ceil((this.targetHashRate * 1000) / deviceInfo.hashrate)
     const totalDeviceCost = deviceCount * deviceInfo.cost
-    const totalKwh = deviceCount * deviceInfo.power * parseFloat(this.attackPeriodTarget.value) / 1000
+    const totalKwh =
+      (deviceCount * deviceInfo.power * parseFloat(this.attackPeriodTarget.value)) / 1000
     const totalElectricity = totalKwh * parseFloat(this.kwhRateTarget.value)
-    const extraCost = parseFloat(this.otherCostsTarget.value) / 100 * (totalDeviceCost + totalElectricity)
+    const extraCost =
+      (parseFloat(this.otherCostsTarget.value) / 100) * (totalDeviceCost + totalElectricity)
     const totalPow = extraCost + totalDeviceCost + totalElectricity
     let ticketAttackSize, DCRNeed
     if (this.settings.attack_type === externalAttackType) {
@@ -436,15 +524,22 @@ export default class extends Controller {
       this.setAllValues(this.ticketPoolAttackTargets, digitformat(DCRNeed))
     }
     const projectedTicketPrice = DCRNeed / tpSize
-    this.projectedTicketPriceIncreaseTarget.innerHTML = digitformat(100 * Math.abs(projectedTicketPrice - tpPrice) / tpPrice, 2)
-    this.projectedTicketPriceSignTarget.innerHTML = projectedTicketPrice > tpPrice ? 'increase' : 'decrease'
+    this.projectedTicketPriceIncreaseTarget.innerHTML = digitformat(
+      (100 * Math.abs(projectedTicketPrice - tpPrice)) / tpPrice,
+      2
+    )
+    this.projectedTicketPriceSignTarget.innerHTML =
+      projectedTicketPrice > tpPrice ? 'increase' : 'decrease'
     this.ticketPoolValueTarget.innerHTML = digitformat(hashrate, 3)
 
-    const totalDCRPos = this.settings.attack_type === externalAttackType ? DCRNeed - tpValue : ticketAttackSize * projectedTicketPrice
+    const totalDCRPos =
+      this.settings.attack_type === externalAttackType
+        ? DCRNeed - tpValue
+        : ticketAttackSize * projectedTicketPrice
     const totalPos = totalDCRPos * dcrPrice
     const timeStr = this.attackPeriodTarget.value
     const hourStr = timeStr > 1 ? 'hours' : 'hour'
-    const timeHourStr = timeStr + ' ' + hourStr
+    const timeHourStr = `${timeStr} ${hourStr}`
     const devicePronounStr = deviceCount > 1 ? 'them' : 'it'
     const deviceSuffixStr = deviceCount > 1 ? 's' : ''
     this.ticketPoolSizeLabelTarget.innerHTML = digitformat(tpSize, 2)
@@ -459,7 +554,10 @@ export default class extends Controller {
     this.setAllValues(this.countDeviceTargets, digitformat(deviceCount))
     this.devicePronounTarget.innerHTML = devicePronounStr
     this.deviceSuffixTarget.innerHTML = deviceSuffixStr
-    this.setAllValues(this.deviceNameTargets, `<a href="${deviceInfo.link}">${deviceInfo.name}</a>${deviceSuffixStr}`)
+    this.setAllValues(
+      this.deviceNameTargets,
+      `<a href="${deviceInfo.link}">${deviceInfo.name}</a>${deviceSuffixStr}`
+    )
     this.setAllValues(this.totalDeviceCostTargets, digitformat(totalDeviceCost))
     this.setAllValues(this.totalKwhTargets, digitformat(totalKwh, 2))
     this.setAllValues(this.totalElectricityTargets, digitformat(totalElectricity, 2))
@@ -480,23 +578,27 @@ export default class extends Controller {
     this.showPosCostWarning(DCRNeed)
   }
 
-  setAllValues (targets, data) {
-    targets.forEach((n) => { n.innerHTML = data })
+  setAllValues(targets, data) {
+    targets.forEach((n) => {
+      n.innerHTML = data
+    })
   }
 
-  setAllInputs (targets, data) {
-    targets.forEach((n) => { n.value = data })
+  setAllInputs(targets, data) {
+    targets.forEach((n) => {
+      n.value = data
+    })
   }
 
-  hideAll (targets) {
-    targets.forEach(el => el.classList.add('d-none'))
+  hideAll(targets) {
+    targets.forEach((el) => el.classList.add('d-none'))
   }
 
-  showAll (targets) {
-    targets.forEach(el => el.classList.remove('d-none'))
+  showAll(targets) {
+    targets.forEach((el) => el.classList.remove('d-none'))
   }
 
-  showPosCostWarning (DCRNeed) {
+  showPosCostWarning(DCRNeed) {
     const totalDCRInCirculation = coinSupply / 100000000
     if (DCRNeed > totalDCRInCirculation) {
       this.coinSupplyTarget.textContent = digitformat(totalDCRInCirculation, 2)

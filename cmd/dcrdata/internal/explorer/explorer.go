@@ -9,6 +9,7 @@ package explorer
 import (
 	"context"
 	"crypto/rand"
+	"encoding/json"
 	"fmt"
 	"math"
 	"math/big"
@@ -230,9 +231,10 @@ type explorerUI struct {
 	displaySyncStatusPage atomic.Value
 	politeiaURL           string
 
-	invsMtx sync.RWMutex
-	invs    *types.MempoolInfo
-	premine int64
+	invsMtx  sync.RWMutex
+	invs     *types.MempoolInfo
+	premine  int64
+	manifest map[string]string
 }
 
 // AreDBsSyncing is a thread-safe way to fetch the boolean in dbsSyncing.
@@ -283,21 +285,22 @@ func (exp *explorerUI) StopWebsocketHub() {
 
 // ExplorerConfig is the configuration settings for explorerUI.
 type ExplorerConfig struct {
-	DataSource    explorerDataSource
-	ChartSource   ChartDataSource
-	UseRealIP     bool
-	AppVersion    string
-	DevPrefetch   bool
-	Viewsfolder   string
-	XcBot         *exchanges.ExchangeBot
-	AgendasSource agendaBackend
-	Tracker       *agendas.VoteTracker
-	Proposals     PoliteiaBackend
-	PoliteiaURL   string
-	MainnetLink   string
-	TestnetLink   string
-	OnionAddress  string
-	ReloadHTML    bool
+	DataSource        explorerDataSource
+	ChartSource       ChartDataSource
+	UseRealIP         bool
+	AppVersion        string
+	DevPrefetch       bool
+	Viewsfolder       string
+	XcBot             *exchanges.ExchangeBot
+	AgendasSource     agendaBackend
+	Tracker           *agendas.VoteTracker
+	Proposals         PoliteiaBackend
+	PoliteiaURL       string
+	MainnetLink       string
+	TestnetLink       string
+	OnionAddress      string
+	ReloadHTML        bool
+	AssetManifestPath string
 }
 
 // New returns an initialized instance of explorerUI
@@ -367,8 +370,27 @@ func New(cfg *ExplorerConfig) *explorerUI {
 
 	log.Infof("Mean Voting Blocks calculated: %d", exp.pageData.HomeInfo.Params.MeanVotingBlocks)
 
-	commonTemplates := []string{"extras"}
-	exp.templates = newTemplates(cfg.Viewsfolder, cfg.ReloadHTML, commonTemplates, makeTemplateFuncMap(exp.ChainParams))
+	// Load webpack manifest for cache-busted asset URLs.
+	if cfg.AssetManifestPath != "" {
+		if manifestData, err := os.ReadFile(cfg.AssetManifestPath); err != nil {
+			log.Warnf("Could not read asset manifest: %v", err)
+		} else if err = json.Unmarshal(manifestData, &exp.manifest); err != nil {
+			log.Warnf("Could not parse asset manifest: %v", err)
+		} else {
+			log.Infof("Loaded asset manifest with %d entries", len(exp.manifest))
+		}
+	}
+
+	funcMap := makeTemplateFuncMap(exp.ChainParams)
+	funcMap["asset"] = func(name string) string {
+		if hashed, ok := exp.manifest[name]; ok {
+			return hashed
+		}
+		return "/dist/" + name
+	}
+
+	commonTemplates := []string{"extras", "home_latest_blocks"}
+	exp.templates = newTemplates(cfg.Viewsfolder, cfg.ReloadHTML, commonTemplates, funcMap)
 
 	tmpls := []string{"home", "blocks", "mempool", "block", "tx", "address",
 		"rawtx", "status", "parameters", "agenda", "agendas", "charts",

@@ -2,16 +2,16 @@ import { Controller } from '@hotwired/stimulus'
 import humanize from '../helpers/humanize_helper'
 import globalEventBus from '../services/event_bus_service'
 
-function isCorrectVal (value) {
+function isCorrectVal(value) {
   return /^\d+$/.test(value) && value > 0
 }
 
 export default class extends Controller {
-  static get targets () {
+  static get targets() {
     return ['age', 'blocktime', 'header']
   }
 
-  connect () {
+  connect() {
     this.startAgeRefresh()
     this.processBlock = this._processBlock.bind(this)
     this.targetBlockTime = parseInt(document.getElementById('navBar').dataset.blocktime)
@@ -19,27 +19,27 @@ export default class extends Controller {
       globalEventBus.on('BLOCK_RECEIVED', this.processBlock)
     }
     if (this.hasHeaderTarget) {
-      this.headerTargets.forEach(h => {
+      this.headerTargets.forEach((h) => {
         h.textContent = h.dataset.jstitle
       })
     }
   }
 
-  disconnect () {
+  disconnect() {
     this.stopAgeRefresh()
     if (this.hasBlocktimeTarget) {
       globalEventBus.off('BLOCK_RECEIVED', this.processBlock)
     }
   }
 
-  _processBlock (blockData) {
+  _processBlock(blockData) {
     const block = blockData.block
     this.blocktimeTarget.dataset.stamp = block.unixStamp
     this.blocktimeTarget.classList.remove('text-danger')
     this.blocktimeTarget.textContent = humanize.timeSince(block.unixStamp)
   }
 
-  startAgeRefresh () {
+  startAgeRefresh() {
     setTimeout(() => {
       this.setAges()
     })
@@ -48,17 +48,18 @@ export default class extends Controller {
     }, 10 * 1000)
   }
 
-  stopAgeRefresh () {
+  stopAgeRefresh() {
     if (this.ageRefreshTimer) {
       clearInterval(this.ageRefreshTimer)
     }
   }
 
-  setAges () {
+  setAges() {
     if (this.hasBlocktimeTarget) {
       const lbt = this.blocktimeTarget.dataset.stamp
       this.blocktimeTarget.textContent = humanize.timeSince(lbt)
-      if ((new Date()).getTime() / 1000 - lbt > 8 * this.targetBlockTime) { // 8*blocktime = 40minutes = 12000 seconds
+      if (new Date().getTime() / 1000 - lbt > 8 * this.targetBlockTime) {
+        // 8*blocktime = 40minutes = 12000 seconds
         this.element.classList.add('text-danger')
       }
     }

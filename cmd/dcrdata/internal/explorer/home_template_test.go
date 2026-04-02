@@ -14,7 +14,9 @@ const viewsFolder = "../../views"
 
 func newTestTemplates(t *testing.T) templates {
 	t.Helper()
-	tmpl := newTemplates(viewsFolder, false, []string{"extras"}, makeTemplateFuncMap(chaincfg.SimNetParams()))
+	funcMap := makeTemplateFuncMap(chaincfg.SimNetParams())
+	funcMap["asset"] = func(name string) string { return "/dist/" + name }
+	tmpl := newTemplates(viewsFolder, false, []string{"extras", "home_latest_blocks"}, funcMap)
 	if err := tmpl.addTemplate("home"); err != nil {
 		t.Fatalf("addTemplate home: %v", err)
 	}
@@ -22,12 +24,14 @@ func newTestTemplates(t *testing.T) templates {
 }
 
 func makeTestBlock(height int64, coinRows []types.CoinRowData) *types.BlockBasic {
-	return &types.BlockBasic{
+	b := &types.BlockBasic{
 		Height:         height,
 		Hash:           strings.Repeat("0", 64),
 		FormattedBytes: "1.0 kB",
 		CoinRows:       coinRows,
 	}
+	b.FlattenCoinRows()
+	return b
 }
 
 func TestHomeTemplate_BlocksTable(t *testing.T) {

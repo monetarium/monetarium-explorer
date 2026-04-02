@@ -374,7 +374,7 @@ body.darkBG {
 #menu-toggle input:checked ~ .patty {
   opacity: 1;
   background: #232323;
-  transform: rotate(-45deg) translate(0, -2px)  scale(1.25, 1.25);
+  transform: rotate(-45deg) translate(0, -2px) scale(1.25, 1.25);
 }
 
 #menu-toggle input:checked ~ .patty.short {

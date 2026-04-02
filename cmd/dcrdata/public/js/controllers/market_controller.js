@@ -44,14 +44,14 @@ const exchangeLinks = {
 const CurrencyPairDCRUSDT = 'DCR-USDT'
 const CurrencyPairDCRBTC = 'DCR-BTC'
 
-function isValidDCRPair (pair) {
+function isValidDCRPair(pair) {
   return pair === CurrencyPairDCRBTC || pair === CurrencyPairDCRUSDT
 }
 
 const BTCIndex = 'BTC-Index'
 const USDTIndex = 'USDT-Index'
 
-function quoteAsset (currencyPair) {
+function quoteAsset(currencyPair) {
   const v = currencyPair.split('-')
   if (v.length === 1) {
     return currencyPair
@@ -64,7 +64,7 @@ const printNames = {
   // default is capitalize
 }
 
-function printName (token) {
+function printName(token) {
   const name = printNames[token]
   if (name) return name
   return humanize.capitalize(token)
@@ -72,7 +72,8 @@ function printName (token) {
 
 const defaultZoomPct = 20
 let hidden, visibilityChange
-if (typeof document.hidden !== 'undefined') { // Opera 12.10 and Firefox 18 and later support
+if (typeof document.hidden !== 'undefined') {
+  // Opera 12.10 and Firefox 18 and later support
   hidden = 'hidden'
   visibilityChange = 'visibilitychange'
 } else if (typeof document.msHidden !== 'undefined') {
@@ -86,42 +87,42 @@ let focused = true
 let refreshAvailable = false
 let availableCandlesticks, availableDepths
 
-function screenIsBig () {
+function screenIsBig() {
   return window.innerWidth >= 992
 }
 
-function validDepthExchange (token) {
+function validDepthExchange(token) {
   return availableDepths.indexOf(token) > -1
 }
 
-function hasBin (xc, bin) {
+function hasBin(xc, bin) {
   return availableCandlesticks[xc].indexOf(bin) !== -1
 }
 
-function usesOrderbook (chart) {
+function usesOrderbook(chart) {
   return chart === depth || chart === orders
 }
 
-function usesCandlesticks (chart) {
+function usesCandlesticks(chart) {
   return chart === candlestick || chart === volume || chart === history
 }
 
 let requestCounter = 0
 let responseCache = {}
 
-function hasCache (k) {
+function hasCache(k) {
   if (!responseCache[k]) return false
   const expiration = new Date(responseCache[k].expiration)
   return expiration > new Date()
 }
 
-function clearCache (k) {
+function clearCache(k) {
   if (!responseCache[k]) return
   delete responseCache[k]
 }
 
 let indices = {}
-function currentPairFiatPrice () {
+function currentPairFiatPrice() {
   switch (settings.pair) {
     case CurrencyPairDCRBTC:
       return indices[BTCIndex]
@@ -143,7 +144,7 @@ let settings = {}
 const commonChartOpts = {
   gridLineColor: gridColor,
   axisLineColor: 'transparent',
-  underlayCallback: (ctx, area, dygraph) => {
+  underlayCallback: (ctx, area, _dygraph) => {
     ctx.lineWidth = 1
     ctx.strokeStyle = gridColor
     ctx.strokeRect(area.x, area.y, area.w, area.h)
@@ -165,23 +166,27 @@ const chartResetOpts = {
   zoomCallback: null
 }
 
-function convertedThreeSigFigs (x) {
+function convertedThreeSigFigs(x) {
   return humanize.threeSigFigs(x * conversionFactor)
 }
 
-function convertedEightDecimals (x) {
+function convertedEightDecimals(x) {
   return (x * conversionFactor).toFixed(8)
 }
 
-function adjustAxis (axis, zoomInPercentage, bias) {
+function adjustAxis(axis, zoomInPercentage, bias) {
   const delta = axis[1] - axis[0]
   const increment = delta * zoomInPercentage
   const foo = [increment * bias, increment * (1 - bias)]
   return [axis[0] + foo[0], axis[1] - foo[1]]
 }
 
-function gScroll (event, g, context) {
-  const percentage = event.detail ? event.detail * -1 / 1000 : event.wheelDelta ? event.wheelDelta / 1000 : event.deltaY / -25
+function gScroll(event, g, _context) {
+  const percentage = event.detail
+    ? (event.detail * -1) / 1000
+    : event.wheelDelta
+      ? event.wheelDelta / 1000
+      : event.deltaY / -25
 
   if (!(event.offsetX && event.offsetY)) {
     event.offsetX = event.layerX - event.target.offsetLeft
@@ -191,7 +196,7 @@ function gScroll (event, g, context) {
   const xOffset = g.toDomCoords(g.xAxisRange()[0], null)[0]
   const x = event.offsetX - xOffset
   const w = g.toDomCoords(g.xAxisRange()[1], null)[0] - xOffset
-  const xPct = w === 0 ? 0 : (x / w)
+  const xPct = w === 0 ? 0 : x / w
   const newWindow = adjustAxis(g.xAxisRange(), percentage, xPct)
   g.updateOptions({
     dateWindow: newWindow
@@ -202,7 +207,7 @@ function gScroll (event, g, context) {
   event.stopPropagation()
 }
 
-function orderbookStats (bids, asks) {
+function orderbookStats(bids, asks) {
   const bidEdge = bids[0].price
   const askEdge = asks[0].price
   const midGap = (bidEdge + askEdge) / 2
@@ -224,10 +229,10 @@ const dummyOrderbook = {
   }
 }
 
-function rangedPts (pts, cutoff) {
+function rangedPts(pts, cutoff) {
   const l = []
   const outliers = []
-  pts.forEach(pt => {
+  pts.forEach((pt) => {
     if (cutoff(pt)) {
       outliers.push(pt)
       return
@@ -237,10 +242,10 @@ function rangedPts (pts, cutoff) {
   return { pts: l, outliers: outliers }
 }
 
-function translateDepthSide (pts, idx, cutoff) {
+function translateDepthSide(pts, idx, cutoff) {
   const sorted = rangedPts(pts, cutoff)
   let accumulator = 0
-  const translated = sorted.pts.map(pt => {
+  const translated = sorted.pts.map((pt) => {
     accumulator += pt.quantity
     pt = [pt.price, null, null]
     pt[idx] = accumulator
@@ -249,9 +254,9 @@ function translateDepthSide (pts, idx, cutoff) {
   return { pts: translated, outliers: sorted.outliers }
 }
 
-function translateOrderbookSide (pts, idx, cutoff) {
+function translateOrderbookSide(pts, idx, cutoff) {
   const sorted = rangedPts(pts, cutoff)
-  const translated = sorted.pts.map(pt => {
+  const translated = sorted.pts.map((pt) => {
     const l = [pt.price, null, null]
     l[idx] = pt.quantity
     return l
@@ -259,7 +264,7 @@ function translateOrderbookSide (pts, idx, cutoff) {
   return { pts: translated, outliers: sorted.outliers }
 }
 
-function processOrderbook (response, translator) {
+function processOrderbook(response, translator) {
   const bids = response.data.bids
   const asks = response.data.asks
   if (!bids || !asks) {
@@ -275,9 +280,9 @@ function processOrderbook (response, translator) {
   bids.splice(0, 0, { price: bids[0].price + 1e-8, quantity: 0 })
   asks.splice(0, 0, { price: asks[0].price - 1e-8, quantity: 0 })
   const stats = orderbookStats(bids, asks)
-  const buys = translator(bids, BUY, pt => pt.price < stats.lowCut)
+  const buys = translator(bids, BUY, (pt) => pt.price < stats.lowCut)
   buys.pts.reverse()
-  const sells = translator(asks, SELL, pt => pt.price > stats.highCut)
+  const sells = translator(asks, SELL, (pt) => pt.price > stats.highCut)
 
   return {
     pts: buys.pts.concat(sells.pts),
@@ -286,7 +291,7 @@ function processOrderbook (response, translator) {
   }
 }
 
-function candlestickPlotter (e) {
+function candlestickPlotter(e) {
   if (e.seriesIndex !== 0) return
   const area = e.plotArea
   const ctx = e.drawingContext
@@ -330,27 +335,29 @@ function candlestickPlotter (e) {
   }
 }
 
-function drawOrderPt (ctx, pt) {
+function drawOrderPt(ctx, pt) {
   return drawPt(ctx, pt, orderPtSize, true)
 }
 
-function drawPt (ctx, pt, size, bordered) {
+function drawPt(ctx, pt, size, bordered) {
   ctx.beginPath()
   ctx.arc(pt.x, pt.y, size, 0, PIPI)
   ctx.fill()
   if (bordered) ctx.stroke()
 }
 
-function drawLine (ctx, start, end) {
+function drawLine(ctx, start, end) {
   ctx.beginPath()
   ctx.moveTo(start.x, start.y)
   ctx.lineTo(end.x, end.y)
   ctx.stroke()
 }
 
-function makePt (x, y) { return { x, y } }
+function makePt(x, y) {
+  return { x, y }
+}
 
-function canvasXY (area, pt) {
+function canvasXY(area, pt) {
   return {
     x: area.x + pt.x * area.w,
     y: area.y + pt.y * area.h
@@ -360,7 +367,7 @@ function canvasXY (area, pt) {
 let orderPtSize = 7
 if (!screenIsBig()) orderPtSize = 4
 
-function orderPlotter (e) {
+function orderPlotter(e) {
   if (e.seriesIndex !== 0) return
 
   const area = e.plotArea
@@ -388,7 +395,7 @@ function orderPlotter (e) {
 
 const greekCapDelta = String.fromCharCode(916)
 
-function depthLegendPlotter (e) {
+function depthLegendPlotter(e) {
   const stats = e.dygraph.getOption('stats')
 
   const area = e.plotArea
@@ -407,12 +414,12 @@ function depthLegendPlotter (e) {
   const boxColor = dark ? '#2228' : '#fff8'
 
   const midGapPrice = humanize.threeSigFigs(stats.midGap)
-  const deltaPctTxt = `${greekCapDelta} : ${humanize.threeSigFigs(stats.gap / stats.midGap * 100)}%`
+  const deltaPctTxt = `${greekCapDelta} : ${humanize.threeSigFigs((stats.gap / stats.midGap) * 100)}%`
   const fiatGapTxt = `${humanize.threeSigFigs(stats.gap * currentPairFiatPrice())} ${fiatCode}`
   const btcGapTxt = `${humanize.threeSigFigs(stats.gap)} ${quoteAsset(settings.pair)}`
   let boxW = 0
   const txts = [fiatGapTxt, btcGapTxt, deltaPctTxt, midGapPrice]
-  txts.forEach(txt => {
+  txts.forEach((txt) => {
     const w = ctx.measureText(txt).width
     if (w > boxW) boxW = w
   })
@@ -430,9 +437,9 @@ function depthLegendPlotter (e) {
   ctx.fillRect(rect.x, rect.y, dims.x, dims.y)
   ctx.strokeRect(rect.x, rect.y, dims.x, dims.y)
   ctx.fillStyle = chartStroke
-  const centerX = x + (boxW / 2)
-  const write = s => {
-    const cornerX = centerX - (ctx.measureText(s).width / 2)
+  const centerX = x + boxW / 2
+  const write = (s) => {
+    const cornerX = centerX - ctx.measureText(s).width / 2
     ctx.fillText(s, cornerX + rowPad, y + rowPad)
     y += rowHeight
   }
@@ -446,12 +453,10 @@ function depthLegendPlotter (e) {
   write(btcGapTxt)
 
   // Draw a line from the box to the gap
-  drawLine(ctx,
-    makePt(x + boxW / 2, y + boxPad * 2 + boxPad),
-    makePt(midGap.x, midGap.y - boxPad))
+  drawLine(ctx, makePt(x + boxW / 2, y + boxPad * 2 + boxPad), makePt(midGap.x, midGap.y - boxPad))
 }
 
-function depthPlotter (e) {
+function depthPlotter(e) {
   Dygraph.Plotters.fillPlotter(e)
   Dygraph.Plotters.linePlotter(e)
 
@@ -460,7 +465,7 @@ function depthPlotter (e) {
 }
 
 let stickZoom
-function calcStickWindow (start, end, bin) {
+function calcStickWindow(start, end, bin) {
   const halfBin = minuteMap[bin] / 2
   start = new Date(start.getTime())
   end = new Date(end.getTime())
@@ -470,18 +475,38 @@ function calcStickWindow (start, end, bin) {
   ]
 }
 
-function isValidExchange (xc) {
+function isValidExchange(xc) {
   return xc === 'binance' || xc === 'dcrdex' || xc === 'mexc'
 }
 
 export default class extends Controller {
-  static get targets () {
-    return ['chartSelect', 'exchanges', 'bin', 'chart', 'legend', 'conversion',
-      'xcName', 'xcLogo', 'actions', 'sticksOnly', 'depthOnly', 'chartLoader',
-      'xcRow', 'xcIndex', 'price', 'age', 'ageSpan', 'link', 'zoom', 'marketName', 'marketSection']
+  static get targets() {
+    return [
+      'chartSelect',
+      'exchanges',
+      'bin',
+      'chart',
+      'legend',
+      'conversion',
+      'xcName',
+      'xcLogo',
+      'actions',
+      'sticksOnly',
+      'depthOnly',
+      'chartLoader',
+      'xcRow',
+      'xcIndex',
+      'price',
+      'age',
+      'ageSpan',
+      'link',
+      'zoom',
+      'marketName',
+      'marketSection'
+    ]
   }
 
-  async connect () {
+  async connect() {
     this.query = new TurboQuery()
     settings = TurboQuery.nullTemplate(['chart', 'xc', 'bin', 'pair'])
     this.query.update(settings)
@@ -548,7 +573,7 @@ export default class extends Controller {
     this.fetchInitialData()
   }
 
-  disconnect () {
+  disconnect() {
     responseCache = {}
     window.removeEventListener('resize', this.resize)
     document.removeEventListener(visibilityChange, this.tabVis)
@@ -556,7 +581,7 @@ export default class extends Controller {
     globalEventBus.off('EXCHANGE_UPDATE', this.processXcUpdate)
   }
 
-  _resize () {
+  _resize() {
     if (this.graph) {
       orderPtSize = screenIsBig() ? 7 : 4
       this.graph.resize()
@@ -564,7 +589,7 @@ export default class extends Controller {
     this.setNameDisplay()
   }
 
-  setNameDisplay () {
+  setNameDisplay() {
     if (screenIsBig()) {
       this.xcNameTarget.classList.remove('d-hide')
     } else {
@@ -572,12 +597,12 @@ export default class extends Controller {
     }
   }
 
-  _tabVis () {
+  _tabVis() {
     focused = !document[hidden]
     if (focused && refreshAvailable) this.refreshChart()
   }
 
-  async fetchInitialData () {
+  async fetchInitialData() {
     Dygraph = await getDefault(
       import(/* webpackChunkName: "dygraphs" */ '../vendor/dygraphs.min.js')
     )
@@ -613,11 +638,18 @@ export default class extends Controller {
     }
     commonChartOpts.interactionModel = model
 
-    this.graph = new Dygraph(this.chartTarget, [[0, 0], [0, 1]], commonChartOpts)
+    this.graph = new Dygraph(
+      this.chartTarget,
+      [
+        [0, 0],
+        [0, 1]
+      ],
+      commonChartOpts
+    )
     this.fetchChart()
   }
 
-  async fetchChart (isRefresh) {
+  async fetchChart(isRefresh) {
     let url = null
     requestCounter++
     const thisRequest = requestCounter
@@ -683,13 +715,13 @@ export default class extends Controller {
     refreshAvailable = false
   }
 
-  xcTokenAndPair () {
-    return settings.xc + ':' + settings.pair
+  xcTokenAndPair() {
+    return `${settings.xc}:${settings.pair}`
   }
 
-  processCandlesticks (response) {
+  processCandlesticks(response) {
     const halfDuration = minuteMap[settings.bin] / 2
-    const data = response.sticks.map(stick => {
+    const data = response.sticks.map((stick) => {
       const t = new Date(stick.start)
       t.setMinutes(t.getMinutes() + halfDuration)
       return [t, stick.open, stick.close, stick.high, stick.low]
@@ -719,10 +751,10 @@ export default class extends Controller {
     }
   }
 
-  processHistory (response) {
+  processHistory(response) {
     const halfDuration = minuteMap[settings.bin] / 2
     return {
-      file: response.sticks.map(stick => {
+      file: response.sticks.map((stick) => {
         const t = new Date(stick.start)
         t.setMinutes(t.getMinutes() + halfDuration)
         // Not sure what the best way to reduce a candlestick to a single number
@@ -748,10 +780,10 @@ export default class extends Controller {
     }
   }
 
-  processVolume (response) {
+  processVolume(response) {
     const halfDuration = minuteMap[settings.bin] / 2
     return {
-      file: response.sticks.map(stick => {
+      file: response.sticks.map((stick) => {
         const t = new Date(stick.start)
         t.setMinutes(t.getMinutes() + halfDuration)
         return [t, stick.volume]
@@ -774,7 +806,7 @@ export default class extends Controller {
     }
   }
 
-  processDepth (response) {
+  processDepth(response) {
     const data = processOrderbook(response, translateDepthSide)
     return {
       labels: ['price', 'cumulative sell', 'cumulative buy'],
@@ -799,7 +831,7 @@ export default class extends Controller {
     }
   }
 
-  processOrders (response) {
+  processOrders(response) {
     const data = processOrderbook(response, translateOrderbookSide)
     return {
       labels: ['price', 'sell', 'buy'],
@@ -826,7 +858,7 @@ export default class extends Controller {
     }
   }
 
-  justifyBins () {
+  justifyBins() {
     const bins = availableCandlesticks[this.xcTokenAndPair()]
     if (bins.indexOf(settings.bin) === -1) {
       settings.bin = bins[0]
@@ -834,7 +866,7 @@ export default class extends Controller {
     }
   }
 
-  setButtons () {
+  setButtons() {
     this.chartSelectTarget.value = settings.chart
     this.exchangesTarget.value = this.xcTokenAndPair()
     if (usesOrderbook(settings.chart)) {
@@ -843,7 +875,7 @@ export default class extends Controller {
     } else {
       this.binTarget.classList.remove('d-hide')
       this.zoomTarget.classList.add('d-hide')
-      this.binButtons.forEach(button => {
+      this.binButtons.forEach((button) => {
         if (hasBin(this.exchangesTarget.value, button.name)) {
           button.classList.remove('d-hide')
         } else {
@@ -853,18 +885,18 @@ export default class extends Controller {
       this.setBinSelection()
     }
     const sticksDisabled = !availableCandlesticks[this.exchangesTarget.value]
-    this.sticksOnlyTargets.forEach(option => {
+    this.sticksOnlyTargets.forEach((option) => {
       option.disabled = sticksDisabled
     })
     const depthDisabled = !validDepthExchange(this.exchangesTarget.value)
-    this.depthOnlyTargets.forEach(option => {
+    this.depthOnlyTargets.forEach((option) => {
       option.disabled = depthDisabled
     })
   }
 
-  setBinSelection () {
+  setBinSelection() {
     const bin = settings.bin
-    this.binButtons.forEach(button => {
+    this.binButtons.forEach((button) => {
       if (button.name === bin) {
         button.classList.add('btn-selected')
       } else {
@@ -873,7 +905,7 @@ export default class extends Controller {
     })
   }
 
-  changeGraph (e) {
+  changeGraph(e) {
     const target = e.target || e.srcElement
     settings.chart = target.value
     if (usesCandlesticks(settings.chart)) {
@@ -883,7 +915,7 @@ export default class extends Controller {
     this.fetchChart()
   }
 
-  changeExchange () {
+  changeExchange() {
     settings.xc = this.exchangesTarget.value.split(':')[0]
     settings.pair = this.exchangesTarget.value.split(':')[1]
     this.setExchangeName()
@@ -901,7 +933,7 @@ export default class extends Controller {
     this.resetZoom()
   }
 
-  setExchange (e) {
+  setExchange(e) {
     let node = e.target || e.srcElement
     while (node && node.nodeName !== 'TR') node = node.parentNode
     if (!node || !node.dataset || !node.dataset.token) return
@@ -911,7 +943,7 @@ export default class extends Controller {
     this.changeExchange()
   }
 
-  changeBin (e) {
+  changeBin(e) {
     const btn = e.target || e.srcElement
     if (btn.nodeName !== 'BUTTON' || !this.graph) return
     settings.bin = btn.name
@@ -920,7 +952,7 @@ export default class extends Controller {
     this.fetchChart()
   }
 
-  resetZoom () {
+  resetZoom() {
     if (settings.chart === candlestick) {
       this.graph.updateOptions({ dateWindow: stickZoom })
     } else if (usesOrderbook(settings.chart)) {
@@ -930,7 +962,7 @@ export default class extends Controller {
     }
   }
 
-  refreshChart () {
+  refreshChart() {
     refreshAvailable = true
     if (!focused) {
       return
@@ -938,15 +970,17 @@ export default class extends Controller {
     this.fetchChart(true)
   }
 
-  setConversion (e) {
+  setConversion(e) {
     const btn = e.target || e.srcElement
     if (btn.nodeName !== 'BUTTON' || !this.graph) return
-    this.conversionTarget.querySelectorAll('button').forEach(b => b.classList.remove('btn-selected'))
+    this.conversionTarget
+      .querySelectorAll('button')
+      .forEach((b) => b.classList.remove('btn-selected'))
     btn.classList.add('btn-selected')
     this.updateConversion(e.target.name)
   }
 
-  updateConversion (targetName) {
+  updateConversion(targetName) {
     if (!this.graph) return
     let cLabel = quoteAsset(settings.pair)
     if (targetName === cLabel) {
@@ -960,7 +994,7 @@ export default class extends Controller {
     this.graph.updateOptions({ xlabel: `Price (${cLabel})` })
   }
 
-  setExchangeName () {
+  setExchangeName() {
     this.xcLogoTarget.className = `exchange-logo ${settings.xc} me-2`
     const prettyName = printName(settings.xc)
     this.xcNameTarget.textContent = prettyName
@@ -974,7 +1008,7 @@ export default class extends Controller {
     } else {
       this.actionsTarget.classList.add('d-hide')
     }
-    this.conversionTarget.querySelectorAll('button').forEach(b => {
+    this.conversionTarget.querySelectorAll('button').forEach((b) => {
       if (b.textContent !== fiatCode) {
         b.name = quoteAsset(settings.pair)
         b.textContent = b.name
@@ -986,7 +1020,7 @@ export default class extends Controller {
     })
   }
 
-  _processNightMode (data) {
+  _processNightMode(data) {
     if (!this.graph) return
     chartStroke = data.nightMode ? darkStroke : lightStroke
     if (settings.chart === history || settings.chart === volume) {
@@ -997,14 +1031,15 @@ export default class extends Controller {
     }
   }
 
-  getExchangeRow (token, pair) {
+  getExchangeRow(token, pair) {
     const rows = this.xcRowTargets
     for (let i = 0; i < rows.length; i++) {
       const tr = rows[i]
-      const hasPair = tr.dataset.pair !== undefined && tr.dataset.pair !== null && tr.dataset.pair === pair
+      const hasPair =
+        tr.dataset.pair !== undefined && tr.dataset.pair !== null && tr.dataset.pair === pair
       if ((hasPair && tr.dataset.token === token) || tr.dataset.token === token) {
         const row = {}
-        tr.querySelectorAll('td').forEach(td => {
+        tr.querySelectorAll('td').forEach((td) => {
           switch (td.dataset.type) {
             case 'price':
               row.price = td
@@ -1026,22 +1061,22 @@ export default class extends Controller {
     return null
   }
 
-  setZoom (e) {
+  setZoom(e) {
     const btn = e.target || e.srcElement
     if (btn.nodeName !== 'BUTTON' || !this.graph) return
     this.setZoomPct(parseInt(btn.name))
     const stats = this.graph.getOption('stats')
-    const spread = stats.midGap * parseFloat(btn.name) / 100
+    const spread = (stats.midGap * parseFloat(btn.name)) / 100
     this.graph.updateOptions({ dateWindow: [stats.midGap - spread, stats.midGap + spread] })
   }
 
-  setZoomPct (pct) {
-    this.zoomButtons.forEach(b => {
+  setZoomPct(pct) {
+    this.zoomButtons.forEach((b) => {
       if (parseInt(b.name) === pct) b.classList.add('btn-selected')
       else b.classList.remove('btn-selected')
     })
     const stats = this.graph.getOption('stats')
-    const spread = stats.midGap * pct / 100
+    const spread = (stats.midGap * pct) / 100
     let low = stats.midGap - spread
     let high = stats.midGap + spread
     const [min, max] = this.graph.xAxisExtremes()
@@ -1050,22 +1085,25 @@ export default class extends Controller {
     this.graph.updateOptions({ dateWindow: [low, high] })
   }
 
-  _zoomCallback () {
-    this.zoomButtons.forEach(b => b.classList.remove('btn-selected'))
+  _zoomCallback() {
+    this.zoomButtons.forEach((b) => b.classList.remove('btn-selected'))
   }
 
-  _processXcUpdate (update) {
+  _processXcUpdate(update) {
     const xc = update.updater
     indices = update.indices
-    if (update.fiat) { // btc-fiat exchange update
-      if (xc.pair === BTCIndex) { // we also receive updates for USDTIndex but we don't use it atm.
-        this.xcIndexTargets.forEach(span => {
+    if (update.fiat) {
+      // btc-fiat exchange update
+      if (xc.pair === BTCIndex) {
+        // we also receive updates for USDTIndex but we don't use it atm.
+        this.xcIndexTargets.forEach((span) => {
           if (span.dataset.token === xc.token) {
             span.textContent = humanize.commaWithDecimal(xc.price, 2)
           }
         })
       }
-    } else { // dcr-{Asset} exchange update
+    } else {
+      // dcr-{Asset} exchange update
       const row = this.getExchangeRow(xc.token, xc.pair)
       row.volume.textContent = humanize.threeSigFigs(xc.volume)
       row.price.textContent = humanize.threeSigFigs(xc.price)

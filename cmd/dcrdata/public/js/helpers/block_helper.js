@@ -1,5 +1,5 @@
 // Check for the txid in the given block
-export default function txInBlock (txid, block) {
+export default function txInBlock(txid, block) {
   const txTypes = [block.Tx, block.Tickets, block.Revs, block.Votes]
   for (const txIdx in txTypes) {
     const txs = txTypes[txIdx]

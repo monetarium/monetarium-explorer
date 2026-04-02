@@ -3,19 +3,19 @@
 // The keys in zoomMap can be passed directly to Zoom.validate.
 const zoomMap = {
   all: 0,
-  year: 3.154e+10,
-  month: 2.628e+9,
-  week: 6.048e+8,
-  day: 8.64e+7
+  year: 3.154e10,
+  month: 2.628e9,
+  week: 6.048e8,
+  day: 8.64e7
 }
 
-function zoomObject (start, end) {
+function zoomObject(start, end) {
   return { start, end }
 }
 
 // Attempts to decode a string of format start-end where start and end are
 // base 36 encoded unix timestamps in seconds.
-function decodeZoomString (encoded) {
+function decodeZoomString(encoded) {
   const range = encoded.split('-')
   if (range.length !== 2) {
     return false
@@ -28,7 +28,7 @@ function decodeZoomString (encoded) {
   return zoomObject(start, end)
 }
 
-function tryDecode (zoom) {
+function tryDecode(zoom) {
   if (Array.isArray(zoom) && zoom.length === 2) {
     return zoomObject(zoom[0], zoom[1])
   } else if (typeof zoom === 'string' && zoom.indexOf('-') !== -1) {
@@ -40,18 +40,18 @@ function tryDecode (zoom) {
 // Zoom is the exported class for dealing with Zoom windows. It is composed
 // entirely of static methods used for working with zoom ranges.
 export default class Zoom {
-  static object (start, end) {
+  static object(start, end) {
     return zoomObject(start, end)
   }
 
-  static mapValue (key, scale) {
+  static mapValue(key, scale) {
     scale = scale || 1
     return zoomMap[key] / scale
   }
 
   // encode uses base 36 encoded unix timestamps to store the range in a
   // short string.
-  static encode (start, end) {
+  static encode(start, end) {
     // Can supply a single argument of zoomObject type, or two
     // millisecond timestamps.
     if (!end) {
@@ -59,10 +59,10 @@ export default class Zoom {
       end = range.end
       start = range.start
     }
-    return parseInt(start).toString(36) + '-' + parseInt(end).toString(36)
+    return `${parseInt(start).toString(36)}-${parseInt(end).toString(36)}`
   }
 
-  static decode (encoded, limits, scale) {
+  static decode(encoded, limits, scale) {
     // decodes zoomString, such as from this.encode. zoomObjects pass through.
     // If limits are provided, encoded can be a zoomMap key.
     scale = scale || 1
@@ -78,7 +78,7 @@ export default class Zoom {
 
   // validate will shift and clamp the proposed zoom window to accommodate the
   // range limits and minimum size.
-  static validate (proposal, limits, minSize, scale) {
+  static validate(proposal, limits, minSize, scale) {
     // proposed: encoded zoom string || zoomMap key || zoomObject
     // limits: zoomObject || array
     scale = scale || 1
@@ -109,7 +109,7 @@ export default class Zoom {
 
   // mapKey returns the corresponding map key, if the zoom meets the correct
   // range and position within the limits, else null.
-  static mapKey (zoom, limits, scale) {
+  static mapKey(zoom, limits, scale) {
     scale = scale || 1
     const lims = tryDecode(limits)
     const decoded = this.decode(zoom, lims)
@@ -125,7 +125,7 @@ export default class Zoom {
   }
 
   // project proportionally translates the zoom from oldWindow to newWindow.
-  static project (zoom, oldWindow, newWindow) {
+  static project(zoom, oldWindow, newWindow) {
     const decoded = tryDecode(zoom)
     if (!decoded) return
     const ow = tryDecode(oldWindow)
