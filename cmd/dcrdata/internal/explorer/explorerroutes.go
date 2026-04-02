@@ -895,6 +895,7 @@ func (exp *explorerUI) TxPage(w http.ResponseWriter, r *http.Request) {
 				// VoteInfo TODO - check votes table
 				Coinbase:     dbTx0.BlockIndex == 0 && dbTx0.Tree == wire.TxTreeRegular,
 				Treasurybase: stake.TxType(txType) == stake.TxTypeTreasuryBase,
+				SKASent:      dbTx0.SentByCoin,
 			},
 			SpendingTxns: make([]types.TxInID, len(dbTx0.VoutDbIds)), // SpendingTxns filled below
 			// Vins - looked-up in vins table
@@ -946,18 +947,23 @@ func (exp *explorerUI) TxPage(w http.ResponseWriter, r *http.Request) {
 				log.Warnf("SpendingTransaction failed for outpoint %s:%d: %v",
 					hash, vouts[iv].TxIndex, err)
 			}
-			amount := dcrutil.Amount(int64(vouts[iv].Value)).ToCoin()
-			tx.Vout = append(tx.Vout, types.Vout{
-				Addresses:       vouts[iv].ScriptPubKeyData.Addresses,
-				Amount:          amount,
-				FormattedAmount: humanize.Commaf(amount),
-				Type:            vouts[iv].ScriptPubKeyData.Type.String(),
-				Spent:           spendingTx != "",
-				// OP_RETURN:       opReturn,
-				// OP_TADD:         opTAdd,
-				Index:   vouts[iv].TxIndex,
-				Version: vouts[iv].Version,
-			})
+			vout := types.Vout{
+				Addresses: vouts[iv].ScriptPubKeyData.Addresses,
+				Type:      vouts[iv].ScriptPubKeyData.Type.String(),
+				Spent:     spendingTx != "",
+				Index:     vouts[iv].TxIndex,
+				Version:   vouts[iv].Version,
+				CoinType:  vouts[iv].CoinType,
+				SKAValue:  vouts[iv].SKAValue,
+			}
+			if vouts[iv].CoinType == 0 {
+				amount := dcrutil.Amount(int64(vouts[iv].Value)).ToCoin()
+				vout.Amount = amount
+				vout.FormattedAmount = humanize.Commaf(amount)
+			} else {
+				vout.FormattedAmount = types.FormatSKAAmount(vouts[iv].SKAValue, vouts[iv].CoinType, true)
+			}
+			tx.Vout = append(tx.Vout, vout)
 		}
 
 		// Retrieve vins from DB.
@@ -989,7 +995,14 @@ func (exp *explorerUI) TxPage(w http.ResponseWriter, r *http.Request) {
 			asm, _ := txscript.DisasmString(vins[iv].ScriptSig)
 
 			txIndex := vins[iv].TxIndex
-			amount := dcrutil.Amount(vins[iv].ValueIn).ToCoin()
+			var formattedAmt string
+			var amountIn float64
+			if vins[iv].CoinType == 0 {
+				amountIn = dcrutil.Amount(vins[iv].ValueIn).ToCoin()
+				formattedAmt = humanize.Commaf(amountIn)
+			} else {
+				formattedAmt = types.FormatSKAAmount(vins[iv].SKAValue, vins[iv].CoinType, true)
+			}
 			var coinbase, stakebase, tspend string
 			var treasuryBase bool
 			if txIndex == 0 {
@@ -1013,7 +1026,7 @@ func (exp *explorerUI) TxPage(w http.ResponseWriter, r *http.Request) {
 					Vout:          vins[iv].PrevTxIndex,
 					Tree:          dbTx0.Tree,
 					Sequence:      vins[iv].Sequence,
-					AmountIn:      amount,
+					AmountIn:      amountIn,
 					BlockHeight:   uint32(tx.BlockHeight),
 					BlockIndex:    tx.BlockIndex,
 					ScriptSig: &chainjson.ScriptSig{
@@ -1022,8 +1035,10 @@ func (exp *explorerUI) TxPage(w http.ResponseWriter, r *http.Request) {
 					},
 				},
 				Addresses:       []string{"unknown"}, // addresses,
-				FormattedAmount: humanize.Commaf(amount),
+				FormattedAmount: formattedAmt,
 				Index:           txIndex,
+				CoinType:        vins[iv].CoinType,
+				SKAValue:        vins[iv].SKAValue,
 			})
 		}
 

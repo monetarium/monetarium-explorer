@@ -194,6 +194,7 @@ type TxBasic struct {
 	Treasurybase  bool
 	MixCount      uint32
 	MixDenom      int64
+	SKASent       map[uint8]string
 }
 
 // TrimmedTxInfo for use with /visualblocks
@@ -451,6 +452,8 @@ type Vin struct {
 	DisplayText     string
 	TextIsHash      bool
 	Link            string
+	CoinType        uint8
+	SKAValue        string
 }
 
 // Vout models basic data about a tx output for display
@@ -464,6 +467,8 @@ type Vout struct {
 	OP_TADD         bool
 	Index           uint32
 	Version         uint16
+	CoinType        uint8
+	SKAValue        string
 }
 
 // CoinRowData holds per-coin summary data for the expandable blocks table.

@@ -117,7 +117,7 @@ func Test_processTransactions_VinCoinType(t *testing.T) {
 	tx.AddTxOut(wire.NewTxOutSKA(bigOut, cointype.CoinType(1), nil))
 
 	blk := syntheticBlock(tx)
-	_, _, vins := processTransactions(blk, wire.TxTreeRegular, chaincfg.SimNetParams(), true, true)
+	_, vouts, vins := processTransactions(blk, wire.TxTreeRegular, chaincfg.SimNetParams(), true, true)
 
 	// vins[1] is our tx (vins[0] is coinbase)
 	if len(vins) < 2 || len(vins[1]) == 0 {
@@ -125,6 +125,20 @@ func Test_processTransactions_VinCoinType(t *testing.T) {
 	}
 	if vins[1][0].CoinType != 1 {
 		t.Errorf("vin CoinType: want 1 (SKA-1), got %d", vins[1][0].CoinType)
+	}
+	if vins[1][0].SKAValue != bigAmt.String() {
+		t.Errorf("vin SKAValue: want %s, got %q", bigAmt, vins[1][0].SKAValue)
+	}
+
+	// vout SKAValue must be set, Value must be 0
+	if len(vouts) < 2 || len(vouts[1]) == 0 {
+		t.Fatal("expected vout for SKA tx")
+	}
+	if vouts[1][0].SKAValue != bigOut.String() {
+		t.Errorf("vout SKAValue: want %s, got %q", bigOut, vouts[1][0].SKAValue)
+	}
+	if vouts[1][0].Value != 0 {
+		t.Errorf("vout Value must be 0 for SKA output, got %d", vouts[1][0].Value)
 	}
 }
 

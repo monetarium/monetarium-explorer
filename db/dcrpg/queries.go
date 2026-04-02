@@ -1930,7 +1930,8 @@ func insertVinsStmt(stmt *sql.Stmt, dbVins dbtypes.VinTxPropertyARRAY) ([]uint64
 		var id uint64
 		err := stmt.QueryRow(vin.TxID, vin.TxIndex, vin.TxTree,
 			vin.PrevTxHash, vin.PrevTxIndex, vin.PrevTxTree,
-			vin.ValueIn, vin.CoinType, vin.IsValid, vin.IsMainchain, vin.Time, vin.TxType).Scan(&id)
+			vin.ValueIn, vin.CoinType, sql.NullString{String: vin.SKAValue, Valid: vin.SKAValue != ""},
+			vin.IsValid, vin.IsMainchain, vin.Time, vin.TxType).Scan(&id)
 		if err != nil {
 			return ids, fmt.Errorf("InsertVins INSERT exec failed: %w", err)
 		}
@@ -2364,13 +2365,15 @@ func retrieveVinsByIDs(ctx context.Context, db *sql.DB, vinDbIDs []uint64) ([]db
 	vins := make([]dbtypes.VinTxProperty, len(vinDbIDs))
 	for i, id := range vinDbIDs {
 		vin := &vins[i]
+		var skaVal sql.NullString
 		err := db.QueryRowContext(ctx, internal.SelectAllVinInfoByID, id).Scan(&vin.TxID,
 			&vin.TxIndex, &vin.TxTree, &vin.IsValid, &vin.IsMainchain,
 			&vin.Time, &vin.PrevTxHash, &vin.PrevTxIndex, &vin.PrevTxTree,
-			&vin.ValueIn, &vin.TxType)
+			&vin.ValueIn, &vin.CoinType, &skaVal, &vin.TxType)
 		if err != nil {
 			return nil, err
 		}
+		vin.SKAValue = skaVal.String
 	}
 	return vins, nil
 }

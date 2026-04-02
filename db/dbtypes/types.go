@@ -2039,6 +2039,7 @@ type VinTxProperty struct {
 	Sequence    uint32    `json:"sequence"`
 	ValueIn     int64     `json:"amountin"`
 	CoinType    uint8     `json:"coin_type"`
+	SKAValue    string    `json:"ska_value,omitempty"`
 	TxID        ChainHash `json:"tx_hash"`
 	TxIndex     uint32    `json:"tx_index"`
 	TxTree      uint16    `json:"tx_tree"`
@@ -2217,6 +2218,8 @@ type AddressTx struct {
 	MatchedTxIndex uint32
 	MergedTxnCount uint64 `json:",omitempty"`
 	BlockHeight    uint32
+	CoinType       uint8
+	SKAValue       string
 }
 
 // Link formats a link for the transaction, with vin/vout index if the AddressTx
@@ -2369,20 +2372,30 @@ func ReduceAddressHistory(addrHist []*AddressRow) (*AddressInfo, float64, float6
 
 		if addrOut.IsFunding {
 			// Funding transaction
-			received += int64(addrOut.Value)
-			tx.ReceivedTotal = coin
-			creditTxns = append(creditTxns, &tx)
-			if txType != "Regular" {
-				fromStake += int64(addrOut.Value)
+			if addrOut.CoinType == 0 {
+				received += int64(addrOut.Value)
+				tx.ReceivedTotal = coin
+				if txType != "Regular" {
+					fromStake += int64(addrOut.Value)
+				}
+			} else {
+				tx.SKAValue = addrOut.SKAValue
+				tx.CoinType = addrOut.CoinType
 			}
+			creditTxns = append(creditTxns, &tx)
 		} else {
 			// Spending transaction
-			sent += int64(addrOut.Value)
-			tx.SentTotal = coin
-			debitTxns = append(debitTxns, &tx)
-			if txType != "Regular" {
-				toStake += int64(addrOut.Value)
+			if addrOut.CoinType == 0 {
+				sent += int64(addrOut.Value)
+				tx.SentTotal = coin
+				if txType != "Regular" {
+					toStake += int64(addrOut.Value)
+				}
+			} else {
+				tx.SKAValue = addrOut.SKAValue
+				tx.CoinType = addrOut.CoinType
 			}
+			debitTxns = append(debitTxns, &tx)
 		}
 
 		transactions = append(transactions, &tx)

@@ -192,6 +192,10 @@ func processTransactions(msgBlock *wire.MsgBlock, tree int8, chainParams *chainc
 
 		dbTxVins[txIndex] = make(VinTxPropertyARRAY, 0, len(tx.TxIn))
 		for idx, txin := range tx.TxIn {
+			var skaVal string
+			if vinCoinType != 0 && txin.SKAValueIn != nil {
+				skaVal = txin.SKAValueIn.String()
+			}
 			dbTxVins[txIndex] = append(dbTxVins[txIndex], VinTxProperty{
 				PrevTxHash:  ChainHash(txin.PreviousOutPoint.Hash),
 				PrevTxIndex: txin.PreviousOutPoint.Index,
@@ -209,6 +213,7 @@ func processTransactions(msgBlock *wire.MsgBlock, tree int8, chainParams *chainc
 				IsValid:     dbTx.IsValid,
 				IsMainchain: isMainchain,
 				CoinType:    vinCoinType,
+				SKAValue:    skaVal,
 			})
 		}
 

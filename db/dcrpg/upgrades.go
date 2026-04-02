@@ -440,6 +440,7 @@ func upgradeSchemaMultiCoin(db *sql.DB) error {
 	log.Infof("Applying multi-coin schema migration (Task 10)")
 	stmts := []string{
 		`ALTER TABLE vins     ADD COLUMN IF NOT EXISTS coin_type INT2 NOT NULL DEFAULT 0`,
+		`ALTER TABLE vins     ADD COLUMN IF NOT EXISTS ska_value TEXT`,
 		`ALTER TABLE vouts    ADD COLUMN IF NOT EXISTS coin_type INT2 NOT NULL DEFAULT 0`,
 		`ALTER TABLE vouts    ADD COLUMN IF NOT EXISTS ska_value TEXT`,
 		`ALTER TABLE transactions ADD COLUMN IF NOT EXISTS ska_fees JSONB`,

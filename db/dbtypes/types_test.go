@@ -182,3 +182,35 @@ func TestChainHashArray2_Value(t *testing.T) {
 		})
 	}
 }
+
+func TestReduceAddressHistory_SKA(t *testing.T) {
+	rows := []*AddressRow{
+		{
+			Address:        "MsTest",
+			TxHash:         ChainHash{1},
+			ValidMainChain: true,
+			IsFunding:      true,
+			CoinType:       1,
+			Value:          0,
+			SKAValue:       "1000000000000000000",
+		},
+	}
+	ai, _, _ := ReduceAddressHistory(rows)
+	if ai == nil || len(ai.Transactions) == 0 {
+		t.Fatal("expected one transaction")
+	}
+	tx := ai.Transactions[0]
+	if tx.SKAValue != "1000000000000000000" {
+		t.Errorf("SKAValue: want 1000000000000000000, got %q", tx.SKAValue)
+	}
+	if tx.ReceivedTotal != 0 {
+		t.Errorf("ReceivedTotal must be 0 for SKA row, got %v", tx.ReceivedTotal)
+	}
+	if tx.CoinType != 1 {
+		t.Errorf("CoinType: want 1, got %d", tx.CoinType)
+	}
+	// VAR totals must be unaffected
+	if ai.AmountReceived != 0 {
+		t.Errorf("AmountReceived must be 0 for SKA-only history, got %v", ai.AmountReceived)
+	}
+}

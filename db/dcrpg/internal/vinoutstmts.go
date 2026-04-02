@@ -22,12 +22,13 @@ const (
 		prev_tx_tree INT2,
 		value_in INT8,
 		coin_type INT2 NOT NULL DEFAULT 0,
+		ska_value TEXT,
 		tx_type INT4
 	);`
 
 	// insertVinRow is the basis for several vins insert/upsert statements.
 	insertVinRow = `INSERT INTO vins (tx_hash, tx_index, tx_tree, prev_tx_hash, prev_tx_index, prev_tx_tree,
-		value_in, coin_type, is_valid, is_mainchain, block_time, tx_type) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) `
+		value_in, coin_type, ska_value, is_valid, is_mainchain, block_time, tx_type) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) `
 
 	// InsertVinRow inserts a new vin row without checking for unique index
 	// conflicts. This should only be used before the unique indexes are created
@@ -37,7 +38,7 @@ const (
 	// UpsertVinRow is an upsert (insert or update on conflict), returning the
 	// inserted/updated vin row id.
 	UpsertVinRow = insertVinRow + `ON CONFLICT (tx_hash, tx_index, tx_tree) DO UPDATE
-		SET is_valid = $9, is_mainchain = $10, block_time = $11,
+		SET is_valid = $10, is_mainchain = $11, block_time = $12,
 			prev_tx_hash = $4, prev_tx_index = $5, prev_tx_tree = $6
 		RETURNING id;`
 
@@ -100,7 +101,7 @@ const (
 
 	SelectFundingOutpointIndxByVinID = `SELECT prev_tx_index FROM vins WHERE id=$1;`
 	SelectAllVinInfoByID             = `SELECT tx_hash, tx_index, tx_tree, is_valid, is_mainchain, block_time,  --- could easily do this by tx_hash and tx_index
-		prev_tx_hash, prev_tx_index, prev_tx_tree, value_in, coin_type, tx_type FROM vins WHERE id = $1;`
+		prev_tx_hash, prev_tx_index, prev_tx_tree, value_in, coin_type, ska_value, tx_type FROM vins WHERE id = $1;`
 
 	/* alt without spend_tx_row_id
 	SelectUTXOsViaVinsMatch = `SELECT vouts.id, vouts.tx_hash, vouts.tx_index,   -- row ID and outpoint
