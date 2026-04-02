@@ -200,6 +200,8 @@ type Vout struct {
 	Version             uint16       `json:"version"`
 	ScriptPubKeyDecoded ScriptPubKey `json:"scriptPubKey"`
 	Spend               *TxInputID   `json:"spend,omitempty"` // unused?
+	CoinType            uint8        `json:"coin_type,omitempty"`
+	SKAValue            string       `json:"ska_value,omitempty"`
 }
 
 // TxInputID specifies a transaction input as hash:vin_index.
@@ -360,6 +362,8 @@ type TxOut struct {
 	Value               float64      `json:"value"`
 	Version             uint16       `json:"version"`
 	ScriptPubKeyDecoded ScriptPubKey `json:"scriptPubKey"`
+	CoinType            uint8        `json:"coin_type,omitempty"`
+	SKAValue            string       `json:"ska_value,omitempty"`
 }
 
 // TxIn defines a decred transaction input.

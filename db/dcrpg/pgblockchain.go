@@ -4937,6 +4937,8 @@ func (pgb *ChainDB) GetAPITransaction(ctx context.Context, txid *chainhash.Hash)
 		tx.Vout[i].Value = vout.Value
 		tx.Vout[i].N = vout.N
 		tx.Vout[i].Version = vout.Version
+		tx.Vout[i].CoinType = vout.CoinType
+		tx.Vout[i].SKAValue = vout.SKAValue
 		spk := &tx.Vout[i].ScriptPubKeyDecoded
 		spkRaw := &vout.ScriptPubKey
 		spk.Asm = spkRaw.Asm
@@ -5081,8 +5083,10 @@ func (pgb *ChainDB) GetAllTxOut(ctx context.Context, txid *chainhash.Hash) []*ap
 			apiScriptClass = apitypes.ScriptClassStakeSubCommit
 		}
 		allTxOut = append(allTxOut, &apitypes.TxOut{
-			Value:   txouts[i].Value,
-			Version: txouts[i].Version,
+			Value:    txouts[i].Value,
+			Version:  txouts[i].Version,
+			CoinType: txouts[i].CoinType,
+			SKAValue: txouts[i].SKAValue,
 			ScriptPubKeyDecoded: apitypes.ScriptPubKey{
 				Asm:       spk.Asm,
 				Hex:       spk.Hex,

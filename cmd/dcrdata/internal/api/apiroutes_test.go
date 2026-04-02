@@ -75,3 +75,50 @@ func TestProposalRoute_Returns410(t *testing.T) {
 		t.Errorf("want 410, got %d", w.Code)
 	}
 }
+
+func TestAPIVout_SKAFields(t *testing.T) {
+	// Verify that apitypes.Vout carries CoinType and SKAValue and that they
+	// round-trip through JSON without precision loss.
+	vout := apitypes.Vout{
+		Value:    0,
+		N:        0,
+		CoinType: 1,
+		SKAValue: "900000000000000000000000000000000",
+	}
+	b, err := json.Marshal(vout)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var got apitypes.Vout
+	if err := json.Unmarshal(b, &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if got.CoinType != 1 {
+		t.Errorf("CoinType: want 1, got %d", got.CoinType)
+	}
+	if got.SKAValue != vout.SKAValue {
+		t.Errorf("SKAValue: want %s, got %s", vout.SKAValue, got.SKAValue)
+	}
+}
+
+func TestAPITxOut_SKAFields(t *testing.T) {
+	txout := apitypes.TxOut{
+		Value:    0,
+		CoinType: 2,
+		SKAValue: "123456789012345678901234567890",
+	}
+	b, err := json.Marshal(txout)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var got apitypes.TxOut
+	if err := json.Unmarshal(b, &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if got.CoinType != 2 {
+		t.Errorf("CoinType: want 2, got %d", got.CoinType)
+	}
+	if got.SKAValue != txout.SKAValue {
+		t.Errorf("SKAValue: want %s, got %s", txout.SKAValue, got.SKAValue)
+	}
+}
