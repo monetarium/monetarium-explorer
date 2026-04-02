@@ -712,3 +712,142 @@ strings).
 
 Demo: Restart the explorer against a synced DB; the homepage latest-blocks table shows SKA-1 rows without requiring a re-sync.
 
+> ### Task 16: Display SKA amounts on transaction and address pages
+Commit: fix: display SKA amounts on tx and address pages
+
+Objective: Six display bugs cause SKA amounts to show as 0 on the transaction and address pages. All stem from the same root: Value int64 is 0 for SKA outputs/inputs; 
+the real amount lives in SKAValue string. The display layer never reads it.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+explorer/types/explorertypes.go — extend Vout and AddressTx:
+
+go
+type Vout struct {
+    // ... existing fields ...
+    CoinType        uint8
+    SKAValue        string // raw atom string for SKA outputs; empty for VAR
+    FormattedAmount string // already exists; set correctly for both coin types
+}
+
+type AddressTx struct {
+    // ... existing fields ...
+    CoinType      uint8
+    SKAValue      string // raw atom string; empty for VAR
+}
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+cmd/dcrdata/internal/explorer/explorerroutes.go — vout loop:
+
+Replace:
+go
+amount := dcrutil.Amount(int64(vouts[iv].Value)).ToCoin()
+tx.Vout = append(tx.Vout, types.Vout{
+    Amount:          amount,
+    FormattedAmount: humanize.Commaf(amount),
+    ...
+})
+
+With:
+go
+vout := types.Vout{
+    Addresses: vouts[iv].ScriptPubKeyData.Addresses,
+    Type:      vouts[iv].ScriptPubKeyData.Type.String(),
+    Spent:     spendingTx != "",
+    Index:     vouts[iv].TxIndex,
+    Version:   vouts[iv].Version,
+    CoinType:  vouts[iv].CoinType,
+    SKAValue:  vouts[iv].SKAValue,
+}
+if vouts[iv].CoinType == 0 {
+    amount := dcrutil.Amount(int64(vouts[iv].Value)).ToCoin()
+    vout.Amount = amount
+    vout.FormattedAmount = humanize.Commaf(amount)
+} else {
+    vout.FormattedAmount = exptypes.FormatSKAAmount(vouts[iv].SKAValue, vouts[iv].CoinType, true)
+}
+tx.Vout = append(tx.Vout, vout)
+
+
+vin loop — replace:
+go
+amount := dcrutil.Amount(vins[iv].ValueIn).ToCoin()
+// ...
+AmountIn:      amount,
+// ...
+FormattedAmount: humanize.Commaf(amount),
+
+With:
+go
+var formattedAmt string
+var amountIn float64
+if vins[iv].CoinType == 0 {
+    amountIn = dcrutil.Amount(vins[iv].ValueIn).ToCoin()
+    formattedAmt = humanize.Commaf(amountIn)
+} else {
+    formattedAmt = exptypes.FormatSKAAmount(/* need SKAValue on VinTxProperty — see below */)
+}
+
+
+This requires adding SKAValue string to dbtypes.VinTxProperty (currently missing — vins store ValueIn int64 which is 0 for SKA). Populate it in processTransactions 
+alongside CoinType:
+go
+// in the vin loop in extraction.go
+SKAValue: func() string {
+    if vinCoinType != 0 {
+        // sum SKAValueIn from this input
+        if txin.SKAValueIn != nil {
+            return txin.SKAValueIn.String()
+        }
+    }
+    return ""
+}(),
+
+And add ska_value TEXT to the vins INSERT statement + SelectAllVinInfoByID SELECT (mirrors the vouts pattern).
+
+TxBasic.Total — set from dbTx0.Sent (VAR only). Add a SKASent map[uint8]string field to TxBasic and populate from dbTx0.SentByCoin:
+go
+TxBasic: &types.TxBasic{
+    Total:   dcrutil.Amount(dbTx0.Sent).ToCoin(), // VAR
+    SKASent: dbTx0.SentByCoin,                    // SKA
+    ...
+}
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+db/dbtypes/types.go — ReduceAddressHistory:
+
+Replace:
+go
+coin := dcrutil.Amount(addrOut.Value).ToCoin()
+tx.ReceivedTotal = coin  // or SentTotal
+
+With:
+go
+if addrOut.CoinType == 0 {
+    coin := dcrutil.Amount(addrOut.Value).ToCoin()
+    if addrOut.IsFunding { tx.ReceivedTotal = coin } else { tx.SentTotal = coin }
+} else {
+    tx.SKAValue = addrOut.SKAValue
+    tx.CoinType = addrOut.CoinType
+}
+
+
+Also skip SKA rows in the VAR-only received/sent int64 accumulators (they're already 0 but make it explicit with a CoinType == 0 guard).
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+Test: Add cases to db/dbtypes/extraction_test.go asserting that a SKA-1 vout produces SKAValue != "" and Value == 0. Add a ReduceAddressHistory test with a SKA 
+AddressRow (CoinType=1, Value=0, SKAValue="1000000000000000000") asserting tx.SKAValue == "1000000000000000000" and tx.ReceivedTotal == 0.
+
+Demo: Navigate to a transaction with SKA-1 outputs — vout amounts show the correct SKA-1 value instead of 0. Navigate to the receiving address — the transaction row 
+shows the SKA-1 amount.
+
+
