@@ -1,8 +1,8 @@
 package txhelpers
 
 import (
-	"github.com/decred/dcrd/dcrutil/v4"
-	"github.com/decred/dcrd/wire"
+	"github.com/monetarium/monetarium-node/dcrutil"
+	"github.com/monetarium/monetarium-node/wire"
 )
 
 // must be sorted large to small

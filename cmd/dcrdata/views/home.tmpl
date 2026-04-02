@@ -2,7 +2,7 @@
 {{- $conv := .Conversions -}}
 <!DOCTYPE html>
 <html lang="en">
-{{ template "html-head" headData .CommonPageData "Decred Block Explorer by dcrdata.org"}}
+{{ template "html-head" headData .CommonPageData "Monetarium Block Explorer"}}
     {{ template "navbar" . }}
     <div class="container main" data-controller="time blocklist homepage">
         <div class="row">
@@ -33,7 +33,7 @@
                                 {{template "mempoolDump" .Mempool}}
                                 data-tooltip="transactions ready for the next block"
                             >{{threeSigFigs .Mempool.LikelyMineable.Total}}</span>
-                            <span class="h5">DCR</span>
+                            <span class="h5">VAR</span>
                         </div>
                     </div>
 
@@ -45,7 +45,7 @@
                                     <span class="h6"> regular</span>
                                     <br>
                                     <span class="h4" data-homepage-target="mpRegTotal">{{threeSigFigs .Mempool.LikelyMineable.RegularTotal}}</span>
-                                    <span class="h6">DCR</span>
+                                    <span class="h6">VAR</span>
                                 </div>
                                 {{- /* TODO: pe-SM, pe-MD, ETC CAN GO */ -}}
                                 <div class="text-end pe-3 pe-sm-3 pe-md-3 pe-lg-3 tx-bar tx-ticket d-inline-block">
@@ -54,7 +54,7 @@
                                     <br>
                                     <span class="h4" data-homepage-target="mpTicketTotal"
                                     >{{threeSigFigs .Mempool.LikelyMineable.TicketTotal}}</span>
-                                    <span class="h6">DCR</span>
+                                    <span class="h6">VAR</span>
                                 </div>
                             </div>
 
@@ -63,6 +63,15 @@
                                 <div class="tx-gauge tx-ticket" data-homepage-target="mpTicketBar"></div>
                                 <div class="tx-gauge tx-rev" data-homepage-target="mpRevBar"></div>
                                 <div class="tx-gauge tx-vote rounded-end" data-homepage-target="mpVoteBar"></div>
+                                {{- if .Mempool.CoinFills}}
+                                <div class="mt-1 d-flex" style="gap:4px">
+                                    {{- range .Mempool.CoinFills}}
+                                    <div style="flex:1;background:#eee;height:8px;border-radius:3px;overflow:hidden" title="{{.Symbol}}">
+                                        <div style="width:{{printf "%.1f" (mulf .FillPct 100.0)}}%;height:100%;background:{{.Color}}"></div>
+                                    </div>
+                                    {{- end}}
+                                </div>
+                                {{- end}}
                             </div>
 
                             <div class="d-flex justify-content-between align-items-center mx-auto px-2">
@@ -72,7 +81,7 @@
                                     <br>
                                     <span class="h4" data-homepage-target="mpRevTotal"
                                     >{{threeSigFigs .Mempool.LikelyMineable.RevokeTotal}}</span>
-                                    <span class="h6">DCR</span>
+                                    <span class="h6">VAR</span>
                                 </div>
                                 <div class="text-end pe-3 ps-sm-3 ps-md-3 ps-lg-3 tx-bar tx-bar tx-vote d-inline-block">
                                     <span data-homepage-target="mpVoteCount"
@@ -94,7 +103,7 @@
                                     <span class="h6"> votes</span>
                                     <br>
                                     <span class="h4" data-homepage-target="mpVoteTotal">{{threeSigFigs .Mempool.LikelyMineable.VoteTotal}}</span>
-                                    <span class="h6">DCR</span><br>
+                                    <span class="h6">VAR</span><br>
                                 </div>
                             </div>
                         </div>
@@ -105,7 +114,7 @@
                                 <tr>
                                     <th class="text-start ps-2">Hash</th>
                                     <th class="text-start">Type</th>
-                                    <th class="text-end">DCR</th>
+                                    <th class="text-end">VAR</th>
                                     <th class="text-end">Size</th>
                                     <th class="text-end pe-2 jsonly">Age</th>
                                 </tr>
@@ -142,7 +151,7 @@
                             </div>
                             <div class="mono lh1rem fs14-decimal fs24 pt-1 pb-1 d-flex align-items-baseline">
                                 <span data-homepage-target="blocksdiff">{{template "decimalParts" (float64AsDecimalParts .StakeDiff 8 false 2)}}</span>
-                                <span class="ps-1 unit lh15rem">DCR</span>
+                                <span class="ps-1 unit lh15rem">VAR</span>
                             </div>
                             {{if $conv -}}
                             <div class="fs12 lh1rem text-black-50">
@@ -154,7 +163,7 @@
                             <div class="fs13 text-secondary">Next Ticket Price</div>
                             <div class="mono d-flex align-items-baseline lh1rem pt-1 pb-1">
                                 <span class="fs22">~</span><span class="fs24 d-flex" data-homepage-target="nextExpectedSdiff">{{template "decimalParts" (float64AsDecimalParts .NextExpectedStakeDiff 2 false)}}</span>
-                                <span class="ps-1 unit lh15rem">DCR</span>
+                                <span class="ps-1 unit lh15rem">VAR</span>
                             </div>
                             <div class="d-flex lh1rem fs12 text-black-50">
                                 <span>min:&nbsp;</span>
@@ -198,12 +207,12 @@
                             </div>
                         </div>
                         <div class="col-12 mb-3 mb-sm-2 mb-md-3 mb-lg-3">
-                            <div class="fs13 text-secondary">Vote Reward</div>
+                            <div class="fs13 text-secondary">Vote VAR Reward</div>
                             <div class="mono lh1rem fs14-decimal fs24 pt-1 pb-1 d-flex align-items-baseline">
                                 <span data-homepage-target="bsubsidyPos">
                                     {{template "decimalParts" (float64AsDecimalParts (toFloat64Amount (divide .NBlockSubsidy.PoS 5)) 8 true 2)}}
                                 </span>
-                                <span class="ps-1 unit lh15rem" style="font-size:13px;">DCR/vote</span>
+                                <span class="ps-1 unit lh15rem" style="font-size:13px;">VAR/vote</span>
                             </div>
                             <div class="fs12 lh1rem text-black-50">
                                 <span data-homepage-target="ticketReward">{{printf "%.2f" .TicketReward}}%</span> per ~{{.RewardPeriod}}
@@ -216,7 +225,7 @@
                                 <span data-homepage-target="poolValue">
                                     {{template "decimalParts" (float64AsDecimalParts .PoolInfo.Value 0 true)}}
                                 </span>
-                                <span class="ps-1 unit lh15rem">DCR</span>
+                                <span class="ps-1 unit lh15rem">VAR</span>
                             </div>
                             <div class="fs12 lh1rem text-black-50">
                                 <span data-homepage-target="poolSizePct">{{printf "%.2f" .PoolInfo.Percentage}}</span> % of circulating supply
@@ -250,10 +259,10 @@
                             </div>
                         </div>
                         <div class="col-12 mb-3 mb-sm-2 mb-md-3 mb-lg-3">
-                            <div class="fs13 text-secondary">PoW Reward</div>
+                            <div class="fs13 text-secondary">PoW VAR Reward</div>
                             <div class="mono lh1rem p03rem0 fs14-decimal fs24 p03rem0 d-flex align-items-baseline">
                                 <span data-homepage-target="bsubsidyPow">{{template "decimalParts" (float64AsDecimalParts (toFloat64Amount .NBlockSubsidy.PoW) 8 true 2)}}</span>
-                                <span class="ps-1 unit lh15rem">DCR</span>
+                                <span class="ps-1 unit lh15rem">VAR</span>
                             </div>
                             {{if $conv -}}
                             <div class="fs12 lh1rem text-black-50">
@@ -293,16 +302,16 @@
                 <div class="bg-white mb-1 p-2 px-3 mx-1 flex-grow-1">
                     <div class="my-3 h4">
                         <span class="dcricon-tree d-inline-block pe-2 h4"></span>
-                        Distribution
+                        Supply
                     </div>
                     <div class="row mt-1">
                         <div class="col-12 mb-3 mb-sm-2 mb-md-3 mb-lg-3">
-                            <div class="fs13 text-secondary"><a href="/treasury">Treasury</a></div>
+                            <div class="fs13 text-secondary">VAR Circulating Supply</div>
                             <div class="mono lh1rem fs14-decimal fs24 p03rem0 d-flex align-items-baseline">
                                 <span data-homepage-target="devFund">
                                     {{template "decimalParts" (float64AsDecimalParts (toFloat64Amount (add .DevFund .TreasuryBalance.Balance)) 0 true)}}
                                 </span>
-                                <span class="ps-1 unit lh15rem">DCR</span>
+                                <span class="ps-1 unit lh15rem">VAR</span>
                             </div>
                             {{if $conv -}}
                             <div class="fs12 lh1rem text-black-50">
@@ -316,7 +325,7 @@
                                 <span data-homepage-target="coinSupply">
                                     {{template "decimalParts" (float64AsDecimalParts (toFloat64Amount .CoinSupply) 0 true)}}
                                 </span>
-                                <span class="ps-1 unit lh15rem">DCR</span>
+                                <span class="ps-1 unit lh15rem">VAR</span>
                             </div>
                             <div class="fs12 lh1rem text-black-50">
                                 {{if $conv -}}
@@ -331,7 +340,7 @@
                                 <span data-homepage-target="bsubsidyDev">
                                     {{template "decimalParts" (float64AsDecimalParts (toFloat64Amount .NBlockSubsidy.Dev) 8 true 2)}}
                                 </span>
-                                <span class="ps-1 unit lh15rem">DCR</span>
+                                <span class="ps-1 unit lh15rem">VAR</span>
                             </div>
                             {{if $conv -}}
                             <div class="fs12 lh1rem text-black-50">
@@ -358,6 +367,14 @@
     </div>
     <!-- end wrapper -->
     {{  template "footer" . }}
+<script>
+function mnToggleCoinRows(row) {
+  var next = row.nextElementSibling;
+  if (next && next.classList.contains('mn-coin-rows')) {
+    next.style.display = next.style.display === 'none' ? '' : 'none';
+  }
+}
+</script>
 </body>
 </html>
 {{- end}}

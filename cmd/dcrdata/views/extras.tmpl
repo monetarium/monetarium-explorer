@@ -4,22 +4,22 @@
 	<meta name="viewport" content="width=device-width, initial-scale=1">
 	{{/* The above meta tags *must* come first in the head */ -}}
 	{{- if .Data.Host -}}
-	<meta name="description" content="dcrdata, an original Decred block explorer powered by Go">
-	<meta name="author" content="The Decred developers">
-	<meta name="application-name"           content="dcrdata - The Decred Block Explorer">
-	<meta name="apple-mobile-web-app-title" content="dcrdata - The Decred Block Explorer">
+	<meta name="description" content="Monetarium Block Explorer">
+	<meta name="author" content="The Monetarium developers">
+	<meta name="application-name"           content="Monetarium Block Explorer">
+	<meta name="apple-mobile-web-app-title" content="Monetarium Block Explorer">
 
 	<meta name="twitter:card" content="summary"/>
-	<meta name="twitter:title" content="dcrdata - The Decred Block Explorer"/>
+	<meta name="twitter:title" content="Monetarium Block Explorer"/>
 	<meta name="twitter:description" content="{{ .Title }}"/>
-	<meta name="twitter:image" content="{{ .Data.BaseURL }}/images/dcrdata400x348.png"/>
+	<meta name="twitter:image" content="{{ .Data.BaseURL }}/images/monetarium400x348.png"/>
 
-	<meta property="og:site_name"   content="dcrdata" />
-	<meta property="og:title"       content="dcrdata - The Decred Block Explorer" />
+	<meta property="og:site_name"   content="monetarium-explorer" />
+	<meta property="og:title"       content="Monetarium Block Explorer" />
 	<meta property="og:description" content="{{ .Title }}" />
 	<meta property="og:type"        content="website" />
 	<meta property="og:url"         content="{{ .Data.CanonicalURL }}" />
-	<meta property="og:image"       content="{{ .Data.BaseURL }}/images/dcrdata400x348.png" />
+	<meta property="og:image"       content="{{ .Data.BaseURL }}/images/monetarium400x348.png" />
 	{{- end}}
 
 	{{- if ne .Data.Links.OnionURL "" }}
@@ -106,16 +106,16 @@
 				<span class="patty short"></span>
 				<div id="menu">
 					<a class="menu-item" data-keynav-skip href="/" title="Home">Home</a>
-					<a class="menu-item" data-keynav-skip href="/blocks" title="Decred blocks">Blocks</a>
-					<a class="menu-item" data-keynav-skip href="/mempool" title="Decred mempool">Mempool</a>
-					<a class="menu-item" data-keynav-skip href="/ticketpool" title="Decred ticket pool">Ticket Pool</a>
-					<a class="menu-item jsonly" data-keynav-skip href="/charts" title="Decred charts">Charts</a>
+					<a class="menu-item" data-keynav-skip href="/blocks" title="Monetarium blocks">Blocks</a>
+					<a class="menu-item" data-keynav-skip href="/mempool" title="Monetarium mempool">Mempool</a>
+					<a class="menu-item" data-keynav-skip href="/ticketpool" title="Monetarium ticket pool">Ticket Pool</a>
+					<a class="menu-item jsonly" data-keynav-skip href="/charts" title="Monetarium charts">Charts</a>
 					<a class="menu-item" data-keynav-skip href="/agendas" title="Agendas">Agendas</a>
 					<a class="menu-item" data-keynav-skip href="/proposals" title="Proposals">Proposals</a>
 					<a class="menu-item" data-keynav-skip href="/market" title="Market">Market</a>
-					<a class="menu-item" data-keynav-skip href="/attack-cost" title="Decred Attack Cost">Attack Cost</a>
+					<a class="menu-item" data-keynav-skip href="/attack-cost" title="Monetarium Attack Cost">Attack Cost</a>
 					<a class="menu-item" data-keynav-skip href="/parameters" title="Chain Parameters">Parameters</a>
-					<a class="menu-item" data-keynav-skip href="/treasury" title="Decred Treasury">Treasury</a>
+					<a class="menu-item" data-keynav-skip href="/treasury" title="Monetarium Supply">Supply</a>
 					<a class="menu-item" data-keynav-skip href="/decodetx" title="Decode or send a raw transaction">Decode/Broadcast Tx</a>
 					<a class="menu-item" data-keynav-skip href="/verify-message" title="Verify Message">Verify Message</a>
 				{{- if eq .NetName "Mainnet"}}
@@ -156,15 +156,15 @@
 			<a
 				class="text-nowrap d-none d-md-inline-block pe-3"
 				href="{{.Links.Github}}"
-				title="dcrdata on GitHub"
+				title="monetarium-explorer on GitHub"
 				target="_blank"
 				rel="noopener noreferrer"
-			>dcrdata v{{.Version}}</a>
+			>monetarium-explorer v{{.Version}}</a>
 			{{- if ne .Links.OnionURL "" }}
 			<a
 				class="text-nowrap d-none d-md-inline-block pe-3"
 				href="{{.Links.OnionURL}}"
-				title="Access dcrdata over Tor"
+				title="Access monetarium-explorer over Tor"
 				target="_blank"
 				rel="noopener noreferrer"
 			>Tor site</a>
@@ -174,7 +174,7 @@
 				href="{{.Links.License}}"
 				target="_blank"
 				rel="noopener noreferrer"
-			>© {{currentYear}} The Decred developers (ISC)</a>
+			>© {{currentYear}} The Monetarium developers (ISC)</a>
 		</span>
 		<span
 			id="connection"
@@ -258,21 +258,21 @@
 		<th class="text-end"><span class="d-sm-none position-relative" data-tooltip="merged input count">Cnt</span
 			><span class="d-none d-sm-inline">Inputs</span>
 		</th>
-		<th class="text-end">Debit DCR</th>
+		<th class="text-end">Debit VAR</th>
 	{{- else if eq $txType "merged_credit" }}
 		<th class="text-end"><span class="d-sm-none position-relative" data-tooltip="merged output count">Cnt</span
 			><span class="d-none d-sm-inline">Outputs</span>
 		</th>
-		<th class="text-end">Credit DCR</th>
+		<th class="text-end">Credit VAR</th>
 	{{- else if eq $txType "merged" }}
 		<th title="Count of address's inputs and outputs in the transaction." class="text-end"><span class="d-none d-sm-inline-block">I/O Count</span><span class="d-sm-none position-relative" data-tooltip="# of inputs and outputs">#</span></th>
-		<th class="text-end">Credit DCR</th>
-		<th class="text-end">Debit DCR</th>
+		<th class="text-end">Credit VAR</th>
+		<th class="text-end">Debit VAR</th>
 	{{- else if eq $txType "unspent" }}
-		<th class="text-end">Credit DCR</th>
+		<th class="text-end">Credit VAR</th>
 	{{- else}}
-		<th class="text-end">Credit DCR</th>
-		<th class="text-end">Debit DCR</th>
+		<th class="text-end">Credit VAR</th>
+		<th class="text-end">Debit VAR</th>
 	{{- end}}
 		<th class="d-none d-sm-table-cell text-end">Time (UTC)</th>
 		<th class="text-end">Age</th>

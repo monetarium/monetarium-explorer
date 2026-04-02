@@ -16,9 +16,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/decred/dcrd/chaincfg/chainhash"
 	"github.com/decred/slog"
 	"github.com/dgraph-io/badger"
+	"github.com/monetarium/monetarium-node/chaincfg/chainhash"
 )
 
 // TicketPool contains the live ticket pool diffs (tickets in/out) between

@@ -8,9 +8,9 @@ import (
 	"net/http"
 	"strings"
 
-	m "github.com/decred/dcrdata/cmd/dcrdata/internal/middleware"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	m "github.com/monetarium/monetarium-explorer/cmd/dcrdata/internal/middleware"
 	"github.com/rs/cors"
 )
 
@@ -200,10 +200,11 @@ func NewAPIRouter(app *appContext, JSONIndent string, useRealIP, compressLarge b
 		})
 	})
 
-	// Treasury
+	// Treasury — not present in Monetarium; return 410 Gone.
 	mux.Route("/treasury", func(r chi.Router) {
-		r.Get("/balance", app.getTreasuryBalance)
-		r.With(m.ChartGroupingCtx).Get("/io/{chartgrouping}", app.getTreasuryIO)
+		r.Get("/*", func(w http.ResponseWriter, r *http.Request) {
+			http.Error(w, "treasury not available", http.StatusGone)
+		})
 	})
 
 	// Returns agenda data like; description, name, lockedin activated and other
@@ -245,8 +246,11 @@ func NewAPIRouter(app *appContext, JSONIndent string, useRealIP, compressLarge b
 		r.Get("/charts", app.getTicketPoolCharts)
 	})
 
+	// Proposals/Politeia — not present in Monetarium; return 410 Gone.
 	mux.Route("/proposal", func(r chi.Router) {
-		r.With(m.ProposalTokenCtx).Get("/{token}", app.getProposalChartData)
+		r.Get("/*", func(w http.ResponseWriter, r *http.Request) {
+			http.Error(w, "proposals not available", http.StatusGone)
+		})
 	})
 
 	mux.Route("/exchangerate", func(r chi.Router) {

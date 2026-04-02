@@ -22,24 +22,24 @@ import (
 	"sync"
 	"time"
 
-	"github.com/decred/dcrd/blockchain/standalone/v2"
-	"github.com/decred/dcrd/chaincfg/chainhash"
-	"github.com/decred/dcrd/chaincfg/v3"
-	"github.com/decred/dcrd/dcrutil/v4"
-	chainjson "github.com/decred/dcrd/rpc/jsonrpc/types/v4"
-	"github.com/decred/dcrd/rpcclient/v8"
-	"github.com/decred/dcrd/txscript/v4/stdaddr"
-	"github.com/decred/dcrd/txscript/v4/stdscript"
-	"github.com/decred/dcrd/wire"
+	"github.com/monetarium/monetarium-node/blockchain/standalone"
+	"github.com/monetarium/monetarium-node/chaincfg"
+	"github.com/monetarium/monetarium-node/chaincfg/chainhash"
+	"github.com/monetarium/monetarium-node/dcrutil"
+	chainjson "github.com/monetarium/monetarium-node/rpc/jsonrpc/types"
+	"github.com/monetarium/monetarium-node/rpcclient"
+	"github.com/monetarium/monetarium-node/txscript/stdaddr"
+	"github.com/monetarium/monetarium-node/txscript/stdscript"
+	"github.com/monetarium/monetarium-node/wire"
 
-	m "github.com/decred/dcrdata/cmd/dcrdata/internal/middleware"
-	"github.com/decred/dcrdata/exchanges/v3"
-	"github.com/decred/dcrdata/gov/v6/agendas"
-	"github.com/decred/dcrdata/gov/v6/politeia"
-	apitypes "github.com/decred/dcrdata/v8/api/types"
-	"github.com/decred/dcrdata/v8/db/cache"
-	"github.com/decred/dcrdata/v8/db/dbtypes"
-	"github.com/decred/dcrdata/v8/txhelpers"
+	apitypes "github.com/monetarium/monetarium-explorer/api/types"
+	m "github.com/monetarium/monetarium-explorer/cmd/dcrdata/internal/middleware"
+	"github.com/monetarium/monetarium-explorer/db/cache"
+	"github.com/monetarium/monetarium-explorer/db/dbtypes"
+	"github.com/monetarium/monetarium-explorer/exchanges"
+	"github.com/monetarium/monetarium-explorer/gov/agendas"
+	"github.com/monetarium/monetarium-explorer/gov/politeia"
+	"github.com/monetarium/monetarium-explorer/txhelpers"
 )
 
 // maxBlockRangeCount is the maximum number of blocks that can be requested at
@@ -272,7 +272,7 @@ out:
 // root is a http.Handler intended for the API root path. This essentially
 // provides a heartbeat, and no information about the application status.
 func (c *appContext) root(w http.ResponseWriter, _ *http.Request) {
-	fmt.Fprint(w, "dcrdata api running")
+	fmt.Fprint(w, "monetarium-explorer api running")
 }
 
 func writeJSON(w http.ResponseWriter, thing interface{}, indent string) {

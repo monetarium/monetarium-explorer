@@ -1,12 +1,12 @@
 {{define "parameters"}}
 <!DOCTYPE html>
 <html lang="en">
-    {{ template "html-head" headData .CommonPageData "Decred Chain Parameters"}}
+    {{ template "html-head" headData .CommonPageData "Monetarium Chain Parameters"}}
         {{template "navbar" . }}
         <div class="container main">
             <div class="row justify-content-between">
                 <div class="col-lg-14 col-sm-12 d-flex">
-                    <h4 class="mb-2">Parameters for Decred {{.ChainParams.Name}}
+                    <h4 class="mb-2">Parameters for Monetarium {{.ChainParams.Name}}
                       <span class="fs12" >
                         from <a href="{{.Links.NetParams}}">chaincfg/params.go</a>
                       </span>
@@ -117,7 +117,7 @@
                                 <td class="mono text-start pe-2 nowrap p03rem0">BaseSubsidy</td>
                                 <td>
                                     {{template "decimalParts" (amountAsDecimalParts .ChainParams.BaseSubsidy true)}}
-                                    <span class="ps-1 unit lh15rem">DCR</span>
+                                    <span class="ps-1 unit lh15rem">VAR</span>
                                 </td>
                                 <td>Starting subsidy amount for mined blocks</td>
                             </tr>
@@ -165,7 +165,7 @@
                         <tbody>
                             <tr>
                                 <td class="mono text-start pe-2 nowrap p03rem0">MinimumStakeDiff</td>
-                                <td class="mono">{{template "decimalParts" (amountAsDecimalParts .ChainParams.MinimumStakeDiff true)}} DCR</td>
+                                <td class="mono">{{template "decimalParts" (amountAsDecimalParts .ChainParams.MinimumStakeDiff true)}} VAR</td>
                                 <td>Minimum amount of Atoms required to purchase a stake ticket</td>
                             </tr>
                             <tr>

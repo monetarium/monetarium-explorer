@@ -15,8 +15,8 @@ const (
 		is_multisig BOOLEAN, -- historically false always, but actually indicates is_p2sh
 		is_split BOOLEAN,
 		num_inputs INT2,
-		price FLOAT8,
-		fee FLOAT8,
+		price TEXT,
+		fee TEXT,
 		spend_type INT2,
 		pool_status INT2,
 		is_mainchain BOOLEAN,
@@ -103,18 +103,18 @@ const (
 	SelectUnspentTickets = `SELECT id, tx_hash FROM tickets
 		WHERE spend_type = 0 AND is_mainchain = true;`
 
-	SelectTicketsForPriceAtLeast = `SELECT ` + allCols + ` FROM tickets WHERE price >= $1;`
-	SelectTicketsForPriceAtMost  = `SELECT ` + allCols + ` FROM tickets WHERE price <= $1;`
+	SelectTicketsForPriceAtLeast = `SELECT ` + allCols + ` FROM tickets WHERE price::NUMERIC >= $1;`
+	SelectTicketsForPriceAtMost  = `SELECT ` + allCols + ` FROM tickets WHERE price::NUMERIC <= $1;`
 
-	SelectTicketsByPrice = `SELECT price,
+	SelectTicketsByPrice = `SELECT price::NUMERIC,
 		SUM(CASE WHEN tickets.block_height >= $1 THEN 1 ELSE 0 END) as immature,
 		SUM(CASE WHEN tickets.block_height < $1 THEN 1 ELSE 0 END) as live
 		FROM tickets JOIN transactions ON purchase_tx_db_id=transactions.id
 		WHERE pool_status = 0 AND tickets.is_mainchain = TRUE
-		GROUP BY price ORDER BY price;`
+		GROUP BY price::NUMERIC ORDER BY price::NUMERIC;`
 
 	selectTicketsByPurchaseDate = `SELECT %s as timestamp,
-		SUM(price) as price,
+		SUM(price::NUMERIC) as price,
 		SUM(CASE WHEN tickets.block_height >= $1 THEN 1 ELSE 0 END) as immature,
 		SUM(CASE WHEN tickets.block_height < $1 THEN 1 ELSE 0 END) as live
 		FROM tickets JOIN transactions ON purchase_tx_db_id=transactions.id
@@ -169,8 +169,8 @@ const (
 		block_valid BOOLEAN,
 		ticket_hash BYTEA,
 		ticket_tx_db_id INT8,
-		ticket_price FLOAT8,
-		vote_reward FLOAT8,
+		ticket_price TEXT,
+		vote_reward TEXT,
 		is_mainchain BOOLEAN,
 		block_time TIMESTAMPTZ
 	);`

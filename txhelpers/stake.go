@@ -3,7 +3,7 @@ package txhelpers
 import (
 	"math"
 
-	"github.com/decred/dcrd/chaincfg/v3"
+	"github.com/monetarium/monetarium-node/chaincfg"
 )
 
 // CalcMeanVotingBlocks computes the average number of blocks a ticket will be

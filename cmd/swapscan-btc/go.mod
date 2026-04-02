@@ -1,4 +1,4 @@
-module github.com/decred/dcrdata/cmd/swapscan-btc
+module github.com/monetarium/monetarium-explorer/cmd/swapscan-btc
 
 go 1.21
 

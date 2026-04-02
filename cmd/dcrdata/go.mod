@@ -1,29 +1,16 @@
-module github.com/decred/dcrdata/cmd/dcrdata
+module github.com/monetarium/monetarium-explorer/cmd/dcrdata
 
-go 1.22
+go 1.23
 
 replace (
-	github.com/decred/dcrdata/db/dcrpg/v8 => ../../db/dcrpg/
-	github.com/decred/dcrdata/exchanges/v3 => ../../exchanges/
-	github.com/decred/dcrdata/gov/v6 => ../../gov/
-	github.com/decred/dcrdata/v8 => ../../
+	github.com/monetarium/monetarium-explorer => ../../
+	github.com/monetarium/monetarium-explorer/db/dcrpg => ../../db/dcrpg/
+	github.com/monetarium/monetarium-explorer/exchanges => ../../exchanges/
+	github.com/monetarium/monetarium-explorer/gov => ../../gov/
 )
 
 require (
 	github.com/caarlos0/env/v6 v6.10.1
-	github.com/decred/dcrd/blockchain/stake/v5 v5.0.2
-	github.com/decred/dcrd/blockchain/standalone/v2 v2.2.2
-	github.com/decred/dcrd/chaincfg/chainhash v1.0.5
-	github.com/decred/dcrd/chaincfg/v3 v3.3.0
-	github.com/decred/dcrd/dcrutil/v4 v4.0.3
-	github.com/decred/dcrd/rpc/jsonrpc/types/v4 v4.4.0
-	github.com/decred/dcrd/rpcclient/v8 v8.1.0
-	github.com/decred/dcrd/txscript/v4 v4.1.2
-	github.com/decred/dcrd/wire v1.7.1
-	github.com/decred/dcrdata/db/dcrpg/v8 v8.0.0
-	github.com/decred/dcrdata/exchanges/v3 v3.1.0
-	github.com/decred/dcrdata/gov/v6 v6.0.0
-	github.com/decred/dcrdata/v8 v8.0.0
 	github.com/decred/politeia v1.5.0
 	github.com/decred/slog v1.2.0
 	github.com/didip/tollbooth/v6 v6.1.3-0.20220606152938-a7634c70944a
@@ -34,6 +21,19 @@ require (
 	github.com/googollee/go-socket.io v1.4.4
 	github.com/jessevdk/go-flags v1.5.0
 	github.com/jrick/logrotate v1.0.0
+	github.com/monetarium/monetarium-explorer v0.0.0
+	github.com/monetarium/monetarium-explorer/db/dcrpg v0.0.0
+	github.com/monetarium/monetarium-explorer/exchanges v0.0.0
+	github.com/monetarium/monetarium-explorer/gov v0.0.0
+	github.com/monetarium/monetarium-node/blockchain/stake v1.0.14
+	github.com/monetarium/monetarium-node/blockchain/standalone v1.0.14
+	github.com/monetarium/monetarium-node/chaincfg v1.0.14
+	github.com/monetarium/monetarium-node/chaincfg/chainhash v1.0.14
+	github.com/monetarium/monetarium-node/dcrutil v1.0.14
+	github.com/monetarium/monetarium-node/rpc/jsonrpc/types v1.0.14
+	github.com/monetarium/monetarium-node/rpcclient v1.0.14
+	github.com/monetarium/monetarium-node/txscript v1.0.14
+	github.com/monetarium/monetarium-node/wire v1.0.14
 	github.com/rs/cors v1.8.2
 	golang.org/x/net v0.28.0
 	golang.org/x/text v0.22.0
@@ -92,26 +92,35 @@ require (
 	github.com/decred/base58 v1.0.6 // indirect
 	github.com/decred/dcrd/addrmgr/v2 v2.0.4 // indirect
 	github.com/decred/dcrd/blockchain/stake/v3 v3.0.0 // indirect
+	github.com/decred/dcrd/blockchain/stake/v5 v5.0.1 // indirect
+	github.com/decred/dcrd/blockchain/standalone/v2 v2.2.1 // indirect
 	github.com/decred/dcrd/certgen v1.2.0 // indirect
+	github.com/decred/dcrd/chaincfg/chainhash v1.0.4 // indirect
+	github.com/decred/dcrd/chaincfg/v3 v3.2.1 // indirect
 	github.com/decred/dcrd/connmgr/v3 v3.1.2 // indirect
 	github.com/decred/dcrd/container/lru v1.0.0 // indirect
 	github.com/decred/dcrd/crypto/blake256 v1.1.0 // indirect
 	github.com/decred/dcrd/crypto/rand v1.0.1 // indirect
 	github.com/decred/dcrd/crypto/ripemd160 v1.0.2 // indirect
 	github.com/decred/dcrd/database/v2 v2.0.2 // indirect
-	github.com/decred/dcrd/database/v3 v3.0.3 // indirect
+	github.com/decred/dcrd/database/v3 v3.0.2 // indirect
 	github.com/decred/dcrd/dcrec v1.0.1 // indirect
-	github.com/decred/dcrd/dcrec/edwards/v2 v2.0.4 // indirect
+	github.com/decred/dcrd/dcrec/edwards/v2 v2.0.3 // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v3 v3.0.0 // indirect
-	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.4.0 // indirect
-	github.com/decred/dcrd/dcrjson/v4 v4.2.0 // indirect
+	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.3.0 // indirect
+	github.com/decred/dcrd/dcrjson/v4 v4.1.0 // indirect
 	github.com/decred/dcrd/dcrutil/v3 v3.0.0 // indirect
+	github.com/decred/dcrd/dcrutil/v4 v4.0.2 // indirect
 	github.com/decred/dcrd/gcs/v2 v2.1.0 // indirect
-	github.com/decred/dcrd/gcs/v4 v4.1.1 // indirect
+	github.com/decred/dcrd/gcs/v4 v4.1.0 // indirect
 	github.com/decred/dcrd/hdkeychain/v3 v3.1.2 // indirect
 	github.com/decred/dcrd/lru v1.1.2 // indirect
 	github.com/decred/dcrd/mixing v0.5.0 // indirect
+	github.com/decred/dcrd/rpc/jsonrpc/types/v4 v4.3.0 // indirect
+	github.com/decred/dcrd/rpcclient/v8 v8.0.1 // indirect
 	github.com/decred/dcrd/txscript/v3 v3.0.0 // indirect
+	github.com/decred/dcrd/txscript/v4 v4.1.1 // indirect
+	github.com/decred/dcrd/wire v1.7.0 // indirect
 	github.com/decred/dcrtime v0.0.0-20191018193024-8d8b4ef0458e // indirect
 	github.com/decred/go-socks v1.1.0 // indirect
 	github.com/decred/vspd/client/v4 v4.0.1 // indirect
@@ -171,6 +180,16 @@ require (
 	github.com/mattn/go-runewidth v0.0.13 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.4 // indirect
 	github.com/mmcloughlin/addchain v0.4.0 // indirect
+	github.com/monetarium/monetarium-node/cointype v1.0.14 // indirect
+	github.com/monetarium/monetarium-node/crypto/blake256 v1.0.14 // indirect
+	github.com/monetarium/monetarium-node/crypto/rand v1.0.14 // indirect
+	github.com/monetarium/monetarium-node/crypto/ripemd160 v1.0.14 // indirect
+	github.com/monetarium/monetarium-node/database v1.0.14 // indirect
+	github.com/monetarium/monetarium-node/dcrec v1.0.14 // indirect
+	github.com/monetarium/monetarium-node/dcrec/edwards v1.0.14 // indirect
+	github.com/monetarium/monetarium-node/dcrec/secp256k1 v1.0.14 // indirect
+	github.com/monetarium/monetarium-node/dcrjson v1.0.14 // indirect
+	github.com/monetarium/monetarium-node/gcs v1.0.14 // indirect
 	github.com/olekukonko/tablewriter v0.0.5 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect

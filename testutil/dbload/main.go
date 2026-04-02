@@ -7,8 +7,8 @@ import (
 	"os"
 	"path/filepath"
 
-	tc "github.com/decred/dcrdata/v8/testutil/dbconfig"
 	_ "github.com/lib/pq"
+	tc "github.com/monetarium/monetarium-explorer/testutil/dbconfig"
 )
 
 const defaultBlockRange = "0-199"

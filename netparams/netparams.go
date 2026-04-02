@@ -5,7 +5,7 @@
 
 package netparams
 
-import "github.com/decred/dcrd/chaincfg/v3"
+import "github.com/monetarium/monetarium-node/chaincfg"
 
 // Params is used to group parameters for various networks such as the main
 // network and test networks.
@@ -17,21 +17,21 @@ type Params struct {
 }
 
 // MainNetParams contains parameters specific running dcrwallet and
-// dcrd on the main network (wire.MainNet).
+// monetarium-node on the main network (wire.MainNet).
 var MainNetParams = Params{
 	Params:            chaincfg.MainNetParams(),
-	JSONRPCClientPort: "9109",
-	JSONRPCServerPort: "9110",
-	GRPCServerPort:    "9111",
+	JSONRPCClientPort: "9508",
+	JSONRPCServerPort: "9509",
+	GRPCServerPort:    "9510",
 }
 
 // TestNet3Params contains parameters specific running dcrwallet and
-// dcrd on the test network (version 3) (wire.TestNet3).
+// monetarium-node on the test network (version 3) (wire.TestNet3).
 var TestNet3Params = Params{
 	Params:            chaincfg.TestNet3Params(),
-	JSONRPCClientPort: "19109",
-	JSONRPCServerPort: "19110",
-	GRPCServerPort:    "19111",
+	JSONRPCClientPort: "19508",
+	JSONRPCServerPort: "19509",
+	GRPCServerPort:    "19510",
 }
 
 // SimNetParams contains parameters specific to the simulation test network

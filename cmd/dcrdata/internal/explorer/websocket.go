@@ -9,8 +9,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/decred/dcrdata/v8/explorer/types"
-	pstypes "github.com/decred/dcrdata/v8/pubsub/types"
+	"github.com/monetarium/monetarium-explorer/explorer/types"
+	pstypes "github.com/monetarium/monetarium-explorer/pubsub/types"
 )
 
 const (

@@ -234,8 +234,7 @@ const (
 		WHERE block_hash=$1
 		RETURNING id;`
 
-	DeleteTreasuryTxns = `DELETE FROM treasury
-		WHERE block_hash=$1;`
+	// DeleteTreasuryTxns removed: treasury table no longer exists.
 
 	DeleteSwaps = `DELETE FROM swaps
 		WHERE spend_height=$1;`

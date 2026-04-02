@@ -6,9 +6,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/decred/dcrd/chaincfg/v3"
-	"github.com/decred/dcrdata/db/dcrpg/v8"
-	"github.com/decred/dcrdata/v8/explorer/types"
+	"github.com/monetarium/monetarium-explorer/db/dcrpg"
+	"github.com/monetarium/monetarium-explorer/explorer/types"
+	"github.com/monetarium/monetarium-node/chaincfg"
 )
 
 const (

@@ -2,6 +2,8 @@ package explorer
 
 import (
 	"testing"
+
+	"github.com/monetarium/monetarium-explorer/explorer/types"
 )
 
 func TestBlockVoteBitsStr(t *testing.T) {
@@ -269,5 +271,58 @@ func TestAmountAsDecimalPartsTrimmed(t *testing.T) {
 				out[0], out[1], out[2],
 				expected[i].whole, expected[i].frac, expected[i].tail)
 		}
+	}
+}
+
+func TestCoinRowData_Variants(t *testing.T) {
+	// 0 SKA types: only VAR row
+	rows0 := []types.CoinRowData{
+		{CoinType: 0, Symbol: "VAR", TxCount: 5, Amount: "1.23K VAR", Size: 1024},
+	}
+	if len(rows0) != 1 || rows0[0].Symbol != "VAR" {
+		t.Errorf("0 SKA: unexpected rows: %v", rows0)
+	}
+
+	// 1 SKA type
+	rows1 := []types.CoinRowData{
+		{CoinType: 0, Symbol: "VAR", TxCount: 3, Amount: "500 VAR", Size: 512},
+		{CoinType: 1, Symbol: "SKA-1", TxCount: 2, Amount: "1M SKA-1", Size: 256},
+	}
+	if len(rows1) != 2 || rows1[1].CoinType != 1 {
+		t.Errorf("1 SKA: unexpected rows: %v", rows1)
+	}
+
+	// 2 SKA types
+	rows2 := []types.CoinRowData{
+		{CoinType: 0, Symbol: "VAR", TxCount: 1, Amount: "100 VAR", Size: 200},
+		{CoinType: 1, Symbol: "SKA-1", TxCount: 1, Amount: "50 SKA-1", Size: 100},
+		{CoinType: 2, Symbol: "SKA-2", TxCount: 1, Amount: "25 SKA-2", Size: 100},
+	}
+	if len(rows2) != 3 || rows2[2].Symbol != "SKA-2" {
+		t.Errorf("2 SKA: unexpected rows: %v", rows2)
+	}
+
+	// Verify TrimmedBlockInfo carries CoinRows
+	tbi := types.TrimmedBlockInfo{
+		Height:   100,
+		CoinRows: rows2,
+	}
+	if len(tbi.CoinRows) != 3 {
+		t.Errorf("TrimmedBlockInfo.CoinRows: want 3, got %d", len(tbi.CoinRows))
+	}
+}
+
+func TestCoinFillData(t *testing.T) {
+	fills := []types.CoinFillData{
+		{Symbol: "VAR", FillPct: 0.05, Color: "green"},
+		{Symbol: "SKA-1", FillPct: 0.90, Color: "red"},
+	}
+	mpi := types.MempoolInfo{}
+	mpi.CoinFills = fills
+	if len(mpi.CoinFills) != 2 {
+		t.Errorf("MempoolInfo.CoinFills: want 2, got %d", len(mpi.CoinFills))
+	}
+	if mpi.CoinFills[0].Symbol != "VAR" || mpi.CoinFills[1].Color != "red" {
+		t.Errorf("unexpected CoinFills: %v", mpi.CoinFills)
 	}
 }

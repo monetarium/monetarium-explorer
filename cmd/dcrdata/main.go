@@ -21,29 +21,29 @@ import (
 	"sync"
 	"time"
 
-	"github.com/decred/dcrd/chaincfg/chainhash"
-	"github.com/decred/dcrd/rpcclient/v8"
+	"github.com/monetarium/monetarium-node/chaincfg/chainhash"
+	"github.com/monetarium/monetarium-node/rpcclient"
 
-	"github.com/decred/dcrdata/db/dcrpg/v8"
-	"github.com/decred/dcrdata/exchanges/v3"
-	"github.com/decred/dcrdata/gov/v6/agendas"
-	politeia "github.com/decred/dcrdata/gov/v6/politeia"
+	"github.com/monetarium/monetarium-explorer/db/dcrpg"
+	"github.com/monetarium/monetarium-explorer/exchanges"
+	"github.com/monetarium/monetarium-explorer/gov/agendas"
+	politeia "github.com/monetarium/monetarium-explorer/gov/politeia"
 
-	"github.com/decred/dcrdata/v8/blockdata"
-	"github.com/decred/dcrdata/v8/db/cache"
-	"github.com/decred/dcrdata/v8/db/dbtypes"
-	"github.com/decred/dcrdata/v8/mempool"
-	"github.com/decred/dcrdata/v8/pubsub"
-	pstypes "github.com/decred/dcrdata/v8/pubsub/types"
-	"github.com/decred/dcrdata/v8/rpcutils"
-	"github.com/decred/dcrdata/v8/semver"
-	"github.com/decred/dcrdata/v8/stakedb"
+	"github.com/monetarium/monetarium-explorer/blockdata"
+	"github.com/monetarium/monetarium-explorer/db/cache"
+	"github.com/monetarium/monetarium-explorer/db/dbtypes"
+	"github.com/monetarium/monetarium-explorer/mempool"
+	"github.com/monetarium/monetarium-explorer/pubsub"
+	pstypes "github.com/monetarium/monetarium-explorer/pubsub/types"
+	"github.com/monetarium/monetarium-explorer/rpcutils"
+	"github.com/monetarium/monetarium-explorer/semver"
+	"github.com/monetarium/monetarium-explorer/stakedb"
 
-	"github.com/decred/dcrdata/cmd/dcrdata/internal/api"
-	"github.com/decred/dcrdata/cmd/dcrdata/internal/api/insight"
-	"github.com/decred/dcrdata/cmd/dcrdata/internal/explorer"
-	mw "github.com/decred/dcrdata/cmd/dcrdata/internal/middleware"
-	notify "github.com/decred/dcrdata/cmd/dcrdata/internal/notification"
+	"github.com/monetarium/monetarium-explorer/cmd/dcrdata/internal/api"
+	"github.com/monetarium/monetarium-explorer/cmd/dcrdata/internal/api/insight"
+	"github.com/monetarium/monetarium-explorer/cmd/dcrdata/internal/explorer"
+	mw "github.com/monetarium/monetarium-explorer/cmd/dcrdata/internal/middleware"
+	notify "github.com/monetarium/monetarium-explorer/cmd/dcrdata/internal/notification"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -83,7 +83,7 @@ func _main(ctx context.Context) error {
 	// Parse the configuration file, and setup logger.
 	cfg, err := loadConfig()
 	if err != nil {
-		fmt.Printf("Failed to load dcrdata config: %s\n", err.Error())
+		fmt.Printf("Failed to load monetarium-explorer config: %s\n", err.Error())
 		return err
 	}
 	defer func() {
@@ -137,17 +137,18 @@ func _main(ctx context.Context) error {
 	}()
 
 	// Display connected network (e.g. mainnet, testnet, simnet).
-	curnet, err := dcrdClient.GetCurrentNet(ctx)
+	chainInfo, err := dcrdClient.GetBlockChainInfo(ctx)
 	if err != nil {
-		return fmt.Errorf("Unable to get current network from dcrd: %v", err)
+		return fmt.Errorf("unable to get chain info from dcrd: %v", err)
 	}
-	log.Infof("Connected to dcrd (JSON-RPC API v%s) on %v",
-		nodeVer.String(), curnet.String())
+	log.Infof("Connected to dcrd (JSON-RPC API v%s) on %s",
+		nodeVer.String(), chainInfo.Chain)
 
-	if curnet != activeNet.Net {
+	// TODO make sure it works without the hack.
+	if chainInfo.Chain != activeNet.Name {
 		log.Criticalf("Network of connected node, %s, does not match expected "+
-			"network, %s.", activeNet.Net, curnet)
-		return fmt.Errorf("expected network %s, got %s", activeNet.Net, curnet)
+			"network, %s.", chainInfo.Chain, activeNet.Name)
+		return fmt.Errorf("expected network %s, got %s", activeNet.Name, chainInfo.Chain)
 	}
 
 	// Wrap the rpcclient to satisfy the TransactionPromiseGetter and
@@ -767,8 +768,12 @@ func _main(ctx context.Context) error {
 		r.With(explorer.TransactionHashCtx, explorer.TransactionIoIndexCtx).Get("/tx/{txid}/{inout}/{inoutid}", explore.TxPage)
 		r.With(explorer.AddressPathCtx).Get("/address/{address}", explore.AddressPage)
 		r.With(explorer.AddressPathCtx).Get("/addresstable/{address}", explore.AddressTable)
-		r.Get("/proposals", explore.ProposalsPage)
-		r.With(explorer.ProposalPathCtx).Get("/proposal/{proposaltoken}", explore.ProposalPage)
+		r.Get("/proposals", func(w http.ResponseWriter, r *http.Request) {
+			http.Error(w, "proposals not available", http.StatusGone)
+		})
+		r.With(explorer.ProposalPathCtx).Get("/proposal/{proposaltoken}", func(w http.ResponseWriter, r *http.Request) {
+			http.Error(w, "proposals not available", http.StatusGone)
+		})
 		r.Get("/decodetx", explore.DecodeTxPage)
 		r.Get("/search", explore.Search)
 		r.Get("/ticketpool", explore.Ticketpool)
@@ -790,11 +795,19 @@ func _main(ctx context.Context) error {
 		withCache.Get("/disapproved", explore.DisapprovedBlocks)
 		withCache.Get("/mempool", explore.Mempool)
 		withCache.Get("/charts", explore.Charts)
-		withCache.Get("/treasury", explore.TreasuryPage)
-		withCache.Get("/treasurytable", explore.TreasuryTable)
+		withCache.Get("/treasury", func(w http.ResponseWriter, r *http.Request) {
+			http.Error(w, "treasury not available", http.StatusGone)
+		})
+		withCache.Get("/treasurytable", func(w http.ResponseWriter, r *http.Request) {
+			http.Error(w, "treasury not available", http.StatusGone)
+		})
 		withCache.Get("/parameters", explore.ParametersPage)
-		withCache.Get("/agendas", explore.AgendasPage)
-		withCache.With(explorer.AgendaPathCtx).Get("/agenda/{agendaid}", explore.AgendaPage)
+		withCache.Get("/agendas", func(w http.ResponseWriter, r *http.Request) {
+			http.Error(w, "agendas not available", http.StatusGone)
+		})
+		withCache.With(explorer.AgendaPathCtx).Get("/agenda/{agendaid}", func(w http.ResponseWriter, r *http.Request) {
+			http.Error(w, "agendas not available", http.StatusGone)
+		})
 		withCache.Get("/attack-cost", explore.AttackCost)
 	})
 
@@ -1152,7 +1165,7 @@ func listenAndServeProto(ctx context.Context, wg *sync.WaitGroup, listen, proto 
 	go func() {
 		var err error
 		if proto == "https" {
-			err = server.ListenAndServeTLS("dcrdata.cert", "dcrdata.key")
+			err = server.ListenAndServeTLS("monetarium-explorer.cert", "monetarium-explorer.key")
 		} else {
 			err = server.ListenAndServe()
 		}

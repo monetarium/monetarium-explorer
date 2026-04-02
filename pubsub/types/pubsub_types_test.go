@@ -3,7 +3,7 @@ package types
 import (
 	"testing"
 
-	exptypes "github.com/decred/dcrdata/v8/explorer/types"
+	exptypes "github.com/monetarium/monetarium-explorer/explorer/types"
 )
 
 func TestHubSignal_String(t *testing.T) {

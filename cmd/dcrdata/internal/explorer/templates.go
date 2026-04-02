@@ -14,12 +14,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/decred/dcrd/chaincfg/v3"
-	"github.com/decred/dcrd/dcrutil/v4"
-	"github.com/decred/dcrdata/v8/db/dbtypes"
-	"github.com/decred/dcrdata/v8/explorer/types"
-	"github.com/decred/dcrdata/v8/txhelpers"
 	humanize "github.com/dustin/go-humanize"
+	"github.com/monetarium/monetarium-explorer/db/dbtypes"
+	"github.com/monetarium/monetarium-explorer/explorer/types"
+	"github.com/monetarium/monetarium-explorer/txhelpers"
+	"github.com/monetarium/monetarium-node/chaincfg"
+	"github.com/monetarium/monetarium-node/dcrutil"
 )
 
 type pageTemplate struct {
@@ -366,6 +366,9 @@ func makeTemplateFuncMap(params *chaincfg.Params) template.FuncMap {
 			return n / d
 		},
 		"multiply": func(a, b int64) int64 {
+			return a * b
+		},
+		"mulf": func(a, b float64) float64 {
 			return a * b
 		},
 		"intMultiply": func(a, b int) int {

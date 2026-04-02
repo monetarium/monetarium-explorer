@@ -15,12 +15,12 @@ import (
 
 	"github.com/asdine/storm/v3"
 	"github.com/asdine/storm/v3/q"
-	pitypes "github.com/decred/dcrdata/gov/v6/politeia/types"
-	"github.com/decred/dcrdata/v8/semver"
 	commentsv1 "github.com/decred/politeia/politeiawww/api/comments/v1"
 	recordsv1 "github.com/decred/politeia/politeiawww/api/records/v1"
 	ticketvotev1 "github.com/decred/politeia/politeiawww/api/ticketvote/v1"
 	piclient "github.com/decred/politeia/politeiawww/client"
+	pitypes "github.com/monetarium/monetarium-explorer/gov/politeia/types"
+	"github.com/monetarium/monetarium-explorer/semver"
 )
 
 var (

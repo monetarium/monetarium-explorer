@@ -8,7 +8,7 @@
 debug
 *.cert
 *.key
-cmd/dcrdata/dcrdata
+cmd/dcrdata/monetarium-explorer
 dcrdata.conf
 /vendor/
 *.orig

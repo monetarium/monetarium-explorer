@@ -12,13 +12,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/decred/dcrd/blockchain/stake/v5"
-	"github.com/decred/dcrd/chaincfg/v3"
-	"github.com/decred/dcrd/dcrutil/v4"
-	chainjson "github.com/decred/dcrd/rpc/jsonrpc/types/v4"
-	"github.com/decred/dcrd/wire"
-	"github.com/decred/dcrdata/v8/db/dbtypes"
-	"github.com/decred/dcrdata/v8/txhelpers"
+	"github.com/monetarium/monetarium-explorer/db/dbtypes"
+	"github.com/monetarium/monetarium-explorer/txhelpers"
+	"github.com/monetarium/monetarium-node/blockchain/stake"
+	"github.com/monetarium/monetarium-node/chaincfg"
+	"github.com/monetarium/monetarium-node/dcrutil"
+	chainjson "github.com/monetarium/monetarium-node/rpc/jsonrpc/types"
+	"github.com/monetarium/monetarium-node/wire"
 )
 
 // Types of votes
@@ -129,6 +129,9 @@ type BlockBasic struct {
 	BlockTime      TimeDef `json:"time"`
 	FormattedBytes string  `json:"formatted_bytes"`
 	Total          float64 `json:"total"`
+	// CoinRows holds per-coin row data for the expandable blocks table.
+	// Populated when available; nil means VAR-only (use Total).
+	CoinRows []CoinRowData `json:"coin_rows,omitempty"`
 }
 
 // WebBasicBlock is used for quick DB data without rpc calls
@@ -432,6 +435,22 @@ type Vout struct {
 	Version         uint16
 }
 
+// CoinRowData holds per-coin summary data for the expandable blocks table.
+type CoinRowData struct {
+	CoinType uint8
+	Symbol   string // "VAR", "SKA-1", ...
+	TxCount  int
+	Amount   string // formatted amount string
+	Size     uint32
+}
+
+// CoinFillData holds per-coin mempool fill bar data.
+type CoinFillData struct {
+	Symbol  string
+	FillPct float64 // 0.0–1.0
+	Color   string  // "green", "yellow", "red"
+}
+
 // TrimmedBlockInfo models data needed to display block info on the new home page
 type TrimmedBlockInfo struct {
 	Time         TimeDef
@@ -443,6 +462,8 @@ type TrimmedBlockInfo struct {
 	Tickets      []*TrimmedTxInfo
 	Revocations  []*TrimmedTxInfo
 	Transactions []*TrimmedTxInfo
+	// CoinRows holds per-coin row data for the expandable blocks table.
+	CoinRows []CoinRowData
 }
 
 // BlockInfo models data for display on the block page
@@ -475,6 +496,8 @@ type BlockInfo struct {
 	TotalMixed            int64
 	StakeValidationHeight int64
 	Subsidy               *chainjson.GetBlockSubsidyResult
+	// CoinAmounts holds per-coin totals (VAR key=0, SKA-n key=n) as decimal atom strings.
+	CoinAmounts map[uint8]string `json:"coin_amounts,omitempty"`
 }
 
 // Conversion is a representation of some amount of DCR in another index.
@@ -503,7 +526,7 @@ type HomeInfo struct {
 	NBlockSubsidy         BlockSubsidy             `json:"subsidy"`
 	Params                ChainParams              `json:"params"`
 	PoolInfo              TicketPoolInfo           `json:"pool_info"`
-	TotalLockedDCR        float64                  `json:"total_locked_dcr"`
+	TotalLockedVAR        float64                  `json:"total_locked_var"`
 	HashRate              float64                  `json:"hash_rate"`
 	HashRateChangeDay     float64                  `json:"hash_rate_change_day"`
 	HashRateChangeMonth   float64                  `json:"hash_rate_change_month"`
@@ -543,6 +566,8 @@ type MempoolInfo struct {
 	TSpends      []MempoolTx `json:"tspends"`
 	TAdds        []MempoolTx `json:"tadds"`
 	Ident        uint64      `json:"id"`
+	// CoinFills holds per-coin mempool fill bar data for the homepage.
+	CoinFills []CoinFillData `json:"coin_fills,omitempty"`
 }
 
 // DeepCopy makes a deep copy of MempoolInfo, where all the slice and map data

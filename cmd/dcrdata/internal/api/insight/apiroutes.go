@@ -19,17 +19,17 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/decred/dcrd/chaincfg/chainhash"
-	"github.com/decred/dcrd/chaincfg/v3"
-	"github.com/decred/dcrd/dcrutil/v4"
-	chainjson "github.com/decred/dcrd/rpc/jsonrpc/types/v4"
-	"github.com/decred/dcrd/rpcclient/v8"
+	"github.com/monetarium/monetarium-node/chaincfg"
+	"github.com/monetarium/monetarium-node/chaincfg/chainhash"
+	"github.com/monetarium/monetarium-node/dcrutil"
+	chainjson "github.com/monetarium/monetarium-node/rpc/jsonrpc/types"
+	"github.com/monetarium/monetarium-node/rpcclient"
 
-	m "github.com/decred/dcrdata/cmd/dcrdata/internal/middleware"
+	m "github.com/monetarium/monetarium-explorer/cmd/dcrdata/internal/middleware"
 
-	apitypes "github.com/decred/dcrdata/v8/api/types"
-	"github.com/decred/dcrdata/v8/db/dbtypes"
-	"github.com/decred/dcrdata/v8/txhelpers"
+	apitypes "github.com/monetarium/monetarium-explorer/api/types"
+	"github.com/monetarium/monetarium-explorer/db/dbtypes"
+	"github.com/monetarium/monetarium-explorer/txhelpers"
 )
 
 type BlockDataSource interface {
@@ -483,14 +483,22 @@ func (iapi *InsightApi) getAddressesTxnOutput(w http.ResponseWriter, r *http.Req
 
 				txOut := fundingTx.Tx.TxOut[f.Index]
 
+				// Insight API Amount/Satoshis are VAR-only; SKA outputs have Value=0.
+				var outAmount float64
+				var outSatoshis int64
+				if txOut.CoinType == 0 { // cointype.CoinTypeVAR
+					outAmount = dcrutil.Amount(txOut.Value).ToCoin()
+					outSatoshis = txOut.Value
+				}
+
 				txnOutputs = append(txnOutputs, &apitypes.AddressTxnOutput{
 					Address:       address,
 					TxnID:         fundingTx.Hash().String(),
 					Vout:          f.Index,
 					BlockTime:     fundingTx.MemPoolTime,
 					ScriptPubKey:  txOut.PkScript,
-					Amount:        dcrutil.Amount(txOut.Value).ToCoin(),
-					Satoshis:      txOut.Value,
+					Amount:        outAmount,
+					Satoshis:      outSatoshis,
 					Confirmations: 0,
 				})
 			}

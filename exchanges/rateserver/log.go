@@ -8,9 +8,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/decred/dcrdata/exchanges/v3"
 	"github.com/decred/slog"
 	"github.com/jrick/logrotate/rotator"
+	"github.com/monetarium/monetarium-explorer/exchanges"
 )
 
 var (

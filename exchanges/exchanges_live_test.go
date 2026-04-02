@@ -16,7 +16,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/decred/dcrd/dcrutil/v4"
+	"github.com/monetarium/monetarium-node/dcrutil"
 )
 
 func makeKillSwitch() chan os.Signal {

@@ -8,5 +8,5 @@ const (
 	PGTestsPort   = "5432"      // "" for UNIX socket
 	PGTestsUser   = "postgres"  // "dcrdata" for full database rather than test data repo
 	PGTestsPass   = ""
-	PGTestsDBName = "dcrdata_mainnet_full"
+	PGTestsDBName = "monetarium_mainnet_full"
 )

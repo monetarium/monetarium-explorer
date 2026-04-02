@@ -8,7 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 
-	"github.com/decred/dcrdata/v8/db/dbtypes"
+	"github.com/monetarium/monetarium-explorer/db/dbtypes"
 )
 
 // SyncResponse contains sync status information.

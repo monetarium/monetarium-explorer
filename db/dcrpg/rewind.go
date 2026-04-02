@@ -43,8 +43,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/decred/dcrdata/db/dcrpg/v8/internal"
-	"github.com/decred/dcrdata/v8/db/dbtypes"
+	"github.com/monetarium/monetarium-explorer/db/dbtypes"
+	"github.com/monetarium/monetarium-explorer/db/dcrpg/internal"
 )
 
 func deleteMissesForBlock(dbTx SqlExecutor, hash dbtypes.ChainHash) (rowsDeleted int64, err error) {

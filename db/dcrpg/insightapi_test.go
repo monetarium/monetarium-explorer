@@ -8,7 +8,7 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/decred/dcrd/chaincfg/chainhash"
+	"github.com/monetarium/monetarium-node/chaincfg/chainhash"
 )
 
 type txSortable struct {

@@ -13,7 +13,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/decred/dcrd/chaincfg/chainhash"
+	"github.com/monetarium/monetarium-node/chaincfg/chainhash"
 )
 
 // constants from time

@@ -8,9 +8,9 @@ import (
 	"database/sql"
 	"fmt"
 
-	"github.com/decred/dcrd/chaincfg/v3"
-	"github.com/decred/dcrdata/db/dcrpg/v8/internal"
-	"github.com/decred/dcrdata/v8/stakedb"
+	"github.com/monetarium/monetarium-explorer/db/dcrpg/internal"
+	"github.com/monetarium/monetarium-explorer/stakedb"
+	"github.com/monetarium/monetarium-node/chaincfg"
 )
 
 // The database schema is versioned in the meta table as follows.
@@ -433,3 +433,49 @@ func (u *Upgrader) upgradeSchema-to1() error {
 	return whatever(u.db)
 }
 */
+
+// upgradeSchemaMultiCoin applies the multi-coin schema migration for existing
+// databases. Safe to run multiple times (IF NOT EXISTS / IF column does not exist).
+func upgradeSchemaMultiCoin(db *sql.DB) error {
+	log.Infof("Applying multi-coin schema migration (Task 10)")
+	stmts := []string{
+		`ALTER TABLE vins     ADD COLUMN IF NOT EXISTS coin_type INT2 NOT NULL DEFAULT 0`,
+		`ALTER TABLE vouts    ADD COLUMN IF NOT EXISTS coin_type INT2 NOT NULL DEFAULT 0`,
+		`ALTER TABLE vouts    ADD COLUMN IF NOT EXISTS ska_value TEXT`,
+		`ALTER TABLE transactions ADD COLUMN IF NOT EXISTS ska_fees JSONB`,
+		`ALTER TABLE addresses ADD COLUMN IF NOT EXISTS coin_type INT2 NOT NULL DEFAULT 0`,
+		`ALTER TABLE addresses ADD COLUMN IF NOT EXISTS ska_value TEXT`,
+		`ALTER TABLE swaps    ADD COLUMN IF NOT EXISTS coin_type INT2 NOT NULL DEFAULT 0`,
+		// TEXT conversion for ticket/vote price fields (no-op if already TEXT)
+		`DO $$ BEGIN
+			IF EXISTS (SELECT 1 FROM information_schema.columns
+				WHERE table_name='tickets' AND column_name='price' AND data_type='double precision')
+			THEN ALTER TABLE tickets ALTER COLUMN price TYPE TEXT USING price::TEXT;
+			END IF;
+		END $$`,
+		`DO $$ BEGIN
+			IF EXISTS (SELECT 1 FROM information_schema.columns
+				WHERE table_name='tickets' AND column_name='fee' AND data_type='double precision')
+			THEN ALTER TABLE tickets ALTER COLUMN fee TYPE TEXT USING fee::TEXT;
+			END IF;
+		END $$`,
+		`DO $$ BEGIN
+			IF EXISTS (SELECT 1 FROM information_schema.columns
+				WHERE table_name='votes' AND column_name='ticket_price' AND data_type='double precision')
+			THEN ALTER TABLE votes ALTER COLUMN ticket_price TYPE TEXT USING ticket_price::TEXT;
+			END IF;
+		END $$`,
+		`DO $$ BEGIN
+			IF EXISTS (SELECT 1 FROM information_schema.columns
+				WHERE table_name='votes' AND column_name='vote_reward' AND data_type='double precision')
+			THEN ALTER TABLE votes ALTER COLUMN vote_reward TYPE TEXT USING vote_reward::TEXT;
+			END IF;
+		END $$`,
+	}
+	for _, stmt := range stmts {
+		if _, err := db.Exec(stmt); err != nil {
+			return fmt.Errorf("multi-coin migration: %w", err)
+		}
+	}
+	return nil
+}
