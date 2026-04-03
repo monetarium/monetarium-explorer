@@ -55,9 +55,12 @@ func buildHomeBlockRows(blocks []*types.BlockBasic) []HomeBlockRow {
 		var varTxCount int
 		var skaAmount string
 		var subRows []SKASubRow
+		totalTxCount := b.Transactions // default: raw block count
 
 		if len(b.CoinRows) > 0 {
+			totalTxCount = 0
 			for _, cr := range b.CoinRows {
+				totalTxCount += cr.TxCount
 				if cr.CoinType == 0 {
 					// VAR row
 					varTxCount = cr.TxCount
@@ -102,7 +105,7 @@ func buildHomeBlockRows(blocks []*types.BlockBasic) []HomeBlockRow {
 		rows = append(rows, HomeBlockRow{
 			Height:         b.Height,
 			Hash:           b.Hash,
-			Transactions:   b.Transactions,
+			Transactions:   totalTxCount,
 			Voters:         b.Voters,
 			FreshStake:     b.FreshStake,
 			Revocations:    b.Revocations,

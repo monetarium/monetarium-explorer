@@ -9,6 +9,7 @@ function coinRowsToSKAData(block) {
   if (!coinRows || coinRows.length === 0) {
     // VAR-only fallback
     return {
+      totalTxCount: block.tx,
       varTxCount: block.tx,
       varAmount: humanize.threeSigFigs(block.total),
       varSize: humanize.bytes(block.size),
@@ -21,8 +22,10 @@ function coinRowsToSKAData(block) {
   let varAmount = humanize.threeSigFigs(block.total)
   let varSize = humanize.bytes(block.size)
   const subRows = []
+  let totalTxCount = 0
 
   for (const cr of coinRows) {
+    totalTxCount += cr.tx_count
     if (cr.coin_type === 0) {
       varTxCount = cr.tx_count
       varAmount = humanize.formatCoinAtoms(cr.amount, cr.coin_type)
@@ -44,7 +47,7 @@ function coinRowsToSKAData(block) {
     skaAmount = `${subRows.length} SKA types`
   }
 
-  return { varTxCount, varAmount, varSize, skaAmount, subRows }
+  return { totalTxCount, varTxCount, varAmount, varSize, skaAmount, subRows }
 }
 
 function makeTd(className, text) {
@@ -144,7 +147,8 @@ export default class extends Controller {
       toRemove.forEach((r) => this.tableTarget.removeChild(r))
     } else return
 
-    const { varTxCount, varAmount, varSize, skaAmount, subRows } = coinRowsToSKAData(block)
+    const { totalTxCount, varTxCount, varAmount, varSize, skaAmount, subRows } =
+      coinRowsToSKAData(block)
 
     // Re-query after removals — firstBlockRow may have been detached.
     const currentFirstBlockRow = this.tableTarget.querySelector(
@@ -179,7 +183,7 @@ export default class extends Controller {
           break
         }
         case 'tx':
-          newTd.textContent = String(block.tx)
+          newTd.textContent = String(totalTxCount)
           break
         case 'var-amount':
           newTd.textContent = varAmount

@@ -120,6 +120,31 @@ const SKA_ROWS_3 = [
 // ---------------------------------------------------------------------------
 
 describe('blocklist_controller — Property 8: WebSocket block prepend matches server-rendered output', () => {
+  // ---- unit: Txn cell uses sum of coin_rows tx_counts --------------------
+
+  describe('Txn cell (tx column)', () => {
+    it('uses sum of all coin_rows tx_counts, not block.tx', () => {
+      const { tbody, ctrl } = buildTable(1000, 1, SKA_ROWS_3)
+      // block.tx = 5 (regular-tree only), but coin_rows sum = 5 + 42 + 17 + 5 = 69
+      ctrl._processBlock(makeBlock(1001, { tx: 5, skaCoinRows: SKA_ROWS_3 }))
+      const row = tbody.querySelector(
+        'tr[data-block-id="1001"][data-ska-accordion-target="blockRow"]'
+      )
+      const txCell = Array.from(row.querySelectorAll('td')).find((td) => td.dataset.type === 'tx')
+      expect(txCell.textContent).toBe('69')
+    })
+
+    it('falls back to block.tx when no coin_rows', () => {
+      const { tbody, ctrl } = buildTable(1000, 1)
+      ctrl._processBlock(makeBlock(1001, { tx: 7 })) // no skaCoinRows → no coin_rows
+      const row = tbody.querySelector(
+        'tr[data-block-id="1001"][data-ska-accordion-target="blockRow"]'
+      )
+      const txCell = Array.from(row.querySelectorAll('td')).find((td) => td.dataset.type === 'tx')
+      expect(txCell.textContent).toBe('7')
+    })
+  })
+
   // ---- unit: block row structure ------------------------------------------
 
   describe('block row structure', () => {

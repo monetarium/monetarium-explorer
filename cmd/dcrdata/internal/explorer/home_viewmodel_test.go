@@ -155,6 +155,29 @@ func TestBuildHomeBlockRows_WithCoinRows(t *testing.T) {
 	}
 }
 
+// TestBuildHomeBlockRows_TransactionsSumsCoinRows verifies that when CoinRows
+// are present, Transactions equals the sum of all per-coin TxCounts (VAR +
+// all SKA types), not just the raw b.Transactions value.
+func TestBuildHomeBlockRows_TransactionsSumsCoinRows(t *testing.T) {
+	b := &types.BlockBasic{
+		Height:       20,
+		Transactions: 3, // regular-tree only — should NOT appear in the result
+		CoinRows: []types.CoinRowData{
+			{CoinType: 0, Symbol: "VAR", TxCount: 5, Amount: "1000000000", Size: 200},
+			{CoinType: 1, Symbol: "SKA-1", TxCount: 2, Amount: "1000000000000000000", Size: 100},
+			{CoinType: 2, Symbol: "SKA-2", TxCount: 4, Amount: "2000000000000000000", Size: 150},
+		},
+	}
+	rows := buildHomeBlockRows([]*types.BlockBasic{b})
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+	// 5 (VAR) + 2 (SKA-1) + 4 (SKA-2) = 11, not b.Transactions (3)
+	if rows[0].Transactions != 11 {
+		t.Errorf("Transactions: got %d, want 11 (sum of CoinRows)", rows[0].Transactions)
+	}
+}
+
 // TestBuildHomeBlockRows_MultipleSKATypes verifies that multiple SKA types
 // produce multiple sub-rows and a count summary in SKAAmount.
 func TestBuildHomeBlockRows_MultipleSKATypes(t *testing.T) {
