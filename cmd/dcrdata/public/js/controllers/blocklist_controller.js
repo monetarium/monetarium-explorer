@@ -146,6 +146,11 @@ export default class extends Controller {
 
     const { varTxCount, varAmount, varSize, skaAmount, subRows } = coinRowsToSKAData(block)
 
+    // Re-query after removals — firstBlockRow may have been detached.
+    const currentFirstBlockRow = this.tableTarget.querySelector(
+      'tr[data-ska-accordion-target="blockRow"]'
+    )
+
     const newRow = document.createElement('tr')
     newRow.dataset.height = block.height
     newRow.dataset.linkClass = firstBlockRow.dataset.linkClass
@@ -200,7 +205,9 @@ export default class extends Controller {
       newRow.appendChild(newTd)
     })
 
-    this.tableTarget.insertBefore(newRow, this.tableTarget.firstChild)
+    // Insert the new block row before the current first block row (re-queried
+    // after removals since the original firstBlockRow may have been detached).
+    this.tableTarget.insertBefore(newRow, currentFirstBlockRow)
     const varSubRow = insertVARSubRow(this.tableTarget, newRow, varTxCount, varAmount, varSize)
     insertSKASubRows(this.tableTarget, varSubRow, subRows, block.height)
   }
