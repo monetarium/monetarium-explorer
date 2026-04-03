@@ -1,7 +1,7 @@
 # Monetarium Explorer — Rewrite Plan
 
 ## Notes
-- **Every task is a separate commit.**
+- **Every task is a separate branch feature/name_of_the_feature.**
 - **Frontend tasks (7, 8): bare minimum for compatibility only — no polish.**
 
 ---
@@ -904,4 +904,120 @@ resulting apitypes.Vout has CoinType == 1 and SKAValue != "".
 
 Demo: GET /api/tx/{ska-tx-id} returns vouts with "coin_type": 1 and "ska_value": "900000000000000000000000000000000" instead of "value": 0.
 
+### Task 18: Per-coin tx count and size in the blocks table
+Commit: feat: persist per-coin tx count and size in blocks table
+
+Objective: Mirror the coin_amounts pattern to store per-coin transaction counts and total sizes, so the blocks table and API expose how many transactions and how many 
+bytes each coin type contributes per block.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+blockdata/blockdata.go — add blockCoinTxStats alongside blockCoinAmounts:
+
+go
+// CoinTxStats holds per-coin tx count and total serialized size.
+type CoinTxStats struct {
+    TxCount int            `json:"tx_count"`
+    Size    uint32         `json:"size"`
+}
+
+func blockCoinTxStats(msgBlock *wire.MsgBlock) map[uint8]CoinTxStats {
+    stats := make(map[uint8]CoinTxStats)
+    allTxs := append(msgBlock.Transactions, msgBlock.STransactions...)
+    for _, tx := range allTxs {
+        // Determine coin type from outputs (tx is single-coin).
+        ct := uint8(cointype.CoinTypeVAR)
+        for _, txout := range tx.TxOut {
+            if txout.CoinType.IsSKA() {
+                ct = uint8(txout.CoinType)
+                break
+            }
+        }
+        s := stats[ct]
+        s.TxCount++
+        s.Size += uint32(tx.SerializeSize())
+        stats[ct] = s
+    }
+    if len(stats) == 0 {
+        return nil
+    }
+    return stats
+}
+
+
+In CollectBlockInfo, populate alongside coinAmounts:
+go
+coinTxStats := blockCoinTxStats(msgBlock)
+if len(coinTxStats) > 0 {
+    blockdata.CoinTxStats = coinTxStats
+    extrainfo.CoinTxStats = coinTxStats
+}
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+api/types/apitypes.go — add to BlockDataBasic and BlockExplorerExtraInfo:
+
+go
+// CoinTxStats holds per-coin tx count and size (key 0=VAR, 1-255=SKA-n).
+CoinTxStats map[uint8]blockdata.CoinTxStats `json:"coin_tx_stats,omitempty"`
+
+
+(Or define the struct in api/types to avoid the import cycle — mirror the same struct there.)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+db/dcrpg/internal/blockstmts.go:
+
+Add column to CreateBlockTable:
+sql
+coin_tx_stats JSONB
+
+
+Add to insertBlockRow (becomes $27):
+sql
+INSERT INTO blocks (..., coin_amounts, coin_tx_stats) VALUES (..., $26, $27)
+
+
+Add blocks.coin_tx_stats to all SELECT statements that already include blocks.coin_amounts (SelectBlockDataByHeight, SelectBlockDataByHash, and the range variants).
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+db/dcrpg/queries.go:
+
+Insert: pass dbtypes.ToJSONB(dbBlock.CoinTxStats) as $27.
+
+Each retrieve function: add var coinTxStatsJSON []byte alongside coinAmountsJSON, scan it, then:
+go
+_ = json.Unmarshal(coinTxStatsJSON, &bd.CoinTxStats)
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+db/dcrpg/upgrades.go:
+sql
+ALTER TABLE blocks ADD COLUMN IF NOT EXISTS coin_tx_stats JSONB;
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+db/dcrpg/pgblockchain.go — coinRowsFromAmounts:
+
+Extend CoinRowData to carry TxCount int and update coinRowsFromAmounts (or add a new merge function) to populate it from CoinTxStats when building the homepage blocks 
+table rows.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+Test: In blockdata/blockdata_test.go, add TestBlockCoinTxStats_Mixed with a block containing one VAR tx and one SKA-1 tx. Assert stats[0].TxCount == 1 and 
+stats[1].TxCount == 1 with correct sizes.
+
+Demo: GET /api/block/{height} returns "coin_tx_stats": {"0": {"tx_count": 5, "size": 2048}, "1": {"tx_count": 2, "size": 512}}. Homepage blocks table rows show per-coin 
+tx counts.
 
