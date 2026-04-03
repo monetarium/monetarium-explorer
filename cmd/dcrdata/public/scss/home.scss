@@ -101,6 +101,14 @@ body.darkBG .ska-sub-row--visible {
   white-space: nowrap;
 }
 
+// VAR and SKA amount cells may contain longer formatted strings on small
+// screens. Allow them to wrap and break rather than stretching the table.
+.last-blocks-table td[data-type="var-amount"],
+.last-blocks-table td[data-type="ska-amount"] {
+  white-space: normal !important;
+  word-break: break-all;
+}
+
 // Column minimum widths — single source of truth.
 // Sized to the widest expected content so expanding sub-rows never shift columns.
 // Formula: max-content-chars × 1ch + Bootstrap cell padding (0.5rem/side = 1rem total).

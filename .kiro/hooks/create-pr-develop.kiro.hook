@@ -1,0 +1,13 @@
+{
+  "enabled": true,
+  "name": "Create PR into develop",
+  "description": "Creates a GitHub PR from the current branch into develop. Inspects recent commits to write a meaningful title and description, then runs gh pr create.",
+  "version": "1",
+  "when": {
+    "type": "userTriggered"
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "Create a GitHub PR from the current branch into develop using the gh cli. 1) Run `git fetch origin develop` to get the latest develop. 2) Run `git log HEAD..origin/develop --oneline` — if there are commits, warn the user that the branch is behind develop and ask if they want to rebase (`git rebase origin/develop`) before continuing; if they decline, abort. 3) Run `git push --set-upstream origin HEAD` to push the branch. 4) Run `git log develop..HEAD --oneline` to see the commits. 5) Derive a concise PR title and a grouped description from the commit messages. 6) Run `gh pr create --base develop` with that title and body. Share the resulting PR URL."
+  }
+}

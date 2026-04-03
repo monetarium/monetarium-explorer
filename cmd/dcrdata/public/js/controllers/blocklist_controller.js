@@ -25,14 +25,14 @@ function coinRowsToSKAData(block) {
   for (const cr of coinRows) {
     if (cr.coin_type === 0) {
       varTxCount = cr.tx_count
-      varAmount = cr.amount
-      varSize = `${cr.size} B`
+      varAmount = humanize.formatCoinAtoms(cr.amount, cr.coin_type)
+      varSize = cr.size > 0 ? `${cr.size} B` : '—'
     } else {
       subRows.push({
         tokenType: cr.symbol,
-        txCount: String(cr.tx_count),
-        amount: cr.amount,
-        size: `${cr.size} B`
+        txCount: cr.tx_count > 0 ? String(cr.tx_count) : '—',
+        amount: humanize.formatCoinAtoms(cr.amount, cr.coin_type),
+        size: cr.size > 0 ? `${cr.size} B` : '—'
       })
     }
   }
@@ -67,7 +67,7 @@ function insertVARSubRow(tbody, newRow, varTxCount, varAmount, varSize) {
   labelSpan.textContent = 'VAR'
   labelTd.appendChild(labelSpan)
   tr.appendChild(labelTd)
-  tr.appendChild(makeTd('text-end num', String(varTxCount)))
+  tr.appendChild(makeTd('text-end num', varTxCount > 0 ? String(varTxCount) : '—'))
   tr.appendChild(makeTd('text-end num', varAmount))
   tr.appendChild(makeTd('text-end', '—'))
   tr.appendChild(makeTd('text-end num d-none d-sm-table-cell d-md-none d-lg-table-cell', varSize))
@@ -146,6 +146,11 @@ export default class extends Controller {
 
     const { varTxCount, varAmount, varSize, skaAmount, subRows } = coinRowsToSKAData(block)
 
+    // Re-query after removals — firstBlockRow may have been detached.
+    const currentFirstBlockRow = this.tableTarget.querySelector(
+      'tr[data-ska-accordion-target="blockRow"]'
+    )
+
     const newRow = document.createElement('tr')
     newRow.dataset.height = block.height
     newRow.dataset.linkClass = firstBlockRow.dataset.linkClass
@@ -180,7 +185,7 @@ export default class extends Controller {
           newTd.textContent = varAmount
           break
         case 'ska-amount':
-          newTd.textContent = skaAmount
+          newTd.textContent = skaAmount || '—'
           break
         case 'size':
           newTd.textContent = humanize.bytes(block.size)
@@ -200,7 +205,9 @@ export default class extends Controller {
       newRow.appendChild(newTd)
     })
 
-    this.tableTarget.insertBefore(newRow, this.tableTarget.firstChild)
+    // Insert the new block row before the current first block row (re-queried
+    // after removals since the original firstBlockRow may have been detached).
+    this.tableTarget.insertBefore(newRow, currentFirstBlockRow)
     const varSubRow = insertVARSubRow(this.tableTarget, newRow, varTxCount, varAmount, varSize)
     insertSKASubRows(this.tableTarget, varSubRow, subRows, block.height)
   }

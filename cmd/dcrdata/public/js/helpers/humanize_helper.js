@@ -78,6 +78,30 @@ const humanize = {
 
     return htmlString
   },
+  // formatCoinAtoms converts a raw atom string to a threeSigFigs-formatted coin
+  // string. coinType 0 = VAR (8 decimal places), any other value = SKA (18
+  // decimal places). Use this instead of calling skaCoinValue or the VAR
+  // division directly.
+  formatCoinAtoms: function (atomStr, coinType) {
+    if (coinType === 0) return humanize.threeSigFigs(parseInt(atomStr) / 1e8)
+    return humanize.threeSigFigs(humanize.skaCoinValue(atomStr))
+  },
+  // skaCoinValue converts a raw SKA atom string (up to 33 decimal digits) to a
+  // coin Number suitable for passing to threeSigFigs. Uses BigInt arithmetic to
+  // avoid float64 precision loss on large atom values. Returns 0 for empty or
+  // invalid input.
+  skaCoinValue: function (atomStr) {
+    if (!atomStr || atomStr === '0') return 0
+    try {
+      const atoms = BigInt(atomStr)
+      const divisor = BigInt('1000000000000000000') // 10^18
+      const whole = Number(atoms / divisor)
+      const remainder = Number(atoms % divisor)
+      return whole + remainder / 1e18
+    } catch {
+      return 0
+    }
+  },
   threeSigFigs: function (v) {
     const sign = v >= 0 ? '' : '-'
     v = Math.abs(v)

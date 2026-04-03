@@ -61,15 +61,27 @@ func buildHomeBlockRows(blocks []*types.BlockBasic) []HomeBlockRow {
 				if cr.CoinType == 0 {
 					// VAR row
 					varTxCount = cr.TxCount
-					varAmount = cr.Amount
-					varSize = fmt.Sprintf("%d B", cr.Size)
+					varAmount = formatCoinAtoms(cr.Amount, cr.CoinType)
+					if cr.Size > 0 {
+						varSize = fmt.Sprintf("%d B", cr.Size)
+					} else {
+						varSize = "—"
+					}
 				} else {
 					// SKA row — add to sub-rows
+					txCount := "—"
+					if cr.TxCount > 0 {
+						txCount = fmt.Sprintf("%d", cr.TxCount)
+					}
+					size := "—"
+					if cr.Size > 0 {
+						size = fmt.Sprintf("%d B", cr.Size)
+					}
 					subRows = append(subRows, SKASubRow{
 						TokenType: cr.Symbol,
-						TxCount:   fmt.Sprintf("%d", cr.TxCount),
-						Amount:    cr.Amount,
-						Size:      fmt.Sprintf("%d B", cr.Size),
+						TxCount:   txCount,
+						Amount:    formatCoinAtoms(cr.Amount, cr.CoinType),
+						Size:      size,
 					})
 				}
 			}

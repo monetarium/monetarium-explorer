@@ -2,12 +2,12 @@
 
 ## Backend
 
-- **Language**: Go 1.21+ (multi-module workspace; `cmd/dcrdata` requires Go 1.22)
+- **Language**: Go 1.23 (multi-module workspace)
 - **Big-number arithmetic**: A specialized module is required for SKA token calculations (15 integer + 18 decimal digits — exceeds float64 precision). Do not use standard Go numeric types for SKA amounts.
 - **HTTP router**: `go-chi/chi/v5`
 - **Database**: PostgreSQL via `lib/pq`; Badger (embedded KV) for stake data
 - **Logging**: `decred/slog` with `jrick/logrotate`
-- **RPC**: `decred/dcrd/rpcclient/v8` for dcrd communication; gRPC for exchange rate server
+- **RPC**: `monetarium/monetarium-node/rpcclient` for node communication; gRPC for exchange rate server
 - **WebSocket**: `gorilla/websocket`, `googollee/go-socket.io` (Insight API)
 - **Rate limiting**: `didip/tollbooth/v6`
 - **CORS**: `rs/cors`
@@ -15,11 +15,12 @@
 
 ## Frontend
 
-- **Bundler**: Webpack 5 (configs: `webpack.common.js`, `webpack.dev.js`, `webpack.prod.js`, `webpack.analyze.js`)
-- **JS framework**: Stimulus 3 — one controller per page feature in `public/js/controllers/`
+- **Bundler**: Webpack 5 (configs: `webpack.common.cjs`, `webpack.dev.cjs`, `webpack.prod.cjs`, `webpack.analyze.cjs`)
+- **JS framework**: Stimulus 3 (`@hotwired/stimulus`) — one controller per page feature in `public/js/controllers/`
 - **SPA navigation**: Turbolinks 5.2.0 (vendored at `public/js/vendor/turbolinks.min.js`) — not Hotwire Turbo
 - **CSS**: SCSS compiled via `sass-loader`; Bootstrap 5 as base; custom overrides in `public/scss/`
 - **Templates**: Go `html/template` (`.tmpl` files in `cmd/dcrdata/views/`)
+- **Testing**: Vitest with jsdom environment for unit tests
 - **Key JS deps**: `lodash-es`, `dompurify`, `qrcode`, `mousetrap`, `url-parse`, `regenerator-runtime`
 
 ## Linting
@@ -39,7 +40,10 @@ cd cmd/dcrdata
 npm clean-install        # install node deps
 npm run build            # production webpack bundle → public/dist/
 npm run watch            # dev watch mode
+npm run test             # run vitest unit tests
 npm run lint             # ESLint on public/js
+npm run lint:css         # Stylelint on public/scss
+npm run format           # Prettier format JS and SCSS
 npm run analyze          # webpack bundle analysis
 ```
 

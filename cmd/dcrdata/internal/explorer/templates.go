@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"html/template"
 	"math"
+	"math/big"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -252,6 +253,49 @@ func threeSigFigs(v float64) string {
 		return "0"
 	}
 	return fmt.Sprintf("%.8f", math.Round(v*1e8)/1e8)
+}
+
+// skaDecimals is 10^18 — the number of SKA atoms per coin.
+var skaDecimals = new(big.Int).Exp(big.NewInt(10), big.NewInt(18), nil)
+
+// parseInt64 parses a decimal atom string to int64, returning 0 on error.
+func parseInt64(s string) int64 {
+	v, err := strconv.ParseInt(s, 10, 64)
+	if err != nil {
+		return 0
+	}
+	return v
+}
+
+// skaCoinValue converts a raw SKA atom string (decimal, up to 33 digits) to a
+// coin float64 suitable for passing to threeSigFigs. Returns 0 on empty or
+// invalid input. Uses big.Float arithmetic to avoid float64 precision loss
+// during the division; the final Float64() call is safe because threeSigFigs
+// only needs ~3 significant digits.
+func skaCoinValue(atomStr string) float64 {
+	if atomStr == "" {
+		return 0
+	}
+	atoms := new(big.Int)
+	if _, ok := atoms.SetString(atomStr, 10); !ok {
+		return 0
+	}
+	bf := new(big.Float).SetPrec(128).SetInt(atoms)
+	divisor := new(big.Float).SetPrec(128).SetInt(skaDecimals)
+	bf.Quo(bf, divisor)
+	v, _ := bf.Float64()
+	return v
+}
+
+// formatCoinAtoms converts a raw atom string to a threeSigFigs-formatted coin
+// string. coinType 0 = VAR (8 decimal places), any other value = SKA (18
+// decimal places). This is the single call site for coin amount display — use
+// this instead of calling skaCoinValue or the VAR division directly.
+func formatCoinAtoms(atomStr string, coinType uint8) string {
+	if coinType == 0 {
+		return threeSigFigs(float64(parseInt64(atomStr)) / 1e8)
+	}
+	return threeSigFigs(skaCoinValue(atomStr))
 }
 
 type periodMap struct {

@@ -473,11 +473,11 @@ type Vout struct {
 
 // CoinRowData holds per-coin summary data for the expandable blocks table.
 type CoinRowData struct {
-	CoinType uint8
-	Symbol   string // "VAR", "SKA-1", ...
-	TxCount  int
-	Amount   string // formatted amount string
-	Size     uint32
+	CoinType uint8  `json:"coin_type"`
+	Symbol   string `json:"symbol"`
+	TxCount  int    `json:"tx_count"`
+	Amount   string `json:"amount"`
+	Size     uint32 `json:"size"`
 }
 
 // SKASubRow holds per-SKA-type data for the accordion sub-rows in the block table.

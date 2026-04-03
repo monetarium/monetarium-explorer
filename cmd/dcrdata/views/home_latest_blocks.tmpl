@@ -29,7 +29,7 @@
         </td>
         <td class="text-end num" data-type="tx">{{.Transactions}}</td>
         <td class="text-end num" data-type="var-amount">{{.VARAmount}}</td>
-        <td class="text-end num" data-type="ska-amount">{{.SKAAmount}}</td>
+        <td class="text-end num" data-type="ska-amount">{{if .SKAAmount}}{{.SKAAmount}}{{else}}—{{end}}</td>
         <td class="text-end num d-none d-sm-table-cell d-md-none d-lg-table-cell" data-type="size">{{.FormattedBytes}}</td>
         <td class="text-end num" data-type="votes">{{.Voters}}</td>
         <td class="text-end num" data-type="tickets">{{.FreshStake}}</td>
@@ -40,7 +40,7 @@
       </tr>
       <tr class="ska-sub-row" data-ska-accordion-target="subRow" data-block-id="{{$blockHeight}}">
         <td class="text-start ps-1"><span class="sub-row-label">VAR</span></td>
-        <td class="text-end num">{{.VARTxCount}}</td>
+        <td class="text-end num">{{if .VARTxCount}}{{.VARTxCount}}{{else}}—{{end}}</td>
         <td class="text-end num">{{.VARAmount}}</td>
         <td class="text-end">—</td>
         <td class="text-end num d-none d-sm-table-cell d-md-none d-lg-table-cell">{{.VARSize}}</td>

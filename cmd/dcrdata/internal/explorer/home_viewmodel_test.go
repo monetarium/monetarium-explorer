@@ -113,15 +113,17 @@ func TestBuildHomeBlockRows_VAROnly(t *testing.T) {
 	}
 }
 
-// TestBuildHomeBlockRows_WithCoinRows verifies that CoinRows data is correctly
-// mapped to VAR and SKA fields.
+// TestBuildHomeBlockRows_WithCoinRows verifies that CoinRows atom strings are
+// formatted via threeSigFigs for both VAR and SKA fields.
 func TestBuildHomeBlockRows_WithCoinRows(t *testing.T) {
 	b := &types.BlockBasic{
 		Height:       20,
 		Transactions: 7,
 		CoinRows: []types.CoinRowData{
-			{CoinType: 0, Symbol: "VAR", TxCount: 5, Amount: "1.23K VAR", Size: 1024},
-			{CoinType: 1, Symbol: "SKA-1", TxCount: 2, Amount: "4.56M SKA-1", Size: 512},
+			// 1 230 000 000 VAR atoms = 12.3 VAR coins (8 decimals)
+			{CoinType: 0, Symbol: "VAR", TxCount: 5, Amount: "1230000000", Size: 1024},
+			// 1 230 000 000 000 000 000 SKA atoms = 1.23 SKA coins (18 decimals)
+			{CoinType: 1, Symbol: "SKA-1", TxCount: 2, Amount: "1230000000000000000", Size: 512},
 		},
 	}
 	rows := buildHomeBlockRows([]*types.BlockBasic{b})
@@ -133,8 +135,9 @@ func TestBuildHomeBlockRows_WithCoinRows(t *testing.T) {
 	if r.VARTxCount != 5 {
 		t.Errorf("VARTxCount: got %d, want 5", r.VARTxCount)
 	}
-	if r.VARAmount != "1.23K VAR" {
-		t.Errorf("VARAmount: got %q, want %q", r.VARAmount, "1.23K VAR")
+	wantVAR := threeSigFigs(float64(1230000000) / 1e8) // "12.3"
+	if r.VARAmount != wantVAR {
+		t.Errorf("VARAmount: got %q, want %q", r.VARAmount, wantVAR)
 	}
 	if len(r.SKASubRows) != 1 {
 		t.Fatalf("expected 1 SKASubRow, got %d", len(r.SKASubRows))
@@ -142,12 +145,13 @@ func TestBuildHomeBlockRows_WithCoinRows(t *testing.T) {
 	if r.SKASubRows[0].TokenType != "SKA-1" {
 		t.Errorf("SKASubRow TokenType: got %q, want %q", r.SKASubRows[0].TokenType, "SKA-1")
 	}
-	if r.SKASubRows[0].Amount != "4.56M SKA-1" {
-		t.Errorf("SKASubRow Amount: got %q, want %q", r.SKASubRows[0].Amount, "4.56M SKA-1")
+	wantSKA := threeSigFigs(skaCoinValue("1230000000000000000")) // "1.23"
+	if r.SKASubRows[0].Amount != wantSKA {
+		t.Errorf("SKASubRow Amount: got %q, want %q", r.SKASubRows[0].Amount, wantSKA)
 	}
 	// Single SKA type: SKAAmount should equal the sub-row amount.
-	if r.SKAAmount != "4.56M SKA-1" {
-		t.Errorf("SKAAmount: got %q, want %q", r.SKAAmount, "4.56M SKA-1")
+	if r.SKAAmount != wantSKA {
+		t.Errorf("SKAAmount: got %q, want %q", r.SKAAmount, wantSKA)
 	}
 }
 
@@ -157,9 +161,9 @@ func TestBuildHomeBlockRows_MultipleSKATypes(t *testing.T) {
 	b := &types.BlockBasic{
 		Height: 30,
 		CoinRows: []types.CoinRowData{
-			{CoinType: 0, Symbol: "VAR", TxCount: 3, Amount: "100 VAR", Size: 200},
-			{CoinType: 1, Symbol: "SKA-1", TxCount: 1, Amount: "50 SKA-1", Size: 100},
-			{CoinType: 2, Symbol: "SKA-2", TxCount: 2, Amount: "75 SKA-2", Size: 150},
+			{CoinType: 0, Symbol: "VAR", TxCount: 3, Amount: "10000000000", Size: 200},
+			{CoinType: 1, Symbol: "SKA-1", TxCount: 1, Amount: "50000000000000000000", Size: 100},
+			{CoinType: 2, Symbol: "SKA-2", TxCount: 2, Amount: "75000000000000000000", Size: 150},
 		},
 	}
 	rows := buildHomeBlockRows([]*types.BlockBasic{b})
@@ -183,9 +187,9 @@ func TestBuildHomeBlockRows_SKASubRowTokenTypeNonEmpty(t *testing.T) {
 	b := &types.BlockBasic{
 		Height: 40,
 		CoinRows: []types.CoinRowData{
-			{CoinType: 0, Symbol: "VAR", Amount: "10 VAR"},
-			{CoinType: 1, Symbol: "SKA-1", Amount: "20 SKA-1"},
-			{CoinType: 3, Symbol: "SKA-3", Amount: "30 SKA-3"},
+			{CoinType: 0, Symbol: "VAR", Amount: "1000000000"},
+			{CoinType: 1, Symbol: "SKA-1", Amount: "1000000000000000000"},
+			{CoinType: 3, Symbol: "SKA-3", Amount: "2000000000000000000"},
 		},
 	}
 	rows := buildHomeBlockRows([]*types.BlockBasic{b})
@@ -246,7 +250,81 @@ func TestProp_HomeBlockRowFieldPreservation(t *testing.T) {
 	})
 }
 
-// TestProp_VARAmountPreFormatted verifies that VARAmount matches threeSigFigs
+// TestFormatCoinAtoms verifies the adapter routes VAR and SKA atom strings
+// to the correct divisor and formatter.
+func TestFormatCoinAtoms(t *testing.T) {
+	cases := []struct {
+		atomStr  string
+		coinType uint8
+		want     string
+	}{
+		// VAR: 8 decimal places
+		{"1000000000", 0, "10.0"}, // 10 VAR coins
+		{"100000000", 0, "1.00"},  // 1 VAR coin
+		{"0", 0, "0"},
+		// SKA: 18 decimal places
+		{"1000000000000000000", 1, "1.00"},     // 1 SKA coin, type 1
+		{"1000000000000000000000", 2, "1.00k"}, // 1000 SKA coins, type 2
+		{"0", 1, "0"},
+	}
+	for _, c := range cases {
+		got := formatCoinAtoms(c.atomStr, c.coinType)
+		if got != c.want {
+			t.Errorf("formatCoinAtoms(%q, %d) = %q, want %q", c.atomStr, c.coinType, got, c.want)
+		}
+	}
+}
+
+// TestSkaCoinValue covers the canonical conversion cases for skaCoinValue.
+func TestSkaCoinValue(t *testing.T) {
+	cases := []struct {
+		input string
+		want  float64
+	}{
+		{"", 0},
+		{"0", 0},
+		{"notanumber", 0},
+		{"1000000000000000000", 1.0},       // exactly 1 SKA coin
+		{"1500000000000000000", 1.5},       // 1.5 SKA coins
+		{"1000000000000000000000", 1000.0}, // 1 000 SKA coins (k range)
+		{"1000000000000000000000000", 1e6}, // 1 M SKA coins
+		{"500000000000000000", 0.5},        // sub-1: 0.5 coin
+		{"100000000000000000", 0.1},        // sub-1: 0.1 coin
+		{"1000000000000000", 0.001},        // sub-1: 0.001 coin
+		{"1", 1e-18},                       // sub-1: single atom, smallest possible value
+	}
+	for _, c := range cases {
+		got := skaCoinValue(c.input)
+		if got != c.want {
+			t.Errorf("skaCoinValue(%q) = %v, want %v", c.input, got, c.want)
+		}
+	}
+}
+
+// TestSkaCoinValue_ThreeSigFigs verifies that skaCoinValue feeds correctly into
+// threeSigFigs for representative magnitudes.
+func TestSkaCoinValue_ThreeSigFigs(t *testing.T) {
+	cases := []struct {
+		atoms string
+		want  string
+	}{
+		{"1000000000000000000", "1.00"},           // 1 coin
+		{"1230000000000000000", "1.23"},           // 1.23 coins
+		{"1000000000000000000000", "1.00k"},       // 1 000 coins
+		{"1000000000000000000000000", "1.00M"},    // 1 M coins
+		{"1000000000000000000000000000", "1.00B"}, // 1 B coins
+		{"500000000000000000", "0.500"},           // sub-1: 0.5 coin
+		{"100000000000000000", "0.100"},           // sub-1: 0.1 coin
+		{"1000000000000000", "0.00100"},           // sub-1: 0.001 coin
+	}
+	for _, c := range cases {
+		got := threeSigFigs(skaCoinValue(c.atoms))
+		if got != c.want {
+			t.Errorf("threeSigFigs(skaCoinValue(%q)) = %q, want %q", c.atoms, got, c.want)
+		}
+	}
+}
+
 // when no CoinRows are present (VAR-only fallback path).
 func TestProp_VARAmountPreFormatted(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
