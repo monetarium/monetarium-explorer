@@ -1,0 +1,87 @@
+#!/usr/bin/env bash
+# Pre-commit hook:
+#   - Go: gofmt check + go test on affected modules
+#   - JS/SCSS: prettier format check + eslint + stylelint + vitest
+
+set -e
+
+ROOT=$(git rev-parse --show-toplevel)
+FAILED=0
+
+# ── Go ────────────────────────────────────────────────────────────────────────
+
+STAGED_GO=$(git diff --cached --name-only --diff-filter=ACM | grep '\.go$' || true)
+
+if [[ -n "$STAGED_GO" ]]; then
+  declare -A MODULES
+  while IFS= read -r file; do
+    dir="$ROOT/$(dirname "$file")"
+    while [[ "$dir" != "/" ]]; do
+      if [[ -f "$dir/go.mod" ]]; then
+        MODULES["$dir"]=1
+        break
+      fi
+      dir=$(dirname "$dir")
+    done
+  done <<< "$STAGED_GO"
+
+  for moddir in "${!MODULES[@]}"; do
+    rel="${moddir#$ROOT/}"
+    echo "==> [$rel] gofmt check"
+    UNFORMATTED=$(gofmt -l "$moddir" 2>/dev/null | grep -v vendor || true)
+    if [[ -n "$UNFORMATTED" ]]; then
+      echo "  gofmt: files need formatting:"
+      echo "$UNFORMATTED" | sed 's/^/    /'
+      echo "  Run: gofmt -w <file>"
+      FAILED=1
+    fi
+
+    echo "==> [$rel] go test ./..."
+    if ! (cd "$moddir" && go test ./...); then
+      echo "  Tests failed in $rel"
+      FAILED=1
+    fi
+  done
+fi
+
+# ── JS / SCSS ─────────────────────────────────────────────────────────────────
+
+STAGED_FRONTEND=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(js|scss)$' || true)
+
+if [[ -n "$STAGED_FRONTEND" ]]; then
+  FRONTEND_DIR="$ROOT/cmd/dcrdata"
+
+  echo "==> [cmd/dcrdata] prettier format check"
+  if ! (cd "$FRONTEND_DIR" && npm run format:check --silent); then
+    echo "  Prettier: files need formatting. Run: npm run format"
+    FAILED=1
+  fi
+
+  echo "==> [cmd/dcrdata] eslint"
+  if ! (cd "$FRONTEND_DIR" && npm run lint --silent); then
+    echo "  ESLint failed. Run: npm run lint:fix"
+    FAILED=1
+  fi
+
+  echo "==> [cmd/dcrdata] stylelint"
+  if ! (cd "$FRONTEND_DIR" && npm run lint:css --silent); then
+    echo "  Stylelint failed. Run: npm run lint:css:fix"
+    FAILED=1
+  fi
+
+  echo "==> [cmd/dcrdata] vitest"
+  if ! (cd "$FRONTEND_DIR" && npm test --silent); then
+    echo "  JS tests failed."
+    FAILED=1
+  fi
+fi
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+if [[ $FAILED -ne 0 ]]; then
+  echo ""
+  echo "Pre-commit checks failed. Fix the issues above and re-stage your changes."
+  exit 1
+fi
+
+echo "Pre-commit checks passed."

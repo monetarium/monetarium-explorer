@@ -10,6 +10,7 @@ Monetarium Explorer is a block explorer for the [Monetarium](https://monetarium.
 - [Overview](#overview)
 - [Requirements](#requirements)
 - [Building](#building)
+- [Contributing](#contributing)
 - [Local Testing on Testnet](#local-testing-on-testnet)
 - [Getting Started (Production)](#getting-started-production)
 - [APIs](#apis)
@@ -87,6 +88,50 @@ The `public` and `views` folders must remain in the same directory as the `monet
 
 ---
 
+## Contributing
+
+### Install git hooks
+
+After cloning, run this once to install the pre-commit hooks:
+
+```sh
+./dev/install-hooks.sh
+```
+
+The pre-commit hook runs automatically on every `git commit` and checks only the files you've staged:
+
+| Staged files      | Checks run                                                 |
+| ----------------- | ---------------------------------------------------------- |
+| `*.go`            | `gofmt` format check + `go test ./...` per affected module |
+| `*.js` / `*.scss` | Prettier format check, ESLint, Stylelint, Vitest           |
+
+If any check fails, the commit is blocked with instructions on how to fix it.
+
+### Running checks manually
+
+**Go** (from any module directory):
+
+```sh
+gofmt -l .                        # list files needing formatting
+gofmt -w .                        # fix formatting
+go test ./...                     # run tests
+golangci-lint run -c .golangci.yml
+```
+
+**JS / SCSS** (from `cmd/dcrdata`):
+
+```sh
+npm run format:check   # prettier check
+npm run format         # prettier fix
+npm run lint           # ESLint
+npm run lint:fix       # ESLint fix
+npm run lint:css       # Stylelint
+npm run lint:css:fix   # Stylelint fix
+npm test               # Vitest unit tests
+```
+
+---
+
 ## Local Testing on Testnet
 
 ### Prerequisites
@@ -114,6 +159,7 @@ Start and wait for full sync:
 ```sh
 ./monetarium-node --testnet
 ```
+
 Wait until the log shows `New best block` at the current testnet height before proceeding.
 
 ---
@@ -124,6 +170,7 @@ Wait until the log shows `New best block` at the current testnet height before p
 createuser -P monetarium_testnet    # enter a password, e.g. "testpass"
 createdb -O monetarium_testnet monetarium_testnet
 ```
+
 ---
 
 ### Step 3: Configure monetarium-explorer
@@ -175,7 +222,6 @@ On first run the explorer will create the DB schema and begin syncing all blocks
 
 Once sync reaches the tip, open:
 
-
 http://127.0.0.1:7777
 
 Check the API:
@@ -188,22 +234,22 @@ curl http://127.0.0.1:7777/api/block/best
 
 ### Ports reference
 
-| Service | Port |
-|---|---|
-| monetarium-node P2P (testnet3) | 19508 |
-| monetarium-node RPC (testnet3) | 19509 |
-| monetarium-explorer web/API | 7777 (configurable) |
+| Service                        | Port                |
+| ------------------------------ | ------------------- |
+| monetarium-node P2P (testnet3) | 19508               |
+| monetarium-node RPC (testnet3) | 19509               |
+| monetarium-explorer web/API    | 7777 (configurable) |
 
 ---
 
 ### Troubleshooting
 
-| Error | Fix |
-|---|---|
-| `expected network testnet3, got Unknown CurrencyNet` | Rebuild monetarium-node from source; stale binary has old wire constants |
-| `Connection to dcrd failed` | Verify `dcrdserv`, `dcrduser`, `dcrdpass`, and that the node is fully started |
-| `pq: relation does not exist` | Ensure `pg=1` is set and the DB user has CREATE privileges |
-| `bad project fund address` | Safe to ignore; Monetarium has no treasury |
+| Error                                                | Fix                                                                           |
+| ---------------------------------------------------- | ----------------------------------------------------------------------------- |
+| `expected network testnet3, got Unknown CurrencyNet` | Rebuild monetarium-node from source; stale binary has old wire constants      |
+| `Connection to dcrd failed`                          | Verify `dcrdserv`, `dcrduser`, `dcrdpass`, and that the node is fully started |
+| `pq: relation does not exist`                        | Ensure `pg=1` is set and the DB user has CREATE privileges                    |
+| `bad project fund address`                           | Safe to ignore; Monetarium has no treasury                                    |
 
 ---
 
@@ -226,10 +272,10 @@ On first startup the explorer imports all blockchain data and builds indexes. Th
 
 ### Hardware requirements
 
-| Setup | CPU | RAM | Storage |
-|---|---|---|---|
-| Explorer only (remote DB) | 1 core | 2 GB | 8 GB HDD |
-| Explorer + PostgreSQL | 3+ cores | 12+ GB | 120 GB NVMe SSD |
+| Setup                     | CPU      | RAM    | Storage         |
+| ------------------------- | -------- | ------ | --------------- |
+| Explorer only (remote DB) | 1 core   | 2 GB   | 8 GB HDD        |
+| Explorer + PostgreSQL     | 3+ cores | 12+ GB | 120 GB NVMe SSD |
 
 ---
 
@@ -244,15 +290,15 @@ See [docs/Insight_API_documentation.md](docs/Insight_API_documentation.md) for t
 
 Key dcrdata API endpoints:
 
-| Resource | Path |
-|---|---|
-| Best block summary | `/api/block/best` |
-| Block by height | `/api/block/{height}` |
-| Transaction | `/api/tx/{txid}` |
-| Address | `/api/address/{address}` |
-| Coin supply | `/api/supply` |
-| Mempool tickets | `/api/mempool/sstx` |
-| Status | `/api/status` |
+| Resource           | Path                     |
+| ------------------ | ------------------------ |
+| Best block summary | `/api/block/best`        |
+| Block by height    | `/api/block/{height}`    |
+| Transaction        | `/api/tx/{txid}`         |
+| Address            | `/api/address/{address}` |
+| Coin supply        | `/api/supply`            |
+| Mempool tickets    | `/api/mempool/sstx`      |
+| Status             | `/api/status`            |
 
 All endpoints accept `?indent=true` for pretty-printed JSON.
 
