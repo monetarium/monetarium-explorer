@@ -26,13 +26,13 @@ function coinRowsToSKAData(block) {
     if (cr.coin_type === 0) {
       varTxCount = cr.tx_count
       varAmount = humanize.formatCoinAtoms(cr.amount, cr.coin_type)
-      varSize = `${cr.size} B`
+      varSize = cr.size > 0 ? `${cr.size} B` : '—'
     } else {
       subRows.push({
         tokenType: cr.symbol,
-        txCount: String(cr.tx_count),
+        txCount: cr.tx_count > 0 ? String(cr.tx_count) : '—',
         amount: humanize.formatCoinAtoms(cr.amount, cr.coin_type),
-        size: `${cr.size} B`
+        size: cr.size > 0 ? `${cr.size} B` : '—'
       })
     }
   }
@@ -67,7 +67,7 @@ function insertVARSubRow(tbody, newRow, varTxCount, varAmount, varSize) {
   labelSpan.textContent = 'VAR'
   labelTd.appendChild(labelSpan)
   tr.appendChild(labelTd)
-  tr.appendChild(makeTd('text-end num', String(varTxCount)))
+  tr.appendChild(makeTd('text-end num', varTxCount > 0 ? String(varTxCount) : '—'))
   tr.appendChild(makeTd('text-end num', varAmount))
   tr.appendChild(makeTd('text-end', '—'))
   tr.appendChild(makeTd('text-end num d-none d-sm-table-cell d-md-none d-lg-table-cell', varSize))
@@ -185,7 +185,7 @@ export default class extends Controller {
           newTd.textContent = varAmount
           break
         case 'ska-amount':
-          newTd.textContent = skaAmount
+          newTd.textContent = skaAmount || '—'
           break
         case 'size':
           newTd.textContent = humanize.bytes(block.size)
