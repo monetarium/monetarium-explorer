@@ -82,3 +82,39 @@ func TestBlockCoinAmounts_Empty(t *testing.T) {
 		t.Errorf("expected nil for empty block, got %v", got)
 	}
 }
+
+func TestBlockCoinTxStats_Mixed(t *testing.T) {
+	varTx := wire.NewMsgTx()
+	varTx.AddTxOut(wire.NewTxOut(100_000_000, nil))
+
+	skaTx := wire.NewMsgTx()
+	skaBig := new(big.Int).Mul(big.NewInt(1_000_000), new(big.Int).Exp(big.NewInt(10), big.NewInt(18), nil))
+	skaTx.AddTxOut(wire.NewTxOutSKA(skaBig, cointype.CoinType(1), nil))
+
+	blk := &wire.MsgBlock{}
+	blk.Transactions = []*wire.MsgTx{varTx, skaTx}
+
+	got := blockCoinTxStats(blk)
+	if got == nil {
+		t.Fatal("expected non-nil CoinTxStats")
+	}
+	if got[0].TxCount != 1 {
+		t.Errorf("VAR TxCount: want 1, got %d", got[0].TxCount)
+	}
+	if got[1].TxCount != 1 {
+		t.Errorf("SKA-1 TxCount: want 1, got %d", got[1].TxCount)
+	}
+	if got[0].Size != uint32(varTx.SerializeSize()) {
+		t.Errorf("VAR Size: want %d, got %d", varTx.SerializeSize(), got[0].Size)
+	}
+	if got[1].Size != uint32(skaTx.SerializeSize()) {
+		t.Errorf("SKA-1 Size: want %d, got %d", skaTx.SerializeSize(), got[1].Size)
+	}
+}
+
+func TestBlockCoinTxStats_Empty(t *testing.T) {
+	blk := &wire.MsgBlock{}
+	if got := blockCoinTxStats(blk); got != nil {
+		t.Errorf("expected nil for empty block, got %v", got)
+	}
+}

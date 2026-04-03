@@ -6083,7 +6083,7 @@ func (pgb *ChainDB) GetExplorerBlocks(ctx context.Context, start int, end int) [
 			block = makeExplorerBlockBasic(data, pgb.chainParams)
 			// Populate per-coin rows from the stored block summary.
 			if summary := pgb.GetSummaryByHash(ctx, data.Hash, false); summary != nil {
-				block.CoinRows = coinRowsFromAmounts(summary.CoinAmounts)
+				block.CoinRows = coinRowsFromSummary(summary)
 			}
 		}
 		summaries = append(summaries, block)
@@ -6694,5 +6694,18 @@ func coinRowsFromAmounts(amounts map[uint8]string) []exptypes.CoinRowData {
 	}
 	// Sort: VAR first, then SKA by type number.
 	sort.Slice(rows, func(i, j int) bool { return rows[i].CoinType < rows[j].CoinType })
+	return rows
+}
+
+// coinRowsFromSummary builds []CoinRowData from a block summary, merging
+// CoinAmounts with CoinTxStats so each row carries amount, tx count, and size.
+func coinRowsFromSummary(summary *apitypes.BlockDataBasic) []exptypes.CoinRowData {
+	rows := coinRowsFromAmounts(summary.CoinAmounts)
+	for i := range rows {
+		if s, ok := summary.CoinTxStats[rows[i].CoinType]; ok {
+			rows[i].TxCount = s.TxCount
+			rows[i].Size = s.Size
+		}
+	}
 	return rows
 }

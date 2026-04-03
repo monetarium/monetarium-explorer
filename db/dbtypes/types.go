@@ -2148,6 +2148,12 @@ func ToJSONB(v interface{}) []byte {
 }
 
 // Block models a Decred block.
+// CoinTxStats holds per-coin transaction count and total serialized size for a block.
+type CoinTxStats struct {
+	TxCount int    `json:"tx_count"`
+	Size    uint32 `json:"size"`
+}
+
 type Block struct {
 	Hash         ChainHash `json:"hash"`
 	Size         uint32    `json:"size"`
@@ -2173,6 +2179,7 @@ type Block struct {
 	ChainWork    string           `json:"chainwork"`
 	Winners      []ChainHash      `json:"winners"`
 	CoinAmounts  map[uint8]string `json:"coin_amounts,omitempty"`
+	CoinTxStats  map[uint8]CoinTxStats `json:"coin_tx_stats,omitempty"`
 }
 
 type BlockDataBasic struct {

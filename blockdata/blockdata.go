@@ -246,6 +246,13 @@ func (t *Collector) CollectBlockInfo(hash *chainhash.Hash) (*apitypes.BlockDataB
 		extrainfo.CoinAmounts = coinAmounts
 	}
 
+	// Accumulate per-coin tx count and size.
+	coinTxStats := blockCoinTxStats(msgBlock)
+	if len(coinTxStats) > 0 {
+		blockdata.CoinTxStats = coinTxStats
+		extrainfo.CoinTxStats = coinTxStats
+	}
+
 	return blockdata, feeInfoBlock, blockHeaderResults, extrainfo, msgBlock, err
 }
 
@@ -381,6 +388,30 @@ func (t *Collector) Collect() (*BlockData, *wire.MsgBlock, error) {
 	}
 
 	return blockdata, msgBlock, err
+}
+
+// blockCoinTxStats returns per-coin tx count and total serialized size for all
+// transactions in a block (key 0=VAR, 1-255=SKA-n). Returns nil for empty blocks.
+func blockCoinTxStats(msgBlock *wire.MsgBlock) map[uint8]apitypes.CoinTxStats {
+	stats := make(map[uint8]apitypes.CoinTxStats)
+	allTxs := append(msgBlock.Transactions, msgBlock.STransactions...)
+	for _, tx := range allTxs {
+		ct := uint8(cointype.CoinTypeVAR)
+		for _, txout := range tx.TxOut {
+			if txout.CoinType.IsSKA() {
+				ct = uint8(txout.CoinType)
+				break
+			}
+		}
+		s := stats[ct]
+		s.TxCount++
+		s.Size += uint32(tx.SerializeSize())
+		stats[ct] = s
+	}
+	if len(stats) == 0 {
+		return nil
+	}
+	return stats
 }
 
 // blockCoinAmounts iterates all transactions in a block and returns a map of

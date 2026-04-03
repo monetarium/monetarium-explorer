@@ -35,7 +35,8 @@ const (
 		previous_hash BYTEA,
 		chainwork TEXT, -- todo: BYTE
 		winners BYTEA[], -- remove? make a new stake table? to get TicketPoolInfo.Winners we'd need a join or second query
-		coin_amounts JSONB
+		coin_amounts JSONB,
+		coin_tx_stats JSONB
 	);`
 
 	// Block inserts. is_valid refers to blocks that have been validated by
@@ -49,12 +50,12 @@ const (
 		numtx, num_rtx, txDbIDs, num_stx,  stxDbIDs,
 		time, nonce, vote_bits, voters,
 		fresh_stake, revocations, pool_size, bits, sbits,
-		difficulty, stake_version, previous_hash, chainwork, winners, coin_amounts)
+		difficulty, stake_version, previous_hash, chainwork, winners, coin_amounts, coin_tx_stats)
 	VALUES ($1, $2, $3, $4, $5, $6,
 		$7, $8, $9, $10, $11,
 		$12, $13, $14, $15,
 		$16, $17, $18, $19, $20,
-		$21, $22, $23, $24, $25, $26) `
+		$21, $22, $23, $24, $25, $26, $27) `
 
 	// InsertBlockRow inserts a new block row without checking for unique index
 	// conflicts. This should only be used before the unique indexes are created
@@ -226,14 +227,16 @@ const (
 	SelectBlockDataByHeight = `
 		SELECT blocks.hash, blocks.height, blocks.size,
 			blocks.difficulty, blocks.sbits, blocks.time, stats.pool_size,
-			stats.pool_val, blocks.winners, blocks.is_valid, blocks.coin_amounts
+			stats.pool_val, blocks.winners, blocks.is_valid, blocks.coin_amounts,
+			blocks.coin_tx_stats
 		FROM blocks INNER JOIN stats ON blocks.id = stats.blocks_id
 		WHERE blocks.height = $1;`
 
 	SelectBlockDataRange = `
 		SELECT blocks.hash, blocks.height, blocks.size,
 			blocks.difficulty, blocks.sbits, blocks.time, stats.pool_size,
-			stats.pool_val, blocks.winners, blocks.is_valid, blocks.coin_amounts
+			stats.pool_val, blocks.winners, blocks.is_valid, blocks.coin_amounts,
+			blocks.coin_tx_stats
 		FROM blocks INNER JOIN stats ON blocks.id = stats.blocks_id
 		WHERE blocks.height BETWEEN $1 AND $2
 		ORDER BY blocks.height;`
@@ -241,7 +244,8 @@ const (
 	SelectBlockDataRangeDesc = `
 		SELECT blocks.hash, blocks.height, blocks.size,
 			blocks.difficulty, blocks.sbits, blocks.time, stats.pool_size,
-			stats.pool_val, blocks.winners, blocks.is_valid, blocks.coin_amounts
+			stats.pool_val, blocks.winners, blocks.is_valid, blocks.coin_amounts,
+			blocks.coin_tx_stats
 		FROM blocks INNER JOIN stats ON blocks.id = stats.blocks_id
 		WHERE blocks.height BETWEEN $1 AND $2
 		ORDER BY blocks.height DESC;`
@@ -249,7 +253,8 @@ const (
 	SelectBlockDataRangeWithSkip = `
 		SELECT blocks.hash, blocks.height, blocks.size,
 			blocks.difficulty, blocks.sbits, blocks.time, stats.pool_size,
-			stats.pool_val, blocks.winners, blocks.is_valid, blocks.coin_amounts
+			stats.pool_val, blocks.winners, blocks.is_valid, blocks.coin_amounts,
+			blocks.coin_tx_stats
 		FROM blocks INNER JOIN stats ON blocks.id = stats.blocks_id
 		WHERE blocks.height BETWEEN $1 AND $2
 			AND blocks.height %% %d = %d
@@ -258,7 +263,8 @@ const (
 	SelectBlockDataRangeWithSkipDesc = `
 		SELECT blocks.hash, blocks.height, blocks.size,
 			blocks.difficulty, blocks.sbits, blocks.time, stats.pool_size,
-			stats.pool_val, blocks.winners, blocks.is_valid, blocks.coin_amounts
+			stats.pool_val, blocks.winners, blocks.is_valid, blocks.coin_amounts,
+			blocks.coin_tx_stats
 		FROM blocks INNER JOIN stats ON blocks.id = stats.blocks_id
 		WHERE blocks.height BETWEEN $1 AND $2
 			AND blocks.height %% %d = %d
@@ -268,7 +274,7 @@ const (
 			SELECT blocks.height, blocks.size,
 				blocks.difficulty, blocks.sbits, blocks.time, stats.pool_size,
 				stats.pool_val, blocks.winners, blocks.is_mainchain, blocks.is_valid,
-				blocks.coin_amounts
+				blocks.coin_amounts, blocks.coin_tx_stats
 			FROM blocks INNER JOIN stats ON blocks.id = stats.blocks_id
 			WHERE blocks.hash = $1;`
 

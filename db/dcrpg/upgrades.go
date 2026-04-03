@@ -473,6 +473,7 @@ func upgradeSchemaMultiCoin(db *sql.DB) error {
 			END IF;
 		END $$`,
 		`ALTER TABLE blocks ADD COLUMN IF NOT EXISTS coin_amounts JSONB`,
+		`ALTER TABLE blocks ADD COLUMN IF NOT EXISTS coin_tx_stats JSONB`,
 	}
 	for _, stmt := range stmts {
 		if _, err := db.Exec(stmt); err != nil {

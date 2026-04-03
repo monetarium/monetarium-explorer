@@ -710,6 +710,9 @@ type TicketPoolValsAndSizes struct {
 	Size        []uint32  `json:"size"`
 }
 
+// CoinTxStats is an alias for dbtypes.CoinTxStats — per-coin tx count and size.
+type CoinTxStats = dbtypes.CoinTxStats
+
 // BlockDataBasic models primary information about a block.
 type BlockDataBasic struct {
 	Height     uint32  `json:"height"`
@@ -723,6 +726,8 @@ type BlockDataBasic struct {
 	TotalSent  *int64  `json:"total_sent,omitempty"`
 	// CoinAmounts holds per-coin totals (VAR key=0, SKA-n key=n) as decimal atom strings.
 	CoinAmounts map[uint8]string `json:"coin_amounts,omitempty"`
+	// CoinTxStats holds per-coin tx count and size (key 0=VAR, 1-255=SKA-n).
+	CoinTxStats map[uint8]CoinTxStats `json:"coin_tx_stats,omitempty"`
 	// TicketPoolInfo may be nil for side chain blocks.
 	PoolInfo *TicketPoolInfo `json:"ticket_pool,omitempty"`
 }
@@ -755,6 +760,8 @@ type BlockExplorerExtraInfo struct {
 	NextBlockSubsidy *chainjson.GetBlockSubsidyResult `json:"next_block_subsidy"`
 	// CoinAmounts holds per-coin totals (VAR key=0, SKA-n key=n) as decimal atom strings.
 	CoinAmounts map[uint8]string `json:"coin_amounts,omitempty"`
+	// CoinTxStats holds per-coin tx count and size (key 0=VAR, 1-255=SKA-n).
+	CoinTxStats map[uint8]CoinTxStats `json:"coin_tx_stats,omitempty"`
 }
 
 // BlockTransactionCounts contains the regular and stake transaction counts for
