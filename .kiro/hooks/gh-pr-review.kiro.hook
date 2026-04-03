@@ -1,0 +1,13 @@
+{
+  "enabled": true,
+  "name": "GitHub PR Review",
+  "description": "When a GitHub PR URL is mentioned in a prompt, fetch the diff with gh CLI, write a review, and show it to the user for approval before posting",
+  "version": "1",
+  "when": {
+    "type": "promptSubmit"
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "Check if the user's message contains a GitHub pull request URL (e.g. https://github.com/.../pull/N). If it does:\n1. Use `gh pr view N --json title,body,files,commits` and `gh pr diff N` to fetch the PR details and diff.\n2. Perform a thorough code review.\n3. Show the full review body to the user as a preview.\n4. Ask the user: \"Should I post this review?\" and wait for their explicit confirmation before running `gh pr review N --approve --body \"...\"`.\nDo NOT post the review without the user's explicit approval.\nIf no PR URL is present, do nothing."
+  }
+}
