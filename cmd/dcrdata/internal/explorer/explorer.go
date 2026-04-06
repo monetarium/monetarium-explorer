@@ -950,10 +950,11 @@ func generateRandomString() string {
 	return string(bytes)
 }
 
-// computeCoinFills builds per-coin fill bar data with quota-aware status.
 // VAR has a guaranteed 10% of maxBlockSize; SKA types share the remaining 90%
 // equally. A coin is "ok" if within its quota, "borrowing" if over quota but
 // the total block is not full, and "full" if the total block is full.
+//
+//nolint:unparam // maxBlockSize comes from the node at runtime; test uses 100.0 for easy math.
 func computeCoinFills(stats map[uint8]types.MempoolCoinStats, maxBlockSize float64) []types.CoinFillData {
 	varQuota := maxBlockSize * 0.10
 	skaPool := maxBlockSize * 0.90
