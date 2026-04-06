@@ -943,4 +943,80 @@ via the BlockInfo path has non-zero TxCount and Size when CoinTxStats is present
 Demo: Block detail page and websocket block events show correct per-coin tx_count and size in coin_rows. GET /api/block/{height} returns 
 "coin_tx_stats": {"0": {"tx_count": 5, "size": 2048}, "1": {"tx_count": 2, "size": 512}}.
 
+Task 19: Per-coin mempool tracking (size, amount, tx count)
+Commit: fix: per-coin tx count, size, and amount tracking in mempool
+
+Objective: Mempool currently tracks only a single VAR-based TotalOut float64 and a single LikelyMineable.Size int32. SKA transactions contribute 0 to all totals. Mirror 
+the block-level CoinTxStats pattern to track per-coin tx count, size, and amount in mempool.
+
+Root cause — three broken sites:
+
+1. txhelpers.TotalOutFromMsgTx sums v.Value (int64) for all outputs — SKA outputs have Value == 0, their amount is in v.SKAValue *big.Int, never read.
+2. MempoolTx has no per-coin amount field — only TotalOut float64 (VAR only).
+3. ParseTxns in collector.go accumulates out, _ := dcrutil.NewAmount(tx.TotalOut) into regularTotal, ticketTotal, etc. — all zero for SKA. LikelyMineable totals and 
+CoinFills in StoreMPData are therefore wrong for SKA.
+
+Changes:
+
+txhelpers/txhelpers.go — fix TotalOutFromMsgTx to guard on VAR only:
+go
+func TotalOutFromMsgTx(msgTx *wire.MsgTx) dcrutil.Amount {
+    var amtOut int64
+    for _, v := range msgTx.TxOut {
+        if v.CoinType == cointype.CoinTypeVAR {
+            amtOut += v.Value
+        }
+    }
+    return dcrutil.Amount(amtOut)
+}
+
+
+Add SKATotalsFromMsgTx(msgTx *wire.MsgTx) map[uint8]string — mirrors blockCoinAmounts but for a single tx, returns atom strings keyed by SKA coin type.
+
+explorer/types/explorertypes.go — add to MempoolTx:
+go
+SKATotals map[uint8]string `json:"ska_totals,omitempty"`
+
+Update DeepCopy to copy the map.
+
+Add MempoolCoinStats struct (mirrors CoinTxStats):
+go
+type MempoolCoinStats struct {
+    TxCount int   `json:"tx_count"`
+    Size    int32 `json:"size"`
+    Amount  string `json:"amount"` // VAR: atom int64 string; SKA: big.Int atom string
+}
+
+
+Add to MempoolShort:
+go
+CoinStats map[uint8]MempoolCoinStats `json:"coin_stats,omitempty"`
+
+Update DeepCopy to copy the map.
+
+mempool/monitor.go and mempool/collector.go — populate SKATotals in MempoolTx{}:
+go
+SKATotals: txhelpers.SKATotalsFromMsgTx(msgTx),
+
+
+mempool/collector.go — ParseTxns: after the existing per-type accumulation loop, build CoinStats by iterating all txs, grouping by coin type (VAR from tx.TotalOut, SKA 
+from tx.SKATotals), accumulating count, size, and amount. Assign to mpInfo.MempoolShort.CoinStats.
+
+cmd/dcrdata/internal/explorer/explorer.go — StoreMPData: replace the stub SKA fill loop with one driven by inv.CoinStats:
+go
+// VAR: 10% of bar; SKA types share remaining 90% equally
+for ct, stats := range inv.CoinStats {
+    // compute fill from stats.Size / maxBlockSize
+    // assign symbol, fill pct, color
+}
+inv.CoinFills = fills
+
+
+Test:
+- Unit test for TotalOutFromMsgTx with a mixed VAR+SKA tx — assert VAR amount correct, SKA does not corrupt it.
+- Unit test for SKATotalsFromMsgTx — assert correct atom string for SKA-1 output.
+- Unit test for ParseTxns with a slice containing one VAR tx and one SKA-1 tx — assert CoinStats[0].TxCount == 1 and CoinStats[1].TxCount == 1 with correct sizes.
+
+Demo: Mempool API response includes coin_stats with per-coin tx count, size, and amount. Homepage fill bars show non-zero SKA fill when SKA transactions are in mempool.
+
 
