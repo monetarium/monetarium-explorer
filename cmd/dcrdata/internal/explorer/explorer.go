@@ -470,9 +470,13 @@ func (exp *explorerUI) MempoolSignal() chan<- pstypes.HubMessage {
 // []types.MempoolTx so that it may be modified (e.g. sorted) without affecting
 // other MempoolDataSavers.
 func (exp *explorerUI) StoreMPData(_ *mempool.StakeData, _ []types.MempoolTx, inv *types.MempoolInfo) {
-	maxBlockSize := float64(exp.pageData.BlockchainInfo.MaxBlockSize)
-	if maxBlockSize == 0 {
-		maxBlockSize = 393216
+	exp.pageData.RLock()
+	blockchainInfo := exp.pageData.BlockchainInfo
+	exp.pageData.RUnlock()
+
+	maxBlockSize := 393216.0
+	if blockchainInfo != nil && blockchainInfo.MaxBlockSize > 0 {
+		maxBlockSize = float64(blockchainInfo.MaxBlockSize)
 	}
 	inv.CoinFills = computeCoinFills(inv.CoinStats, maxBlockSize)
 
