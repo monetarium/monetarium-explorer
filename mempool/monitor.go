@@ -354,6 +354,25 @@ func (p *MempoolMonitor) TxHandler(rawTx *chainjson.TxRawResult) error {
 		p.inventory.LikelyMineable.Count++
 	}
 	p.inventory.FormattedTotalSize = exptypes.BytesString(uint64(p.inventory.TotalSize))
+
+	// Update per-coin stats incrementally.
+	if p.inventory.CoinStats == nil {
+		p.inventory.CoinStats = make(map[uint8]exptypes.MempoolCoinStats)
+	}
+	if len(tx.SKATotals) == 0 {
+		s := p.inventory.CoinStats[0]
+		s.TxCount++
+		s.Size += tx.Size
+		p.inventory.CoinStats[0] = s
+	} else {
+		for ct := range tx.SKATotals {
+			s := p.inventory.CoinStats[ct]
+			s.TxCount++
+			s.Size += tx.Size
+			p.inventory.CoinStats[ct] = s
+		}
+	}
+
 	p.inventory.Unlock()
 	p.mtx.RUnlock()
 
