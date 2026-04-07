@@ -15,6 +15,7 @@ import (
 
 	"github.com/monetarium/monetarium-node/blockchain/stake"
 	"github.com/monetarium/monetarium-node/chaincfg"
+	"github.com/monetarium/monetarium-node/cointype"
 	"github.com/monetarium/monetarium-node/chaincfg/chainhash"
 	"github.com/monetarium/monetarium-node/dcrutil"
 	chainjson "github.com/monetarium/monetarium-node/rpc/jsonrpc/types"
@@ -105,7 +106,9 @@ func (t *DataCollector) mempoolTxns() ([]exptypes.MempoolTx, txhelpers.MempoolAd
 
 		var totalOut int64
 		for _, v := range msgTx.TxOut {
-			totalOut += v.Value
+			if v.CoinType == cointype.CoinTypeVAR {
+				totalOut += v.Value
+			}
 		}
 
 		txType := txhelpers.DetermineTxType(msgTx)
@@ -154,7 +157,8 @@ func (t *DataCollector) mempoolTxns() ([]exptypes.MempoolTx, txhelpers.MempoolAd
 			TotalOut: dcrutil.Amount(totalOut).ToCoin(),
 			Type:     txhelpers.TxTypeToString(int(txType)),
 			TypeID:   int(txType),
-			VoteInfo: voteInfo,
+			VoteInfo:  voteInfo,
+			SKATotals: txhelpers.SKATotalsFromMsgTx(msgTx),
 		})
 	}
 
