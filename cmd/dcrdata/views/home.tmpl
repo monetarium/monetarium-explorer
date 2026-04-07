@@ -67,7 +67,7 @@
                                 <div class="mt-1 d-flex" style="gap:4px">
                                     {{- range .Mempool.CoinFills}}
                                     <div style="flex:1;background:#eee;height:8px;border-radius:3px;overflow:hidden" title="{{.Symbol}}">
-                                        <div style="width:{{printf "%.1f" (mulf .FillPct 100.0)}}%;height:100%;background:{{.Color}}"></div>
+                                        <div style="width:{{printf "%.1f" (mulf .FillPct 100.0)}}%;height:100%" class="fill-{{.Status}}"></div>
                                     </div>
                                     {{- end}}
                                 </div>

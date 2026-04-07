@@ -25,6 +25,7 @@ import (
 	"github.com/monetarium/monetarium-node/blockchain/standalone"
 	"github.com/monetarium/monetarium-node/chaincfg"
 	"github.com/monetarium/monetarium-node/chaincfg/chainhash"
+	"github.com/monetarium/monetarium-node/cointype"
 	"github.com/monetarium/monetarium-node/dcrutil"
 	chainjson "github.com/monetarium/monetarium-node/rpc/jsonrpc/types"
 	"github.com/monetarium/monetarium-node/txscript/stdaddr"
@@ -1266,13 +1267,42 @@ func FeeRate(amtIn, amtOut, sizeBytes int64) int64 {
 	return 1000 * (amtIn - amtOut) / sizeBytes
 }
 
-// TotalOutFromMsgTx computes the total value out of a MsgTx
+// TotalOutFromMsgTx computes the total VAR value out of a MsgTx.
+// SKA outputs are excluded (their amounts are in v.SKAValue, not v.Value).
 func TotalOutFromMsgTx(msgTx *wire.MsgTx) dcrutil.Amount {
 	var amtOut int64
 	for _, v := range msgTx.TxOut {
-		amtOut += v.Value
+		if v.CoinType == cointype.CoinTypeVAR {
+			amtOut += v.Value
+		}
 	}
 	return dcrutil.Amount(amtOut)
+}
+
+// SKATotalsFromMsgTx returns per-SKA-coin output totals as decimal atom strings
+// (key = SKA coin type number). Returns nil if the tx has no SKA outputs.
+func SKATotalsFromMsgTx(msgTx *wire.MsgTx) map[uint8]string {
+	var totals map[uint8]*big.Int
+	for _, v := range msgTx.TxOut {
+		if v.CoinType.IsSKA() && v.SKAValue != nil {
+			if totals == nil {
+				totals = make(map[uint8]*big.Int)
+			}
+			k := uint8(v.CoinType)
+			if totals[k] == nil {
+				totals[k] = new(big.Int)
+			}
+			totals[k].Add(totals[k], v.SKAValue)
+		}
+	}
+	if len(totals) == 0 {
+		return nil
+	}
+	out := make(map[uint8]string, len(totals))
+	for k, v := range totals {
+		out[k] = v.String()
+	}
+	return out
 }
 
 // TotalVout computes the total value of a slice of chainjson.Vout

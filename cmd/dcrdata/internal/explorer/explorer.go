@@ -470,14 +470,15 @@ func (exp *explorerUI) MempoolSignal() chan<- pstypes.HubMessage {
 // []types.MempoolTx so that it may be modified (e.g. sorted) without affecting
 // other MempoolDataSavers.
 func (exp *explorerUI) StoreMPData(_ *mempool.StakeData, _ []types.MempoolTx, inv *types.MempoolInfo) {
-	// Compute per-coin fill bars. VAR occupies 10% of the bar; SKA types share
-	// the remaining 90%. Fill = min(size/maxBlockSize, 1.0).
-	const maxBlockSize = 393216.0
-	varFill := math.Min(float64(inv.LikelyMineable.Size)/maxBlockSize, 1.0)
-	inv.CoinFills = []types.CoinFillData{
-		{Symbol: "VAR", FillPct: varFill * 0.10, Color: fillColor(varFill)},
+	exp.pageData.RLock()
+	blockchainInfo := exp.pageData.BlockchainInfo
+	exp.pageData.RUnlock()
+
+	maxBlockSize := 393216.0
+	if blockchainInfo != nil && blockchainInfo.MaxBlockSize > 0 {
+		maxBlockSize = float64(blockchainInfo.MaxBlockSize)
 	}
-	// SKA fills are zero until per-coin mempool tracking is implemented.
+	inv.CoinFills = computeCoinFills(inv.CoinStats, maxBlockSize)
 
 	// Get exclusive access to the Mempool field.
 	exp.invsMtx.Lock()
@@ -949,13 +950,63 @@ func generateRandomString() string {
 	return string(bytes)
 }
 
-// fillColor returns "green", "yellow", or "red" based on fill fraction.
-// green: fits in guaranteed space (<= 1.0), yellow: borrowed space, red: won't fit.
-func fillColor(fill float64) string {
-	if fill <= 1.0 {
-		return "green"
-	} else if fill <= 1.5 {
-		return "yellow"
+// VAR has a guaranteed 10% of maxBlockSize; SKA types share the remaining 90%
+// equally. A coin is "ok" if within its quota, "borrowing" if over quota but
+// the total block is not full, and "full" if the total block is full.
+//
+//nolint:unparam // maxBlockSize comes from the node at runtime; test uses 100.0 for easy math.
+func computeCoinFills(stats map[uint8]types.MempoolCoinStats, maxBlockSize float64) []types.CoinFillData {
+	varQuota := maxBlockSize * 0.10
+	skaPool := maxBlockSize * 0.90
+
+	var numSKA int
+	var totalSKASize float64
+	for ct, s := range stats {
+		if ct != 0 {
+			numSKA++
+			totalSKASize += float64(s.Size)
+		}
 	}
-	return "red"
+
+	varSize := float64(0)
+	if s, ok := stats[0]; ok {
+		varSize = float64(s.Size)
+	}
+	totalUsed := varSize + totalSKASize
+
+	fillStatus := func(size, quota float64) string {
+		switch {
+		case size <= quota:
+			return "ok"
+		case totalUsed <= maxBlockSize:
+			return "borrowing"
+		default:
+			return "full"
+		}
+	}
+
+	fills := make([]types.CoinFillData, 0, 1+numSKA)
+	fills = append(fills, types.CoinFillData{
+		Symbol:  "VAR",
+		FillPct: math.Min(varSize/varQuota, 1.0) * 0.10,
+		Status:  fillStatus(varSize, varQuota),
+	})
+
+	if numSKA == 0 {
+		return fills
+	}
+	perSKAQuota := skaPool / float64(numSKA)
+	skaShare := 0.90 / float64(numSKA)
+	for ct, s := range stats {
+		if ct == 0 {
+			continue
+		}
+		size := float64(s.Size)
+		fills = append(fills, types.CoinFillData{
+			Symbol:  fmt.Sprintf("SKA-%d", ct),
+			FillPct: math.Min(size/perSKAQuota, 1.0) * skaShare,
+			Status:  fillStatus(size, perSKAQuota),
+		})
+	}
+	return fills
 }

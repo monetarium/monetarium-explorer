@@ -44,6 +44,11 @@ type DataCache struct {
 // pass a copy of the []types.MempoolTx so that it may be modified (e.g. sorted)
 // without affecting other MempoolDataSavers.
 func (c *DataCache) StoreMPData(stakeData *StakeData, txsCopy []exptypes.MempoolTx, _ *exptypes.MempoolInfo) {
+	// stakeData is nil when called from TxHandler (incremental update path).
+	// In that case we skip the cache update — explorerUI.StoreMPData handles it.
+	if stakeData == nil {
+		return
+	}
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
 

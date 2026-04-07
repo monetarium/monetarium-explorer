@@ -7,6 +7,7 @@ package mempool
 import (
 	"context"
 	"fmt"
+	"math/big"
 	"sort"
 	"sync"
 	"time"
@@ -14,6 +15,7 @@ import (
 	"github.com/monetarium/monetarium-node/blockchain/stake"
 	"github.com/monetarium/monetarium-node/chaincfg"
 	"github.com/monetarium/monetarium-node/chaincfg/chainhash"
+	"github.com/monetarium/monetarium-node/cointype"
 	"github.com/monetarium/monetarium-node/dcrutil"
 	chainjson "github.com/monetarium/monetarium-node/rpc/jsonrpc/types"
 
@@ -103,7 +105,9 @@ func (t *DataCollector) mempoolTxns() ([]exptypes.MempoolTx, txhelpers.MempoolAd
 
 		var totalOut int64
 		for _, v := range msgTx.TxOut {
-			totalOut += v.Value
+			if v.CoinType == cointype.CoinTypeVAR {
+				totalOut += v.Value
+			}
 		}
 
 		txType := txhelpers.DetermineTxType(msgTx)
@@ -146,13 +150,14 @@ func (t *DataCollector) mempoolTxns() ([]exptypes.MempoolTx, txhelpers.MempoolAd
 			VoutCount: len(msgTx.TxOut),
 			Vin:       exptypes.MsgTxMempoolInputs(msgTx),
 			// Coinbase:  txhelpers.IsCoinBaseTx(msgTx), // commented because coinbase is not in mempool
-			Hash:     hashStr, // dup of TxID!
-			Time:     tx.Time,
-			Size:     tx.Size,
-			TotalOut: dcrutil.Amount(totalOut).ToCoin(),
-			Type:     txhelpers.TxTypeToString(int(txType)),
-			TypeID:   int(txType),
-			VoteInfo: voteInfo,
+			Hash:      hashStr, // dup of TxID!
+			Time:      tx.Time,
+			Size:      tx.Size,
+			TotalOut:  dcrutil.Amount(totalOut).ToCoin(),
+			Type:      txhelpers.TxTypeToString(int(txType)),
+			TypeID:    int(txType),
+			VoteInfo:  voteInfo,
+			SKATotals: txhelpers.SKATotalsFromMsgTx(msgTx),
 		})
 	}
 
@@ -467,6 +472,58 @@ func ParseTxns(txs []exptypes.MempoolTx, params *chaincfg.Params, lastBlock *Blo
 	sort.Sort(exptypes.MPTxsByHeight(votes))
 	formattedSize := exptypes.BytesString(uint64(totalSize))
 
+	// Build per-coin stats: accumulate counts/sizes and amounts natively,
+	// then convert amounts to strings once at the end.
+	type coinAccum struct {
+		txCount int
+		size    int32
+		varAmt  int64
+		skaAmt  map[uint8]*big.Int
+	}
+	accum := make(map[uint8]*coinAccum)
+	getAccum := func(ct uint8) *coinAccum {
+		if accum[ct] == nil {
+			accum[ct] = &coinAccum{}
+		}
+		return accum[ct]
+	}
+	for _, tx := range txs {
+		if len(tx.SKATotals) == 0 {
+			a := getAccum(0)
+			a.txCount++
+			a.size += tx.Size
+			a.varAmt += int64(tx.TotalOut * 1e8)
+		} else {
+			for ct, amtStr := range tx.SKATotals {
+				a := getAccum(ct)
+				a.txCount++
+				a.size += tx.Size
+				if a.skaAmt == nil {
+					a.skaAmt = make(map[uint8]*big.Int)
+				}
+				v, _ := new(big.Int).SetString(amtStr, 10)
+				if v != nil {
+					if a.skaAmt[ct] == nil {
+						a.skaAmt[ct] = new(big.Int)
+					}
+					a.skaAmt[ct].Add(a.skaAmt[ct], v)
+				}
+			}
+		}
+	}
+	coinStats := make(map[uint8]exptypes.MempoolCoinStats, len(accum))
+	for ct, a := range accum {
+		s := exptypes.MempoolCoinStats{TxCount: a.txCount, Size: a.size}
+		if ct == 0 {
+			s.Amount = fmt.Sprintf("%d", a.varAmt)
+		} else if a.skaAmt != nil {
+			if v := a.skaAmt[ct]; v != nil {
+				s.Amount = v.String()
+			}
+		}
+		coinStats[ct] = s
+	}
+
 	// Store mempool data for template rendering
 	mpInfo := exptypes.MempoolInfo{
 		MempoolShort: exptypes.MempoolShort{
@@ -502,6 +559,7 @@ func ParseTxns(txs []exptypes.MempoolTx, params *chaincfg.Params, lastBlock *Blo
 			VotingInfo:         votingInfo,
 			InvRegular:         invRegular,
 			InvStake:           invStake,
+			CoinStats:          coinStats,
 		},
 		Transactions: regular,
 		Tickets:      tickets,

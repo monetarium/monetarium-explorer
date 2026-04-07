@@ -5,12 +5,15 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"math/big"
 	"strings"
 	"testing"
 
 	"github.com/monetarium/monetarium-node/chaincfg"
 	"github.com/monetarium/monetarium-node/chaincfg/chainhash"
+	"github.com/monetarium/monetarium-node/cointype"
 	"github.com/monetarium/monetarium-node/dcrutil"
+	"github.com/monetarium/monetarium-node/wire"
 )
 
 type TxGetter struct {
@@ -290,5 +293,49 @@ func TestMsgTxFromHex(t *testing.T) {
 				t.Errorf("MsgTxFromHex() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
+	}
+}
+
+func TestTotalOutFromMsgTx_Mixed(t *testing.T) {
+	tx := wire.NewMsgTx()
+	tx.AddTxOut(wire.NewTxOut(100_000_000, nil)) // 1 VAR
+	tx.AddTxOut(wire.NewTxOut(50_000_000, nil))  // 0.5 VAR
+	// SKA output — Value is 0, amount in SKAValue
+	skaBig := new(big.Int).Mul(big.NewInt(1e6), new(big.Int).Exp(big.NewInt(10), big.NewInt(18), nil))
+	tx.AddTxOut(wire.NewTxOutSKA(skaBig, cointype.CoinType(1), nil))
+
+	got := TotalOutFromMsgTx(tx)
+	want := dcrutil.Amount(150_000_000)
+	if got != want {
+		t.Errorf("TotalOutFromMsgTx: want %d, got %d", want, got)
+	}
+}
+
+func TestSKATotalsFromMsgTx(t *testing.T) {
+	tx := wire.NewMsgTx()
+	tx.AddTxOut(wire.NewTxOut(100_000_000, nil)) // VAR — should be ignored
+	ska1 := new(big.Int).SetInt64(9e18)
+	tx.AddTxOut(wire.NewTxOutSKA(ska1, cointype.CoinType(1), nil))
+	ska1b := new(big.Int).SetInt64(1e18)
+	tx.AddTxOut(wire.NewTxOutSKA(ska1b, cointype.CoinType(1), nil))
+
+	got := SKATotalsFromMsgTx(tx)
+	if got == nil {
+		t.Fatal("expected non-nil SKATotals")
+	}
+	want := new(big.Int).Add(ska1, ska1b).String()
+	if got[1] != want {
+		t.Errorf("SKA-1 total: want %s, got %s", want, got[1])
+	}
+	if _, hasVAR := got[0]; hasVAR {
+		t.Error("SKATotals should not contain VAR key")
+	}
+}
+
+func TestSKATotalsFromMsgTx_VAROnly(t *testing.T) {
+	tx := wire.NewMsgTx()
+	tx.AddTxOut(wire.NewTxOut(100_000_000, nil))
+	if got := SKATotalsFromMsgTx(tx); got != nil {
+		t.Errorf("expected nil for VAR-only tx, got %v", got)
 	}
 }

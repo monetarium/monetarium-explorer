@@ -7,6 +7,7 @@ package mempool
 import (
 	"context"
 	"fmt"
+	"math/big"
 	"sort"
 	"sync"
 	"time"
@@ -250,13 +251,14 @@ func (p *MempoolMonitor) TxHandler(rawTx *chainjson.TxRawResult) error {
 		VoutCount: len(msgTx.TxOut),
 		Vin:       exptypes.MsgTxMempoolInputs(msgTx),
 		// Coinbase is not in mempool
-		Hash:     hash,
-		Time:     rawTx.Time,
-		Size:     int32(len(rawTx.Hex) / 2),
-		TotalOut: txhelpers.TotalOutFromMsgTx(msgTx).ToCoin(),
-		Type:     txTypeStr,
-		TypeID:   int(txType),
-		VoteInfo: voteInfo,
+		Hash:      hash,
+		Time:      rawTx.Time,
+		Size:      int32(len(rawTx.Hex) / 2),
+		TotalOut:  txhelpers.TotalOutFromMsgTx(msgTx).ToCoin(),
+		Type:      txTypeStr,
+		TypeID:    int(txType),
+		VoteInfo:  voteInfo,
+		SKATotals: txhelpers.SKATotalsFromMsgTx(msgTx),
 	}
 
 	// Maintain a separate total that excludes votes for sidechain
@@ -353,8 +355,40 @@ func (p *MempoolMonitor) TxHandler(rawTx *chainjson.TxRawResult) error {
 		p.inventory.LikelyMineable.Count++
 	}
 	p.inventory.FormattedTotalSize = exptypes.BytesString(uint64(p.inventory.TotalSize))
+
+	// Update per-coin stats incrementally.
+	if p.inventory.CoinStats == nil {
+		p.inventory.CoinStats = make(map[uint8]exptypes.MempoolCoinStats)
+	}
+	if len(tx.SKATotals) == 0 {
+		s := p.inventory.CoinStats[0]
+		s.TxCount++
+		s.Size += tx.Size
+		s.Amount = addAtomStrings(s.Amount, fmt.Sprintf("%d", int64(tx.TotalOut*1e8)), false)
+		p.inventory.CoinStats[0] = s
+	} else {
+		for ct, amtStr := range tx.SKATotals {
+			s := p.inventory.CoinStats[ct]
+			s.TxCount++
+			s.Size += tx.Size
+			s.Amount = addAtomStrings(s.Amount, amtStr, true)
+			p.inventory.CoinStats[ct] = s
+		}
+	}
+
 	p.inventory.Unlock()
 	p.mtx.RUnlock()
+
+	// Notify savers so CoinFills are recomputed with the new tx included.
+	p.mtx.RLock()
+	invCopy := p.inventory.DeepCopy()
+	savers := p.dataSavers
+	p.mtx.RUnlock()
+	for _, s := range savers {
+		if s != nil {
+			go s.StoreMPData(nil, nil, invCopy)
+		}
+	}
 
 	// Broadcast the new transaction.
 	log.Tracef("Signaling new tx to hub relays...")
@@ -520,4 +554,24 @@ func (p *MempoolMonitor) UnconfirmedTxnsForAddress(address string) (*txhelpers.A
 	}
 
 	return outs, int64(len(outs.TxnsStore)), nil
+}
+
+// addAtomStrings adds two decimal atom strings. For SKA (isBig=true) it uses
+// big.Int; for VAR (isBig=false) it uses int64. Returns the sum as a string.
+func addAtomStrings(a, b string, isBig bool) string {
+	if a == "" {
+		return b
+	}
+	if isBig {
+		av, _ := new(big.Int).SetString(a, 10)
+		bv, _ := new(big.Int).SetString(b, 10)
+		if av == nil || bv == nil {
+			return a
+		}
+		return new(big.Int).Add(av, bv).String()
+	}
+	var ai, bi int64
+	fmt.Sscan(a, &ai)
+	fmt.Sscan(b, &bi)
+	return fmt.Sprintf("%d", ai+bi)
 }
