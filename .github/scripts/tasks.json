@@ -1,0 +1,29 @@
+{
+    "tasks": [
+        {
+            "type": "parent",
+            "issue_type": "Feature",
+            "title": "[MOCK] Implement User Authentication Module",
+            "description": "Build out the core user authentication module supporting secure sessions. This is a high-level tracker for the feature.",
+            "assignee": "edshav",
+            "labels": ["enhancement"]
+        },
+        {
+            "type": "sub-issue",
+            "issue_type": "Task",
+            "title": "[MOCK] Backend: JWT Session Management",
+            "description": "Create the Go middleware to generate, sign, and validate authentication keys.",
+            "assignee": "yanchenko-igor",
+            "labels": ["backend"],
+            "parent": 0
+        },
+        {
+            "type": "issue",
+            "issue_type": "Task",
+            "title": "[MOCK] Frontend: Implement Login Form UI",
+            "description": "Design and implement the login interface HTML/SCSS and connect the form submit to the authentication endpoints.",
+            "assignee": "edshav",
+            "labels": ["frontend"]
+        }
+    ]
+}
