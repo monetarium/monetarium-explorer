@@ -1019,4 +1019,222 @@ Test:
 
 Demo: Mempool API response includes coin_stats with per-coin tx count, size, and amount. Homepage fill bars show non-zero SKA fill when SKA transactions are in mempool.
 
+### Task 20: TxTypeSSFee block display + Vote SKA Reward homepage section
+Commit: feat: handle TxTypeSSFee in block explorer and homepage SKA vote reward
+
+Objective: Two related gaps around TxTypeSSFee (stake fee distribution for SKA token types): the transactions are silently dropped from the block detail page, and the 
+homepage has no "Vote SKA Reward" section. Fix both together since they share the same data source.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+Part A — Fix missing SSFee transactions on block page
+
+txhelpers/txhelpers.go — add string constant and case to TxTypeToString:
+go
+TxTypeSSFee string = "Stake Fee"
+
+case stake.TxTypeSSFee:
+    return TxTypeSSFee
+
+
+explorer/types/explorertypes.go — add to BlockInfo:
+go
+StakeFees []*TrimmedTxInfo
+
+
+db/dcrpg/pgblockchain.go — GetExplorerBlock:
+go
+// declaration:
+stakeFees := make([]*exptypes.TrimmedTxInfo, 0)
+
+// in switch:
+case stake.TxTypeSSFee:
+    stakeFees = append(stakeFees, stx)
+
+// after loop:
+block.StakeFees = stakeFees
+sortTx(block.StakeFees)
+
+// include in TotalSent:
+block.TotalSent = (getTotalSent(block.Tx) + getTotalSent(block.Treasury) +
+    getTotalSent(block.Revs) + getTotalSent(block.Tickets) +
+    getTotalSent(block.Votes) + getTotalSent(block.StakeFees)).ToCoin()
+
+
+cmd/dcrdata/views/block.tmpl — add after the Revocations section:
+html
+{{if .StakeFees}}
+<span class="d-inline-block pt-4 pb-1 h4">Stake Fees</span>
+<table class="table">
+    <thead>
+        <tr>
+            <th>Transaction ID</th>
+            <th class="text-end">Total</th>
+            <th class="text-end">Fee</th>
+            <th class="text-end">Size</th>
+        </tr>
+    </thead>
+    <tbody>
+    {{range .StakeFees}}
+        <tr>
+            <td class="break-word"><a class="hash" href="/tx/{{.TxID}}">{{.TxID}}</a></td>
+            <td class="mono fs15 text-end">{{template "decimalParts" (float64AsDecimalParts .Total 8 false)}}</td>
+            <td class="mono fs15 text-end">{{.Fee}}</td>
+            <td class="mono fs15 text-end">{{.FormattedSize}}</td>
+        </tr>
+    {{end}}
+    </tbody>
+</table>
+{{end}}
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+Part B — Vote SKA Reward homepage section
+
+api/types/apitypes.go — add to BlockExplorerExtraInfo:
+go
+SSFeeTotalsByCoin map[uint8]string `json:"ssfee_totals,omitempty"`
+
+
+blockdata/blockdata.go — add helper and wire into CollectBlockInfo:
+go
+func blockSSFeeTotals(msgBlock *wire.MsgBlock) map[uint8]string {
+    totals := make(map[uint8]*big.Int)
+    for _, tx := range msgBlock.STransactions {
+        if stake.DetermineTxType(tx) != stake.TxTypeSSFee {
+            continue
+        }
+        for _, out := range tx.TxOut {
+            if out.CoinType.IsSKA() && out.SKAValue != nil {
+                ct := uint8(out.CoinType)
+                if totals[ct] == nil {
+                    totals[ct] = new(big.Int)
+                }
+                totals[ct].Add(totals[ct], out.SKAValue)
+            }
+        }
+    }
+    if len(totals) == 0 {
+        return nil
+    }
+    result := make(map[uint8]string, len(totals))
+    for ct, v := range totals {
+        result[ct] = v.String()
+    }
+    return result
+}
+// in CollectBlockInfo:
+extrainfo.SSFeeTotalsByCoin = blockSSFeeTotals(msgBlock)
+
+
+db/dcrpg/internal/blockstmts.go — add ssfee_totals JSONB column to CreateBlockTable and insertBlockRow (as $28); include in all SELECT statements alongside coin_tx_stats
+.
+
+db/dcrpg/queries.go — pass dbtypes.ToJSONB(dbBlock.SSFeeTotalsByCoin) as $28 on insert; scan and unmarshal in retrieveBlockSummaryByHash and related functions.
+
+db/dcrpg/upgrades.go:
+sql
+ALTER TABLE blocks ADD COLUMN IF NOT EXISTS ssfee_totals JSONB;
+
+
+Also add SSFeeTotalsByCoin map[uint8]string to dbtypes.DBBlock and apitypes.BlockDataBasic.
+
+explorer/types/explorertypes.go — add new type and field to HomeInfo:
+go
+type SKAVoteReward struct {
+    CoinType  uint8  `json:"coin_type"`
+    Symbol    string `json:"symbol"`
+    PerBlock  string `json:"per_block"`   // SKA/VAR ratio, 18dp decimal string
+    Per30Days string `json:"per_30_days"`
+    PerYear   string `json:"per_year"`
+}
+
+// in HomeInfo:
+SKAVoteRewards []SKAVoteReward `json:"ska_vote_rewards,omitempty"`
+
+
+cmd/dcrdata/internal/explorer/explorer.go — add helpers and wire into Store():
+
+go
+// formatSKAPerVAR divides skaAtoms by varAtoms with 18dp precision.
+func formatSKAPerVAR(skaAtoms *big.Int, varAtoms int64) string {
+    if varAtoms == 0 {
+        return "0.000000000000000000"
+    }
+    // multiply skaAtoms by 1e18 then divide by varAtoms for 18dp fixed-point
+    scaled := new(big.Int).Mul(skaAtoms, new(big.Int).Exp(big.NewInt(10), big.NewInt(18), nil))
+    q := new(big.Int).Div(scaled, big.NewInt(varAtoms))
+    return formatFixed18(q) // format as "integer.18decimals"
+}
+
+// avgSSFeeRate returns the average SKA/VAR rate over the last nBlocks blocks.
+func (exp *explorerUI) avgSSFeeRate(ctx context.Context, coinType uint8, nBlocks int) string {
+    summaries := exp.dataSource.GetExplorerBlocks(ctx, /* tip */, /* tip-nBlocks */)
+    // sum SSFeeTotalsByCoin[coinType] and StakeDiff across summaries, return average
+}
+
+// in Store(), after posSubsPerVote:
+sbits, _ := dcrutil.NewAmount(blockData.Header.SBits)
+ticketPriceAtoms := int64(sbits)
+if ticketPriceAtoms > 0 {
+    rewards := make([]types.SKAVoteReward, 0, len(blockData.ExtraInfo.SSFeeTotalsByCoin))
+    for ct, totalStr := range blockData.ExtraInfo.SSFeeTotalsByCoin {
+        total, ok := new(big.Int).SetString(totalStr, 10)
+        if !ok {
+            continue
+        }
+        blocksIn30Days := int(30 * 24 * time.Hour / exp.ChainParams.TargetTimePerBlock)
+        rewards = append(rewards, types.SKAVoteReward{
+            CoinType:  ct,
+            Symbol:    fmt.Sprintf("SKA-%d", ct),
+            PerBlock:  formatSKAPerVAR(total, ticketPriceAtoms),
+            Per30Days: exp.avgSSFeeRate(ctx, ct, blocksIn30Days),
+            PerYear:   exp.avgSSFeeRate(ctx, ct, blocksIn30Days*12),
+        })
+    }
+    sort.Slice(rewards, func(i, j int) bool { return rewards[i].CoinType < rewards[j].CoinType })
+    p.HomeInfo.SKAVoteRewards = rewards
+}
+
+
+Apply the same logic in pubsub/pubsubhub.go.
+
+cmd/dcrdata/views/home.tmpl — replace the existing Vote VAR Reward block and add Vote SKA Reward below it:
+html
+<div class="fs13 text-secondary">Vote VAR Reward</div>
+<div class="mono lh1rem fs14-decimal fs24 pt-1 pb-1 d-flex align-items-baseline">
+    <span data-homepage-target="bsubsidyPos">
+        {{template "decimalParts" (float64AsDecimalParts (toFloat64Amount (divide .NBlockSubsidy.PoS 5)) 8 true 2)}}
+    </span>
+    <span class="ps-1 unit lh15rem" style="font-size:13px;">VAR/VAR per last block</span>
+</div>
+<div class="fs12 lh1rem text-black-50">
+    <span data-homepage-target="ticketReward">{{printf "%.2f" .TicketReward}}%</span> per 30 days
+</div>
+<div class="fs12 lh1rem text-black-50" title="Annual Stake Rewards">{{printf "%.2f" .ASR}}% per year</div>
+
+{{if .SKAVoteRewards}}
+<div class="fs13 text-secondary mt-2">Vote SKA Reward</div>
+{{range .SKAVoteRewards}}
+<div class="fs12 lh1rem text-black-50">{{.PerBlock}} {{.Symbol}}/VAR per last block</div>
+<div class="fs12 lh1rem text-black-50">{{.Per30Days}} {{.Symbol}}/VAR per 30 days</div>
+<div class="fs12 lh1rem text-black-50">{{.PerYear}} {{.Symbol}}/VAR per year</div>
+{{end}}
+{{end}}
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+Tests:
+- TxTypeToString(int(stake.TxTypeSSFee)) == "Stake Fee"
+- blockSSFeeTotals with a synthetic block containing one TxTypeSSFee tx with SKA-1 output of 1e18 atoms → map[uint8]string{1: "1000000000000000000"}
+- formatSKAPerVAR(big.NewInt(1e18), 100_000_000) → "10.000000000000000000" (1 SKA per 1 VAR)
+- Template renders "Stake Fees" section only when StakeFees non-empty; "Vote SKA Reward" only when SKAVoteRewards non-empty
+
+Demo: Block /block/68032b6621... shows all 9 stake transactions (5 votes, 1 revocation, 3 stake fees). Homepage shows "Vote SKA Reward" with per-SKA rows for last block,
+30-day, and yearly rates.
 
