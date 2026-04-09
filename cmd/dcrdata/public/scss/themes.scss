@@ -1,3 +1,14 @@
+@use "sass:color";
+
+/* mempool status tokens — light mode (default) */
+:root {
+  --status-success: #{color.mix($blue, $mempool-ok, 10%)};
+  --status-warning: #{color.mix($blue, $mempool-borrowing, 10%)};
+  --status-danger: #{color.mix($blue, $mempool-full, 10%)};
+  --status-danger-hatched: #{color.mix($blue, $mempool-full, 10%)};
+  --indicator-track-bg: #ddd;
+}
+
 /**  testnet theme  **/
 body.theme-testnet {
   .top-nav,
@@ -222,4 +233,11 @@ body.darkBG {
       inset 3px 0 0 0 #4a5568,
       inset 0 0 0 9999px var(--bs-table-accent-bg);
   }
+
+  // Mempool status tokens — dark mode (reduced saturation and tinted)
+  --status-success: #{color.mix($blue, color.mix($mempool-ok, #000, 80%), 10%)};
+  --status-warning: #{color.mix($blue, color.mix($mempool-borrowing, #000, 80%), 10%)};
+  --status-danger: #{color.mix($blue, color.mix($mempool-full, #000, 80%), 10%)};
+  --status-danger-hatched: #{color.mix($blue, color.mix($mempool-full, #000, 80%), 10%)};
+  --indicator-track-bg: #757575;
 }

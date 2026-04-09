@@ -1,0 +1,119 @@
+{{define "mempoolCard" -}}
+                <div class="py-1 px-2 mb-1 bg-white flex-grow-1"
+                    data-homepage-target="mempool"
+                    data-active-ska-count="{{.Mempool.ActiveSKACount}}">
+
+                    <div class="d-flex align-items-baseline my-2">
+                        <div class="position-relative col px7-5 nowrap">
+                            <span class="card-icon dcricon-stack h1 me-2"></span> <a href="/mempool" class="h3">Mempool</a>
+                        </div>
+                    </div>
+
+                    <div class="row mb-2">
+                        {{/* Left column — fill indicators */}}
+                        <div class="col-md-9 my-3">
+                            {{/* Indicator_List — visible without JS (no jsonly class) */}}
+                            <div class="indicator-fill mb-3"
+                                data-homepage-target="indicatorList"
+                                aria-label="Coin fill indicators">
+
+                                {{/* Total_Bar */}}
+                                <div class="total-bar"
+                                    role="meter"
+                                    aria-valuemin="0"
+                                    aria-valuemax="100"
+                                    aria-valuenow="{{printf "%.1f" (mulf (minf .Mempool.TotalFillRatio 1.0) 100.0)}}"
+                                    aria-label="Total mempool: {{printf "%.1f" (mulf (minf .Mempool.TotalFillRatio 1.0) 100.0)}}% of block capacity"
+                                    data-homepage-target="totalBar"
+                                    {{if gt .Mempool.TotalFillRatio 1.0}}data-overflow="true"{{end}}>
+                                    <span class="total-bar__label">TOTAL</span>
+                                    <div class="total-bar__track">
+                                        <div class="total-bar__fill"
+                                            style="--seg-w: {{printf "%.4f%%" (mulf (minf .Mempool.TotalFillRatio 1.0) 100.0)}}"></div>
+                                    </div>
+                                    <span class="total-bar__pct">{{printf "%.1f" (mulf (minf .Mempool.TotalFillRatio 1.0) 100.0)}}%</span>
+                                </div>
+
+                                {{/* One Fill_Bar per CoinFills entry */}}
+                                {{range .Mempool.CoinFills}}
+                                <div class="fill-bar"
+                                    role="meter"
+                                    aria-valuemin="0"
+                                    aria-valuemax="100"
+                                    aria-valuenow="{{printf "%.0f" (mulf (mulf .GQFillRatio .GQPositionRatio) 100.0)}}"
+                                    aria-label="{{.Symbol}} — {{.Status}}"
+                                    data-coin="{{.Symbol}}">
+                                    <span class="fill-bar__label">{{.Symbol}}</span>
+                                    <div class="fill-bar__track"
+                                        data-status="{{.Status}}"
+                                        style="--gq-pos: {{printf "%.6f" .GQPositionRatio}}">
+                                        <div class="gq-segment"
+                                            {{if eq .GQFillRatio 0.0}}hidden{{end}}
+                                            style="--seg-w: {{printf "%.4f%%" (mulf (mulf .GQFillRatio .GQPositionRatio) 100.0)}}"></div>
+                                        <div class="extra-segment"
+                                            {{if eq .ExtraFillRatio 0.0}}hidden{{end}}
+                                            style="--seg-w: {{printf "%.4f%%" (mulf .ExtraFillRatio 100.0)}}"></div>
+                                        <div class="overflow-segment overflow-hatch"
+                                            {{if eq .OverflowFillRatio 0.0}}hidden{{end}}
+                                            style="--seg-w: {{printf "%.4f%%" (mulf .OverflowFillRatio 100.0)}}"></div>
+                                        <div class="gq-marker" style="left: {{printf "%.4f" (mulf .GQPositionRatio 100.0)}}%">
+                                        </div>
+                                    </div>
+                                    <span class="fill-bar__pct">{{printf "%.1f" (mulf (mulf .GQFillRatio .GQPositionRatio) 100.0)}}%</span>
+                                </div>
+                                {{end}}
+
+                                {{/* Reusable template for dynamic injection of new SKA bars */}}
+                                <template id="fill-bar-template">
+                                    <div class="fill-bar"
+                                        role="meter"
+                                        aria-valuemin="0"
+                                        aria-valuemax="100"
+                                        aria-valuenow="0"
+                                        aria-label=""
+                                        data-coin="">
+                                        <span class="fill-bar__label"></span>
+                                        <div class="fill-bar__track"
+                                            data-status=""
+                                            style="--gq-pos: 0">
+                                            <div class="gq-segment" style="--seg-w: 0%"></div>
+                                            <div class="extra-segment" style="--seg-w: 0%"></div>
+                                            <div class="overflow-segment overflow-hatch" style="--seg-w: 0%"></div>
+                                            <div class="gq-marker" style="left: 0%">
+                                            </div>
+                                        </div>
+                                        <span class="fill-bar__pct">0.0%</span>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+
+                        {{/* Right column — transactions table */}}
+                        <div class="col mb-1">
+                            <table class="table table-sm w-100 mx-auto mb-0">
+                                <thead>
+                                <tr>
+                                    <th class="text-start ps-2">Hash</th>
+                                    <th class="text-start">Type</th>
+                                    <th class="text-end">VAR</th>
+                                    <th class="text-end">Size</th>
+                                    <th class="text-end pe-2 jsonly">Age</th>
+                                </tr>
+                                </thead>
+                                <tbody class="homepage-mempool" data-homepage-target="transactions">
+                                {{range .Mempool.LatestTransactions -}}
+                                <tr>
+                                    <td class="text-start ps-1 clipboard">{{template "hashElide" (hashlink .Hash (print "/tx/" .Hash))}}</td>
+                                    <td class="text-start">{{.Type}}</td>
+                                    <td class="text-end">{{threeSigFigs .TotalOut}}</td>
+                                    <td class="text-nowrap text-end">{{.Size}} B</td>
+                                    <td class="text-end pe-1 jsonly text-nowrap" data-time-target="age" data-age="{{.Time}}"></td>
+                                </tr>
+                                {{- end}}
+                                </tbody>
+                            </table>
+                            <a href="/mempool" class="small ms-2">more transactions...</a>
+                        </div>
+                    </div>
+                </div>  <!-- end mempool card -->
+{{- end}}

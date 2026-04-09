@@ -503,13 +503,31 @@ loop:
 				clientData.newTxs.Unlock()
 				continue loop // break sigselect
 			}
-			err := enc.Encode(clientData.newTxs.t)
-
+			txSlice := clientData.newTxs.t
 			// Reinit the tx buffer.
 			clientData.newTxs.t = make(pstypes.TxList, 0, NewTxBufferSize)
 			clientData.newTxs.Unlock()
+
+			// Attach current fill data so the client can update indicators
+			// immediately without waiting for the next mempool event.
+			inv := psh.MempoolInventory()
+			inv.RLock()
+			newTxsPayload := struct {
+				Txs            pstypes.TxList          `json:"txs"`
+				CoinFills      []exptypes.CoinFillData `json:"coin_fills"`
+				TotalFillRatio float64                 `json:"total_fill_ratio"`
+				ActiveSKACount int                     `json:"active_ska_count"`
+			}{
+				Txs:            txSlice,
+				CoinFills:      inv.MempoolShort.CoinFills,
+				TotalFillRatio: inv.MempoolShort.TotalFillRatio,
+				ActiveSKACount: inv.MempoolShort.ActiveSKACount,
+			}
+			inv.RUnlock()
+
+			err := enc.Encode(newTxsPayload)
 			if err != nil {
-				log.Warnf("Encode([]*exptypes.MempoolTx) failed: %v", err)
+				log.Warnf("Encode(newTxsPayload) failed: %v", err)
 			}
 
 			pushMsg.Message = buff.Bytes()

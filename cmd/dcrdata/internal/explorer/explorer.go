@@ -392,7 +392,7 @@ func New(cfg *ExplorerConfig) *explorerUI {
 		return "/dist/" + name
 	}
 
-	commonTemplates := []string{"extras", "home_latest_blocks"}
+	commonTemplates := []string{"extras", "home_latest_blocks", "home_mempool"}
 	exp.templates = newTemplates(cfg.Viewsfolder, cfg.ReloadHTML, commonTemplates, funcMap)
 
 	tmpls := []string{"home", "blocks", "mempool", "block", "tx", "address",
@@ -481,7 +481,11 @@ func (exp *explorerUI) StoreMPData(_ *mempool.StakeData, _ []types.MempoolTx, in
 	if blockchainInfo != nil && blockchainInfo.MaxBlockSize > 0 {
 		maxBlockSize = float64(blockchainInfo.MaxBlockSize)
 	}
-	inv.CoinFills = computeCoinFills(inv.CoinStats, maxBlockSize)
+	fills, totalFillRatio, activeSKACount := computeCoinFills(inv.CoinStats, maxBlockSize)
+	inv.CoinFills = fills
+	inv.MempoolShort.CoinFills = fills
+	inv.MempoolShort.TotalFillRatio = totalFillRatio
+	inv.MempoolShort.ActiveSKACount = activeSKACount
 
 	// Get exclusive access to the Mempool field.
 	exp.invsMtx.Lock()
@@ -1017,29 +1021,39 @@ func generateRandomString() string {
 	return string(bytes)
 }
 
-// VAR has a guaranteed 10% of maxBlockSize; SKA types share the remaining 90%
-// equally. A coin is "ok" if within its quota, "borrowing" if over quota but
-// the total block is not full, and "full" if the total block is full.
+// tcBytes is the maximum block size in bytes used as Total Capacity for all
+// fill-bar ratio computations. VAR is guaranteed 10% of TC; all active SKA
+// types share the remaining 90% equally.
+const tcBytes = 393216.0
+
+// computeCoinFills derives per-coin fill bar data from the mempool CoinStats
+// map. VAR is always first in the returned slice; SKA types follow in ascending
+// coin-type order. When stats is empty or nil a single VAR entry with all
+// ratios at 0.0 and status "ok" is returned.
 //
 //nolint:unparam // maxBlockSize comes from the node at runtime; test uses 100.0 for easy math.
-func computeCoinFills(stats map[uint8]types.MempoolCoinStats, maxBlockSize float64) []types.CoinFillData {
+func computeCoinFills(stats map[uint8]types.MempoolCoinStats, maxBlockSize float64) ([]types.CoinFillData, float64, int) {
 	varQuota := maxBlockSize * 0.10
 	skaPool := maxBlockSize * 0.90
 
-	var numSKA int
+	// Collect and sort SKA coin-type keys for deterministic output order.
+	var skaKeys []int
 	var totalSKASize float64
 	for ct, s := range stats {
 		if ct != 0 {
-			numSKA++
+			skaKeys = append(skaKeys, int(ct))
 			totalSKASize += float64(s.Size)
 		}
 	}
+	sort.Ints(skaKeys)
+	numSKA := len(skaKeys)
 
 	varSize := float64(0)
 	if s, ok := stats[0]; ok {
 		varSize = float64(s.Size)
 	}
 	totalUsed := varSize + totalSKASize
+	totalFillRatio := totalUsed / maxBlockSize
 
 	fillStatus := func(size, quota float64) string {
 		switch {
@@ -1052,28 +1066,48 @@ func computeCoinFills(stats map[uint8]types.MempoolCoinStats, maxBlockSize float
 		}
 	}
 
+	extraOrOverflow := func(size, quota float64, status string) (extra, overflow float64) {
+		if status == "borrowing" {
+			extra = math.Min((size-quota)/maxBlockSize, 1.0)
+		} else if status == "full" {
+			overflow = math.Min((size-quota)/maxBlockSize, 1.0)
+		}
+		return
+	}
+
+	varStatus := fillStatus(varSize, varQuota)
+	varExtra, varOverflow := extraOrOverflow(varSize, varQuota, varStatus)
+
 	fills := make([]types.CoinFillData, 0, 1+numSKA)
 	fills = append(fills, types.CoinFillData{
-		Symbol:  "VAR",
-		FillPct: math.Min(varSize/varQuota, 1.0) * 0.10,
-		Status:  fillStatus(varSize, varQuota),
+		Symbol:            "VAR",
+		GQFillRatio:       math.Min(varSize/varQuota, 1.0),
+		ExtraFillRatio:    varExtra,
+		OverflowFillRatio: varOverflow,
+		GQPositionRatio:   0.10,
+		Status:            varStatus,
 	})
 
 	if numSKA == 0 {
-		return fills
+		return fills, totalFillRatio, 0
 	}
+
 	perSKAQuota := skaPool / float64(numSKA)
-	skaShare := 0.90 / float64(numSKA)
-	for ct, s := range stats {
-		if ct == 0 {
-			continue
-		}
+	gqPos := 0.90 / float64(numSKA)
+
+	for _, ct := range skaKeys {
+		s := stats[uint8(ct)]
 		size := float64(s.Size)
+		status := fillStatus(size, perSKAQuota)
+		extra, overflow := extraOrOverflow(size, perSKAQuota, status)
 		fills = append(fills, types.CoinFillData{
-			Symbol:  fmt.Sprintf("SKA-%d", ct),
-			FillPct: math.Min(size/perSKAQuota, 1.0) * skaShare,
-			Status:  fillStatus(size, perSKAQuota),
+			Symbol:            fmt.Sprintf("SKA-%d", ct),
+			GQFillRatio:       math.Min(size/perSKAQuota, 1.0),
+			ExtraFillRatio:    extra,
+			OverflowFillRatio: overflow,
+			GQPositionRatio:   gqPos,
+			Status:            status,
 		})
 	}
-	return fills
+	return fills, totalFillRatio, numSKA
 }

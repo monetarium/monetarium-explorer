@@ -1,0 +1,185 @@
+// Mempool real-time visual indicators — fill bar components.
+// All transitions use transform (scaleX) to avoid layout reflow (Requirements 2.10, 3.6, 7.2).
+
+// ─── Container ───────────────────────────────────────────────────────────────
+
+.indicator-fill {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+// ─── Fill Bar ────────────────────────────────────────────────────────────────
+
+.fill-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+
+  // Coin symbol label
+  .fill-bar__label {
+    flex: 0 0 4rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  // Numeric utilisation percentage
+  .fill-bar__pct {
+    flex: 0 0 3.5rem;
+    font-size: 0.75rem;
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  // Track — full-width container for all segments and the marker
+  .fill-bar__track {
+    position: relative;
+    flex: 1 1 auto;
+    height: 1.25rem; // Matched to $progress-height
+    border-radius: $border-radius;
+    background-color: var(--indicator-track-bg);
+    overflow: visible; // allow marker/label to overflow above
+  }
+}
+
+// ─── Segments ────────────────────────────────────────────────────────────────
+
+// Shared segment base — width is always 100%; scaleX drives the visual size.
+// This avoids layout reflow on every WebSocket update (Requirements 2.10, 3.6, 7.2).
+%segment-base {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  width: max(var(--seg-w, 0%), 4px);
+  border-radius: $border-radius;
+  transition:
+    width 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    background-color 0.3s ease;
+}
+
+.gq-segment {
+  @extend %segment-base;
+
+  background-color: var(--status-neutral, #{$mempool-neutral});
+}
+
+.extra-segment {
+  @extend %segment-base;
+
+  background-color: var(--status-neutral, #{$mempool-neutral});
+}
+
+.overflow-segment {
+  @extend %segment-base;
+
+  background-color: var(--status-neutral, #{$mempool-neutral});
+}
+
+// ─── Status colour selectors ─────────────────────────────────────────────────
+
+// ok — green on GQ segment only
+[data-status="ok"] {
+  .gq-segment {
+    background-color: var(--status-success);
+  }
+}
+
+// borrowing — warning colour on GQ and extra segments
+[data-status="borrowing"] {
+  .gq-segment,
+  .extra-segment {
+    background-color: var(--status-warning);
+  }
+}
+
+// full — danger colour on GQ and overflow segments; hatch on overflow
+[data-status="full"] {
+  .gq-segment,
+  .overflow-segment {
+    background-color: var(--status-danger);
+  }
+
+  .overflow-segment.overflow-hatch {
+    background-image: repeating-linear-gradient(
+      45deg,
+      transparent,
+      transparent 3px,
+      rgb(0 0 0 / 25%) 3px,
+      rgb(0 0 0 / 25%) 6px
+    );
+  }
+}
+
+// Neutral fallback for empty / unknown data-status
+[data-status=""] {
+  .gq-segment {
+    background-color: var(--status-neutral, #{$mempool-neutral});
+  }
+}
+
+// ─── GQ Marker ───────────────────────────────────────────────────────────────
+
+.gq-marker {
+  position: absolute;
+  top: -0.2rem;
+  bottom: -0.2rem;
+  left: calc(var(--gq-pos, 0) * 100%);
+  width: 2px;
+  background-color: currentcolor;
+  opacity: 0.6;
+
+  // No transition — repositioned immediately on Active_SKA_Count change
+}
+
+// ─── Total Bar ───────────────────────────────────────────────────────────────
+
+.total-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+
+  .total-bar__label {
+    flex: 0 0 4rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  .total-bar__track {
+    position: relative;
+    flex: 1 1 auto;
+    height: 1.25rem; // Matched to $progress-height
+    border-radius: $border-radius;
+    background-color: var(--indicator-track-bg);
+    overflow: hidden;
+  }
+
+  .total-bar__fill {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    width: max(var(--seg-w, 0%), 4px);
+    border-radius: $border-radius;
+    background-color: var(--status-success);
+    transition:
+      width 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+      background-color 0.3s ease;
+  }
+
+  // Overflow appearance when total > 100%
+  &[data-overflow="true"] .total-bar__fill {
+    background-color: var(--status-danger);
+    background-image: repeating-linear-gradient(
+      45deg,
+      transparent,
+      transparent 3px,
+      rgb(0 0 0 / 25%) 3px,
+      rgb(0 0 0 / 25%) 6px
+    );
+  }
+}

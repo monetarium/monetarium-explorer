@@ -29,22 +29,32 @@ To maintain a professional and transparent development process for the **Monetar
 - **Status Integrity:** Developers are responsible for keeping their cards updated. When you start working on a task, move it to **In Progress**. When finished and a PR is opened, it moves toward **Review/Done**.
 - **Group by Assignee:** The board should be viewed using the "Group by: Assignee" setting to clearly visualize the workload distribution between Team Members.
 
-### 6. Automated Issue Creation
+### 6. Issue Count per Feature
+
+Every feature maps to either one or three issues — never two or four.
+
+- **Multi-domain feature** (touches both backend and frontend): one parent issue + one backend sub-issue + one frontend sub-issue.
+- **Single-domain feature** (touches only backend or only frontend): one parent issue only, no sub-issues. Internal breakdown goes into checkboxes within the parent.
+
+### 7. Automated Issue Creation
 
 To speed up the creation of large milestones, we use a custom Bash script (`.github/scripts/create_issues.sh`) that reads a `tasks.json` file and handles parent/sub-issue linking natively via the GitHub API.
 
 #### Prerequisites
+
 - `brew install jq gh`
 - `gh auth login`
 
 #### JSON Structure & Rules
 
 You can define three types of issues in your `tasks.json`:
+
 - **`parent`**: High-level feature group. Defaults to the "Feature" org issue-type.
 - **`sub-issue`**: Specific developer task. Linked natively to a parent using the zero-based array index of the parent. Defaults to "Task" org issue-type.
 - **`issue`**: A standalone task with no parent. Defaults to "Task" org issue-type.
 
 **Example `tasks.json`:**
+
 ```json
 {
   "tasks": [

@@ -363,3 +363,49 @@ func TestProp_VARAmountPreFormatted(t *testing.T) {
 		}
 	})
 }
+
+// TestMempoolInfo_TotalFillRatio verifies that TotalFillRatio is accessible
+// on MempoolInfo and propagates to TrimmedMempoolInfo via Trim().
+func TestMempoolInfo_TotalFillRatio(t *testing.T) {
+	m := &types.MempoolInfo{}
+	m.TotalFillRatio = 0.75
+	m.ActiveSKACount = 2
+
+	trimmed := m.Trim()
+	if trimmed.TotalFillRatio != 0.75 {
+		t.Errorf("TotalFillRatio: got %v, want 0.75", trimmed.TotalFillRatio)
+	}
+	if trimmed.ActiveSKACount != 2 {
+		t.Errorf("ActiveSKACount: got %d, want 2", trimmed.ActiveSKACount)
+	}
+}
+
+// TestMempoolInfo_TotalFillRatio_Zero verifies zero values propagate correctly.
+func TestMempoolInfo_TotalFillRatio_Zero(t *testing.T) {
+	m := &types.MempoolInfo{}
+	trimmed := m.Trim()
+	if trimmed.TotalFillRatio != 0.0 {
+		t.Errorf("TotalFillRatio: got %v, want 0.0", trimmed.TotalFillRatio)
+	}
+	if trimmed.ActiveSKACount != 0 {
+		t.Errorf("ActiveSKACount: got %d, want 0", trimmed.ActiveSKACount)
+	}
+}
+
+// TestProp_TotalFillRatioRoundTrip verifies TotalFillRatio survives Trim() unchanged.
+func TestProp_TotalFillRatioRoundTrip(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		ratio := rapid.Float64Range(0, 2.0).Draw(t, "ratio")
+		count := rapid.IntRange(0, 255).Draw(t, "count")
+		m := &types.MempoolInfo{}
+		m.TotalFillRatio = ratio
+		m.ActiveSKACount = count
+		trimmed := m.Trim()
+		if trimmed.TotalFillRatio != ratio {
+			t.Errorf("TotalFillRatio round-trip: got %v, want %v", trimmed.TotalFillRatio, ratio)
+		}
+		if trimmed.ActiveSKACount != count {
+			t.Errorf("ActiveSKACount round-trip: got %d, want %d", trimmed.ActiveSKACount, count)
+		}
+	})
+}

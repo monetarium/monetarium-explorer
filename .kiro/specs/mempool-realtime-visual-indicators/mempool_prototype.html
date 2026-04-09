@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Mempool Block Space Indicators - Production Specs</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      :root {
+        --color-green: #22c55e;
+        --color-yellow: #eab308;
+        --color-red: #ef4444;
+        --color-track: #334155;
+      }
+
+      /* Container for all indicators */
+      .indicator-list {
+        display: flex;
+        flex-direction: column;
+        gap: 1.5rem;
+      }
+
+      /* The Fill_Bar structure from specs */
+      .fill-bar-container {
+        display: grid;
+        grid-template-columns: 60px 1fr 45px;
+        align-items: center;
+        gap: 1rem;
+      }
+
+      .indicator-track {
+        background-color: var(--color-track);
+        height: 14px;
+        border-radius: 4px;
+        position: relative;
+        width: 100%;
+      }
+
+      /* Requirement 7.2: Use transform: scaleX for performance */
+      .segment {
+        height: 100%;
+        position: absolute;
+        left: 0;
+        top: 0;
+        transform-origin: left;
+        transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        width: 100%; /* Base width 100%, scaleX does the work */
+        border-radius: 4px;
+      }
+
+      /* Hatching strictly for the Overflow_Segment */
+      .overflow-hatch {
+        background-image: repeating-linear-gradient(
+          45deg,
+          transparent,
+          transparent 5px,
+          rgba(0, 0, 0, 0.2) 5px,
+          rgba(0, 0, 0, 0.2) 10px
+        );
+      }
+
+      .gq-marker {
+        position: absolute;
+        top: -4px;
+        bottom: -4px;
+        width: 2px;
+        background-color: white;
+        z-index: 20;
+        box-shadow: 0 0 4px rgba(0, 0, 0, 0.5);
+      }
+
+      .qc-label {
+        position: absolute;
+        top: -18px;
+        left: 50%;
+        transform: translateX(-50%);
+        font-size: 9px;
+        font-weight: bold;
+        color: white;
+        white-space: nowrap;
+        background: #475569;
+        padding: 1px 3px;
+        border-radius: 2px;
+      }
+
+      .status-ok {
+        background-color: var(--color-green);
+      }
+      .status-borrowing {
+        background-color: var(--color-yellow);
+      }
+      .status-full {
+        background-color: var(--color-red);
+      }
+
+      /* Total Bar specific styling */
+      .total-bar-label {
+        color: #94a3b8;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+      }
+    </style>
+  </head>
+  <body class="bg-slate-900 text-slate-100 p-8 font-sans">
+    <div class="max-w-3xl mx-auto space-y-12">
+      <header>
+        <h1 class="text-2xl font-bold border-b border-slate-700 pb-2">
+          Mempool Real-time Indicators
+        </h1>
+        <p class="text-slate-400 mt-2 text-sm italic">
+          Compliance: 3-Segment Model & Transform-based Animations
+        </p>
+      </header>
+
+      <!-- STATE 1: OPTIMAL -->
+      <section class="space-y-4">
+        <h2 class="text-lg font-semibold text-green-400">
+          State 1: Optimal (Total 39%)
+        </h2>
+        <div
+          class="bg-slate-800 p-6 rounded-xl border border-slate-700 space-y-6"
+        >
+          <!-- Total Block Bar -->
+          <div class="fill-bar-container border-b border-slate-700 pb-4">
+            <span class="text-xs total-bar-label">TOTAL</span>
+            <div class="indicator-track">
+              <div
+                class="segment bg-slate-400"
+                style="transform: scaleX(0.39)"
+              ></div>
+            </div>
+            <span class="text-xs font-mono text-right">39%</span>
+          </div>
+
+          <div class="indicator-list">
+            <!-- VAR: 4% (GQ ONLY) -->
+            <div class="fill-bar-container">
+              <span class="text-xs font-bold text-slate-400">VAR</span>
+              <div class="indicator-track">
+                <div
+                  class="segment status-ok"
+                  style="transform: scaleX(0.04)"
+                ></div>
+                <div class="gq-marker" style="left: 10%">
+                  <span class="qc-label">QC</span>
+                </div>
+              </div>
+              <span class="text-xs font-mono text-right">4%</span>
+            </div>
+            <!-- SKA-1: 20% (GQ ONLY) -->
+            <div class="fill-bar-container">
+              <span class="text-xs font-bold text-slate-400">SKA-1</span>
+              <div class="indicator-track">
+                <div
+                  class="segment status-ok"
+                  style="transform: scaleX(0.2)"
+                ></div>
+                <div class="gq-marker" style="left: 45%">
+                  <span class="qc-label">QC</span>
+                </div>
+              </div>
+              <span class="text-xs font-mono text-right">20%</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- STATE 2: BORROWING -->
+      <section class="space-y-4">
+        <h2 class="text-lg font-semibold text-yellow-400">
+          State 2: Borrowing (Total 85%)
+        </h2>
+        <div
+          class="bg-slate-800 p-6 rounded-xl border border-slate-700 space-y-6"
+        >
+          <div class="fill-bar-container border-b border-slate-700 pb-4">
+            <span class="text-xs total-bar-label">TOTAL</span>
+            <div class="indicator-track">
+              <div
+                class="segment bg-slate-400"
+                style="transform: scaleX(0.85)"
+              ></div>
+            </div>
+            <span class="text-xs font-mono text-right">85%</span>
+          </div>
+
+          <div class="indicator-list">
+            <div class="fill-bar-container">
+              <span class="text-xs font-bold text-slate-400">SKA-1</span>
+              <div class="indicator-track">
+                <!-- 3-Segment model for Borrowing: GQ + Extra -->
+                <div
+                  class="segment status-borrowing"
+                  style="transform: scaleX(0.45); z-index: 1"
+                ></div>
+                <div
+                  class="segment status-borrowing"
+                  style="transform: scaleX(0.6); z-index: 0; opacity: 0.8"
+                ></div>
+                <div class="gq-marker" style="left: 45%">
+                  <span class="qc-label">QC</span>
+                </div>
+              </div>
+              <span class="text-xs font-mono text-right text-yellow-400"
+                >60%</span
+              >
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- STATE 3: CONGESTED -->
+      <section class="space-y-4">
+        <h2 class="text-lg font-semibold text-red-400">
+          State 3: Congested (Total 100%)
+        </h2>
+        <div
+          class="bg-slate-800 p-6 rounded-xl border border-slate-700 space-y-6"
+        >
+          <div class="fill-bar-container border-b border-slate-700 pb-4">
+            <span class="text-xs total-bar-label">TOTAL</span>
+            <div class="indicator-track">
+              <div
+                class="segment status-full"
+                style="transform: scaleX(1)"
+              ></div>
+            </div>
+            <span class="text-xs font-mono text-right text-red-400">100%</span>
+          </div>
+
+          <div class="indicator-list">
+            <div class="fill-bar-container">
+              <span class="text-xs font-bold text-slate-400">SKA-2</span>
+              <div class="indicator-track">
+                <!-- 3-Segment model for Congestion: GQ (Solid) + Overflow (Hatched) -->
+                <!-- GQ Segment (0% to 45%) -->
+                <div
+                  class="segment status-full"
+                  style="transform: scaleX(0.45); z-index: 2"
+                ></div>
+                <!-- Overflow Segment (45% to 65%) with hatching -->
+                <div
+                  class="segment status-full overflow-hatch"
+                  style="transform: scaleX(0.65); z-index: 1"
+                ></div>
+                <div class="gq-marker" style="left: 45%">
+                  <span class="qc-label">QC</span>
+                </div>
+              </div>
+              <span class="text-xs font-mono text-right text-red-400">65%</span>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </body>
+</html>

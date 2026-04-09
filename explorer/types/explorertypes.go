@@ -490,9 +490,12 @@ type SKASubRow struct {
 
 // CoinFillData holds per-coin mempool fill bar data.
 type CoinFillData struct {
-	Symbol  string  `json:"symbol"`
-	FillPct float64 `json:"fill_pct"` // 0.0–1.0, relative to bar width
-	Status  string  `json:"status"`   // "ok", "borrowing", "full"
+	Symbol            string  `json:"symbol"`
+	GQFillRatio       float64 `json:"gq_fill_ratio"`       // 0.0–1.0, fraction of coin's Guaranteed Quota consumed
+	ExtraFillRatio    float64 `json:"extra_fill_ratio"`    // 0.0–1.0, fraction of TC consumed beyond quota (borrowing only)
+	OverflowFillRatio float64 `json:"overflow_fill_ratio"` // 0.0–1.0, fraction of TC that cannot fit (full only)
+	GQPositionRatio   float64 `json:"gq_position_ratio"`   // 0.0–1.0, quota boundary position as fraction of TC
+	Status            string  `json:"status"`              // "ok", "borrowing", "full"
 }
 
 // MempoolCoinStats holds per-coin mempool transaction count, size, and amount.
@@ -622,17 +625,19 @@ type BlockSubsidy struct {
 
 // TrimmedMempoolInfo is mempool data for the home page.
 type TrimmedMempoolInfo struct {
-	Transactions []*TrimmedTxInfo
-	Tickets      []*TrimmedTxInfo
-	Votes        []*TrimmedTxInfo
-	Revocations  []*TrimmedTxInfo
-	TSpends      []*TrimmedTxInfo
-	TAdds        []*TrimmedTxInfo
-	Subsidy      BlockSubsidy
-	Total        float64
-	Time         int64
-	Fees         float64
-	CoinFills    []CoinFillData `json:"coin_fills,omitempty"`
+	Transactions   []*TrimmedTxInfo
+	Tickets        []*TrimmedTxInfo
+	Votes          []*TrimmedTxInfo
+	Revocations    []*TrimmedTxInfo
+	TSpends        []*TrimmedTxInfo
+	TAdds          []*TrimmedTxInfo
+	Subsidy        BlockSubsidy
+	Total          float64
+	Time           int64
+	Fees           float64
+	CoinFills      []CoinFillData `json:"coin_fills,omitempty"`
+	TotalFillRatio float64        `json:"total_fill_ratio"`
+	ActiveSKACount int            `json:"active_ska_count"`
 }
 
 // MempoolInfo models data to update mempool info on the home page.
@@ -682,15 +687,17 @@ func (mpi *MempoolInfo) Trim() *TrimmedMempoolInfo {
 	mempoolVotes := TrimMempoolTxs(mpi.Votes)
 
 	data := &TrimmedMempoolInfo{
-		Transactions: FilterRegularTx(mempoolRegularTxs),
-		Tickets:      TrimMempoolTxs(mpi.Tickets),
-		Votes:        FilterUniqueLastBlockVotes(mempoolVotes),
-		Revocations:  TrimMempoolTxs(mpi.Revocations),
-		TSpends:      TrimMempoolTxs(mpi.TSpends),
-		TAdds:        TrimMempoolTxs(mpi.TAdds),
-		Total:        mpi.TotalOut,
-		Time:         mpi.LastBlockTime,
-		CoinFills:    mpi.CoinFills,
+		Transactions:   FilterRegularTx(mempoolRegularTxs),
+		Tickets:        TrimMempoolTxs(mpi.Tickets),
+		Votes:          FilterUniqueLastBlockVotes(mempoolVotes),
+		Revocations:    TrimMempoolTxs(mpi.Revocations),
+		TSpends:        TrimMempoolTxs(mpi.TSpends),
+		TAdds:          TrimMempoolTxs(mpi.TAdds),
+		Total:          mpi.TotalOut,
+		Time:           mpi.LastBlockTime,
+		CoinFills:      mpi.MempoolShort.CoinFills,
+		TotalFillRatio: mpi.MempoolShort.TotalFillRatio,
+		ActiveSKACount: mpi.MempoolShort.ActiveSKACount,
 	}
 
 	mpi.RUnlock()
@@ -878,6 +885,12 @@ type MempoolShort struct {
 	InvStake           map[string]struct{} `json:"-"`
 	// CoinStats holds per-coin tx count, size, and amount for all mempool txs.
 	CoinStats map[uint8]MempoolCoinStats `json:"coin_stats,omitempty"`
+	// CoinFills holds pre-computed per-coin fill bar data broadcast via WebSocket.
+	CoinFills []CoinFillData `json:"coin_fills,omitempty"`
+	// TotalFillRatio is the ratio of total mempool bytes to TC (unclamped).
+	TotalFillRatio float64 `json:"total_fill_ratio"`
+	// ActiveSKACount is the number of distinct SKA token types in CoinFills.
+	ActiveSKACount int `json:"active_ska_count"`
 }
 
 // LikelyMineable holds the totals for all mempool transactions except for votes
@@ -963,6 +976,10 @@ func (mps *MempoolShort) DeepCopy() *MempoolShort {
 			out.CoinStats[k] = v
 		}
 	}
+
+	out.CoinFills = CopyCoinFillSlice(mps.CoinFills)
+	out.TotalFillRatio = mps.TotalFillRatio
+	out.ActiveSKACount = mps.ActiveSKACount
 
 	return out
 }
@@ -1150,6 +1167,17 @@ func CopyMempoolTxSlice(s []MempoolTx) []MempoolTx {
 	for i := range s {
 		out = append(out, *s[i].DeepCopy())
 	}
+	return out
+}
+
+// CopyCoinFillSlice returns a shallow copy of a CoinFillData slice.
+// CoinFillData contains only value types so a shallow copy is sufficient.
+func CopyCoinFillSlice(s []CoinFillData) []CoinFillData {
+	if s == nil {
+		return nil
+	}
+	out := make([]CoinFillData, len(s))
+	copy(out, s)
 	return out
 }
 

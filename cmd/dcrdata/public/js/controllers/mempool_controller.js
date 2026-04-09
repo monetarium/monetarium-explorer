@@ -1,11 +1,11 @@
 import { Controller } from '@hotwired/stimulus'
-import { map, each } from 'lodash-es'
 import dompurify from 'dompurify'
+import { each, map } from 'lodash-es'
 import humanize from '../helpers/humanize_helper'
-import ws from '../services/messagesocket_service'
-import { keyNav } from '../services/keyboard_navigation_service'
 import Mempool from '../helpers/mempool_helper'
-import { copyIcon, alertArea } from './clipboard_controller'
+import { keyNav } from '../services/keyboard_navigation_service'
+import ws from '../services/messagesocket_service'
+import { alertArea, copyIcon } from './clipboard_controller'
 
 function incrementValue(el) {
   if (!el) return
@@ -128,7 +128,8 @@ export default class extends Controller {
       Regular: this.numRegularTarget
     }
     ws.registerEvtHandler('newtxs', (evt) => {
-      const txs = JSON.parse(evt)
+      const m = JSON.parse(evt)
+      const txs = Array.isArray(m) ? m : m.txs || []
       this.mempool.mergeTxs(txs)
       this.renderNewTxns(txs)
       this.setMempoolFigures()

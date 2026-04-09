@@ -82,6 +82,12 @@ $link-decoration: none;
 $link-hover-decoration: underline;
 $dark-link-hover-color: #94ffca;
 
+// Mempool status colors
+$mempool-ok: #2ed6a1;
+$mempool-borrowing: #f5a623;
+$mempool-full: #ed4b4b;
+$mempool-neutral: #80868b;
+
 // variables that changed with the bootstrap 5 migration.
 $input-bg: #fff;
 $input-color: #495057;
