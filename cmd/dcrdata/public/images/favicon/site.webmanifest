@@ -1,35 +1,21 @@
 {
-    "name": "Decred",
-    "short_name": "Decred",
-    "icons": [
-        {
-            "src": "/images/favicon/ic_launcher_mdpi.png?v=vMddPLeYWy",
-            "sizes": "48x48",
-            "type": "image/png"
-        },
-    	{
-            "src": "/images/favicon/ic_launcher_hdpi.png?v=vMddPLeYWy",
-            "sizes": "72x72",
-            "type": "image/png"
-        },
-        {
-            "src": "/images/favicon/ic_launcher_xhdpi.png?v=vMddPLeYWy",
-            "sizes": "96x96",
-            "type": "image/png"
-        },
-        {
-            "src": "/images/favicon/ic_launcher_xxhdpi.png?v=vMddPLeYWy",
-            "sizes": "144x144",
-            "type": "image/png"
-        },
-        {
-            "src": "/images/favicon/ic_launcher_xxxhdpi.png?v=vMddPLeYWy",
-            "sizes": "192x192",
-            "type": "image/png"
-        }
-    ],
-    "theme_color": "#091440",
-    "background_color": "#091440",
-    "start_url": "/",
-    "display": "browser"
+  "name": "Monetarium Block Explorer",
+  "short_name": "Monetarium",
+  "icons": [
+    {
+      "src": "/images/favicon/web-app-manifest-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/images/favicon/web-app-manifest-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "theme_color": "#ffffff",
+  "background_color": "#ffffff",
+  "display": "standalone"
 }

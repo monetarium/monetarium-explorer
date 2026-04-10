@@ -19,15 +19,15 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/decred/dcrdata.git"
+    "url": "git+https://github.com/monetarium/monetarium-explorer.git"
   },
   "keywords": [],
-  "author": "The Decred developers",
+  "author": "The Monetarium developers",
   "license": "ISC",
   "bugs": {
-    "url": "https://github.com/decred/dcrdata/issues"
+    "url": "https://github.com/monetarium/monetarium-explorer/issues"
   },
-  "homepage": "https://github.com/decred/dcrdata#readme",
+  "homepage": "https://github.com/monetarium/monetarium-explorer#readme",
   "vitest": {
     "environment": "jsdom",
     "include": [
