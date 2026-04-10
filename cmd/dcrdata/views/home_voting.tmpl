@@ -1,0 +1,127 @@
+{{define "voting-card"}}
+{{- $page := . -}}
+{{- $conv := $page.Conversions -}}
+{{with $page.Info -}}
+<div class="bg-white mb-1 py-2 px-3 mx-1">
+    <div class="my-3 h4">
+        <span class="dcricon-ticket d-inline-block pe-2 h3"></span>
+        Voting
+    </div>
+    <div class="row mt-1">
+        <div class="col-12 mb-3 mb-sm-2 mb-md-3 mb-lg-3">
+            <div class="fs13 text-secondary">
+                <a class="no-underline" href="/charts?chart=ticket-price&zoom=month">Current Ticket Price</a>
+            </div>
+            <div class="mono lh1rem fs14-decimal fs24 pt-1 pb-1 d-flex align-items-baseline">
+                <span data-homepage-target="blocksdiff">{{template "decimalParts" (float64AsDecimalParts .StakeDiff 8 false 2)}}</span>
+                <span class="ps-1 unit lh15rem">VAR</span>
+            </div>
+            {{if $conv -}}
+            <div class="fs12 lh1rem text-black-50">
+                <span data-homepage-target="convertedStake">{{$conv.StakeDiff.TwoDecimals}} {{$conv.StakeDiff.Index}}</span>
+            </div>
+            {{- end}}
+        </div>
+        <div class="col-12 mb-3 mb-sm-2 mb-md-3 mb-lg-3">
+            <div class="fs13 text-secondary">Next Ticket Price</div>
+            <div class="mono d-flex align-items-baseline lh1rem pt-1 pb-1">
+                <span class="fs22">~</span><span class="fs24 d-flex" data-homepage-target="nextExpectedSdiff">{{template "decimalParts" (float64AsDecimalParts .NextExpectedStakeDiff 2 false)}}</span>
+                <span class="ps-1 unit lh15rem">VAR</span>
+            </div>
+            <div class="d-flex lh1rem fs12 text-black-50">
+                <span>min:&nbsp;</span>
+                <span class="d-flex" data-homepage-target="nextExpectedMin">{{template "decimalParts" (float64AsDecimalParts .NextExpectedBoundsMin 2 false)}}</span>
+                <span>&nbsp;&mdash;&nbsp;max:&nbsp;</span>
+                <span class="d-flex" data-homepage-target="nextExpectedMax">{{template "decimalParts" (float64AsDecimalParts .NextExpectedBoundsMax 2 false)}}</span>
+            </div>
+        </div>
+        <div class="col-12 mb-3 mb-sm-2 mb-md-3 mb-lg-3">
+            <div class="d-block fs13 text-secondary"><a href="/charts?chart=ticket-pool-size">Ticket Pool Size</a></div>
+            <div class="mono lh1rem fs14-decimal fs24 pt-1 pb-1 d-flex align-items-baseline">
+                <span data-homepage-target="poolSize">
+                    {{intComma .PoolInfo.Size}}
+                </span>
+            </div>
+            <div class="fs12 lh1rem text-black-50">
+                <span data-homepage-target="targetPct">{{printf "%.2f" (toAbsValue $page.PercentChange)}}</span>%
+                {{if lt $page.PercentChange 0.0}} under {{else}} over {{end -}}
+                target
+            </div>
+        </div>
+        <div class="col-12 mb-3 mb-sm-2 mb-md-3 mb-lg-3">
+            <div class="fs13 text-secondary">Next Ticket Price Change</div>
+            <div class="progress mt-1 mb-1">
+                <div
+                    class="progress-bar rounded"
+                    data-homepage-target="posBar"
+                    role="progressbar"
+                    style="width: {{ticketWindowProgress .IdxBlockInWindow}}%;"
+                    aria-valuenow="{{.IdxBlockInWindow}}"
+                    aria-valuemin="0"
+                    aria-valuemax="{{.Params.WindowSize}}"
+                >
+                    <span class="nowrap ps-1">block <span data-homepage-target="windowIndex">{{.IdxBlockInWindow}}</span> of {{.Params.WindowSize}}</span>
+                </div>
+            </div>
+            <div class="fs12 lh1rem">
+                <span class="text-black-50">
+                    {{remaining .IdxBlockInWindow .Params.WindowSize .Params.BlockTime}}
+                </span>
+            </div>
+        </div>
+        <div class="col-24 mb-3 mb-sm-2 mb-md-3 mb-lg-3">
+            <div class="fs13 text-secondary">Vote VAR Reward</div>
+            <div class="mono lh1rem fs14-decimal fs24 pt-1 pb-1 d-flex align-items-baseline">
+                <span data-homepage-target="bsubsidyPos">
+                    {{template "decimalParts" (float64AsDecimalParts $page.Info.VoteVARReward.PerBlock 8 false)}}
+                </span>
+                <span class="ps-1 unit lh15rem fs13">VAR/VAR per last block</span>
+            </div>
+            <div class="fs12 lh1rem text-black-50">
+                <span data-homepage-target="ticketReward">{{printf "%.2f" $page.Info.VoteVARReward.Per30Days}}%</span> per 30 days
+            </div>
+            <div class="fs12 lh1rem text-black-50">{{printf "%.2f" $page.Info.VoteVARReward.PerYear}}% per year</div>
+        </div>
+        <!-- Vote SKA Reward subsection -->
+        <div class="col-24 mb-3 mb-sm-2 mb-md-3 mb-lg-3">
+            <div class="fs13 text-secondary">Vote SKA Reward</div>
+            <div data-homepage-target="skaVoteRewards">
+                {{if $page.Info.SKAVoteRewards}}{{range $page.Info.SKAVoteRewards}}
+                <div class="mono lh1rem fs14-decimal fs24 pt-1 pb-1 d-flex align-items-baseline">
+                    {{template "decimalParts" (skaSplitParts .PerBlock)}}
+                    <span class="ps-1 unit lh15rem fs13">{{.Symbol}}/VAR per last block</span>
+                </div>
+                <div class="fs12 lh1rem text-black-50">{{.Per30Days}} {{.Symbol}}/VAR per 30 days</div>
+                <div class="fs12 lh1rem text-black-50">{{.PerYear}} {{.Symbol}}/VAR per year</div>
+                {{end}}{{else}}
+                <div class="fs12 lh1rem text-black-50">No SKA rewards available</div>
+                {{end}}
+            </div>
+            {{/* Reusable template for JS live-update cloning */}}
+            <template id="ska-reward-block-template">
+                <div class="mono lh1rem fs14-decimal fs24 pt-1 pb-1 d-flex align-items-baseline">
+                    <div class="decimal-parts d-inline-block">
+                        <span class="int"></span><span class="decimal"></span><span class="decimal trailing-zeroes"></span>
+                    </div>
+                    <span class="ps-1 unit lh15rem fs13" data-field="unit"></span>
+                </div>
+                <div class="fs12 lh1rem text-black-50" data-field="per30d"></div>
+                <div class="fs12 lh1rem text-black-50" data-field="peryear"></div>
+            </template>
+        </div>
+        <div class="col-12 mb-3 mb-sm-2 mb-md-3 mb-lg-3">
+            <div class="fs13 text-secondary"><a href="/charts?chart=stake-participation">Total Staked VAR</a></div>
+            <div class="mono lh1rem fs14-decimal fs24 pt-1 pb-1 d-flex align-items-baseline">
+                <span data-homepage-target="poolValue">
+                    {{template "decimalParts" (float64AsDecimalParts .PoolInfo.Value 0 true)}}
+                </span>
+                <span class="ps-1 unit lh15rem">VAR</span>
+            </div>
+            <div class="fs12 lh1rem text-black-50">
+                <span data-homepage-target="poolSizePct">{{printf "%.2f" .PoolInfo.Percentage}}</span> % of circulating supply
+            </div>
+        </div>
+    </div>
+</div> <!-- end voting card -->
+{{- end}}
+{{end}}

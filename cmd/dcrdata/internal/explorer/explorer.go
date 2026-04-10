@@ -392,7 +392,7 @@ func New(cfg *ExplorerConfig) *explorerUI {
 		return "/dist/" + name
 	}
 
-	commonTemplates := []string{"extras", "home_latest_blocks", "home_mempool"}
+	commonTemplates := []string{"extras", "home_latest_blocks", "home_mempool", "home_voting"}
 	exp.templates = newTemplates(cfg.Viewsfolder, cfg.ReloadHTML, commonTemplates, funcMap)
 
 	tmpls := []string{"home", "blocks", "mempool", "block", "tx", "address",

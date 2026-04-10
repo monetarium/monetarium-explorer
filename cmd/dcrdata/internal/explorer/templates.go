@@ -369,6 +369,36 @@ func formattedDuration(duration time.Duration, str *periodMap) string {
 	return i(durationsec) + pl(str.s, durationsec)
 }
 
+// skaSplitParts converts a pre-formatted SKA decimal string into the 4-element
+// []string format expected by the "decimalParts" template:
+// [integer, boldDecimals, restDecimals, trailingZeros].
+// boldPlaces controls how many decimal digits are rendered at full weight
+// (matching the boldNumPlaces argument of float64Formatting). Defaults to 2.
+// Trailing zeros are separated from the significant decimal digits so the
+// "decimal trailing-zeroes" CSS class can dim them, identical to VAR rendering.
+func skaSplitParts(s string, boldPlaces int) []string {
+	dot := strings.IndexByte(s, '.')
+	if dot < 0 {
+		return []string{s, "", "", ""}
+	}
+	integer := s[:dot]
+	frac := s[dot+1:]
+
+	// Separate trailing zeros from significant decimal digits.
+	trimmed := strings.TrimRight(frac, "0")
+	trailingZeros := strings.Repeat("0", len(frac)-len(trimmed))
+
+	// Split trimmed decimals into bold prefix and dimmed rest.
+	bold := trimmed
+	rest := ""
+	if len(trimmed) > boldPlaces {
+		bold = trimmed[:boldPlaces]
+		rest = trimmed[boldPlaces:]
+	}
+
+	return []string{integer, bold, rest, trailingZeros}
+}
+
 func makeTemplateFuncMap(params *chaincfg.Params) template.FuncMap {
 	netTheme := "theme-" + strings.ToLower(netName(params))
 	netName := netName(params)
@@ -384,20 +414,7 @@ func makeTemplateFuncMap(params *chaincfg.Params) template.FuncMap {
 		"txtypeStr": func(txtype int) string {
 			return txhelpers.TxTypeToString(txtype)
 		},
-		// skaSplit splits a fixed-point decimal string (e.g. "0.060682851693627761")
-		// into [intPart, firstTwoDecimals, restDecimals].
-		"skaSplit": func(s string) [3]string {
-			dot := strings.IndexByte(s, '.')
-			if dot < 0 {
-				return [3]string{s, "", ""}
-			}
-			intPart := s[:dot]
-			frac := s[dot+1:]
-			if len(frac) <= 2 {
-				return [3]string{intPart, frac, ""}
-			}
-			return [3]string{intPart, frac[:2], frac[2:]}
-		},
+		"skaSplitParts": func(s string) []string { return skaSplitParts(s, 2) },
 		"add": func(args ...int64) int64 {
 			var sum int64
 			for _, a := range args {

@@ -249,19 +249,7 @@ export default class extends Controller {
     this.hashrateDeltaTarget.innerHTML = humanize.fmtPercentage(ex.hash_rate_change_month)
 
     if (this.hasSkaVoteRewardsTarget && ex.ska_vote_rewards && ex.ska_vote_rewards.length) {
-      this.skaVoteRewardsTarget.innerHTML = ex.ska_vote_rewards
-        .map((r) => {
-          const dot = r.per_block.indexOf('.')
-          const sig = dot >= 0 ? r.per_block.slice(0, dot + 3) : r.per_block
-          const rest = dot >= 0 ? r.per_block.slice(dot + 3) : ''
-          return `<div class="mono lh1rem fs14-decimal fs24 pt-1 pb-1 d-flex align-items-baseline">
-          <span>${sig}<span class="fs13 opacity-50">${rest}</span></span>
-          <span class="ps-1 unit lh15rem" style="font-size:13px;">${r.symbol}/VAR per last block</span>
-        </div>
-        <div class="fs12 lh1rem text-black-50">${r.per_30_days} ${r.symbol}/VAR per 30 days</div>
-        <div class="fs12 lh1rem text-black-50">${r.per_year} ${r.symbol}/VAR per year</div>`
-        })
-        .join('')
+      this._renderSkaRewards(ex.ska_vote_rewards)
     }
 
     if (ex.exchange_rate) {
@@ -286,6 +274,57 @@ export default class extends Controller {
         this.convertedStakeTarget.textContent = `${humanize.twoDecimals(ex.sdiff * xcRate)} ${index}`
       }
     }
+  }
+
+  // _renderSkaRewards clones the ska-reward-block-template for each entry and
+  // fills the decimal-parts spans to match the SSR decimalParts 4-element structure:
+  // int="0.16", decimal="158359431255151", trailing-zeroes="0"
+  _renderSkaRewards(rewards) {
+    if (!this.hasSkaVoteRewardsTarget) return
+    const tmpl = document.getElementById('ska-reward-block-template')
+    if (!tmpl) return
+
+    const container = this.skaVoteRewardsTarget
+    container.innerHTML = ''
+
+    rewards.forEach((r) => {
+      const clone = document.importNode(tmpl.content, true)
+
+      // Replicate skaSplitParts(s, 2): split at dot, strip trailing zeros,
+      // take first 2 significant decimals as "bold", rest as "rest".
+      const s = r.per_block || ''
+      const dot = s.indexOf('.')
+      const intPart = dot >= 0 ? s.slice(0, dot) : s
+      const frac = dot >= 0 ? s.slice(dot + 1) : ''
+      const trimmed = frac.replace(/0+$/, '')
+      const trailingZeros = frac.slice(trimmed.length)
+      const bold = trimmed.slice(0, 2)
+      const rest = trimmed.slice(2)
+
+      // Match decimalParts 4-element branch exactly:
+      // <span class="int">intPart.bold</span>
+      // <span class="decimal">rest</span>
+      // <span class="decimal trailing-zeroes">trailingZeros</span>
+      const intEl = clone.querySelector('.int')
+      const decEl = clone.querySelector('.decimal:not(.trailing-zeroes)')
+      const trailEl = clone.querySelector('.trailing-zeroes')
+
+      if (intEl) intEl.textContent = bold ? `${intPart}.${bold}` : intPart
+      if (decEl) decEl.textContent = rest
+      if (trailEl) trailEl.textContent = trailingZeros
+
+      // Fill by data-field, then strip the attributes so the rendered HTML
+      // matches the SSR output exactly.
+      clone.querySelectorAll('[data-field]').forEach((el) => {
+        const field = el.dataset.field
+        if (field === 'unit') el.textContent = `${r.symbol}/VAR per last block`
+        else if (field === 'per30d') el.textContent = `${r.per_30_days} ${r.symbol}/VAR per 30 days`
+        else if (field === 'peryear') el.textContent = `${r.per_year} ${r.symbol}/VAR per year`
+        el.removeAttribute('data-field')
+      })
+
+      container.appendChild(clone)
+    })
   }
 
   // ─── Indicator update methods ───────────────────────────────────────────────

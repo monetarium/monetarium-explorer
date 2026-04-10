@@ -239,3 +239,12 @@ $col-min-widths-sm: (
     background-color: $coin-ska-primary;
   }
 }
+
+// Vote SKA Reward subsection — dark theme overrides
+body.darkBG .vote-ska-reward-block .text-secondary {
+  color: $dark-text-primary;
+}
+
+body.darkBG .vote-ska-reward-block {
+  background-color: $inverse-bg-white;
+}
