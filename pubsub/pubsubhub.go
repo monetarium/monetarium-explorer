@@ -723,47 +723,60 @@ func (psh *PubSubHub) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgBl
 		psh.params.TargetTimePerBlock.Hours()/24)
 	//p.GeneralInfo.ASR = ASR
 
-	// Compute per-SKA vote rewards from SSFee totals in this block.
+	// Compute per-SKA vote rewards. Averages are always computed from
+	// historical summaries so they survive SKA-free blocks. PerBlock is only
+	// populated when the current block contains SKA fee data.
 	sbits, _ := dcrutil.NewAmount(blockData.Header.SBits)
 	ticketPriceAtoms := int64(sbits)
 	voters := int64(blockData.Header.Voters)
-	if ticketPriceAtoms > 0 && voters > 0 && len(blockData.ExtraInfo.SSFeeTotalsByCoin) > 0 {
-		blocksIn30Days := int(30 * 24 * time.Hour / psh.params.TargetTimePerBlock)
-		tip := int(psh.sourceBase.Height())
-		start30 := tip - blocksIn30Days
-		if start30 < 0 {
-			start30 = 0
+
+	blocksIn30Days := int(30 * 24 * time.Hour / psh.params.TargetTimePerBlock)
+	tip := int(psh.sourceBase.Height())
+	start30 := tip - blocksIn30Days
+	if start30 < 0 {
+		start30 = 0
+	}
+	startYear := tip - blocksIn30Days*12
+	if startYear < 0 {
+		startYear = 0
+	}
+	toSummaries := func(blocks []*apitypes.BlockDataBasic) []txhelpers.SSFeeSummary {
+		s := make([]txhelpers.SSFeeSummary, len(blocks))
+		for i, b := range blocks {
+			s[i] = txhelpers.SSFeeSummary{SSFeeTotalsByCoin: b.SSFeeTotalsByCoin, StakeDiff: b.StakeDiff}
 		}
-		startYear := tip - blocksIn30Days*12
-		if startYear < 0 {
-			startYear = 0
-		}
-		toSummaries := func(blocks []*apitypes.BlockDataBasic) []txhelpers.SSFeeSummary {
-			s := make([]txhelpers.SSFeeSummary, len(blocks))
-			for i, b := range blocks {
-				s[i] = txhelpers.SSFeeSummary{SSFeeTotalsByCoin: b.SSFeeTotalsByCoin, StakeDiff: b.StakeDiff}
+		return s
+	}
+	sum30 := toSummaries(psh.sourceBase.GetSummaryRange(ctx, start30, tip))
+	sumYear := toSummaries(psh.sourceBase.GetSummaryRange(ctx, startYear, tip))
+
+	coinTypes := txhelpers.SSFeeCoinTypes(sumYear)
+	for ct := range blockData.ExtraInfo.SSFeeTotalsByCoin {
+		coinTypes[ct] = struct{}{}
+	}
+
+	if len(coinTypes) > 0 {
+		rewards := make([]exptypes.SKAVoteReward, 0, len(coinTypes))
+		for ct := range coinTypes {
+			var perBlock string
+			if totalStr, ok := blockData.ExtraInfo.SSFeeTotalsByCoin[ct]; ok {
+				if total, parsed := new(big.Int).SetString(totalStr, 10); parsed && voters > 0 && ticketPriceAtoms > 0 {
+					perVote := new(big.Int).Div(total, big.NewInt(voters))
+					perBlock = txhelpers.FormatSKAPerVAR(perVote, ticketPriceAtoms)
+				}
 			}
-			return s
-		}
-		sum30 := toSummaries(psh.sourceBase.GetSummaryRange(ctx, start30, tip))
-		sumYear := toSummaries(psh.sourceBase.GetSummaryRange(ctx, startYear, tip))
-		rewards := make([]exptypes.SKAVoteReward, 0, len(blockData.ExtraInfo.SSFeeTotalsByCoin))
-		for ct, totalStr := range blockData.ExtraInfo.SSFeeTotalsByCoin {
-			total, ok := new(big.Int).SetString(totalStr, 10)
-			if !ok {
-				continue
-			}
-			perVote := new(big.Int).Div(total, big.NewInt(voters))
 			rewards = append(rewards, exptypes.SKAVoteReward{
 				CoinType:  ct,
 				Symbol:    fmt.Sprintf("SKA-%d", ct),
-				PerBlock:  txhelpers.FormatSKAPerVAR(perVote, ticketPriceAtoms),
+				PerBlock:  perBlock,
 				Per30Days: txhelpers.AvgSSFeeRate(sum30, ct, psh.params.TicketsPerBlock),
 				PerYear:   txhelpers.AvgSSFeeRate(sumYear, ct, psh.params.TicketsPerBlock),
 			})
 		}
 		sort.Slice(rewards, func(i, j int) bool { return rewards[i].CoinType < rewards[j].CoinType })
 		p.GeneralInfo.SKAVoteRewards = rewards
+	} else {
+		p.GeneralInfo.SKAVoteRewards = nil
 	}
 
 	p.mtx.Unlock()

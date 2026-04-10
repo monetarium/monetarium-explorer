@@ -247,10 +247,7 @@ export default class extends Controller {
     this.devFundTarget.innerHTML = humanize.decimalParts(treasuryTotal / 100000000, true, 0)
     this.hashrateTarget.innerHTML = humanize.decimalParts(ex.hash_rate, false, 8, 2)
     this.hashrateDeltaTarget.innerHTML = humanize.fmtPercentage(ex.hash_rate_change_month)
-
-    if (this.hasSkaVoteRewardsTarget && ex.ska_vote_rewards && ex.ska_vote_rewards.length) {
-      this._renderSkaRewards(ex.ska_vote_rewards)
-    }
+    this._renderSkaRewards(ex.ska_vote_rewards)
 
     if (ex.exchange_rate) {
       const xcRate = ex.exchange_rate.value

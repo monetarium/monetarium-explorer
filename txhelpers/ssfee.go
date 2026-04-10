@@ -60,6 +60,18 @@ func FormatSKAPerVAR(skaAtoms *big.Int, varAtoms int64) string {
 	return fmt.Sprintf("%s.%018d", intPart.String(), fracPart.Int64())
 }
 
+// SSFeeCoinTypes returns the set of unique SKA coin types that appear in any
+// of the provided block summaries.
+func SSFeeCoinTypes(summaries []SSFeeSummary) map[uint8]struct{} {
+	out := make(map[uint8]struct{})
+	for _, s := range summaries {
+		for ct := range s.SSFeeTotalsByCoin {
+			out[ct] = struct{}{}
+		}
+	}
+	return out
+}
+
 // AvgSSFeeRate returns the average SKA/VAR staker reward rate over the provided
 // block summaries for the given coin type and voter count per block.
 func AvgSSFeeRate(summaries []SSFeeSummary, coinType uint8, ticketsPerBlock uint16) string {
