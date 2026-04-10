@@ -290,6 +290,12 @@ export default class extends Controller {
       // Replicate skaSplitParts(s, 2): split at dot, strip trailing zeros,
       // take first 2 significant decimals as "bold", rest as "rest".
       const s = r.per_block || ''
+      const isDash = !s
+
+      const decimalPartsEl = clone.querySelector('.decimal-parts')
+      if (decimalPartsEl && isDash) {
+        decimalPartsEl.style.display = 'none'
+      }
       const dot = s.indexOf('.')
       const intPart = dot >= 0 ? s.slice(0, dot) : s
       const frac = dot >= 0 ? s.slice(dot + 1) : ''
@@ -314,9 +320,13 @@ export default class extends Controller {
       // matches the SSR output exactly.
       clone.querySelectorAll('[data-field]').forEach((el) => {
         const field = el.dataset.field
-        if (field === 'unit') el.textContent = `${r.symbol}/VAR per last block`
-        else if (field === 'per30d') el.textContent = `${r.per_30_days} ${r.symbol}/VAR per 30 days`
-        else if (field === 'peryear') el.textContent = `${r.per_year} ${r.symbol}/VAR per year`
+        if (field === 'unit') {
+          el.textContent = isDash
+            ? `— ${r.symbol}/VAR per last block`
+            : `${r.symbol}/VAR per last block`
+        } else if (field === 'per30d') {
+          el.textContent = `${r.per_30_days} ${r.symbol}/VAR per 30 days`
+        } else if (field === 'peryear') el.textContent = `${r.per_year} ${r.symbol}/VAR per year`
         el.removeAttribute('data-field')
       })
 
