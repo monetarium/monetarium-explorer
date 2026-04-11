@@ -4844,9 +4844,45 @@ func (pgb *ChainDB) CurrentCoinSupply(ctx context.Context) (supply *apitypes.Coi
 	}
 }
 
+// GetBurnedCoins retrieves the total burned amount for all SKA coin types.
+func (pgb *ChainDB) GetBurnedCoins(ctx context.Context) (map[uint8]*big.Int, error) {
+	res, err := rpcutils.GetBurnedCoins(ctx, pgb.Client)
+	if err != nil {
+		return nil, err
+	}
+	result := res
+
+	burnedMap := make(map[uint8]*big.Int)
+	skaScale := new(big.Int).Exp(big.NewInt(10), big.NewInt(18), nil)
+
+	for _, stat := range result.Stats {
+		// Convert coin string (e.g., "8000.16") to atoms (big.Int)
+		// Use big.Rat for guaranteed precision
+		br := new(big.Rat)
+		if _, ok := br.SetString(stat.TotalBurned); !ok {
+			log.Errorf("GetBurnedCoins: failed to parse burned amount %q", stat.TotalBurned)
+			burnedMap[stat.CoinType] = big.NewInt(0)
+			continue
+		}
+
+		// Multiply by 10^18 and convert to big.Int
+		scaleRat := new(big.Rat).SetInt(skaScale)
+		atomsRat := new(big.Rat).Mul(br, scaleRat)
+
+		if atomsRat.IsInt() {
+			burnedMap[stat.CoinType] = atomsRat.Num()
+		} else {
+			// Handle cases where RPC might return more than 18 decimals (unexpected)
+			burnedMap[stat.CoinType] = new(big.Int).Div(atomsRat.Num(), atomsRat.Denom())
+		}
+	}
+
+	return burnedMap, nil
+}
+
 // SKACoinSupply retrieves the supply info for all SKA coin types.
 // TotalIssued = sum of vouts by coin_type (mainchain).
-// TotalBurned = "0" (placeholder - burn tracking not implemented).
+// TotalBurned = retrieved from RPC getburnedcoins.
 // InCirculation = TotalIssued - TotalBurned.
 func (pgb *ChainDB) SKACoinSupply(ctx context.Context) ([]*exptypes.SKACoinSupplyEntry, error) {
 	rows, err := pgb.db.QueryContext(ctx, internal.SelectSKACoinSupply)
@@ -4855,6 +4891,13 @@ func (pgb *ChainDB) SKACoinSupply(ctx context.Context) ([]*exptypes.SKACoinSuppl
 		return nil, err
 	}
 	defer rows.Close()
+
+	// Fetch burned coins from RPC
+	burnedMap, err := pgb.GetBurnedCoins(ctx)
+	if err != nil {
+		log.Errorf("SKACoinSupply: GetBurnedCoins failed: %v", err)
+		return nil, err
+	}
 
 	var supply []*exptypes.SKACoinSupplyEntry
 	for rows.Next() {
@@ -4865,21 +4908,29 @@ func (pgb *ChainDB) SKACoinSupply(ctx context.Context) ([]*exptypes.SKACoinSuppl
 			return nil, err
 		}
 
-		// Convert numeric string to big.Int to ensure we can pad it correctly
-		atoms := new(big.Int)
-		if _, ok := atoms.SetString(valueStr, 10); !ok {
+		issuedAtoms := new(big.Int)
+		if _, ok := issuedAtoms.SetString(valueStr, 10); !ok {
 			log.Errorf("SKACoinSupply: failed to parse sum %q as big.Int", valueStr)
 		}
 
-		// Format to atom string with at least 18 digits (padding with leading zeros)
-		s := atoms.String()
-		if len(s) < 18 {
-			s = strings.Repeat("0", 18-len(s)) + s
+		burnedAtoms := big.NewInt(0)
+		if b, ok := burnedMap[entry.CoinType]; ok {
+			burnedAtoms = b
 		}
 
-		entry.TotalIssued = s
-		entry.TotalBurned = "0"
-		entry.InCirculation = s // placeholder: same as TotalIssued
+		circulatingAtoms := new(big.Int).Sub(issuedAtoms, burnedAtoms)
+
+		formatAtoms := func(bi *big.Int) string {
+			s := bi.String()
+			if len(s) < 18 {
+				s = strings.Repeat("0", 18-len(s)) + s
+			}
+			return s
+		}
+
+		entry.TotalIssued = formatAtoms(issuedAtoms)
+		entry.TotalBurned = formatAtoms(burnedAtoms)
+		entry.InCirculation = formatAtoms(circulatingAtoms)
 		supply = append(supply, &entry)
 	}
 
