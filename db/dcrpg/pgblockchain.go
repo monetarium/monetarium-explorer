@@ -4857,19 +4857,24 @@ func (pgb *ChainDB) GetBurnedCoins(ctx context.Context) (map[uint8]*big.Int, err
 
 	for _, stat := range result.Stats {
 		// Convert coin string (e.g., "8000.16") to atoms (big.Int)
-		// Use big.Float for precision
-		bf, ok := new(big.Float).SetString(stat.TotalBurned)
-		if !ok {
+		// Use big.Rat for guaranteed precision
+		br := new(big.Rat)
+		if _, ok := br.SetString(stat.TotalBurned); !ok {
 			log.Errorf("GetBurnedCoins: failed to parse burned amount %q", stat.TotalBurned)
 			burnedMap[stat.CoinType] = big.NewInt(0)
 			continue
 		}
 
 		// Multiply by 10^18 and convert to big.Int
-		atoms := new(big.Int)
-		bf.Mul(bf, new(big.Float).SetInt(skaScale))
-		bf.Int(atoms)
-		burnedMap[stat.CoinType] = atoms
+		scaleRat := new(big.Rat).SetInt(skaScale)
+		atomsRat := new(big.Rat).Mul(br, scaleRat)
+
+		if atomsRat.IsInt() {
+			burnedMap[stat.CoinType] = atomsRat.Num()
+		} else {
+			// Handle cases where RPC might return more than 18 decimals (unexpected)
+			burnedMap[stat.CoinType] = new(big.Int).Div(atomsRat.Num(), atomsRat.Denom())
+		}
 	}
 
 	return burnedMap, nil
@@ -4891,7 +4896,7 @@ func (pgb *ChainDB) SKACoinSupply(ctx context.Context) ([]*exptypes.SKACoinSuppl
 	burnedMap, err := pgb.GetBurnedCoins(ctx)
 	if err != nil {
 		log.Errorf("SKACoinSupply: GetBurnedCoins failed: %v", err)
-		burnedMap = make(map[uint8]*big.Int)
+		return nil, err
 	}
 
 	var supply []*exptypes.SKACoinSupplyEntry
@@ -4930,7 +4935,7 @@ func (pgb *ChainDB) SKACoinSupply(ctx context.Context) ([]*exptypes.SKACoinSuppl
 	}
 
 	if err := rows.Err(); err != nil {
-		log.Errorf("SKACoinLSupply rows error: %v", err)
+		log.Errorf("SKACoinSupply rows error: %v", err)
 		return nil, err
 	}
 
