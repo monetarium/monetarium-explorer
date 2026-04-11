@@ -4,7 +4,8 @@
 <html lang="en">
 {{ template "html-head" headData .CommonPageData "Monetarium Block Explorer"}}
     {{ template "navbar" . }}
-    <div class="container main" data-controller="time blocklist homepage">
+    <div class="container main" data-controller="time blocklist homepage mining distribution"
+         data-action="homepage:block->mining#handleBlock homepage:block->distribution#handleBlock">
         <div class="row">
             <div class="d-flex flex-column col-md-15 p-0">
                 <div class="bg-white mb-1 py-2 px-3 my-0">
@@ -38,28 +39,28 @@
                                 <a class="no-underline" href="/charts?chart=pow-difficulty">Difficulty</a>
                             </div>
                             <div class="mono lh1rem p03rem0 fs14-decimal fs24 p03rem0 d-flex align-items-baseline">
-                                <span data-homepage-target="difficulty">{{threeSigFigs .Difficulty}}</span>
+                                <span data-mining-target="difficulty">{{threeSigFigs .Difficulty}}</span>
                             </div>
                         </div>
                         <div class="col-12 mb-3 mb-sm-2 mb-md-3 mb-lg-3">
                             <div class="fs13 text-secondary"><a href="/charts?chart=hashrate">Hashrate</a></div>
                             <div class="mono lh1rem pt-1 pb-1 fs14-decimal fs24 d-flex align-items-baseline">
-                                <span data-homepage-target="hashrate">{{template "decimalParts" (float64AsDecimalParts .HashRate 8 true 2)}}</span>
+                                <span data-mining-target="hashrate">{{template "decimalParts" (float64AsDecimalParts .HashRate 8 true 2)}}</span>
                                 <span class="ps-1 unit lh15rem">Ph/s</span>
                             </div>
                             <div class="fs12 text-black-50 lh1rem text-black-50">
-                                <span data-homepage-target="hashrateDelta">{{template "fmtPercentage" .HashRateChangeMonth}}</span> in past 30 days
+                                <span data-mining-target="hashrateDelta">{{template "fmtPercentage" .HashRateChangeMonth}}</span> in past 30 days
                             </div>
                         </div>
                         <div class="col-12 mb-3 mb-sm-2 mb-md-3 mb-lg-3">
                             <div class="fs13 text-secondary">PoW VAR Reward</div>
                             <div class="mono lh1rem p03rem0 fs14-decimal fs24 p03rem0 d-flex align-items-baseline">
-                                <span data-homepage-target="bsubsidyPow">{{template "decimalParts" (float64AsDecimalParts (toFloat64Amount .NBlockSubsidy.PoW) 8 true 2)}}</span>
+                                <span data-mining-target="bsubsidyPow">{{template "decimalParts" (float64AsDecimalParts (toFloat64Amount .NBlockSubsidy.PoW) 8 true 2)}}</span>
                                 <span class="ps-1 unit lh15rem">VAR</span>
                             </div>
                             {{if $conv -}}
                             <div class="fs12 lh1rem text-black-50">
-                                <span data-homepage-target="powConverted">{{$conv.PowSplit.TwoDecimals}} {{$conv.PowSplit.Index}}</span>
+                                <span data-mining-target="powConverted">{{$conv.PowSplit.TwoDecimals}} {{$conv.PowSplit.Index}}</span>
                             </div>
                             {{- end}}
                         </div>
@@ -80,7 +81,7 @@
                             <div class="progress mt-1 mb-1">
                                 <div
                                     class="progress-bar rounded"
-                                    data-homepage-target="powBar"
+                                    data-mining-target="powBar"
                                     role="progressbar"
                                     style="width: {{rewardAdjustmentProgress .IdxInRewardWindow}}%;"
                                     aria-valuenow="{{.IdxInRewardWindow}}"
@@ -91,7 +92,7 @@
                                         id="powreward"
                                         class="nowrap ps-1"
                                     >
-                                        block <span data-homepage-target="rewardIdx" >{{.IdxInRewardWindow}}</span> of {{.Params.RewardWindowSize}}
+                                        block <span data-mining-target="rewardIdx" >{{.IdxInRewardWindow}}</span> of {{.Params.RewardWindowSize}}
                                     </span>
                                 </div>
                             </div>
@@ -113,43 +114,43 @@
                         <div class="col-12 mb-3 mb-sm-2 mb-md-3 mb-lg-3">
                             <div class="fs13 text-secondary">VAR Circulating Supply</div>
                             <div class="mono lh1rem fs14-decimal fs24 p03rem0 d-flex align-items-baseline">
-                                <span data-homepage-target="devFund">
+                                <span data-distribution-target="devFund">
                                     {{template "decimalParts" (float64AsDecimalParts (toFloat64Amount (add .DevFund .TreasuryBalance.Balance)) 0 true)}}
                                 </span>
                                 <span class="ps-1 unit lh15rem">VAR</span>
                             </div>
                             {{if $conv -}}
                             <div class="fs12 lh1rem text-black-50">
-                                <span data-homepage-target="convertedDev">{{threeSigFigs $conv.TreasuryBalance.Value}} {{$conv.TreasuryBalance.Index}}</span>
+                                <span data-distribution-target="convertedDev">{{threeSigFigs $conv.TreasuryBalance.Value}} {{$conv.TreasuryBalance.Index}}</span>
                             </div>
                             {{- end}}
                         </div>
                         <div class="col-12 mb-3 mb-sm-2 mb-md-3 mb-lg-3">
                             <div class="d-block fs13 text-secondary lh1rem"><a href="/charts?chart=coin-supply">Total Coin Supply</a> <span class="nowrap">(of 21 mil)</span></div>
                             <div class="mono lh1rem fs14-decimal fs24 p03rem0 d-flex align-items-baseline">
-                                <span data-homepage-target="coinSupply">
+                                <span data-distribution-target="coinSupply">
                                     {{template "decimalParts" (float64AsDecimalParts (toFloat64Amount .CoinSupply) 0 true)}}
                                 </span>
                                 <span class="ps-1 unit lh15rem">VAR</span>
                             </div>
                             <div class="fs12 lh1rem text-black-50">
                                 {{if $conv -}}
-                                <span data-homepage-target="convertedSupply">{{threeSigFigs $conv.CoinSupply.Value}} {{$conv.CoinSupply.Index}}</span>,
+                                <span data-distribution-target="convertedSupply">{{threeSigFigs $conv.CoinSupply.Value}} {{$conv.CoinSupply.Index}}</span>,
                                 {{- end}}
-                                <span data-homepage-target="mixedPct">{{printf "%.0f" .MixedPercent}}</span>% mixed
+                                <span data-distribution-target="mixedPct">{{printf "%.0f" .MixedPercent}}</span>% mixed
                             </div>
                         </div>
                         <div class="col-12 mb-3 mb-sm-2 mb-md-3 mb-lg-3">
                             <div class="fs13 text-secondary">Treasury Block Reward</div>
                             <div class="mono lh1rem fs14-decimal fs24 p03rem0 d-flex align-items-baseline">
-                                <span data-homepage-target="bsubsidyDev">
+                                <span data-distribution-target="bsubsidyDev">
                                     {{template "decimalParts" (float64AsDecimalParts (toFloat64Amount .NBlockSubsidy.Dev) 8 true 2)}}
                                 </span>
                                 <span class="ps-1 unit lh15rem">VAR</span>
                             </div>
                             {{if $conv -}}
                             <div class="fs12 lh1rem text-black-50">
-                                <span data-homepage-target="convertedDevSub">{{$conv.TreasurySplit.TwoDecimals}} {{$conv.TreasurySplit.Index}}</span>
+                                <span data-distribution-target="convertedDevSub">{{$conv.TreasurySplit.TwoDecimals}} {{$conv.TreasurySplit.Index}}</span>
                             </div>
                             {{- end}}
                         </div>
@@ -159,7 +160,7 @@
                                 <a class="no-underline" href="/market">Exchange Rate</a>
                             </div>
                             <div class="mono lh1rem fs14-decimal fs24 p03rem0 d-flex align-items-baseline">
-                                <span class="d-inline-block" data-homepage-target="exchangeRate">{{$conv.ExchangeRate.TwoDecimals}}</span>
+                                <span class="d-inline-block" data-distribution-target="exchangeRate">{{$conv.ExchangeRate.TwoDecimals}}</span>
                                 <span class="ps-1 unit lh15rem">{{$conv.ExchangeRate.Index}}</span>
                             </div>
                         </div>
