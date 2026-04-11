@@ -7,6 +7,7 @@ package rpcutils
 import (
 	"context"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -55,14 +56,28 @@ func (cl *AsyncTxClient) GetRawTransactionVerbosePromise(ctx context.Context, tx
 	return cl.Client.GetRawTransactionVerboseAsync(ctx, txHash)
 }
 
-var _ txhelpers.VerboseTransactionPromiseGetter = (*AsyncTxClient)(nil)
-
 // GetRawTransactionPromise gives txhelpers.TransactionPromiseGetter.
 func (cl *AsyncTxClient) GetRawTransactionPromise(ctx context.Context, txHash *chainhash.Hash) txhelpers.TxReceiver {
 	return cl.Client.GetRawTransactionAsync(ctx, txHash)
 }
 
+var _ txhelpers.VerboseTransactionPromiseGetter = (*AsyncTxClient)(nil)
 var _ txhelpers.TransactionPromiseGetter = (*AsyncTxClient)(nil)
+
+// GetBurnedCoins returns the burn statistics for all coin types.
+func GetBurnedCoins(ctx context.Context, client *rpcclient.Client) (*chainjson.GetBurnedCoinsResult, error) {
+	res, err := client.RawRequest(ctx, "getburnedcoins", []json.RawMessage{json.RawMessage("null")})
+	if err != nil {
+		return nil, err
+	}
+
+	var result chainjson.GetBurnedCoinsResult
+	if err := json.Unmarshal(res, &result); err != nil {
+		return nil, err
+	}
+
+	return &result, nil
+}
 
 // NewAsyncTxClient creates an AsyncTxClient from a rpcclient.Client.
 func NewAsyncTxClient(c *rpcclient.Client) *AsyncTxClient {
