@@ -91,14 +91,14 @@ func TestVotingCardTemplate(t *testing.T) {
 		}
 	})
 
-	// Case 3 — data-homepage-target preservation
+	// Case 3 — data-voting-target preservation
 	t.Run("DataTargetPreservation", func(t *testing.T) {
 		out := renderVotingCard(t, tmpl, makeHomeInfo(types.VoteVARReward{PerBlock: 0.5, Per30Days: 1.23, PerYear: 15.0}, nil))
-		if !strings.Contains(out, `data-homepage-target="bsubsidyPos"`) {
-			t.Error("expected data-homepage-target=\"bsubsidyPos\" in output")
+		if !strings.Contains(out, `data-voting-target="bsubsidyPos"`) {
+			t.Error("expected data-voting-target=\"bsubsidyPos\" in output")
 		}
-		if !strings.Contains(out, `data-homepage-target="ticketReward"`) {
-			t.Error("expected data-homepage-target=\"ticketReward\" in output")
+		if !strings.Contains(out, `data-voting-target="ticketReward"`) {
+			t.Error("expected data-voting-target=\"ticketReward\" in output")
 		}
 	})
 
@@ -146,7 +146,7 @@ func TestVotingCardTemplate(t *testing.T) {
 	// Case 6 — skaVoteRewards container present exactly once
 	t.Run("SKAVoteRewardsContainerOnce", func(t *testing.T) {
 		out := renderVotingCard(t, tmpl, makeHomeInfo(types.VoteVARReward{}, nil))
-		count := strings.Count(out, `data-homepage-target="skaVoteRewards"`)
+		count := strings.Count(out, `data-voting-target="skaVoteRewards"`)
 		if count != 1 {
 			t.Errorf("expected exactly 1 skaVoteRewards target, got %d", count)
 		}
@@ -340,7 +340,7 @@ func TestProp_SKAVoteRewardsContainerExactlyOnce(t *testing.T) {
 		info := makeHomeInfo(types.VoteVARReward{}, skaRewards)
 		out := renderVotingCard(t, tmpl, info)
 
-		count := strings.Count(out, `data-homepage-target="skaVoteRewards"`)
+		count := strings.Count(out, `data-voting-target="skaVoteRewards"`)
 		if count != 1 {
 			t.Errorf("expected exactly 1 skaVoteRewards target, got %d", count)
 		}
