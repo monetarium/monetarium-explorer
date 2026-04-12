@@ -84,8 +84,8 @@ func TestVotingCardTemplate(t *testing.T) {
 	// Case 2 — VAR unit label
 	t.Run("VARUnitLabel", func(t *testing.T) {
 		out := renderVotingCard(t, tmpl, makeHomeInfo(types.VoteVARReward{PerBlock: 1.5}, nil))
-		if !strings.Contains(out, "VAR/VAR") {
-			t.Error("expected 'VAR/VAR' unit label in output")
+		if !strings.Contains(out, "VAR/Vote") {
+			t.Error("expected 'VAR/Vote' unit label in output")
 		}
 	})
 
