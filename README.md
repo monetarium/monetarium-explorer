@@ -159,7 +159,7 @@ npm test               # Vitest unit tests
 
 ### Step 1: Start monetarium-node on testnet3
 
-Create `~/.monetarium-node/monetarium-node.conf`: (macOS: ~/Library/Application Support/Monetarium/)
+Create `~/.monetarium/monetarium-node.conf`: (macOS: ~/Library/Application Support/Monetarium/)
 
 ```ini
 testnet=1
@@ -204,7 +204,7 @@ testnet=1
 dcrduser=monuser
 dcrdpass=monpass
 dcrdserv=127.0.0.1:19509
-dcrdcert=~/.monetarium-node/rpc.cert
+dcrdcert=~/.monetarium/rpc.cert
 
 ; PostgreSQL
 pg=1
