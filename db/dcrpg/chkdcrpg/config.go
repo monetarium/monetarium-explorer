@@ -29,7 +29,7 @@ var activeNet = &netparams.MainNetParams
 var activeChain = chaincfg.MainNetParams()
 
 var (
-	dcrdHomeDir              = dcrutil.AppDataDir("dcrd", false)
+	dcrdHomeDir              = dcrutil.AppDataDir("monetarium", false)
 	defaultDcrdHost          = "localhost"
 	defaultDaemonRPCCertFile = filepath.Join(dcrdHomeDir, "rpc.cert")
 

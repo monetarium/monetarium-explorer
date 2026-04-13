@@ -44,7 +44,7 @@ var (
 	defaultConfigFile        = filepath.Join(defaultHomeDir, defaultConfigFilename)
 	defaultLogDir            = filepath.Join(defaultHomeDir, defaultLogDirname)
 	defaultDataDir           = filepath.Join(defaultHomeDir, defaultDataDirname)
-	dcrdHomeDir              = dcrutil.AppDataDir("dcrd", false)
+	dcrdHomeDir              = dcrutil.AppDataDir("monetarium", false)
 	defaultDaemonRPCCertFile = filepath.Join(dcrdHomeDir, "rpc.cert")
 	defaultMaxLogZips        = 16
 

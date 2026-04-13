@@ -1,3 +1,14 @@
+.git
+**/node_modules
+**/dist
+bin/
+obj/
+*.exe
+*.dll
+*.so
+*.dylib
+.env
+.gitignore
 Dockerfile
 docker-compose.yml
 vendor
