@@ -608,10 +608,8 @@ func (exp *explorerUI) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgB
 		exp.ChainParams.TargetTimePerBlock.Hours()/24)
 
 	// Compute per-SKA vote rewards. Averages are always computed from
-	// historical summaries so they survive SKA-free blocks. PerBlock is only
-	// populated when the current block contains SKA fee data.
-	voters := int64(blockData.Header.Voters)
-
+	// historical summaries so they survive SKA-free blocks. PerBlock is
+	// retrieved from the latest block that contains SKA fee data.
 	blocksIn30Days := int(30 * 24 * time.Hour / exp.ChainParams.TargetTimePerBlock)
 	tip := int(exp.dataSource.Height())
 	start30 := tip - blocksIn30Days
@@ -633,8 +631,19 @@ func (exp *explorerUI) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgB
 	}
 
 	coinTypes := txhelpers.SSFeeCoinTypes(toSummaries(sumYear))
-	for ct := range blockData.ExtraInfo.SSFeeTotalsByCoin {
-		coinTypes[ct] = struct{}{}
+
+	// Find the latest block with SKA fee data for PerBlock calculation.
+	var latestSkaBlock *apitypes.BlockDataBasic
+	var latestSkaVoters int64
+	for i := len(sum30) - 1; i >= 0; i-- {
+		if len(sum30[i].SSFeeTotalsByCoin) > 0 {
+			latestSkaBlock = sum30[i]
+			// Get full block info to retrieve the voters count for this specific block
+			if bInfo := exp.dataSource.GetExplorerBlock(ctx, latestSkaBlock.Hash); bInfo != nil {
+				latestSkaVoters = int64(bInfo.BlockBasic.Voters)
+			}
+			break
+		}
 	}
 
 	if len(coinTypes) > 0 {
@@ -643,10 +652,12 @@ func (exp *explorerUI) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgB
 		rewards := make([]types.SKAVoteReward, 0, len(coinTypes))
 		for ct := range coinTypes {
 			var perBlock string
-			if totalStr, ok := blockData.ExtraInfo.SSFeeTotalsByCoin[ct]; ok {
-				if total, parsed := new(big.Int).SetString(totalStr, 10); parsed && voters > 0 {
-					perVote := new(big.Int).Div(total, big.NewInt(voters))
-					perBlock = txhelpers.FormatSKAAtoms(perVote)
+			if latestSkaBlock != nil {
+				if totalStr, ok := latestSkaBlock.SSFeeTotalsByCoin[ct]; ok {
+					if total, parsed := new(big.Int).SetString(totalStr, 10); parsed && latestSkaVoters > 0 {
+						perVote := new(big.Int).Div(total, big.NewInt(latestSkaVoters))
+						perBlock = txhelpers.FormatSKAAtoms(perVote)
+					}
 				}
 			}
 			rewards = append(rewards, types.SKAVoteReward{
