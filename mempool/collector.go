@@ -18,6 +18,7 @@ import (
 	"github.com/monetarium/monetarium-node/cointype"
 	"github.com/monetarium/monetarium-node/dcrutil"
 	chainjson "github.com/monetarium/monetarium-node/rpc/jsonrpc/types"
+	"github.com/monetarium/monetarium-node/wire"
 
 	apitypes "github.com/monetarium/monetarium-explorer/api/types"
 	exptypes "github.com/monetarium/monetarium-explorer/explorer/types"
@@ -148,8 +149,9 @@ func (t *DataCollector) mempoolTxns() ([]exptypes.MempoolTx, txhelpers.MempoolAd
 			FeeRate:   feeRate.ToCoin(),
 			VinCount:  len(msgTx.TxIn),
 			VoutCount: len(msgTx.TxOut),
-			Vin:       exptypes.MsgTxMempoolInputs(msgTx),
+			Vin:       populateMempoolInputs(msgTx, txType, txnsStore),
 			// Coinbase:  txhelpers.IsCoinBaseTx(msgTx), // commented because coinbase is not in mempool
+
 			Hash:      hashStr, // dup of TxID!
 			Time:      tx.Time,
 			Size:      tx.Size,
@@ -164,7 +166,34 @@ func (t *DataCollector) mempoolTxns() ([]exptypes.MempoolTx, txhelpers.MempoolAd
 	return txs, addrMap, txnsStore, nil
 }
 
+func populateMempoolInputs(msgTx *wire.MsgTx, txType stake.TxType, txnsStore txhelpers.TxnsStore) []exptypes.MempoolInput {
+	inputs := make([]exptypes.MempoolInput, 0, len(msgTx.TxIn))
+	for i, txIn := range msgTx.TxIn {
+		input := exptypes.MempoolInput{
+			TxId:   txIn.PreviousOutPoint.Hash.String(),
+			Index:  uint32(i),
+			Outdex: txIn.PreviousOutPoint.Index,
+		}
+
+		if txType == stake.TxTypeRegular {
+			// For regular transactions, determine the coin type of the spent output.
+			if !(&chainhash.Hash{}).IsEqual(&txIn.PreviousOutPoint.Hash) {
+				if prevTxData, found := txnsStore[txIn.PreviousOutPoint.Hash]; found {
+					txOut := prevTxData.Tx.TxOut[txIn.PreviousOutPoint.Index]
+					input.CoinType = uint8(txOut.CoinType)
+					if txOut.SKAValue != nil {
+						input.SKAValue = txOut.SKAValue.String()
+					}
+				}
+			}
+		}
+		inputs = append(inputs, input)
+	}
+	return inputs
+}
+
 // Collect is the main handler for collecting mempool data. Data collection is
+
 // focused on stake-related information, including vote and ticket transactions,
 // and fee info. Transactions of all types in mempool are returned as a
 // []exptypes.MempoolTx, corresponding to the same data provided by the

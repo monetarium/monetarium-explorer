@@ -412,7 +412,8 @@ type VinShort struct {
 	AmountIn      float64 `json:"amountin"`
 	BlockHeight   *uint32 `json:"blockheight,omitempty"`
 	BlockIndex    *uint32 `json:"blockindex,omitempty"`
-	// No ScriptSig or Sequence
+	CoinType      uint8   `json:"coin_type,omitempty"`
+	SKAValue      string  `json:"ska_value,omitempty"`
 }
 
 // MarshalJSON is used to marshal a Vin to JSON with special handling for when
