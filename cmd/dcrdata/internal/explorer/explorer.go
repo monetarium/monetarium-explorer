@@ -631,18 +631,31 @@ func (exp *explorerUI) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgB
 	}
 
 	coinTypes := txhelpers.SSFeeCoinTypes(toSummaries(sumYear))
+	for ct := range blockData.ExtraInfo.SSFeeTotalsByCoin {
+		coinTypes[ct] = struct{}{}
+	}
 
 	// Find the latest block with SKA fee data for PerBlock calculation.
 	var latestSkaBlock *apitypes.BlockDataBasic
 	var latestSkaVoters int64
-	for i := len(sum30) - 1; i >= 0; i-- {
-		if len(sum30[i].SSFeeTotalsByCoin) > 0 {
-			latestSkaBlock = sum30[i]
-			// Get full block info to retrieve the voters count for this specific block
-			if bInfo := exp.dataSource.GetExplorerBlock(ctx, latestSkaBlock.Hash); bInfo != nil {
-				latestSkaVoters = int64(bInfo.BlockBasic.Voters)
+
+	if len(blockData.ExtraInfo.SSFeeTotalsByCoin) > 0 {
+		// Use current block data directly to avoid redundant DB query
+		latestSkaVoters = int64(blockData.Header.Voters)
+		latestSkaBlock = &apitypes.BlockDataBasic{
+			SSFeeTotalsByCoin: blockData.ExtraInfo.SSFeeTotalsByCoin,
+		}
+	} else {
+		// Fallback: Search backwards through historical summaries
+		for i := len(sum30) - 1; i >= 0; i-- {
+			if len(sum30[i].SSFeeTotalsByCoin) > 0 {
+				latestSkaBlock = sum30[i]
+				// Get full block info to retrieve the voters count for this specific block
+				if bInfo := exp.dataSource.GetExplorerBlock(ctx, latestSkaBlock.Hash); bInfo != nil {
+					latestSkaVoters = int64(bInfo.BlockBasic.Voters)
+				}
+				break
 			}
-			break
 		}
 	}
 
