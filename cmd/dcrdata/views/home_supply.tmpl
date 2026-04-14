@@ -29,15 +29,15 @@
                 <div class="fs12 text-secondary fw-semibold">SKA-{{.CoinType}}</div>
                 <div class="fs12 lh1rem d-flex justify-content-between">
                     <span class="text-black-50">In Circulation</span>
-                    <span class="mono">{{formatCoinAtoms .InCirculation .CoinType}}</span>
+                    <span class="mono">{{formatCoinAtomsFull .InCirculation .CoinType}}</span>
                 </div>
                 <div class="fs12 lh1rem d-flex justify-content-between">
                     <span class="text-black-50">Total Issued</span>
-                    <span class="mono">{{formatCoinAtoms .TotalIssued .CoinType}}</span>
+                    <span class="mono">{{formatCoinAtomsFull .TotalIssued .CoinType}}</span>
                 </div>
                 <div class="fs12 lh1rem d-flex justify-content-between">
                     <span class="text-black-50">Total Burned</span>
-                    <span class="mono">{{formatCoinAtoms .TotalBurned .CoinType}}</span>
+                    <span class="mono">{{formatCoinAtomsFull .TotalBurned .CoinType}}</span>
                 </div>
             </div>
             {{end}}
