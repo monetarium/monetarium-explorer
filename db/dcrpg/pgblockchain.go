@@ -5657,10 +5657,12 @@ func (pgb *ChainDB) GetAddressTransactionsRawWithSkip(ctx context.Context, addr 
 				// For regular transactions, determine the coin type of the spent output.
 				if txType == stake.TxTypeRegular {
 					if prevTxData, found := mpTxs.TxnsStore[txIn.PreviousOutPoint.Hash]; found {
-						txOut := prevTxData.Tx.TxOut[txIn.PreviousOutPoint.Index]
-						vin.CoinType = uint8(txOut.CoinType)
-						if txOut.SKAValue != nil {
-							vin.SKAValue = txOut.SKAValue.String()
+						if int(txIn.PreviousOutPoint.Index) < len(prevTxData.Tx.TxOut) {
+							txOut := prevTxData.Tx.TxOut[txIn.PreviousOutPoint.Index]
+							vin.CoinType = uint8(txOut.CoinType)
+							if txOut.SKAValue != nil {
+								vin.SKAValue = txOut.SKAValue.String()
+							}
 						}
 					}
 				}
