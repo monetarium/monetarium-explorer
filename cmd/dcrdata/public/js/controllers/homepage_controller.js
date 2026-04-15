@@ -17,8 +17,37 @@ function incrementValue(element) {
 }
 
 function mempoolTableRow(tx) {
-  const tbody = document.createElement('tbody')
   const link = `/tx/${tx.hash}`
+
+  // Determine coin label and formatted amount
+  let coin, amount
+  if (tx.ska_totals && Object.keys(tx.ska_totals).length > 0) {
+    const [id, atomStr] = Object.entries(tx.ska_totals)[0]
+    coin = `SKA-${id}`
+    amount = humanize.formatCoinAtoms(atomStr, parseInt(id))
+  } else {
+    coin = 'VAR'
+    amount = humanize.threeSigFigs(tx.total || 0)
+  }
+
+  const tmpl = document.getElementById('home-mempool-tx-row-template')
+  if (tmpl) {
+    const clone = document.importNode(tmpl.content, true)
+    const hashTd = clone.querySelector('.tx-hash')
+    hashTd.innerHTML = humanize.hashElide(tx.hash, link)
+    clone.querySelector('.tx-type').textContent = tx.Type
+    clone.querySelector('.tx-coin').textContent = coin
+    clone.querySelector('.tx-amount').textContent = amount
+    clone.querySelector('.tx-size').textContent = `${tx.size} B`
+    const ageTd = clone.querySelector('.tx-age')
+    ageTd.dataset.timeTarget = 'age'
+    ageTd.dataset.age = tx.time
+    ageTd.textContent = humanize.timeSince(tx.time)
+    return clone.querySelector('tr')
+  }
+
+  // Fallback
+  const tbody = document.createElement('tbody')
   tbody.innerHTML = `<tr>
     <td class="text-start ps-1 clipboard">
       ${humanize.hashElide(tx.hash, link)}
@@ -26,7 +55,8 @@ function mempoolTableRow(tx) {
       ${alertArea()}
     </td>
     <td class="text-start">${tx.Type}</td>
-    <td class="text-end">${humanize.threeSigFigs(tx.total || 0, false, 8)}</td>
+    <td class="text-start">${coin}</td>
+    <td class="text-end">${amount}</td>
     <td class="text-nowrap text-end">${tx.size} B</td>
     <td class="text-end pe-1 text-nowrap" data-time-target="age" data-age="${tx.time}">${humanize.timeSince(tx.time)}</td>
   </tr>`
