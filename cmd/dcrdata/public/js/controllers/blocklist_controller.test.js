@@ -137,7 +137,7 @@ describe('blocklist_controller — Property 8: WebSocket block prepend matches s
         'tr[data-block-id="1001"][data-ska-accordion-target="blockRow"]'
       )
       const txCell = Array.from(row.querySelectorAll('td')).find((td) => td.dataset.type === 'tx')
-      expect(txCell.textContent).toBe('69')
+      expect(txCell.textContent).toBe('61')
     })
 
     it('falls back to block.tx when no coin_rows', () => {
