@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/monetarium/monetarium-node/blockchain/stake"
 	"github.com/monetarium/monetarium-node/chaincfg"
 	"github.com/monetarium/monetarium-node/chaincfg/chainhash"
 	"github.com/monetarium/monetarium-node/cointype"
@@ -406,6 +407,10 @@ func blockCoinTxStats(msgBlock *wire.MsgBlock) map[uint8]apitypes.CoinTxStats {
 	stats := make(map[uint8]apitypes.CoinTxStats)
 	allTxs := append(msgBlock.Transactions, msgBlock.STransactions...)
 	for _, tx := range allTxs {
+		txType := txhelpers.DetermineTxType(tx)
+		if txType == stake.TxTypeSSGen || txType == stake.TxTypeSStx || txType == stake.TxTypeSSRtx {
+			continue
+		}
 		ct := uint8(cointype.CoinTypeVAR)
 		for _, txout := range tx.TxOut {
 			if txout.CoinType.IsSKA() {
