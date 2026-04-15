@@ -18,14 +18,14 @@ if (darkEnabled()) {
   toggleToLightClasses(document.body)
 }
 function toggleToDarkClasses(body) {
-  sunIcon.classList.remove('dcricon-sun-fill')
-  sunIcon.classList.add('dcricon-sun-stroke')
+  sunIcon.classList.remove('monicon-sun-fill')
+  sunIcon.classList.add('monicon-sun-stroke')
   body.classList.add('darkBG')
 }
 function toggleToLightClasses(body) {
   body.classList.remove('darkBG')
-  sunIcon.classList.remove('dcricon-sun-stroke')
-  sunIcon.classList.add('dcricon-sun-fill')
+  sunIcon.classList.remove('monicon-sun-stroke')
+  sunIcon.classList.add('monicon-sun-fill')
 }
 export function toggleSun() {
   if (darkEnabled()) {

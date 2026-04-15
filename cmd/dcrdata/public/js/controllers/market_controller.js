@@ -1115,9 +1115,9 @@ export default class extends Controller {
       if (xc.change === 0) {
         row.arrow.className = ''
       } else if (xc.change > 0) {
-        row.arrow.className = 'dcricon-arrow-up text-green'
+        row.arrow.className = 'monicon-arrow-up text-green'
       } else {
-        row.arrow.className = 'dcricon-arrow-down text-danger'
+        row.arrow.className = 'monicon-arrow-down text-danger'
       }
     }
     // Update the big displayed value and the aggregated row

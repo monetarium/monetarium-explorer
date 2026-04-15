@@ -132,7 +132,7 @@
             <div class="text-end pe-3">
               {{if lt $topBlock .BestBlock}}
                 <a href="/blocks?height={{ add $topBlock (int64 $blocksCount) }}&rows={{.Rows}}"
-                class="d-inline-block dcricon-arrow-left m-1 fs20"></a>
+                class="d-inline-block monicon-arrow-left m-1 fs20"></a>
               {{end}}
               {{range .Pages}}
                 {{if eq .Link ""}}
@@ -143,7 +143,7 @@
               {{end}}
               {{if ge $topBlock .Rows}}
                 <a href="/blocks?height={{ subtract $topBlock (int64 $blocksCount) }}&rows={{.Rows}}"
-                class="d-inline-block dcricon-arrow-right m-1 fs20"></a>
+                class="d-inline-block monicon-arrow-right m-1 fs20"></a>
               {{end}}
             </div>
             {{end}}

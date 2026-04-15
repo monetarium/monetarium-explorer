@@ -44,7 +44,7 @@
                           {{template "voteTable" .}}
                       {{else if .IsLocked}}
                           <div class="d-flex justify-content-start align-items-center mb-2">
-                              <span class="fs22 text-green dcricon-affirm me-2 pt-1"></span>
+                              <span class="fs22 text-green monicon-affirm me-2 pt-1"></span>
                               <div class="d-inline-block">
                                 <span class="fs18 fw-bold me-2">{{.ID}} approved</span>
                                 <span class="fs14">active at block {{$.VotingSummary.NextRCIHeight}} (about {{secondsToShortDurationString $.VotingSummary.TilNextRCI}})</span>
@@ -54,13 +54,13 @@
                           {{template "voteTable" .}}
                       {{else if .IsFailed}}
                           <div class="d-flex justify-content-start align-items-center mb-2">
-                              <span class="fs22 text-danger dcricon-reject me-2 pt-1"></span> <span class="fs18 fw-bold">{{.ID}} rejected</span>
+                              <span class="fs22 text-danger monicon-reject me-2 pt-1"></span> <span class="fs18 fw-bold">{{.ID}} rejected</span>
                           </div>
                           {{.Description}}
                           {{template "voteTable" .}}
                       {{else if .IsActive}}
                           <div class="d-flex justify-content-start align-items-center mb-2">
-                              <span class="fs22 text-green dcricon-affirm me-2 pt-1"></span> <span class="fs18 fw-bold">{{.ID}} passed (active)</span>
+                              <span class="fs22 text-green monicon-affirm me-2 pt-1"></span> <span class="fs18 fw-bold">{{.ID}} passed (active)</span>
                           </div>
                           {{.Description}}
                           {{template "voteTable" .}}
