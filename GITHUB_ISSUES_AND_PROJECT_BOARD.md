@@ -88,7 +88,7 @@ You can define three types of issues in your `tasks.json`:
 
 The tool features robust ID-based idempotency, validation checks, legacy state auto-migration, and automatic rate-limit processing. All API activity and errors are permanently recorded to `create_issues.log`. If the script encounters a failure it isolates the error, gracefully processes the rest of the stack, and preserves its internal state file so you can retry flawlessly.
 
-**Note on Resuming**: Live runs will automatically read the existing state file (`.create_issues_state.json`) and skip tasks that were already linked. State files are automatically cleaned up upon a completely flawless execution run.
+**Note on Resuming**: If a previous run failed or was interrupted, use the `--resume` flag to read the existing state file (`.create_issues_state.json`). This ensures the script will skip tasks that were already created and linked, preventing duplicates. The state file is automatically cleaned up upon a completely flawless execution run. Without `--resume`, the script will start fresh and ignore any existing state.
 
 ```bash
 cd .github/scripts
@@ -100,6 +100,9 @@ node create-issues.js --dry-run --file my_tasks.json
 # Live run (uses defaults: tasks.json, repo and milestone from script config):
 # Will pause to ask for interactive 'yes' confirmation.
 node create-issues.js
+
+# Resume a previous failed or interrupted run to prevent duplicate issues:
+node create-issues.js --resume
 
 # Skip the interactive confirmation prompt (useful for CI execution):
 node create-issues.js -y
