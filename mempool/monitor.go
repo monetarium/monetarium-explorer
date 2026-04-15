@@ -249,7 +249,7 @@ func (p *MempoolMonitor) TxHandler(rawTx *chainjson.TxRawResult) error {
 		FeeRate:   feeRate.ToCoin(),
 		VinCount:  len(msgTx.TxIn),
 		VoutCount: len(msgTx.TxOut),
-		Vin:       exptypes.MsgTxMempoolInputs(msgTx),
+		Vin:       p.collector.populateMempoolInputs(p.ctx, msgTx, txType, p.txnsStore),
 		// Coinbase is not in mempool
 		Hash:      hash,
 		Time:      rawTx.Time,

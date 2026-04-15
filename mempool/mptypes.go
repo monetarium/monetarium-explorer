@@ -142,6 +142,8 @@ type Vout struct {
 	N            uint32             `json:"n"`
 	Version      uint16             `json:"version"`
 	ScriptPubKey ScriptPubKeyResult `json:"scriptPubKey"`
+	CoinType     uint8              `json:"coin_type"`
+	SKAValue     string             `json:"ska_value,omitempty"`
 }
 
 type Tx struct {

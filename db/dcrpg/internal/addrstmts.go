@@ -106,14 +106,14 @@ const (
 	// 	AS (` + addressTxnsSubQuery + `);`
 
 	SelectVinsForAddressAlt = `SELECT vins.tx_hash, vins.tx_index, vins.prev_tx_hash, vins.prev_tx_index,
-			vins.prev_tx_tree, vins.value_in -- no block height or block index
+			vins.prev_tx_tree, vins.value_in, COALESCE(vins.coin_type, 0), COALESCE(vins.ska_value, '') -- no block height or block index
 		FROM (` + addressTxnsSubQuery + `) atxs
 		-- JOIN transactions txs ON txs.tx_hash=atxs.tx_hash
 		-- JOIN vins ON vins.id = any(txs.vin_db_ids)
 		JOIN vins ON vins.tx_hash = atxs.tx_hash;`
 
 	SelectVinsForAddress = `SELECT vins.tx_hash, vins.tx_index, vins.prev_tx_hash, vins.prev_tx_index,
-			vins.prev_tx_tree, vins.value_in, prevtxs.block_height, prevtxs.block_index
+			vins.prev_tx_tree, vins.value_in, COALESCE(vins.coin_type, 0), COALESCE(vins.ska_value, ''), prevtxs.block_height, prevtxs.block_index
 		FROM (` + addressTxnsSubQuery + `) atxs
 		JOIN vins ON vins.tx_hash = atxs.tx_hash   -- JOIN vins on vins.id = any(txs.vin_db_ids)
 		LEFT JOIN transactions prevtxs ON vins.prev_tx_hash=prevtxs.tx_hash;` // LEFT JOIN because prev_tx_hash may be coinbase

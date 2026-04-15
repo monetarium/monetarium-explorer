@@ -1208,9 +1208,11 @@ type MempoolVin struct {
 
 // MempoolInput is basic information about a transaction input.
 type MempoolInput struct {
-	TxId   string `json:"txid"`
-	Index  uint32 `json:"index"`
-	Outdex uint32 `json:"vout"`
+	TxId     string `json:"txid"`
+	Index    uint32 `json:"index"`
+	Outdex   uint32 `json:"vout"`
+	CoinType uint8  `json:"coin_type,omitempty"`
+	SKAValue string `json:"ska_value,omitempty"`
 }
 
 type MPTxsByTime []MempoolTx

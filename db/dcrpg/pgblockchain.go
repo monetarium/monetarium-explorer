@@ -5653,6 +5653,19 @@ func (pgb *ChainDB) GetAddressTransactionsRawWithSkip(ctx context.Context, addr 
 				case stake.TxTypeTreasuryBase:
 					vin.Treasurybase = true
 				}
+			} else {
+				// For regular transactions, determine the coin type of the spent output.
+				if txType == stake.TxTypeRegular {
+					if prevTxData, found := mpTxs.TxnsStore[txIn.PreviousOutPoint.Hash]; found {
+						if int(txIn.PreviousOutPoint.Index) < len(prevTxData.Tx.TxOut) {
+							txOut := prevTxData.Tx.TxOut[txIn.PreviousOutPoint.Index]
+							vin.CoinType = uint8(txOut.CoinType)
+							if txOut.SKAValue != nil {
+								vin.SKAValue = txOut.SKAValue.String()
+							}
+						}
+					}
+				}
 			}
 			if txIn.ValueIn > 0 {
 				vin.AmountIn = dcrutil.Amount(txIn.ValueIn).ToCoin()
@@ -5666,6 +5679,8 @@ func (pgb *ChainDB) GetAddressTransactionsRawWithSkip(ctx context.Context, addr 
 				N:                   uint32(i),
 				Version:             txOut.Version,
 				ScriptPubKeyDecoded: decPkScript(txOut.Version, txOut.PkScript, isTicketCommit, pgb.chainParams),
+				CoinType:            uint8(txOut.CoinType),
+				SKAValue:            txOut.SKAValue.String(),
 			}
 		}
 		txs = append(txs, &apitypes.AddressTxRaw{
@@ -5702,13 +5717,17 @@ func (pgb *ChainDB) GetAddressTransactionsRawWithSkip(ctx context.Context, addr 
 		var idx int32
 		var vin apitypes.VinShort
 		var val int64
+		var coinType int16
+		var skaValue string
 		if err = rows.Scan(&txid, &idx, &vinTxID, &vin.Vout, &vin.Tree, &val,
-			&vin.BlockHeight, &vin.BlockIndex); err != nil {
+			&vin.BlockHeight, &vin.BlockIndex, &coinType, &skaValue); err != nil {
 			log.Errorf("GetAddressTransactionsRawWithSkip: SelectVinsForAddress %s: %v", addr, err)
 			rows.Close()
 			return nil
 		}
 		vin.Txid = vinTxID.String()
+		vin.CoinType = uint8(coinType)
+		vin.SKAValue = skaValue
 
 		if val > 0 {
 			vin.AmountIn = dcrutil.Amount(val).ToCoin()
