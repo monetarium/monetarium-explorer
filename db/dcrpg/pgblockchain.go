@@ -5677,6 +5677,8 @@ func (pgb *ChainDB) GetAddressTransactionsRawWithSkip(ctx context.Context, addr 
 				N:                   uint32(i),
 				Version:             txOut.Version,
 				ScriptPubKeyDecoded: decPkScript(txOut.Version, txOut.PkScript, isTicketCommit, pgb.chainParams),
+				CoinType:            uint8(txOut.CoinType),
+				SKAValue:            txOut.SKAValue.String(),
 			}
 		}
 		txs = append(txs, &apitypes.AddressTxRaw{

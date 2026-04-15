@@ -149,7 +149,7 @@ func (t *DataCollector) mempoolTxns() ([]exptypes.MempoolTx, txhelpers.MempoolAd
 			FeeRate:   feeRate.ToCoin(),
 			VinCount:  len(msgTx.TxIn),
 			VoutCount: len(msgTx.TxOut),
-			Vin:       populateMempoolInputs(msgTx, txType, txnsStore),
+			Vin:       t.populateMempoolInputs(context.TODO(), msgTx, txType, txnsStore),
 			// Coinbase:  txhelpers.IsCoinBaseTx(msgTx), // commented because coinbase is not in mempool
 
 			Hash:      hashStr, // dup of TxID!
@@ -166,7 +166,7 @@ func (t *DataCollector) mempoolTxns() ([]exptypes.MempoolTx, txhelpers.MempoolAd
 	return txs, addrMap, txnsStore, nil
 }
 
-func populateMempoolInputs(msgTx *wire.MsgTx, txType stake.TxType, txnsStore txhelpers.TxnsStore) []exptypes.MempoolInput {
+func (t *DataCollector) populateMempoolInputs(ctx context.Context, msgTx *wire.MsgTx, txType stake.TxType, txnsStore txhelpers.TxnsStore) []exptypes.MempoolInput {
 	inputs := make([]exptypes.MempoolInput, 0, len(msgTx.TxIn))
 	for i, txIn := range msgTx.TxIn {
 		input := exptypes.MempoolInput{
@@ -183,6 +183,15 @@ func populateMempoolInputs(msgTx *wire.MsgTx, txType stake.TxType, txnsStore txh
 					input.CoinType = uint8(txOut.CoinType)
 					if txOut.SKAValue != nil {
 						input.SKAValue = txOut.SKAValue.String()
+					}
+				} else {
+					// Output not in mempool; fetch from node to get coin type.
+					if prevTx, err := t.dcrdChainSvr.GetRawTransaction(ctx, &txIn.PreviousOutPoint.Hash); err == nil {
+						txOut := prevTx.MsgTx().TxOut[txIn.PreviousOutPoint.Index]
+						input.CoinType = uint8(txOut.CoinType)
+						if txOut.SKAValue != nil {
+							input.SKAValue = txOut.SKAValue.String()
+						}
 					}
 				}
 			}
