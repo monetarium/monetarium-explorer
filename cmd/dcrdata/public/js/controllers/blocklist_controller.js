@@ -40,6 +40,9 @@ function coinRowsToSKAData(block) {
     }
   }
 
+  totalTxCount -= (block.votes || 0) + (block.tickets || 0) + (block.revocations || 0)
+  if (totalTxCount < 0) totalTxCount = 0
+
   let skaAmount = ''
   if (subRows.length === 1) {
     skaAmount = subRows[0].amount
