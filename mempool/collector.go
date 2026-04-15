@@ -179,18 +179,22 @@ func (t *DataCollector) populateMempoolInputs(ctx context.Context, msgTx *wire.M
 			// For regular transactions, determine the coin type of the spent output.
 			if !(&chainhash.Hash{}).IsEqual(&txIn.PreviousOutPoint.Hash) {
 				if prevTxData, found := txnsStore[txIn.PreviousOutPoint.Hash]; found {
-					txOut := prevTxData.Tx.TxOut[txIn.PreviousOutPoint.Index]
-					input.CoinType = uint8(txOut.CoinType)
-					if txOut.SKAValue != nil {
-						input.SKAValue = txOut.SKAValue.String()
+					if int(txIn.PreviousOutPoint.Index) < len(prevTxData.Tx.TxOut) {
+						txOut := prevTxData.Tx.TxOut[txIn.PreviousOutPoint.Index]
+						input.CoinType = uint8(txOut.CoinType)
+						if txOut.SKAValue != nil {
+							input.SKAValue = txOut.SKAValue.String()
+						}
 					}
 				} else {
 					// Output not in mempool; fetch from node to get coin type.
 					if prevTx, err := t.dcrdChainSvr.GetRawTransaction(ctx, &txIn.PreviousOutPoint.Hash); err == nil {
-						txOut := prevTx.MsgTx().TxOut[txIn.PreviousOutPoint.Index]
-						input.CoinType = uint8(txOut.CoinType)
-						if txOut.SKAValue != nil {
-							input.SKAValue = txOut.SKAValue.String()
+						if int(txIn.PreviousOutPoint.Index) < len(prevTx.MsgTx().TxOut) {
+							txOut := prevTx.MsgTx().TxOut[txIn.PreviousOutPoint.Index]
+							input.CoinType = uint8(txOut.CoinType)
+							if txOut.SKAValue != nil {
+								input.SKAValue = txOut.SKAValue.String()
+							}
 						}
 					}
 				}
