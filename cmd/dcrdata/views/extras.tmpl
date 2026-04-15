@@ -27,11 +27,12 @@
 	{{ end }}
 
 	<!-- Favicon -->
-  <link rel="icon" type="image/png" href="/images/favicon/favicon-96x96.png?v=20260415" sizes="96x96">
-  <link rel="icon" type="image/svg+xml" href="/images/favicon/favicon.svg?v=20260415">
-  <link rel="apple-touch-icon" sizes="180x180" href="/images/favicon/apple-touch-icon.png?v=20260415">
-  <meta name="theme-color" content="{{ if .Cookies.DarkMode }}#292929{{ else if eq theme "theme-testnet" }}#1d331a{{ else if eq theme "theme-simnet" }}#076191{{ else }}#ffffff{{ end }}">
-  <link rel="manifest" href="/images/favicon/site.webmanifest?v=20260415">
+	<link rel="icon" href="/images/favicon/favicon.ico?v=20260415" sizes="48x48">
+	<link rel="icon" type="image/png" href="/images/favicon/favicon-96x96.png?v=20260415" sizes="96x96">
+	<link rel="icon" type="image/svg+xml" href="/images/favicon/favicon.svg?v=20260415">
+	<link rel="apple-touch-icon" sizes="180x180" href="/images/favicon/apple-touch-icon.png?v=20260415">
+	<meta name="theme-color" content="{{ if .Cookies.DarkMode }}#292929{{ else if eq theme "theme-testnet" }}#1d331a{{ else if eq theme "theme-simnet" }}#076191{{ else }}#ffffff{{ end }}">
+	<link rel="manifest" href="/images/favicon/site.webmanifest?v=20260415">
   <!-- End favicon -->
 
 	<meta name="turbolinks-cache-control" content="no-cache">
