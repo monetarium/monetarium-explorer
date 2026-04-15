@@ -13,15 +13,15 @@
           <div class="card-pointer pointer-bottom d-xl-none"></div>
           <div class="pb-1 ps-1 position-relative">
             {{if or .IsTicket .IsRevocation}}
-              <span class="fs22 dcricon-ticket"></span>
+              <span class="fs22 monicon-ticket"></span>
             {{else if .IsVote}}
               {{if .VoteInfo.Validation.Validity}}
-                <span class="fs18 dcricon-affirm"></span>
+                <span class="fs18 monicon-affirm"></span>
               {{else}}
-                <span class="fs18 dcricon-reject"></span>
+                <span class="fs18 monicon-reject"></span>
               {{end}}
             {{else}}
-              <span class="fs22 dcricon-coin-negative"></span>
+              <span class="fs22 monicon-coin-negative"></span>
             {{end}}
             <span class="h5 d-inline-block ps-1">{{.Type}}</span>
               <div class="d-inline-block confirmations-box{{if $.IsConfirmedMainchain}} confirmed{{end}} mx-2 fs14"
@@ -328,7 +328,7 @@
                       <span class="text-danger">Rejected</span>
                     {{end}}
                   </div>
-                {{end}}              
+                {{end}}
                 <div class="d-flex w-100 justify-content-start p-2 my-2 secondary-card rounded">
                   <div class="col-auto lilbox px-2">
                     <div
@@ -346,14 +346,14 @@
                       approval of {{intComma .TotalVotes}} votes
                     </span>
                     {{if .QuorumAchieved}}
-                      <div class="d-flex align-items-center"><span class="fs20 dcricon-affirm me-2"></span>
+                      <div class="d-flex align-items-center"><span class="fs20 monicon-affirm me-2"></span>
                       <span class="lh1em pb-1">Quorum achieved ({{.TotalVotes}} of {{.QuorumCount}} needed votes)</span></div>
                     {{else if $votingEnded}}
-                      <div class="d-flex align-items-center"><span class="fs20 dcricon-reject me-2"></span>
+                      <div class="d-flex align-items-center"><span class="fs20 monicon-reject me-2"></span>
                       <span class="pb-1">Quorum not achieved ({{.TotalVotes}} of {{.QuorumCount}} needed votes)</span></div>
                     {{else}}
                        <span class="text-secondary fs13">Quorum</span>
-                       <div class="d-flex align-items-center"><span class="fs20 dcricon-missing me-2"></span>
+                       <div class="d-flex align-items-center"><span class="fs20 monicon-missing me-2"></span>
                        <span class="pb-1">{{.TotalVotes}} of {{.QuorumCount}} needed votes</span>
                         </div>
                      {{end}}
@@ -395,7 +395,7 @@
                  </tr>
                  <tr>
                    <td class="text-end medium-sans text-nowrap pe-2 py-2">Votes Cast:</td>
-                   <td class="text-start py-1 text-secondary"> {{.TotalVotes}} 
+                   <td class="text-start py-1 text-secondary"> {{.TotalVotes}}
                     ({{if gt .TotalVotes 0}}{{printf "%.0f" (percentage .TotalVotes .EligibleVotes)}}{{else}}0{{end}}% turnout)
                    </td>
                  {{if not .Approved}}
@@ -410,12 +410,12 @@
                     <td class="text-start py-1 text-secondary">{{formatDateTime .VoteEndDate}}</td>
                    {{else}}
                     <td class="text-end medium-sans text-nowrap pe-2 py-2" >Voting Ended:</td>
-                    <td class="text-start py-1 text-secondary" data-tx-target="formattedAge">{{$.Data.Time.String}}</td>  
+                    <td class="text-start py-1 text-secondary" data-tx-target="formattedAge">{{$.Data.Time.String}}</td>
                   {{end}}
                  {{end}}
                  </tr>
                  <tr>
-                 {{if not .Approved}} 
+                 {{if not .Approved}}
                    <td class="text-end medium-sans text-nowrap pe-2 py-2" >Yes Votes Still Needed:</td>
                    <td class="text-start py-1 text-secondary">
                      {{$remainingYesVotes := subtract .RequiredYesVotes .YesVotes}}
@@ -423,7 +423,7 @@
                        {{$remainingYesVotes}}
                      {{end}}
                    </td>
-                 {{end}}  
+                 {{end}}
                    <td class="text-end medium-sans text-nowrap pe-2 py-2">Voting Period:</td>
                    <td class="text-start py-1 text-secondary">
                  {{if $votingStarted}}
@@ -579,7 +579,7 @@
             </table>
         </div>
     </div>
-   
+
     {{if .VoteInfo}}
     {{with .VoteInfo}}
     <div class="row mb-3">

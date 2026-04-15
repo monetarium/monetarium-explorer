@@ -83,16 +83,16 @@
                       approval of {{intComma $metadata.VoteCount}} votes ({{printf "%.0f" (percentage $metadata.VoteCount (int64 .EligibleTickets))}}% turnout)
                     </span>
                     {{if $metadata.QuorumAchieved}}
-                      <div class="d-flex align-items-center"><span class="fs20 dcricon-affirm me-2"></span>
+                      <div class="d-flex align-items-center"><span class="fs20 monicon-affirm me-2"></span>
                       <span class="lh1em pb-1">Quorum achieved</span></div>
                     {{else}}
                       {{if eq $status "started"}}
                         <span class="text-secondary fs13">Quorum</span>
-                        <div class="d-flex align-items-center"><span class="fs20 dcricon-missing me-2"></span>
+                        <div class="d-flex align-items-center"><span class="fs20 monicon-missing me-2"></span>
                           <span class="pb-1">{{$metadata.VoteCount}} of {{$metadata.QuorumCount}} needed votes</span>
                         </div>
                       {{else}}
-                        <div class="d-flex align-items-center"><span class="fs20 dcricon-reject me-2"></span>
+                        <div class="d-flex align-items-center"><span class="fs20 monicon-reject me-2"></span>
                         <span class="pb-1">Quorum not achieved</span></div>
                       {{end}}
                     {{end}}
@@ -101,11 +101,11 @@
               {{end}}{{/* END LIVE OR FINISHED */ -}}
               <div class="d-flex justify-content-between w-100 pb-1 fs-17">
                 <a class="d-block" href="{{$.PoliteiaURL}}/record/{{$.ShortToken}}">
-                  <span class="dcricon-discussion me-2 pt-1"></span>
+                  <span class="monicon-discussion me-2 pt-1"></span>
                   Discussion
                 </a>
                 <a class="d-block" href="/proposals">
-                  <span class="dcricon-back me-2 pt-1"></span>
+                  <span class="monicon-back me-2 pt-1"></span>
                   Proposals
                 </a>
               </div>

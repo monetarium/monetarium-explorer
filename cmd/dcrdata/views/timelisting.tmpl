@@ -19,7 +19,7 @@
                 {{if gt $lastGrouping 200}}{{$dropVal = 200}}{{end}}
                 <span class="h2 d-flex pt-4 pb-1 pe-2">
                     {{.TimeGrouping}}
-                    <span class="dcricon-info fs14 ms-2 mt-2" title="Monetarium Blocks Grouped By {{.TimeGrouping}}"></span>
+                    <span class="monicon-info fs14 ms-2 mt-2" title="Monetarium Blocks Grouped By {{.TimeGrouping}}"></span>
                 </span>
 
                 <div class="pb-1 d-flex justify-content-end align-items-center flex-wrap">
@@ -134,7 +134,7 @@
           <div class="text-end pe-3">
             {{if ne .Offset 0}}
               <a href="/{{$lowerCaseVal}}?offset={{subtract .Offset .Limit}}&rows={{.Limit}}"
-              class="d-inline-block dcricon-arrow-left m-1 fs20"></a>
+              class="d-inline-block monicon-arrow-left m-1 fs20"></a>
             {{end}}
             {{range .Pages}}
               {{if eq .Link ""}}
@@ -145,7 +145,7 @@
             {{end}}
             {{if lt $oldest $lastGrouping}}
               <a href="/{{$lowerCaseVal}}?offset={{add .Offset .Limit}}&rows={{.Limit}}"
-              class="d-inline-block dcricon-arrow-right m-1 fs20"></a>
+              class="d-inline-block monicon-arrow-right m-1 fs20"></a>
             {{end}}
           </div>
           {{end}}

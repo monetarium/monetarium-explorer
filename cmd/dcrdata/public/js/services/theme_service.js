@@ -12,20 +12,33 @@ function menuToggle() {
   return document.querySelector('#menu-toggle input')
 }
 
+function updateThemeColor(color) {
+  const meta = document.querySelector('meta[name="theme-color"]')
+  if (meta) {
+    meta.setAttribute('content', color)
+  }
+}
+
 if (darkEnabled()) {
   toggleToDarkClasses(document.body)
 } else {
   toggleToLightClasses(document.body)
 }
 function toggleToDarkClasses(body) {
-  sunIcon.classList.remove('dcricon-sun-fill')
-  sunIcon.classList.add('dcricon-sun-stroke')
+  if (sunIcon) {
+    sunIcon.classList.remove('monicon-sun-fill')
+    sunIcon.classList.add('monicon-sun-stroke')
+  }
   body.classList.add('darkBG')
+  updateThemeColor('#292929')
 }
 function toggleToLightClasses(body) {
   body.classList.remove('darkBG')
-  sunIcon.classList.remove('dcricon-sun-stroke')
-  sunIcon.classList.add('dcricon-sun-fill')
+  if (sunIcon) {
+    sunIcon.classList.remove('monicon-sun-stroke')
+    sunIcon.classList.add('monicon-sun-fill')
+  }
+  updateThemeColor(body.dataset.themeColor || '#ffffff')
 }
 export function toggleSun() {
   if (darkEnabled()) {

@@ -31,7 +31,7 @@
 
         {{- /* DCR/BTC MARKETS */ -}}
         <div class="ms-4 me-2 my-4 p-2 p-lg-4 bg-white">
-            <div colspan="4" class="fs24 text-center pb-4"><span class="dcricon-coin-negative fs24 me-2"></span> Monetarium Markets</div>
+            <div colspan="4" class="fs24 text-center pb-4"><span class="monicon-coin-negative fs24 me-2"></span> Monetarium Markets</div>
             <table class="mx-auto mx-lg-3">
                 <tbody>
                     <tr class="fs14 lh1rem">
@@ -46,7 +46,7 @@
                             <td class="py-2 fs18 fw-bold">
                                 <div class="exchange-logo {{.Token}} me-2"></div>
                                 <span >{{xcDisplayName .Token}}</span>
-                                <span class="py-2 fs12 fw-bold">({{.CurrencyPair.QuoteAsset}})</span> 
+                                <span class="py-2 fs12 fw-bold">({{.CurrencyPair.QuoteAsset}})</span>
                             </td>
                             <td class="ps-2 fs16 py-2 text-end" data-type="volume">
                                 {{threeSigFigs .State.Volume}}
@@ -58,9 +58,9 @@
                               {{if eq .State.Change 0.0}}
                                   <span></span>
                               {{else if gt .State.Change 0.0}}
-                                  <span class="dcricon-arrow-up text-green"></span>
+                                  <span class="monicon-arrow-up text-green"></span>
                               {{else}}
-                                  <span class="dcricon-arrow-down text-danger"></span>
+                                  <span class="monicon-arrow-down text-danger"></span>
                               {{end}}
                             </td>
                             <td class="ps-1 fs16 py-2 text-end" data-type="fiat">
@@ -223,7 +223,7 @@
 
             {{- /* TODO: Test this data controller (time & market) */ -}}
             <div class="text-center py-2 py-lg-0 text-lg-end px-4 fs13 d-hide" data-market-target="age">updated <span data-controller="time" data-time-target="age" data-market-target="ageSpan" data-age="0"></span> ago</div>
-        
+
         </div>
     </div>
 </div>

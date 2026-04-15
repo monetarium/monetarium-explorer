@@ -27,7 +27,7 @@
             <a
               data-action="click->address#showQRCode"
               data-address-target="qricon"
-              class="dcricon-qrcode jsonly no-underline color-inherit clickable lh1rem ms-2 mt-2"
+              class="monicon-qrcode jsonly no-underline color-inherit clickable lh1rem ms-2 mt-2"
             ></a>
             <div class="d-inline-block" data-address-target="qrbox">
                 <div data-action="click->address#hideQRCode"
@@ -174,7 +174,7 @@
               </div>
             </div>
             <div class="p-3 address_chart_wrap">
-              <div class="expando dcricon-expand" data-address-target="expando" data-action="click->address#toggleExpand"></div>
+              <div class="expando monicon-expand" data-address-target="expando" data-action="click->address#toggleExpand"></div>
               <div class="py-5 fs16 d-none" data-address-target="noconfirms"></div>
               <div data-address-target="chart" class="address_chart"></div>
             </div>
@@ -229,7 +229,7 @@
         </span>
         <div class="text-end pe-3" data-address-target="tablePagination">
           {{if ne .Offset 0}}
-            <a  class="d-inline-block dcricon-arrow-left m-1 fz20"
+            <a  class="d-inline-block monicon-arrow-left m-1 fz20"
                 data-action="click->address#pageNumberLink"
                 href="/address/{{.Address}}?start={{subtract .Offset .Limit}}&n={{.Limit}}&txntype={{$txType}}"></a>
           {{end}}
@@ -243,14 +243,14 @@
             {{end}}
           {{end}}
           {{if gt (subtract $TxnCount .Offset) .Limit}}
-            <a  class="d-inline-block dcricon-arrow-right m-1 fs20"
+            <a  class="d-inline-block monicon-arrow-right m-1 fs20"
                 data-action="click->address#pageNumberLink"
                 href="/address/{{.Address}}?start={{add .Offset .Limit}}&n={{.Limit}}&txntype={{$txType}}"></a>
           {{end}}
         </div>
         <div class="d-flex align-items-center justify-content-between">
           {{- if gt $TxnCount 0}}
-          <a class="d-inline-block p-2 rounded download text-nowrap" href="/download/address/io/{{.Address}}{{if $.CRLFDownload}}/win{{end}}" type="text/csv" download><span class="dcricon-download mx-1"></span> Download CSV</a>
+          <a class="d-inline-block p-2 rounded download text-nowrap" href="/download/address/io/{{.Address}}{{if $.CRLFDownload}}/win{{end}}" type="text/csv" download><span class="monicon-download mx-1"></span> Download CSV</a>
           {{- end}}
           <span></span>{{/*This dummy span ensures left/right alignment of the buttons, even if one is hidden.*/}}
           <div class="d-flex flex-row">
