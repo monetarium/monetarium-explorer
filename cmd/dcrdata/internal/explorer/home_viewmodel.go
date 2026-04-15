@@ -62,6 +62,12 @@ func buildHomeBlockRows(blocks []*types.BlockBasic) []HomeBlockRow {
 			totalTxCount = 0
 			for _, cr := range b.CoinRows {
 				totalTxCount += cr.TxCount
+			}
+			totalTxCount -= int(b.Voters) + int(b.FreshStake) + int(b.Revocations)
+			if totalTxCount < 0 {
+				totalTxCount = 0
+			}
+			for _, cr := range b.CoinRows {
 				if cr.CoinType == 0 {
 					// VAR row
 					varTxCount = cr.TxCount

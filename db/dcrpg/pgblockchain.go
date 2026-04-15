@@ -5908,7 +5908,11 @@ func makeExplorerBlockBasic(data *chainjson.GetBlockVerboseResult, params *chain
 
 	total := sumOutsTxRawResult(data.RawTx) + sumOutsTxRawResult(data.RawSTx)
 
-	numReg := len(data.RawTx)
+	numAll := len(data.RawTx) + len(data.RawSTx)
+	numReg := numAll - int(data.Voters) - int(data.FreshStake) - int(data.Revocations)
+	if numReg < 0 {
+		numReg = 0
+	}
 
 	block := &exptypes.BlockBasic{
 		IndexVal:       index,
@@ -5922,7 +5926,7 @@ func makeExplorerBlockBasic(data *chainjson.GetBlockVerboseResult, params *chain
 		Transactions:   numReg,
 		FreshStake:     data.FreshStake,
 		Revocations:    uint32(data.Revocations),
-		TxCount:        uint32(data.FreshStake+data.Revocations) + uint32(numReg) + uint32(data.Voters),
+		TxCount:        uint32(numAll),
 		BlockTime:      exptypes.NewTimeDefFromUNIX(data.Time),
 		FormattedBytes: humanize.Bytes(uint64(data.Size)),
 		Total:          total,
