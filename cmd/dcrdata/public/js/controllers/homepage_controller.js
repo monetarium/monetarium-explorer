@@ -101,7 +101,7 @@ export default class extends Controller {
       this.mempool.replace(m)
       this.setMempoolFigures()
       this.updateCoinFillBars(m.coin_fills)
-      this.renderLatestTransactions(m.latest, true)
+      this.renderLatestTransactions(m.latest, false)
       this.updateIndicators(m)
       keyNav(evt, false, true)
     })
@@ -178,7 +178,10 @@ export default class extends Controller {
 
   renderLatestTransactions(txs, incremental) {
     if (!this.hasTransactionsTarget) return
-    each(txs, (tx) => {
+    // Process transactions in reverse order so that when each is inserted at the
+    // top, the end result matches the original input order (newest at top).
+    const txsToRender = [...txs].reverse()
+    each(txsToRender, (tx) => {
       if (incremental) {
         const targetKey = `num${tx.Type}Target`
         incrementValue(this[targetKey])
