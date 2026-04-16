@@ -370,6 +370,43 @@ func formatCoinAtomsFull(atomStr string, coinType uint8) string {
 	return s
 }
 
+// formatAtomInt converts a raw atom string to an exact integer string with
+// comma separators, given the number of decimal places (8 for VAR, 18 for SKA).
+func formatAtomInt(atomStr string, decimals int) string {
+	if atomStr == "" {
+		return "0"
+	}
+	atoms := new(big.Int)
+	if _, ok := atoms.SetString(atomStr, 10); !ok {
+		return "0"
+	}
+	divisor := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(decimals)), nil)
+	whole := new(big.Int).Quo(atoms, divisor)
+	s := whole.String()
+	n := len(s)
+	var buf []byte
+	for i, c := range s {
+		if i > 0 && (n-i)%3 == 0 {
+			buf = append(buf, ',')
+		}
+		buf = append(buf, byte(c))
+	}
+	return string(buf)
+}
+
+// formatVARAtomInt converts a raw VAR atom string (8 decimal places) to an
+// exact integer string with comma separators and no fractional part.
+func formatVARAtomInt(atomStr string) string {
+	return formatAtomInt(atomStr, 8)
+}
+
+// formatSKAAtomInt converts a raw SKA atom string (18 decimal places) to an
+// exact integer string with comma separators and no fractional part.
+// Used for Coin Supply display where accounting accuracy is required.
+func formatSKAAtomInt(atomStr string) string {
+	return formatAtomInt(atomStr, 18)
+}
+
 // formatCoinAtoms converts a raw atom string to a threeSigFigs-formatted coin
 // string. coinType 0 = VAR (8 decimal places), any other value = SKA (18
 // decimal places). This is the single call site for coin amount display — use
@@ -581,6 +618,8 @@ func makeTemplateFuncMap(params *chaincfg.Params) template.FuncMap {
 		},
 		"formatCoinAtoms":     formatCoinAtoms,
 		"formatCoinAtomsFull": formatCoinAtomsFull,
+		"formatSKAAtomInt":    formatSKAAtomInt,
+		"formatVARAtomInt":    formatVARAtomInt,
 		"skaDecimalParts": func(atomStr string, useCommas bool, boldNumPlaces ...int) []string {
 			return skaDecimalParts(atomStr, useCommas, boldNumPlaces...)
 		},

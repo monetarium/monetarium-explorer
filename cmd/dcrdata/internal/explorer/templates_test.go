@@ -444,3 +444,40 @@ func TestComputeCoinFills(t *testing.T) {
 		}
 	})
 }
+
+func TestFormatAtomInt(t *testing.T) {
+	tests := []struct {
+		name     string
+		atomStr  string
+		decimals int
+		want     string
+	}{
+		// VAR (8 decimals)
+		{"VAR zero", "0", 8, "0"},
+		{"VAR empty", "", 8, "0"},
+		{"VAR invalid", "abc", 8, "0"},
+		{"VAR one atom", "1", 8, "0"},                            // 0.00000001 VAR → 0 whole
+		{"VAR one coin", "100000000", 8, "1"},                    // 1.0 VAR
+		{"VAR no commas", "2100000000000000", 8, "21,000,000"},   // 21M VAR
+		{"VAR with commas", "4200000012345678", 8, "42,000,000"}, // truncates fractional
+		{"VAR large", "900000000000000000", 8, "9,000,000,000"},
+
+		// SKA (18 decimals)
+		{"SKA zero", "0", 18, "0"},
+		{"SKA empty", "", 18, "0"},
+		{"SKA one atom", "1", 18, "0"},                   // < 1 whole SKA
+		{"SKA one coin", "1000000000000000000", 18, "1"}, // 1.0 SKA
+		{"SKA circulating", "899999999991999840000000000000000", 18, "899,999,999,991,999"}, // real-world value, truncates .84
+		{"SKA issued", "900000000000000000000000000000000", 18, "900,000,000,000,000"},
+		{"SKA burned", "8000160000000000000000", 18, "8,000"}, // 8000.16 → 8000
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := formatAtomInt(tc.atomStr, tc.decimals)
+			if got != tc.want {
+				t.Errorf("formatAtomInt(%q, %d) = %q, want %q", tc.atomStr, tc.decimals, got, tc.want)
+			}
+		})
+	}
+}
