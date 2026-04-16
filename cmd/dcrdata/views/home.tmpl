@@ -4,7 +4,7 @@
 <html lang="en">
 {{ template "html-head" headData .CommonPageData "Monetarium Block Explorer"}}
     {{ template "navbar" . }}
-    <div class="container main" data-controller="time blocklist homepage mining supply voting"
+    <div class="container main" data-controller="time home-latest-blocks homepage mining supply voting"
          data-action="homepage:block->mining#handleBlock homepage:block->supply#handleBlock homepage:block->voting#handleBlock">
         <div class="row">
             <div class="d-flex flex-column col-md-15 p-0">
