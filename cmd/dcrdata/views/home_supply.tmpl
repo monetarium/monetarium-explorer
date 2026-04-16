@@ -16,31 +16,23 @@
                 </span>
                 <span class="ps-1 unit lh15rem">VAR</span>
             </div>
-            <div class="fs12 lh1rem text-black-50">
-                (of ~47M) target: {{formatCoinAtoms .VARCoinSupply.Target 0}} VAR
-            </div>
         </div>
         {{end}}
         {{if .SKACoinSupply}}
-        <div class="col-12 mb-3 mb-sm-2 mb-md-3 mb-lg-3">
-            <div class="fs13 text-secondary">SKA Coin Supply</div>
-            {{range .SKACoinSupply}}
-            <div class="mt-2">
-                <div class="fs12 text-secondary fw-semibold">SKA-{{.CoinType}}</div>
-                <div class="fs12 lh1rem d-flex justify-content-between">
-                    <span class="text-black-50">In Circulation</span>
-                    <span class="mono">{{formatCoinAtomsFull .InCirculation .CoinType}}</span>
+        <div class="col-24 mb-3 mb-sm-2 mb-md-3 mb-lg-3">
+            <div class="fs13 text-secondary">SKA Coins Supply</div>
+            <div data-supply-target="skaCoinSupply">
+                {{range .SKACoinSupply}}
+                <div class="mt-2">
+                    <div class="mono lh1rem fs14-decimal fs24 p03rem0 d-flex align-items-baseline">
+                        <span class="int">{{formatCoinAtomsFull .InCirculation .CoinType}}</span>
+                        <span class="ps-1 unit lh15rem">SKA-{{.CoinType}}</span>
+                    </div>
+                    <div class="fs12 lh1rem text-black-50">Issued: <span class="mono">{{formatCoinAtomsFull .TotalIssued .CoinType}}</span></div>
+                    <div class="fs12 lh1rem text-black-50">Burned: <span class="mono">{{formatCoinAtomsFull .TotalBurned .CoinType}}</span></div>
                 </div>
-                <div class="fs12 lh1rem d-flex justify-content-between">
-                    <span class="text-black-50">Total Issued</span>
-                    <span class="mono">{{formatCoinAtomsFull .TotalIssued .CoinType}}</span>
-                </div>
-                <div class="fs12 lh1rem d-flex justify-content-between">
-                    <span class="text-black-50">Total Burned</span>
-                    <span class="mono">{{formatCoinAtomsFull .TotalBurned .CoinType}}</span>
-                </div>
+                {{end}}
             </div>
-            {{end}}
         </div>
         {{end}}
         {{if $conv -}}
@@ -56,5 +48,18 @@
         {{- end}}
     </div>
 </div>
+
+{{/* Template for JS live-update cloning — one SKA supply block */}}
+<template id="ska-supply-block-template">
+    <div class="mt-2">
+        <div class="mono lh1rem fs14-decimal fs24 p03rem0 d-flex align-items-baseline">
+            <span class="int"></span>
+            <span class="ps-1 unit lh15rem"><span class="symbol"></span></span>
+        </div>
+        <div class="fs12 lh1rem text-black-50">Issued: <span class="mono issued"></span></div>
+        <div class="fs12 lh1rem text-black-50">Burned: <span class="mono burned"></span></div>
+    </div>
+</template>
+
 {{- end}}
 {{end}}
