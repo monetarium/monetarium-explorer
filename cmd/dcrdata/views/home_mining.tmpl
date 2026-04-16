@@ -26,6 +26,7 @@
                 <span data-mining-target="hashrateDelta">{{template "fmtPercentage" .HashRateChangeMonth}}</span> in past 30 days
             </div>
         </div>
+        {{/* Row 2 left: PoW VAR Reward */}}
         <div class="col-12 mb-3 mb-sm-2 mb-md-3 mb-lg-3">
             <div class="fs13 text-secondary">PoW VAR Reward</div>
             <div class="mono lh1rem p03rem0 fs14-decimal fs24 p03rem0 d-flex align-items-baseline">
@@ -38,38 +39,7 @@
             </div>
             {{- end}}
         </div>
-        {{if .PoWSKARewards}}
-        <div class="col-12 mb-3 mb-sm-2 mb-md-3 mb-lg-3">
-            <div class="fs13 text-secondary">PoW SKA Reward</div>
-            <div data-mining-target="powSkaRewards">
-            {{range .PoWSKARewards}}
-            <div class="mono lh1rem p03rem0 fs14-decimal fs24 p03rem0 d-flex align-items-baseline">
-                <span>{{template "decimalParts" (skaDecimalParts .Amount true 2)}}</span>
-                <span class="ps-1 unit lh15rem">{{.Symbol}} <span class="text-black-50 ms-1 fs12">per last block</span></span>
-            </div>
-            {{end}}
-            </div>
-        </div>
-        {{else}}
-        <div class="col-12 mb-3 mb-sm-2 mb-md-3 mb-lg-3">
-            <div class="fs13 text-secondary">PoW SKA Reward</div>
-            <div data-mining-target="powSkaRewards">
-                <div class="fs12 lh1rem text-black-50">No SKA rewards available</div>
-            </div>
-        </div>
-        {{end}}
-        {{/* Template for JS live-update cloning */}}
-        <template id="pow-ska-reward-template">
-            <div class="mono lh1rem p03rem0 fs14-decimal fs24 p03rem0 d-flex align-items-baseline">
-                <div class="decimal-parts d-inline-block">
-                    <span class="int"></span><span class="decimal"></span><span class="decimal trailing-zeroes"></span>
-                </div>
-                <span class="ps-1 unit lh15rem"><span class="symbol"></span> <span class="text-black-50 ms-1 fs12">per last block</span></span>
-            </div>
-        </template>
-        <template id="pow-ska-empty-template">
-            <div class="fs12 lh1rem text-black-50">No SKA rewards available</div>
-        </template>
+        {{/* Row 2 right: Next Block VAR Reward Reduction (swapped from below) */}}
         <div class="col-12 mb-3 mb-sm-2 mb-md-3 mb-lg-3">
             <div class="fs13 text-secondary lh1rem">Next Block VAR Reward Reduction</div>
             <div class="progress mt-1 mb-1">
@@ -96,6 +66,39 @@
                 </span>
             </div>
         </div>
+        {{/* Row 3: PoW SKA Reward (moved below, grows as new SKA types are emitted) */}}
+        {{if .PoWSKARewards}}
+        <div class="col-24 mb-3 mb-sm-2 mb-md-3 mb-lg-3">
+            <div class="fs13 text-secondary">PoW SKA Reward</div>
+            <div data-mining-target="powSkaRewards">
+            {{range .PoWSKARewards}}
+            <div class="mono lh1rem p03rem0 fs14-decimal fs24 p03rem0 d-flex align-items-baseline">
+                <span>{{template "decimalParts" (skaDecimalParts .Amount true 2)}}</span>
+                <span class="ps-1 unit lh15rem">{{.Symbol}} <span class="text-black-50 ms-1 fs12">per last block</span></span>
+            </div>
+            {{end}}
+            </div>
+        </div>
+        {{else}}
+        <div class="col-24 mb-3 mb-sm-2 mb-md-3 mb-lg-3">
+            <div class="fs13 text-secondary">PoW SKA Reward</div>
+            <div data-mining-target="powSkaRewards">
+                <div class="fs12 lh1rem text-black-50">No SKA rewards available</div>
+            </div>
+        </div>
+        {{end}}
+        {{/* Templates for JS live-update cloning */}}
+        <template id="pow-ska-reward-template">
+            <div class="mono lh1rem p03rem0 fs14-decimal fs24 p03rem0 d-flex align-items-baseline">
+                <div class="decimal-parts d-inline-block">
+                    <span class="int"></span><span class="decimal"></span><span class="decimal trailing-zeroes"></span>
+                </div>
+                <span class="ps-1 unit lh15rem"><span class="symbol"></span> <span class="text-black-50 ms-1 fs12">per last block</span></span>
+            </div>
+        </template>
+        <template id="pow-ska-empty-template">
+            <div class="fs12 lh1rem text-black-50">No SKA rewards available</div>
+        </template>
     </div>
 </div> <!-- end mining card -->
 {{- end}}
