@@ -13,7 +13,7 @@ vi.mock('../services/event_bus_service', () => ({
   default: { on: vi.fn(), off: vi.fn() }
 }))
 
-const { default: BlocklistController } = await import('./blocklist_controller.js')
+const { default: BlocklistController } = await import('./home_latest_blocks_controller.js')
 
 // ---------------------------------------------------------------------------
 // Helpers
