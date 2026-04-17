@@ -56,7 +56,7 @@ Extracted from `home.tmpl` into `cmd/dcrdata/views/home_supply.tmpl` as the
 VAR Coin Supply: circulating value + `(of ~47M)` target hint, live-update via
 `data-supply-target="varCirculating"`.
 
-SKA Coin Supply: `{{range .SKACoinSupply}}` — per-type block with "In
+SKA Coins Supply: `{{range .SKACoinSupply}}` — per-type block with "In
 Circulation", "Total Issued", "Total Burned" rows formatted via
 `formatCoinAtoms`.
 

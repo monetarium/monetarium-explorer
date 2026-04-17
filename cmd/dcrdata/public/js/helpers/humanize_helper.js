@@ -78,6 +78,34 @@ const humanize = {
 
     return htmlString
   },
+  // formatCoinAtomsFull converts a raw atom string to a full-precision coin
+  // string with trailing zeros stripped — matching Go's formatCoinAtomsFull.
+  // coinType 0 = VAR (8 decimal places), any other value = SKA (18 decimal places).
+  formatCoinAtomsFull: function (atomStr, coinType) {
+    if (!atomStr || atomStr === '') return '0'
+    let atoms
+    try {
+      atoms = BigInt(atomStr)
+    } catch {
+      // eslint-disable-line no-unused-vars
+      return '0'
+    }
+
+    const decimals = coinType === 0 ? 8 : 18
+    // Build divisor as BigInt without using ** operator (avoids Math.pow coercion)
+    let divisor = 1n
+    for (let i = 0; i < decimals; i++) divisor *= 10n
+    const whole = atoms / divisor
+    const remainder = atoms % divisor
+
+    // Pad fractional part to full decimal width, then strip trailing zeros
+    const frac = remainder.toString().padStart(decimals, '0').replace(/0+$/, '')
+    const wholeStr = whole.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+
+    if (remainder === 0n) return wholeStr
+
+    return `${wholeStr}.${frac}`
+  },
   // formatCoinAtoms converts a raw atom string to a threeSigFigs-formatted coin
   // string. coinType 0 = VAR (8 decimal places), any other value = SKA (18
   // decimal places). Use this instead of calling skaCoinValue or the VAR

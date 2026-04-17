@@ -367,7 +367,27 @@ func formatCoinAtomsFull(atomStr string, coinType uint8) string {
 		s = strings.TrimRight(s, "0")
 		s = strings.TrimRight(s, ".")
 	}
-	return s
+
+	parts := strings.Split(s, ".")
+	intPartRaw := parts[0]
+	prefix := ""
+	if len(intPartRaw) > 0 && intPartRaw[0] == '-' {
+		prefix = "-"
+		intPartRaw = intPartRaw[1:]
+	}
+
+	if len(intPartRaw) > 3 {
+		var out []byte
+		for i := 0; i < len(intPartRaw); i++ {
+			if i > 0 && (len(intPartRaw)-i)%3 == 0 {
+				out = append(out, ',')
+			}
+			out = append(out, intPartRaw[i])
+		}
+		parts[0] = prefix + string(out)
+	}
+
+	return strings.Join(parts, ".")
 }
 
 // formatCoinAtoms converts a raw atom string to a threeSigFigs-formatted coin
@@ -578,6 +598,9 @@ func makeTemplateFuncMap(params *chaincfg.Params) template.FuncMap {
 		},
 		"toFloat64Amount": func(intAmount int64) float64 {
 			return dcrutil.Amount(intAmount).ToCoin()
+		},
+		"varAtomsToFloat64": func(atomStr string) float64 {
+			return float64(parseInt64(atomStr)) / 1e8
 		},
 		"formatCoinAtoms":     formatCoinAtoms,
 		"formatCoinAtomsFull": formatCoinAtomsFull,

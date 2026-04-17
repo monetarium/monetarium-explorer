@@ -55,6 +55,8 @@ type DataSource interface {
 	Difficulty(ctx context.Context, timestamp int64) float64
 	Height() int64
 	GetSummaryRange(ctx context.Context, idx0, idx1 int) []*apitypes.BlockDataBasic
+	VARCoinSupply(ctx context.Context) (*exptypes.VARCoinSupply, error)
+	SKACoinSupply(ctx context.Context) ([]*exptypes.SKACoinSupplyEntry, error)
 }
 
 // State represents the current state of block chain.
@@ -784,6 +786,22 @@ func (psh *PubSubHub) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgBl
 		p.GeneralInfo.PoWSKARewards = powRewards
 	} else {
 		p.GeneralInfo.PoWSKARewards = nil
+	}
+
+	// Coin supply data for the Supply section.
+	if varSupply, err := psh.sourceBase.VARCoinSupply(ctx); err != nil {
+		log.Errorf("Store: VARCoinSupply failed: %v", err)
+	} else {
+		p.GeneralInfo.VARCoinSupply = varSupply
+	}
+	if skaSupply, err := psh.sourceBase.SKACoinSupply(ctx); err != nil {
+		log.Errorf("Store: SKACoinSupply failed: %v", err)
+	} else {
+		entries := make([]exptypes.SKACoinSupplyEntry, len(skaSupply))
+		for i, e := range skaSupply {
+			entries[i] = *e
+		}
+		p.GeneralInfo.SKACoinSupply = entries
 	}
 
 	p.mtx.Unlock()
