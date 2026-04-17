@@ -260,7 +260,7 @@ func (t *Collector) CollectBlockInfo(hash *chainhash.Hash) (*apitypes.BlockDataB
 	}
 
 	// Extract per-SKA-type PoW mining reward amounts from the coinbase.
-	if skaRewards := blockSKAPoWRewards(msgBlock); len(skaRewards) > 0 {
+	if skaRewards := BlockSKAPoWRewards(msgBlock); len(skaRewards) > 0 {
 		extrainfo.SKAPoWRewards = skaRewards
 	}
 
@@ -466,14 +466,12 @@ func blockCoinAmounts(msgBlock *wire.MsgBlock) map[uint8]string {
 	return out
 }
 
-// blockSKAPoWRewards extracts per-SKA-type PoW mining reward amounts from the
-// coinbase transaction of a block. Only SKA outputs (CoinType 1-255) from the
-// coinbase are considered, as those represent the miner's SKA reward.
-func blockSKAPoWRewards(msgBlock *wire.MsgBlock) map[uint8]string {
-	if len(msgBlock.Transactions) == 0 {
+// ExtractSKARewardsFromCoinbase extracts per-SKA-type PoW mining reward amounts from the
+// coinbase transaction. Only SKA outputs (CoinType 1-255) from the coinbase are considered.
+func ExtractSKARewardsFromCoinbase(coinbase *wire.MsgTx) map[uint8]string {
+	if coinbase == nil {
 		return nil
 	}
-	coinbase := msgBlock.Transactions[0]
 	skaRewards := make(map[uint8]*big.Int)
 
 	for _, txout := range coinbase.TxOut {
@@ -496,4 +494,14 @@ func blockSKAPoWRewards(msgBlock *wire.MsgBlock) map[uint8]string {
 		out[k] = v.String()
 	}
 	return out
+}
+
+// BlockSKAPoWRewards extracts per-SKA-type PoW mining reward amounts from the
+// coinbase transaction of a block. Only SKA outputs (CoinType 1-255) from the
+// coinbase are considered, as those represent the miner's SKA reward.
+func BlockSKAPoWRewards(msgBlock *wire.MsgBlock) map[uint8]string {
+	if len(msgBlock.Transactions) == 0 {
+		return nil
+	}
+	return ExtractSKARewardsFromCoinbase(msgBlock.Transactions[0])
 }

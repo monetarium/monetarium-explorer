@@ -565,6 +565,7 @@ type BlockInfo struct {
 	TotalMixed            int64
 	StakeValidationHeight int64
 	Subsidy               *chainjson.GetBlockSubsidyResult
+	SKAPoWRewards         []PoWSKAReward `json:"pow_ska_rewards,omitempty"`
 	// CoinAmounts holds per-coin totals (VAR key=0, SKA-n key=n) as decimal atom strings.
 	CoinAmounts map[uint8]string `json:"coin_amounts,omitempty"`
 }

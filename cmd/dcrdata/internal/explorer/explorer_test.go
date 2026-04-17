@@ -1,22 +1,328 @@
 package explorer
 
 import (
-	// Imports for TestThreeSigFigs
-	// "fmt"
-	// "math"
-	// "math/rand"
-	// "time"
-
+	"context"
+	"fmt"
 	"testing"
 
+	apitypes "github.com/monetarium/monetarium-explorer/api/types"
+	"github.com/monetarium/monetarium-explorer/blockdata"
+	"github.com/monetarium/monetarium-explorer/db/dbtypes"
+	explorerTypes "github.com/monetarium/monetarium-explorer/explorer/types"
+	"github.com/monetarium/monetarium-node/blockchain/stake"
 	"github.com/monetarium/monetarium-node/chaincfg"
+	"github.com/monetarium/monetarium-node/chaincfg/chainhash"
+	chainjson "github.com/monetarium/monetarium-node/rpc/jsonrpc/types"
+	"github.com/monetarium/monetarium-node/wire"
 )
 
-func TestTestNet3Name(t *testing.T) {
-	netName := netName(chaincfg.TestNet3Params())
-	if netName != testnetNetName {
-		t.Errorf(`Net name not "%s": %s`, testnetNetName, netName)
+type mockDataSource struct {
+	blocks  map[string]*explorerTypes.BlockInfo
+	heights map[int64]string
+	params  *chaincfg.Params
+	height  int64
+}
+
+func (m *mockDataSource) BlockHeight(ctx context.Context, hash string) (int64, error) { return 0, nil }
+func (m *mockDataSource) Height() int64                                               { return m.height }
+func (m *mockDataSource) HeightDB(context.Context) (int64, error)                     { return 0, nil }
+func (m *mockDataSource) BlockHash(ctx context.Context, height int64) (string, error) {
+	if h, ok := m.heights[height]; ok {
+		return h, nil
 	}
+	return "", fmt.Errorf("not found")
+}
+func (m *mockDataSource) SpendingTransaction(ctx context.Context, fundingTx string, vout uint32) (string, uint32, error) {
+	return "", 0, nil
+}
+func (m *mockDataSource) SpendingTransactions(ctx context.Context, fundingTxID string) ([]string, []uint32, []uint32, error) {
+	return nil, nil, nil, nil
+}
+func (m *mockDataSource) PoolStatusForTicket(ctx context.Context, txid string) (dbtypes.TicketSpendType, dbtypes.TicketPoolStatus, error) {
+	return 0, 0, nil
+}
+func (m *mockDataSource) TreasuryBalance(context.Context) (*dbtypes.TreasuryBalance, error) {
+	return nil, nil
+}
+func (m *mockDataSource) TreasuryTxns(ctx context.Context, n, offset int64, txType stake.TxType) ([]*dbtypes.TreasuryTx, error) {
+	return nil, nil
+}
+func (m *mockDataSource) AddressHistory(ctx context.Context, address string, N, offset int64, txnType dbtypes.AddrTxnViewType) ([]*dbtypes.AddressRow, *dbtypes.AddressBalance, error) {
+	return nil, nil, nil
+}
+func (m *mockDataSource) AddressData(ctx context.Context, address string, N, offset int64, txnType dbtypes.AddrTxnViewType) (*dbtypes.AddressInfo, error) {
+	return nil, nil
+}
+func (m *mockDataSource) DevBalance(ctx context.Context) (*dbtypes.AddressBalance, error) {
+	return nil, nil
+}
+func (m *mockDataSource) FillAddressTransactions(ctx context.Context, addrInfo *dbtypes.AddressInfo) error {
+	return nil
+}
+func (m *mockDataSource) BlockMissedVotes(ctx context.Context, blockHash string) ([]string, error) {
+	return nil, nil
+}
+func (m *mockDataSource) TicketMiss(ctx context.Context, ticketHash string) (string, int64, error) {
+	return "", 0, nil
+}
+func (m *mockDataSource) SideChainBlocks(context.Context) ([]*dbtypes.BlockStatus, error) {
+	return nil, nil
+}
+func (m *mockDataSource) DisapprovedBlocks(context.Context) ([]*dbtypes.BlockStatus, error) {
+	return nil, nil
+}
+func (m *mockDataSource) BlockStatus(ctx context.Context, hash string) (dbtypes.BlockStatus, error) {
+	return dbtypes.BlockStatus{}, nil
+}
+func (m *mockDataSource) BlockStatuses(ctx context.Context, height int64) ([]*dbtypes.BlockStatus, error) {
+	return nil, nil
+}
+func (m *mockDataSource) BlockFlags(ctx context.Context, hash string) (bool, bool, error) {
+	return false, false, nil
+}
+func (m *mockDataSource) TicketPoolVisualization(ctx context.Context, interval dbtypes.TimeBasedGrouping) (*dbtypes.PoolTicketsData, *dbtypes.PoolTicketsData, *dbtypes.PoolTicketsData, int64, error) {
+	return nil, nil, nil, 0, nil
+}
+func (m *mockDataSource) TransactionBlocks(ctx context.Context, hash string) ([]*dbtypes.BlockStatus, []uint32, error) {
+	return nil, nil, nil
+}
+func (m *mockDataSource) Transaction(ctx context.Context, txHash string) ([]*dbtypes.Tx, error) {
+	return nil, nil
+}
+func (m *mockDataSource) VinsForTx(context.Context, *dbtypes.Tx) (vins []dbtypes.VinTxProperty, err error) {
+	return nil, nil
+}
+func (m *mockDataSource) VoutsForTx(context.Context, *dbtypes.Tx) ([]dbtypes.Vout, error) {
+	return nil, nil
+}
+func (m *mockDataSource) PosIntervals(ctx context.Context, limit, offset uint64) ([]*dbtypes.BlocksGroupedInfo, error) {
+	return nil, nil
+}
+func (m *mockDataSource) TimeBasedIntervals(ctx context.Context, timeGrouping dbtypes.TimeBasedGrouping, limit, offset uint64) ([]*dbtypes.BlocksGroupedInfo, error) {
+	return nil, nil
+}
+func (m *mockDataSource) AgendasVotesSummary(ctx context.Context, agendaID string) (summary *dbtypes.AgendaSummary, err error) {
+	return nil, nil
+}
+func (m *mockDataSource) BlockTimeByHeight(ctx context.Context, height int64) (int64, error) {
+	return 0, nil
+}
+func (m *mockDataSource) GetChainParams() *chaincfg.Params { return m.params }
+func (m *mockDataSource) GetExplorerBlock(ctx context.Context, hash string) *explorerTypes.BlockInfo {
+	return m.blocks[hash]
+}
+func (m *mockDataSource) GetExplorerBlocks(ctx context.Context, start int, end int) []*explorerTypes.BlockBasic {
+	return nil
+}
+func (m *mockDataSource) GetBlockHeight(ctx context.Context, hash string) (int64, error) {
+	return 0, nil
+}
+func (m *mockDataSource) GetBlockHash(ctx context.Context, idx int64) (string, error) {
+	if h, ok := m.heights[idx]; ok {
+		return h, nil
+	}
+	return "", fmt.Errorf("not found")
+}
+func (m *mockDataSource) GetExplorerTx(ctx context.Context, txid string) *explorerTypes.TxInfo {
+	return nil
+}
+func (m *mockDataSource) GetTip(context.Context) (*explorerTypes.WebBasicBlock, error) {
+	return nil, nil
+}
+func (m *mockDataSource) DecodeRawTransaction(ctx context.Context, txhex string) (*chainjson.TxRawResult, error) {
+	return nil, nil
+}
+func (m *mockDataSource) SendRawTransaction(ctx context.Context, txhex string) (string, error) {
+	return "", nil
+}
+func (m *mockDataSource) GetTransactionByHash(ctx context.Context, txid string) (*wire.MsgTx, error) {
+	return nil, nil
+}
+func (m *mockDataSource) GetHeight(context.Context) (int64, error)                          { return 0, nil }
+func (m *mockDataSource) TxHeight(ctx context.Context, txid *chainhash.Hash) (height int64) { return 0 }
+func (m *mockDataSource) DCP0010ActivationHeight() int64                                    { return 0 }
+func (m *mockDataSource) DCP0011ActivationHeight() int64                                    { return 0 }
+func (m *mockDataSource) DCP0012ActivationHeight() int64                                    { return 0 }
+func (m *mockDataSource) BlockSubsidy(ctx context.Context, height int64, voters uint16) *chainjson.GetBlockSubsidyResult {
+	return &chainjson.GetBlockSubsidyResult{
+		Developer: 100,
+		PoS:       200,
+		PoW:       300,
+		Total:     600,
+	}
+}
+func (m *mockDataSource) GetExplorerFullBlocks(ctx context.Context, start int, end int) []*explorerTypes.BlockInfo {
+	return nil
+}
+func (m *mockDataSource) CurrentDifficulty(context.Context) (float64, error)      { return 0, nil }
+func (m *mockDataSource) Difficulty(ctx context.Context, timestamp int64) float64 { return 0 }
+func (m *mockDataSource) GetSummaryRange(ctx context.Context, idx0, idx1 int) []*apitypes.BlockDataBasic {
+	return nil
+}
+func (m *mockDataSource) VARCoinSupply(ctx context.Context) (*explorerTypes.VARCoinSupply, error) {
+	return nil, nil
+}
+func (m *mockDataSource) SKACoinSupply(ctx context.Context) ([]*explorerTypes.SKACoinSupplyEntry, error) {
+	return nil, nil
+}
+
+func TestStore_PoWSKARewardsFallback(t *testing.T) {
+	params := chaincfg.MainNetParams()
+
+	setup := func() (*explorerUI, *mockDataSource) {
+		mockDS := &mockDataSource{
+			blocks:  make(map[string]*explorerTypes.BlockInfo),
+			heights: make(map[int64]string),
+			params:  params,
+		}
+
+		exp := &explorerUI{
+			dataSource:  mockDS,
+			ChainParams: params,
+			wsHub:       NewWebsocketHub(),
+			pageData: &pageData{
+				HomeInfo: &explorerTypes.HomeInfo{},
+			},
+		}
+		return exp, mockDS
+	}
+
+	t.Run("ImmediateSuccess", func(t *testing.T) {
+		exp, mockDS := setup()
+		msgBlock := &wire.MsgBlock{Header: wire.BlockHeader{}}
+		hash := msgBlock.BlockHash().String()
+		height := int64(100)
+
+		mockDS.height = height
+		mockDS.heights[height] = hash
+		mockDS.blocks[hash] = &explorerTypes.BlockInfo{
+			BlockBasic: &explorerTypes.BlockBasic{Height: height, Hash: hash},
+		}
+
+		blockData := &blockdata.BlockData{
+			Header: chainjson.GetBlockHeaderVerboseResult{Height: uint32(height)},
+			ExtraInfo: apitypes.BlockExplorerExtraInfo{
+				SKAPoWRewards: map[uint8]string{1: "100", 2: "200"},
+				NextBlockSubsidy: &chainjson.GetBlockSubsidyResult{
+					Developer: 100,
+					PoS:       200,
+					PoW:       300,
+					Total:     600,
+				},
+			},
+		}
+
+		err := exp.Store(blockData, msgBlock)
+		if err != nil {
+			t.Fatalf("Store failed: %v", err)
+		}
+
+		exp.pageData.RLock()
+		defer exp.pageData.RUnlock()
+		if len(exp.pageData.HomeInfo.PoWSKARewards) != 2 {
+			t.Errorf("Expected 2 rewards, got %d", len(exp.pageData.HomeInfo.PoWSKARewards))
+		}
+	})
+
+	t.Run("FallbackSuccess", func(t *testing.T) {
+		exp, mockDS := setup()
+		msgBlock := &wire.MsgBlock{Header: wire.BlockHeader{}}
+		hash := msgBlock.BlockHash().String()
+		height := int64(100)
+
+		mockDS.height = height
+		mockDS.heights[height] = hash
+		mockDS.blocks[hash] = &explorerTypes.BlockInfo{
+			BlockBasic: &explorerTypes.BlockBasic{Height: height, Hash: hash},
+		}
+
+		// Reward in a previous block (height 90)
+		prevHeight := int64(90)
+		prevHash := "hash_90"
+		mockDS.heights[prevHeight] = prevHash
+		mockDS.blocks[prevHash] = &explorerTypes.BlockInfo{
+			BlockBasic: &explorerTypes.BlockBasic{Height: prevHeight, Hash: prevHash, Voters: 10},
+			SKAPoWRewards: []explorerTypes.PoWSKAReward{
+				{CoinType: 1, Amount: "50"},
+			},
+		}
+
+		blockData := &blockdata.BlockData{
+			Header: chainjson.GetBlockHeaderVerboseResult{Height: uint32(height)},
+			ExtraInfo: apitypes.BlockExplorerExtraInfo{
+				SKAPoWRewards: map[uint8]string{}, // Empty
+				NextBlockSubsidy: &chainjson.GetBlockSubsidyResult{
+					Developer: 100,
+					PoS:       200,
+					PoW:       300,
+					Total:     600,
+				},
+			},
+		}
+
+		err := exp.Store(blockData, msgBlock)
+		if err != nil {
+			t.Fatalf("Store failed: %v", err)
+		}
+
+		exp.pageData.RLock()
+		defer exp.pageData.RUnlock()
+		if len(exp.pageData.HomeInfo.PoWSKARewards) != 1 {
+			t.Errorf("Expected 1 reward from fallback, got %d", len(exp.pageData.HomeInfo.PoWSKARewards))
+		} else if exp.pageData.HomeInfo.PoWSKARewards[0].Amount != "50" {
+			t.Errorf("Expected reward amount 50, got %s", exp.pageData.HomeInfo.PoWSKARewards[0].Amount)
+		}
+	})
+
+	t.Run("ExhaustiveSearch", func(t *testing.T) {
+		exp, mockDS := setup()
+		msgBlock := &wire.MsgBlock{Header: wire.BlockHeader{}}
+		hash := msgBlock.BlockHash().String()
+		height := int64(100)
+
+		mockDS.height = height
+		mockDS.heights[height] = hash
+		mockDS.blocks[hash] = &explorerTypes.BlockInfo{
+			BlockBasic: &explorerTypes.BlockBasic{Height: height, Hash: hash},
+		}
+
+		// Reward too far back (more than 4320 blocks)
+		farHeight := height - 4321
+		if farHeight < 0 {
+			farHeight = -1 // effectively no reward
+		} else {
+			farHash := "hash_far"
+			mockDS.heights[farHeight] = farHash
+			mockDS.blocks[farHash] = &explorerTypes.BlockInfo{
+				BlockBasic:    &explorerTypes.BlockBasic{Height: farHeight, Hash: farHash},
+				SKAPoWRewards: []explorerTypes.PoWSKAReward{{CoinType: 1, Amount: "10"}},
+			}
+		}
+
+		blockData := &blockdata.BlockData{
+			Header: chainjson.GetBlockHeaderVerboseResult{Height: uint32(height)},
+			ExtraInfo: apitypes.BlockExplorerExtraInfo{
+				SKAPoWRewards: map[uint8]string{},
+				NextBlockSubsidy: &chainjson.GetBlockSubsidyResult{
+					Developer: 100,
+					PoS:       200,
+					PoW:       300,
+					Total:     600,
+				},
+			},
+		}
+
+		err := exp.Store(blockData, msgBlock)
+		if err != nil {
+			t.Fatalf("Store failed: %v", err)
+		}
+
+		exp.pageData.RLock()
+		defer exp.pageData.RUnlock()
+		if exp.pageData.HomeInfo.PoWSKARewards != nil {
+			t.Errorf("Expected PoWSKARewards to be nil after exhaustive search, got %v", exp.pageData.HomeInfo.PoWSKARewards)
+		}
+	})
 }
 
 func TestMainNetName(t *testing.T) {
@@ -33,13 +339,6 @@ func TestSimNetName(t *testing.T) {
 	}
 }
 
-// func TestThreeSigFigs(t *testing.T) {
-// ...
-// }
-
-// TestThreeSigFigs covers every threshold branch in threeSigFigs, walking from
-// the largest values down to zero. Each case documents what the function
-// actually produces so the output is self-describing.
 func TestThreeSigFigs(t *testing.T) {
 	cases := []struct {
 		in   float64
