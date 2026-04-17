@@ -1,6 +1,5 @@
 /* global requestAnimationFrame */
 import { Controller } from '@hotwired/stimulus'
-import dompurify from 'dompurify'
 import { each } from 'lodash-es'
 import { fadeIn } from '../helpers/animation_helper'
 import humanize from '../helpers/humanize_helper'
@@ -8,7 +7,6 @@ import Mempool from '../helpers/mempool_helper'
 import globalEventBus from '../services/event_bus_service'
 import { keyNav } from '../services/keyboard_navigation_service'
 import ws from '../services/messagesocket_service'
-import { alertArea, copyIcon } from './clipboard_controller'
 
 function incrementValue(element) {
   if (element) {
@@ -31,37 +29,36 @@ function mempoolTableRow(tx) {
   }
 
   const tmpl = document.getElementById('home-mempool-tx-row-template')
-  if (tmpl) {
-    const clone = document.importNode(tmpl.content, true)
-    const hashTd = clone.querySelector('.tx-hash')
+  if (!tmpl) return null
+
+  const clone = document.importNode(tmpl.content, true)
+  const hashTd = clone.querySelector('.tx-hash')
+  if (hashTd) {
     hashTd.innerHTML = humanize.hashElide(tx.hash, link)
-    clone.querySelector('.tx-type').textContent = tx.Type
-    clone.querySelector('.tx-coin').textContent = coin
-    clone.querySelector('.tx-amount').textContent = amount
-    clone.querySelector('.tx-size').textContent = `${tx.size} B`
-    const ageTd = clone.querySelector('.tx-age')
+  }
+  const typeTd = clone.querySelector('.tx-type')
+  if (typeTd) {
+    typeTd.textContent = tx.Type
+  }
+  const coinTd = clone.querySelector('.tx-coin')
+  if (coinTd) {
+    coinTd.textContent = coin
+  }
+  const amountTd = clone.querySelector('.tx-amount')
+  if (amountTd) {
+    amountTd.textContent = amount
+  }
+  const sizeTd = clone.querySelector('.tx-size')
+  if (sizeTd) {
+    sizeTd.textContent = `${tx.size} B`
+  }
+  const ageTd = clone.querySelector('.tx-age')
+  if (ageTd) {
     ageTd.dataset.timeTarget = 'age'
     ageTd.dataset.age = tx.time
     ageTd.textContent = humanize.timeSince(tx.time)
-    return clone.querySelector('tr')
   }
-
-  // Fallback
-  const tbody = document.createElement('tbody')
-  tbody.innerHTML = `<tr>
-    <td class="text-start ps-1 clipboard">
-      ${humanize.hashElide(tx.hash, link)}
-      ${copyIcon()}
-      ${alertArea()}
-    </td>
-    <td class="text-start">${tx.Type}</td>
-    <td class="text-start">${coin}</td>
-    <td class="text-end">${amount}</td>
-    <td class="text-nowrap text-end">${tx.size} B</td>
-    <td class="text-end pe-1 text-nowrap" data-time-target="age" data-age="${tx.time}">${humanize.timeSince(tx.time)}</td>
-  </tr>`
-  dompurify.sanitize(tbody, { IN_PLACE: true, FORBID_TAGS: ['svg', 'math'] })
-  return tbody.firstElementChild
+  return clone.querySelector('tr')
 }
 
 export default class extends Controller {
@@ -186,12 +183,14 @@ export default class extends Controller {
         const targetKey = `num${tx.Type}Target`
         incrementValue(this[targetKey])
       }
-      const rows = this.transactionsTarget.querySelectorAll('tr')
-      if (rows.length) {
-        const lastRow = rows[rows.length - 1]
-        this.transactionsTarget.removeChild(lastRow)
-      }
       const row = mempoolTableRow(tx)
+      if (!row) return
+
+      const rows = this.transactionsTarget.querySelectorAll('tr')
+      if (rows.length > 0) {
+        this.transactionsTarget.removeChild(rows[rows.length - 1])
+      }
+
       row.style.opacity = 0.05
       this.transactionsTarget.insertBefore(row, this.transactionsTarget.firstChild)
       fadeIn(row)
