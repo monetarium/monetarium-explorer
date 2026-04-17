@@ -72,7 +72,7 @@ function insertVARSubRow(tbody, newRow, varTxCount, varAmount, varSize) {
 // Insert SKA sub-rows after insertRef (9-column layout).
 function insertSKASubRows(tbody, insertRef, subRows, blockHeight) {
   const tmpl = document.getElementById('home-ska-sub-row-template')
-  if (!tmpl) return
+  if (!tmpl || !insertRef) return
   const ref = insertRef.nextSibling
   for (const sub of subRows) {
     const clone = document.importNode(tmpl.content, true)
@@ -138,6 +138,8 @@ export default class extends Controller {
     newRow.dataset.height = block.height
     newRow.dataset.linkClass = firstBlockRow.dataset.linkClass
     newRow.dataset.blockId = String(block.height)
+    newRow.dataset.skaAccordionTarget = 'blockRow'
+    newRow.dataset.action = 'click->ska-accordion#toggle'
 
     const link = clone.querySelector('[data-type="height"] a')
     link.href = `/block/${block.height}`

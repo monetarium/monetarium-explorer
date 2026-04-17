@@ -53,10 +53,10 @@
       </tr>
       <tr class="ska-sub-row" data-ska-accordion-target="subRow" data-block-id="{{$blockHeight}}">
         <td class="text-end ps-2 ps-sm-4" data-type="sub-label"><span class="coin-label coin-label--var">VAR</span></td>
-        <td class="text-end num">{{if .VARTxCount}}{{.VARTxCount}}{{else}}—{{end}}</td>
-        <td class="text-end num">{{.VARAmount}}</td>
+        <td class="text-end num" data-type="tx">{{if .VARTxCount}}{{.VARTxCount}}{{else}}—{{end}}</td>
+        <td class="text-end num" data-type="var-amount">{{.VARAmount}}</td>
         <td class="text-end">—</td>
-        <td class="text-end num d-none d-sm-table-cell d-md-none d-lg-table-cell">{{.VARSize}}</td>
+        <td class="text-end num d-none d-sm-table-cell d-md-none d-lg-table-cell" data-type="size">{{.VARSize}}</td>
         <td class="text-end">—</td>
         <td class="text-end">—</td>
         <td class="text-end d-none d-sm-table-cell d-md-none d-lg-table-cell">—</td>
@@ -65,10 +65,10 @@
       {{range .SKASubRows}}
       <tr class="ska-sub-row" data-ska-accordion-target="subRow" data-block-id="{{$blockHeight}}">
         <td class="text-end ps-2 ps-sm-4" data-type="sub-label"><span class="coin-label coin-label--ska">{{.TokenType}}</span></td>
-        <td class="text-end num">{{.TxCount}}</td>
+        <td class="text-end num" data-type="tx">{{.TxCount}}</td>
         <td class="text-end">—</td>
-        <td class="text-end num">{{.Amount}}</td>
-        <td class="text-end num d-none d-sm-table-cell d-md-none d-lg-table-cell">{{.Size}}</td>
+        <td class="text-end num" data-type="ska-amount">{{.Amount}}</td>
+        <td class="text-end num d-none d-sm-table-cell d-md-none d-lg-table-cell" data-type="size">{{.Size}}</td>
         <td class="text-end">—</td>
         <td class="text-end">—</td>
         <td class="text-end d-none d-sm-table-cell d-md-none d-lg-table-cell">—</td>
@@ -84,6 +84,7 @@
   <tr
     class="block-row-expandable"
     data-ska-accordion-target="blockRow"
+    data-block-id=""
     data-action="click->ska-accordion#toggle"
   >
     <td class="text-start ps-1" data-type="height">
@@ -102,7 +103,7 @@
 </template>
 
 <template id="home-var-sub-row-template">
-  <tr class="ska-sub-row" data-ska-accordion-target="subRow">
+  <tr class="ska-sub-row" data-ska-accordion-target="subRow" data-block-id="">
     <td class="text-end ps-2 ps-sm-4" data-type="sub-label"><span class="coin-label coin-label--var">VAR</span></td>
     <td class="text-end num" data-type="tx"></td>
     <td class="text-end num" data-type="var-amount"></td>
@@ -116,7 +117,7 @@
 </template>
 
 <template id="home-ska-sub-row-template">
-  <tr class="ska-sub-row" data-ska-accordion-target="subRow">
+  <tr class="ska-sub-row" data-ska-accordion-target="subRow" data-block-id="">
     <td class="text-end ps-2 ps-sm-4" data-type="sub-label"><span class="coin-label coin-label--ska"></span></td>
     <td class="text-end num" data-type="tx"></td>
     <td class="text-end">—</td>
