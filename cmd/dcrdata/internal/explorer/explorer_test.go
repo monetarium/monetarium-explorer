@@ -183,6 +183,11 @@ func TestStore_PoWSKARewardsFallback(t *testing.T) {
 			pageData: &pageData{
 				HomeInfo: &explorerTypes.HomeInfo{},
 			},
+			invs: &explorerTypes.MempoolInfo{
+				MempoolShort: explorerTypes.MempoolShort{
+					CoinStats: make(map[uint8]explorerTypes.MempoolCoinStats),
+				},
+			},
 		}
 		return exp, mockDS
 	}
@@ -288,9 +293,7 @@ func TestStore_PoWSKARewardsFallback(t *testing.T) {
 
 		// Reward too far back (more than 4320 blocks)
 		farHeight := height - 4321
-		if farHeight < 0 {
-			farHeight = -1 // effectively no reward
-		} else {
+		if farHeight >= 0 {
 			farHash := "hash_far"
 			mockDS.heights[farHeight] = farHash
 			mockDS.blocks[farHash] = &explorerTypes.BlockInfo{
