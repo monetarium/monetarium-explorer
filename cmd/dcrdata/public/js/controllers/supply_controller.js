@@ -10,8 +10,9 @@ export default class extends Controller {
     const ex = blockData.extra
 
     if (ex.var_coin_supply && this.hasVarCirculatingTarget) {
-      this.varCirculatingTarget.textContent = humanize.formatCoinAtoms(
-        ex.var_coin_supply.circulating,
+      this.varCirculatingTarget.innerHTML = humanize.decimalParts(
+        parseInt(ex.var_coin_supply.circulating) / 1e8,
+        true,
         0
       )
     }
