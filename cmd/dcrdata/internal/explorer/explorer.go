@@ -475,13 +475,19 @@ func (exp *explorerUI) MempoolSignal() chan<- pstypes.HubMessage {
 func (exp *explorerUI) StoreMPData(_ *mempool.StakeData, _ []types.MempoolTx, inv *types.MempoolInfo) {
 	exp.pageData.RLock()
 	blockchainInfo := exp.pageData.BlockchainInfo
+	// Derive the full set of issued SKA coin types from the cached supply data
+	// so that coins with no current mempool activity still get a zero-fill entry.
+	var issuedSKA []uint8
+	for _, entry := range exp.pageData.HomeInfo.SKACoinSupply {
+		issuedSKA = append(issuedSKA, entry.CoinType)
+	}
 	exp.pageData.RUnlock()
 
 	maxBlockSize := 393216.0
 	if blockchainInfo != nil && blockchainInfo.MaxBlockSize > 0 {
 		maxBlockSize = float64(blockchainInfo.MaxBlockSize)
 	}
-	fills, totalFillRatio, activeSKACount := computeCoinFills(inv.CoinStats, maxBlockSize)
+	fills, totalFillRatio, activeSKACount := computeCoinFills(inv.CoinStats, maxBlockSize, issuedSKA)
 	inv.CoinFills = fills
 	inv.MempoolShort.CoinFills = fills
 	inv.MempoolShort.TotalFillRatio = totalFillRatio
@@ -570,6 +576,27 @@ func (exp *explorerUI) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgB
 			entries[i] = *e
 		}
 		p.HomeInfo.SKACoinSupply = entries
+	}
+
+	// Recompute fill bars using the freshly updated issued set so that any
+	// newly issued SKA coin (e.g. via coinbase) gets a zero-fill indicator
+	// broadcast to connected clients even before its first mempool transaction.
+	{
+		var issuedSKA []uint8
+		for _, entry := range p.HomeInfo.SKACoinSupply {
+			issuedSKA = append(issuedSKA, entry.CoinType)
+		}
+		maxBlockSize := 393216.0
+		if p.BlockchainInfo != nil && p.BlockchainInfo.MaxBlockSize > 0 {
+			maxBlockSize = float64(p.BlockchainInfo.MaxBlockSize)
+		}
+		exp.invsMtx.Lock()
+		fills, totalFillRatio, activeSKACount := computeCoinFills(exp.invs.CoinStats, maxBlockSize, issuedSKA)
+		exp.invs.CoinFills = fills
+		exp.invs.MempoolShort.CoinFills = fills
+		exp.invs.MempoolShort.TotalFillRatio = totalFillRatio
+		exp.invs.MempoolShort.ActiveSKACount = activeSKACount
+		exp.invsMtx.Unlock()
 	}
 
 	// If BlockData contains non-nil PoolInfo, copy values.
@@ -721,6 +748,16 @@ func (exp *explorerUI) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgB
 		case exp.wsHub.HubRelay <- pstypes.HubMessage{Signal: sigNewBlock}:
 		case <-time.After(time.Second * 10):
 			log.Errorf("sigNewBlock send failed: Timeout waiting for WebsocketHub.")
+		}
+	}()
+
+	// Broadcast updated fill bars so clients learn about newly issued coins
+	// (e.g. via coinbase) even before any mempool transactions for them arrive.
+	go func() {
+		select {
+		case exp.wsHub.HubRelay <- pstypes.HubMessage{Signal: sigMempoolUpdate}:
+		case <-time.After(time.Second * 10):
+			log.Errorf("sigMempoolUpdate send failed: Timeout waiting for WebsocketHub.")
 		}
 	}()
 
@@ -1060,20 +1097,32 @@ const tcBytes = 393216.0
 // map. VAR is always first in the returned slice; SKA types follow in ascending
 // coin-type order. When stats is empty or nil a single VAR entry with all
 // ratios at 0.0 and status "ok" is returned.
+// issuedSKA is the set of all SKA coin types that have ever been issued on-chain
+// (from SKACoinSupply). Coin types present in issuedSKA but absent from stats
+// are included as zero-fill entries so their indicators are always visible.
 //
 //nolint:unparam // maxBlockSize comes from the node at runtime; test uses 100.0 for easy math.
-func computeCoinFills(stats map[uint8]types.MempoolCoinStats, maxBlockSize float64) ([]types.CoinFillData, float64, int) {
+func computeCoinFills(stats map[uint8]types.MempoolCoinStats, maxBlockSize float64, issuedSKA []uint8) ([]types.CoinFillData, float64, int) {
 	varQuota := maxBlockSize * 0.10
 	skaPool := maxBlockSize * 0.90
 
 	// Collect and sort SKA coin-type keys for deterministic output order.
+	// Seed from both the live mempool stats and the full issued set so that
+	// coins with no current mempool activity still get a zero-fill entry.
+	skaKeySet := make(map[int]struct{})
+	for ct := range stats {
+		if ct != 0 {
+			skaKeySet[int(ct)] = struct{}{}
+		}
+	}
+	for _, ct := range issuedSKA {
+		skaKeySet[int(ct)] = struct{}{}
+	}
 	var skaKeys []int
 	var totalSKASize float64
-	for ct, s := range stats {
-		if ct != 0 {
-			skaKeys = append(skaKeys, int(ct))
-			totalSKASize += float64(s.Size)
-		}
+	for k := range skaKeySet {
+		skaKeys = append(skaKeys, k)
+		totalSKASize += float64(stats[uint8(k)].Size)
 	}
 	sort.Ints(skaKeys)
 	numSKA := len(skaKeys)

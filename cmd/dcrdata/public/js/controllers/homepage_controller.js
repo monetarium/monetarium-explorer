@@ -213,11 +213,18 @@ export default class extends Controller {
         }
       })
 
-      // Remove bars for coins no longer in the payload (e.g. after a new block)
+      // Zero out bars for coins no longer in the payload (never remove them)
       if (this.hasIndicatorListTarget) {
         this.indicatorListTarget.querySelectorAll('[data-coin]').forEach((bar) => {
           if (!activeSymbols.has(bar.dataset.coin)) {
-            bar.remove()
+            this._applyFillBar(bar, {
+              symbol: bar.dataset.coin,
+              gq_fill_ratio: 0,
+              extra_fill_ratio: 0,
+              overflow_fill_ratio: 0,
+              gq_position_ratio: 0,
+              status: ''
+            })
           }
         })
       }
