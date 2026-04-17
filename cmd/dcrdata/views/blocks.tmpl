@@ -5,7 +5,7 @@
 {{template "html-head" headData .CommonPageData "Monetarium Blocks List"}}
     {{template "navbar" . }}
     {{template "blocksBanner" .}}
-    <div class="container px-0 main" data-controller="time pagenavigation blocklist">
+    <div class="container px-0 main" data-controller="time pagenavigation">
         {{$pendingBlocks := 0}}
         {{if gt (len $.Data) 0}}{{$pendingBlocks = ((index .Data 0).Height)}}{{end}}
 
@@ -110,7 +110,7 @@
                         <th class="text-end px-0">Time (UTC)</th>
                     </tr>
                 </thead>
-                <tbody data-blocklist-target="table">
+                <tbody>
                 {{range .Data}}
                     <tr data-height="{{ .Height }}">
                         <td data-type="height" class="text-start ps-0"><a href="/block/{{.Height}}" data-keynav-priority>{{if not .Valid}}<span class="attention">&#9888;</span>{{end}}{{ .Height }}</a></td>
