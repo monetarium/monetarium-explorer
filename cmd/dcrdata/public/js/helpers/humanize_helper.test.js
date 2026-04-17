@@ -141,7 +141,7 @@ describe('humanize.formatCoinAtomsFull', () => {
     expect(humanize.formatCoinAtomsFull('100000001', 0)).toBe('1.00000001'))
   it('formats VAR zero atoms as "0"', () => expect(humanize.formatCoinAtomsFull('0', 0)).toBe('0'))
   it('formats large VAR circulating supply (151399680000000 atoms)', () =>
-    expect(humanize.formatCoinAtomsFull('151399680000000', 0)).toBe('1513996.8'))
+    expect(humanize.formatCoinAtomsFull('151399680000000', 0)).toBe('1,513,996.8'))
 
   // SKA: coinType != 0, 18 decimal places, trailing zeros stripped
   it('returns "0" for empty SKA string', () =>
@@ -155,14 +155,14 @@ describe('humanize.formatCoinAtomsFull', () => {
   it('formats SKA zero atoms as "0"', () => expect(humanize.formatCoinAtomsFull('0', 1)).toBe('0'))
   it('formats exact WS payload in_circulation value', () =>
     expect(humanize.formatCoinAtomsFull('899999999991999840000000000000000', 1)).toBe(
-      '899999999991999.84'
+      '899,999,999,991,999.84'
     ))
   it('formats exact WS payload total_issued value (whole number)', () =>
     expect(humanize.formatCoinAtomsFull('900000000000000000000000000000000', 1)).toBe(
-      '900000000000000'
+      '900,000,000,000,000'
     ))
   it('formats exact WS payload total_burned value', () =>
-    expect(humanize.formatCoinAtomsFull('8000160000000000000000', 1)).toBe('8000.16'))
+    expect(humanize.formatCoinAtomsFull('8000160000000000000000', 1)).toBe('8,000.16'))
   it('handles a single atom (10^-18)', () =>
     expect(humanize.formatCoinAtomsFull('1', 1)).toBe('0.000000000000000001'))
   it('strips all 18 trailing decimal zeros for whole coin', () =>

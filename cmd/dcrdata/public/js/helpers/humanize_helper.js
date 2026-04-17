@@ -98,11 +98,13 @@ const humanize = {
     const whole = atoms / divisor
     const remainder = atoms % divisor
 
-    if (remainder === 0n) return whole.toString()
-
     // Pad fractional part to full decimal width, then strip trailing zeros
     const frac = remainder.toString().padStart(decimals, '0').replace(/0+$/, '')
-    return `${whole}.${frac}`
+    const wholeStr = whole.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+
+    if (remainder === 0n) return wholeStr
+
+    return `${wholeStr}.${frac}`
   },
   // formatCoinAtoms converts a raw atom string to a threeSigFigs-formatted coin
   // string. coinType 0 = VAR (8 decimal places), any other value = SKA (18
