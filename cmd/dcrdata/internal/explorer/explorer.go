@@ -714,18 +714,49 @@ func (exp *explorerUI) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgB
 		p.HomeInfo.SKAVoteRewards = nil
 	}
 
-	// PoW SKA rewards: per-SKA-type mining reward amounts from the coinbase.
-	if len(blockData.ExtraInfo.SKAPoWRewards) > 0 {
-		powRewards := make([]types.PoWSKAReward, 0, len(blockData.ExtraInfo.SKAPoWRewards))
-		for ct, amountStr := range blockData.ExtraInfo.SKAPoWRewards {
-			powRewards = append(powRewards, types.PoWSKAReward{
-				CoinType: ct,
-				Symbol:   fmt.Sprintf("SKA-%d", ct),
-				Amount:   amountStr,
-			})
-		}
-		sort.Slice(powRewards, func(i, j int) bool { return powRewards[i].CoinType < powRewards[j].CoinType })
+	// PoW SKA rewards: prioritize rewards from the current block (miner-centric),
+	// then fallback to previous blocks if the current one is empty.
+	if len(newBlockData.SKAPoWRewards) > 0 {
+		powRewards := newBlockData.SKAPoWRewards
 		p.HomeInfo.PoWSKARewards = powRewards
+	} else {
+		var powRewardsMap map[uint8]string
+		if len(blockData.ExtraInfo.SKAPoWRewards) > 0 {
+			powRewardsMap = blockData.ExtraInfo.SKAPoWRewards
+		} else {
+			// Fallback: Search backwards from the current block height.
+			currentHeight := newBlockData.Height
+			for h := currentHeight - 1; h >= currentHeight-4320 && h >= 0; h-- {
+				hash, err := exp.dataSource.BlockHash(ctx, h)
+				if err != nil {
+					continue
+				}
+				bInfo := exp.dataSource.GetExplorerBlock(ctx, hash)
+				if bInfo != nil && len(bInfo.SKAPoWRewards) > 0 {
+					// Convert []types.PoWSKAReward back to map[uint8]string for sorting/assignment.
+					powRewardsMap = make(map[uint8]string)
+					for _, r := range bInfo.SKAPoWRewards {
+						powRewardsMap[r.CoinType] = r.Amount
+					}
+					break
+				}
+			}
+		}
+
+		if len(powRewardsMap) > 0 {
+			powRewards := make([]types.PoWSKAReward, 0, len(powRewardsMap))
+			for ct, amountStr := range powRewardsMap {
+				powRewards = append(powRewards, types.PoWSKAReward{
+					CoinType: ct,
+					Symbol:   fmt.Sprintf("SKA-%d", ct),
+					Amount:   amountStr,
+				})
+			}
+			sort.Slice(powRewards, func(i, j int) bool { return powRewards[i].CoinType < powRewards[j].CoinType })
+			p.HomeInfo.PoWSKARewards = powRewards
+		} else {
+			p.HomeInfo.PoWSKARewards = nil
+		}
 	}
 
 	// If exchange monitoring is enabled, set the exchange rate.
@@ -799,7 +830,7 @@ func (exp *explorerUI) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgB
 	}
 
 	// Update consensus agendas data every 5 blocks.
-	if newBlockData.Height%5 == 0 {
+	if newBlockData.Height%5 == 0 && exp.agendasSource != nil {
 		go func() {
 			err := exp.agendasSource.UpdateAgendas()
 			if err != nil {

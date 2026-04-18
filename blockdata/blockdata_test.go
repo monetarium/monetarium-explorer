@@ -118,3 +118,123 @@ func TestBlockCoinTxStats_Empty(t *testing.T) {
 		t.Errorf("expected nil for empty block, got %v", got)
 	}
 }
+
+func TestBlockSKAPoWRewards_SKAOnly(t *testing.T) {
+	skaBig := new(big.Int).Mul(big.NewInt(1_000_000), new(big.Int).Exp(big.NewInt(10), big.NewInt(18), nil))
+	coinbase := wire.NewMsgTx()
+	coinbase.AddTxOut(wire.NewTxOut(100_000_000, nil))                     // VAR reward
+	coinbase.AddTxOut(wire.NewTxOutSKA(skaBig, cointype.CoinType(1), nil)) // SKA-1 reward
+	coinbase.AddTxOut(wire.NewTxOutSKA(skaBig, cointype.CoinType(2), nil)) // SKA-2 reward
+
+	got := BlockSKAPoWRewards(mockBlock(coinbase))
+	if got == nil {
+		t.Fatal("expected non-nil SKAPoWRewards")
+	}
+	if got[1] != skaBig.String() {
+		t.Errorf("SKA-1: want %s, got %s", skaBig, got[1])
+	}
+	if got[2] != skaBig.String() {
+		t.Errorf("SKA-2: want %s, got %s", skaBig, got[2])
+	}
+	if _, hasVAR := got[0]; hasVAR {
+		t.Error("expected no VAR reward in SKAPoWRewards")
+	}
+	if len(got) != 2 {
+		t.Errorf("expected 2 SKA rewards, got %d", len(got))
+	}
+}
+
+func TestBlockSKAPoWRewards_NoSKA(t *testing.T) {
+	coinbase := wire.NewMsgTx()
+	coinbase.AddTxOut(wire.NewTxOut(100_000_000, nil)) // Only VAR
+
+	got := BlockSKAPoWRewards(mockBlock(coinbase))
+	if got != nil {
+		t.Errorf("expected nil for block without SKA rewards, got %v", got)
+	}
+}
+
+func TestBlockSKAPoWRewards_Empty(t *testing.T) {
+	blk := &wire.MsgBlock{}
+	blk.Transactions = []*wire.MsgTx{}
+	got := BlockSKAPoWRewards(blk)
+	if got != nil {
+		t.Errorf("expected nil for empty block, got %v", got)
+	}
+}
+
+func TestBlockSKAPoWRewards_Summing(t *testing.T) {
+	amt1 := big.NewInt(100)
+	amt2 := big.NewInt(200)
+	coinbase := wire.NewMsgTx()
+	coinbase.AddTxOut(wire.NewTxOutSKA(amt1, cointype.CoinType(1), nil))
+	coinbase.AddTxOut(wire.NewTxOutSKA(amt2, cointype.CoinType(1), nil))
+
+	got := BlockSKAPoWRewards(mockBlock(coinbase))
+	if got == nil {
+		t.Fatal("expected non-nil SKAPoWRewards")
+	}
+	expected := "300"
+	if got[1] != expected {
+		t.Errorf("SKA-1: want %s, got %s", expected, got[1])
+	}
+}
+
+func TestExtractSKARewardsFromCoinbase_Standard(t *testing.T) {
+	skaBig := new(big.Int).Mul(big.NewInt(1_000_000), new(big.Int).Exp(big.NewInt(10), big.NewInt(18), nil))
+	coinbase := wire.NewMsgTx()
+	coinbase.AddTxOut(wire.NewTxOut(100_000_000, nil))                     // VAR reward
+	coinbase.AddTxOut(wire.NewTxOutSKA(skaBig, cointype.CoinType(1), nil)) // SKA-1 reward
+	coinbase.AddTxOut(wire.NewTxOutSKA(skaBig, cointype.CoinType(2), nil)) // SKA-2 reward
+
+	got := ExtractSKARewardsFromCoinbase(coinbase)
+	if got == nil {
+		t.Fatal("expected non-nil SKARewards")
+	}
+	if got[1] != skaBig.String() {
+		t.Errorf("SKA-1: want %s, got %s", skaBig, got[1])
+	}
+	if got[2] != skaBig.String() {
+		t.Errorf("SKA-2: want %s, got %s", skaBig, got[2])
+	}
+	if _, hasVAR := got[0]; hasVAR {
+		t.Error("expected no VAR reward in ExtractSKARewardsFromCoinbase")
+	}
+	if len(got) != 2 {
+		t.Errorf("expected 2 SKA rewards, got %d", len(got))
+	}
+}
+
+func TestExtractSKARewardsFromCoinbase_NoSKA(t *testing.T) {
+	coinbase := wire.NewMsgTx()
+	coinbase.AddTxOut(wire.NewTxOut(100_000_000, nil)) // Only VAR
+
+	got := ExtractSKARewardsFromCoinbase(coinbase)
+	if got != nil && len(got) != 0 {
+		t.Errorf("expected nil or empty map for block without SKA rewards, got %v", got)
+	}
+}
+
+func TestExtractSKARewardsFromCoinbase_Nil(t *testing.T) {
+	got := ExtractSKARewardsFromCoinbase(nil)
+	if got != nil {
+		t.Errorf("expected nil for nil coinbase, got %v", got)
+	}
+}
+
+func TestExtractSKARewardsFromCoinbase_Summing(t *testing.T) {
+	amt1 := big.NewInt(100)
+	amt2 := big.NewInt(200)
+	coinbase := wire.NewMsgTx()
+	coinbase.AddTxOut(wire.NewTxOutSKA(amt1, cointype.CoinType(1), nil))
+	coinbase.AddTxOut(wire.NewTxOutSKA(amt2, cointype.CoinType(1), nil))
+
+	got := ExtractSKARewardsFromCoinbase(coinbase)
+	if got == nil {
+		t.Fatal("expected non-nil SKARewards")
+	}
+	expected := "300"
+	if got[1] != expected {
+		t.Errorf("SKA-1: want %s, got %s", expected, got[1])
+	}
+}
