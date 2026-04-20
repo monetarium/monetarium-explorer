@@ -1,0 +1,75 @@
+{
+  "skill_name": "mutation-analyzer",
+  "evals": [
+    {
+      "id": "interview-block-flow",
+      "prompt": "Start interview for: Trace how block data flows from RPC to frontend rendering.",
+      "expected_output": "8-12 targeted questions focused on data flow, transformations, and cross-layer dependencies. No generic architecture questions."
+    },
+    {
+      "id": "explore-block-origin",
+      "prompt": "Explore: Where is block data initially constructed and what structures represent it?",
+      "expected_output": "Code-grounded answer with file paths and references to blockdata or RPC-related structures. Must include where data originates and how it is represented."
+    },
+    {
+      "id": "explore-block-usage",
+      "prompt": "Explore: Where is block data used in API responses and explorer rendering?",
+      "expected_output": "Answer must include multiple usage points (API handlers, explorer handlers, templates). Must show cross-layer usage, not just a single file."
+    },
+    {
+      "id": "synthesize-block-flow",
+      "prompt": "Synthesize: Trace how block data flows from RPC to frontend rendering.",
+      "expected_output": "Structured markdown document following the 10-section template. Must include end-to-end flow, per-layer breakdown, mutation impact, and evidence with file paths. Must include Compact Knowledge section."
+    },
+    {
+      "id": "interview-mutation-block-table",
+      "prompt": "Start interview for: I want to add SKA-related fields to the block table.",
+      "expected_output": "Questions must focus on data flow, UI rendering, precision handling, and where SKA data is introduced. Must avoid generic questions."
+    },
+    {
+      "id": "explore-ska-handling",
+      "prompt": "Explore: How are SKA token amounts handled and formatted across the system?",
+      "expected_output": "Must identify precision handling, data structures, and formatting logic. Must include references to relevant code and highlight high-risk areas."
+    },
+    {
+      "id": "synthesize-mutation-impact",
+      "prompt": "Synthesize: I want to add SKA-related fields to the block table. What do I need to check?",
+      "expected_output": "Structured document focused on mutation impact. Must explicitly list backend, DB, API, template, and frontend dependencies, plus potential breakage scenarios. Must include the 10-section template."
+    },
+    {
+      "id": "explore-api-impact",
+      "prompt": "Explore: If block data structure changes, which API responses depend on it?",
+      "expected_output": "Must identify API types, handlers, and serialization boundaries. Must include multiple dependency points and not stop at a single file."
+    },
+    {
+      "id": "synthesize-api-breakage",
+      "prompt": "Synthesize: If I change the structure of block data, what API responses and frontend parts will break?",
+      "expected_output": "Structured output emphasizing cross-layer dependencies and mutation risks. Must include both direct and indirect breakage."
+    },
+    {
+      "id": "lint-wiki-entire",
+      "prompt": "Lint: entire wiki",
+      "expected_output": "Issues Found section with Type, Location, Description, Severity, and Action. Suggested Fixes section. Critical Observations section. Must identify contradictions or missing links in the wiki."
+    },
+    {
+      "id": "interview-mempool-flow",
+      "prompt": "Start interview for: Trace how mempool transactions flow from RPC ingestion to live frontend updates.",
+      "expected_output": "Targeted questions about WebSocket vs HTTP paths, PubSubHub involvement, and how the frontend (Stimulus controllers) receives updates."
+    },
+    {
+      "id": "explore-mempool-bifurcation",
+      "prompt": "Explore: How does the system distinguish and separate mempool transactions from on-chain block transactions in the codebase?",
+      "expected_output": "Must identify specific flags, separate processing queues, or database tables. Must show the branching point in the backend logic."
+    },
+    {
+      "id": "explore-precision-enforcement",
+      "prompt": "Explore: Where exactly is the 18-decimal precision for SKA tokens enforced? Check DB schema, API serialization, and UI formatting.",
+      "expected_output": "Must identify exact code lines in SQL/Postgres, Go API structs, and JS formatting helpers. Must flag where precision loss could occur."
+    },
+    {
+      "id": "synthesize-mempool-impact",
+      "prompt": "Synthesize: I want to change how mempool transactions are aggregated before being sent to the UI. What is the impact?",
+      "expected_output": "10-section synthesis document. Must focus on the PubSub/WebSocket layer as a critical dependency and potential for UI lag or out-of-order updates."
+    }
+  ]
+}
