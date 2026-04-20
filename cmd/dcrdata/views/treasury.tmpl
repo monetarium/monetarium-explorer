@@ -137,7 +137,7 @@
               </div>
             </div>
             <div class="p-3 address_chart_wrap">
-              <div class="expando dcricon-expand" data-address-target="expando" data-action="click->address#toggleExpand"></div>
+              <div class="expando monicon-expand" data-address-target="expando" data-action="click->address#toggleExpand"></div>
               <div class="py-5 fs16 d-none" data-address-target="noconfirms"></div>
               <div data-address-target="chart" class="address_chart"></div>
             </div>
@@ -255,7 +255,7 @@
       </div>
       <div class="text-end pe-3" data-address-target="tablePagination">
         {{if ne .Offset 0}}
-        <a class="d-inline-block dcricon-arrow-left m-1 fz20"
+        <a class="d-inline-block monicon-arrow-left m-1 fz20"
            data-action="click->address#pageNumberLink"
            href="/treasury?start={{subtract .Offset .Limit}}&n={{.Limit}}&txntype={{$txType}}"></a>
         {{end}}
@@ -269,7 +269,7 @@
           {{end}}
         {{end}}
         {{if gt (subtract .TypeCount .Offset) .Limit}}
-        <a class="d-inline-block dcricon-arrow-right m-1 fs20"
+        <a class="d-inline-block monicon-arrow-right m-1 fs20"
             data-action="click->address#pageNumberLink"
             href="/treasury?start={{add .Offset .Limit}}&n={{.Limit}}&txntype={{$txType}}"></a>
         {{end}}

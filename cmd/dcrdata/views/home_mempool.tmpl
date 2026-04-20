@@ -5,7 +5,7 @@
 
                     <div class="d-flex align-items-baseline my-2">
                         <div class="position-relative col px7-5 nowrap">
-                            <span class="card-icon dcricon-stack h1 me-2"></span> <a href="/mempool" class="h3">Mempool</a>
+                            <span class="card-icon monicon-stack h1 me-2"></span> <a href="/mempool" class="h3">Mempool</a>
                         </div>
                     </div>
 
@@ -90,12 +90,24 @@
 
                         {{/* Right column — transactions table */}}
                         <div class="col mb-1">
+                            {{/* Template for JS live-update cloning */}}
+                            <template id="home-mempool-tx-row-template">
+                              <tr>
+                                <td class="text-start ps-1 clipboard tx-hash"></td>
+                                <td class="text-start tx-type"></td>
+                                <td class="text-start text-nowrap tx-coin"></td>
+                                <td class="text-end tx-amount"></td>
+                                <td class="text-nowrap text-end tx-size"></td>
+                                <td class="text-end pe-1 text-nowrap tx-age"></td>
+                              </tr>
+                            </template>
                             <table class="table table-sm w-100 mx-auto mb-0">
                                 <thead>
                                 <tr>
                                     <th class="text-start ps-2">Hash</th>
                                     <th class="text-start">Type</th>
-                                    <th class="text-end">VAR</th>
+                                    <th class="text-start">Coin</th>
+                                    <th class="text-end">Amount</th>
                                     <th class="text-end">Size</th>
                                     <th class="text-end pe-2 jsonly">Age</th>
                                 </tr>
@@ -105,7 +117,15 @@
                                 <tr>
                                     <td class="text-start ps-1 clipboard">{{template "hashElide" (hashlink .Hash (print "/tx/" .Hash))}}</td>
                                     <td class="text-start">{{.Type}}</td>
+                                    {{- if .SKATotals -}}
+                                      {{- range $id, $amt := .SKATotals -}}
+                                    <td class="text-start text-nowrap">SKA-{{$id}}</td>
+                                    <td class="text-end">{{formatCoinAtoms $amt $id}}</td>
+                                      {{- end -}}
+                                    {{- else -}}
+                                    <td class="text-start text-nowrap">VAR</td>
                                     <td class="text-end">{{threeSigFigs .TotalOut}}</td>
+                                    {{- end}}
                                     <td class="text-nowrap text-end">{{.Size}} B</td>
                                     <td class="text-end pe-1 jsonly text-nowrap" data-time-target="age" data-age="{{.Time}}"></td>
                                 </tr>

@@ -5653,6 +5653,19 @@ func (pgb *ChainDB) GetAddressTransactionsRawWithSkip(ctx context.Context, addr 
 				case stake.TxTypeTreasuryBase:
 					vin.Treasurybase = true
 				}
+			} else {
+				// For regular transactions, determine the coin type of the spent output.
+				if txType == stake.TxTypeRegular {
+					if prevTxData, found := mpTxs.TxnsStore[txIn.PreviousOutPoint.Hash]; found {
+						if int(txIn.PreviousOutPoint.Index) < len(prevTxData.Tx.TxOut) {
+							txOut := prevTxData.Tx.TxOut[txIn.PreviousOutPoint.Index]
+							vin.CoinType = uint8(txOut.CoinType)
+							if txOut.SKAValue != nil {
+								vin.SKAValue = txOut.SKAValue.String()
+							}
+						}
+					}
+				}
 			}
 			if txIn.ValueIn > 0 {
 				vin.AmountIn = dcrutil.Amount(txIn.ValueIn).ToCoin()
@@ -5666,6 +5679,8 @@ func (pgb *ChainDB) GetAddressTransactionsRawWithSkip(ctx context.Context, addr 
 				N:                   uint32(i),
 				Version:             txOut.Version,
 				ScriptPubKeyDecoded: decPkScript(txOut.Version, txOut.PkScript, isTicketCommit, pgb.chainParams),
+				CoinType:            uint8(txOut.CoinType),
+				SKAValue:            txOut.SKAValue.String(),
 			}
 		}
 		txs = append(txs, &apitypes.AddressTxRaw{
@@ -5702,13 +5717,17 @@ func (pgb *ChainDB) GetAddressTransactionsRawWithSkip(ctx context.Context, addr 
 		var idx int32
 		var vin apitypes.VinShort
 		var val int64
+		var coinType int16
+		var skaValue string
 		if err = rows.Scan(&txid, &idx, &vinTxID, &vin.Vout, &vin.Tree, &val,
-			&vin.BlockHeight, &vin.BlockIndex); err != nil {
+			&vin.BlockHeight, &vin.BlockIndex, &coinType, &skaValue); err != nil {
 			log.Errorf("GetAddressTransactionsRawWithSkip: SelectVinsForAddress %s: %v", addr, err)
 			rows.Close()
 			return nil
 		}
 		vin.Txid = vinTxID.String()
+		vin.CoinType = uint8(coinType)
+		vin.SKAValue = skaValue
 
 		if val > 0 {
 			vin.AmountIn = dcrutil.Amount(val).ToCoin()
@@ -5889,7 +5908,11 @@ func makeExplorerBlockBasic(data *chainjson.GetBlockVerboseResult, params *chain
 
 	total := sumOutsTxRawResult(data.RawTx) + sumOutsTxRawResult(data.RawSTx)
 
-	numReg := len(data.RawTx)
+	numAll := len(data.RawTx) + len(data.RawSTx)
+	numReg := numAll - int(data.Voters) - int(data.FreshStake) - int(data.Revocations)
+	if numReg < 0 {
+		numReg = 0
+	}
 
 	block := &exptypes.BlockBasic{
 		IndexVal:       index,
@@ -5903,7 +5926,7 @@ func makeExplorerBlockBasic(data *chainjson.GetBlockVerboseResult, params *chain
 		Transactions:   numReg,
 		FreshStake:     data.FreshStake,
 		Revocations:    uint32(data.Revocations),
-		TxCount:        uint32(data.FreshStake+data.Revocations) + uint32(numReg) + uint32(data.Voters),
+		TxCount:        uint32(numAll),
 		BlockTime:      exptypes.NewTimeDefFromUNIX(data.Time),
 		FormattedBytes: humanize.Bytes(uint64(data.Size)),
 		Total:          total,
@@ -6074,6 +6097,68 @@ func (pgb *ChainDB) GetExplorerBlock(ctx context.Context, hash string) *exptypes
 		block.PoWHash = header.PowHashV2().String()
 	}
 
+	// PoW SKA Rewards Aggregation
+	rewardsMap := make(map[uint8]*big.Int)
+	var minerAddresses = make(map[string]bool)
+
+	// 1. Identify the coinbase transaction and collect all miner addresses.
+	var coinbaseMsgTx *wire.MsgTx
+	for _, tx := range data.RawTx {
+		if msgTx, err := txhelpers.MsgTxFromHex(tx.Hex); err == nil && txhelpers.IsCoinBaseTx(msgTx) {
+			coinbaseMsgTx = msgTx
+			break
+		}
+	}
+	if coinbaseMsgTx == nil {
+		for _, tx := range data.RawSTx {
+			if msgTx, err := txhelpers.MsgTxFromHex(tx.Hex); err == nil && txhelpers.IsCoinBaseTx(msgTx) {
+				coinbaseMsgTx = msgTx
+				break
+			}
+		}
+	}
+
+	if coinbaseMsgTx != nil {
+		for _, out := range coinbaseMsgTx.TxOut {
+			_, addrs := stdscript.ExtractAddrs(out.Version, out.PkScript, pgb.chainParams)
+			for _, addr := range addrs {
+				minerAddresses[addr.String()] = true
+			}
+		}
+
+		// 2. Aggregate all SKA rewards from all block transactions that go to these miners.
+		aggregate := func(txs []chainjson.TxRawResult) {
+			for _, tx := range txs {
+				msgTx, err := txhelpers.MsgTxFromHex(tx.Hex)
+				if err != nil {
+					continue
+				}
+				for _, out := range msgTx.TxOut {
+					_, addrs := stdscript.ExtractAddrs(out.Version, out.PkScript, pgb.chainParams)
+					isMiner := false
+					for _, addr := range addrs {
+						if minerAddresses[addr.String()] {
+							isMiner = true
+							break
+						}
+					}
+					if isMiner && out.CoinType.IsSKA() && out.SKAValue != nil {
+						ct := uint8(out.CoinType)
+						if cur, ok := rewardsMap[ct]; ok {
+							cur.Add(cur, out.SKAValue)
+						} else {
+							rewardsMap[ct] = new(big.Int).Set(out.SKAValue)
+						}
+					}
+				}
+			}
+		}
+
+		aggregate(data.RawTx)
+		aggregate(data.RawSTx)
+		block.SKAPoWRewards = powRewardsFromMap(rewardsMap)
+	}
+
 	votes := make([]*exptypes.TrimmedTxInfo, 0, block.Voters)
 	revocations := make([]*exptypes.TrimmedTxInfo, 0, block.Revocations)
 	tickets := make([]*exptypes.TrimmedTxInfo, 0, block.FreshStake)
@@ -6219,6 +6304,7 @@ func (pgb *ChainDB) GetExplorerBlocks(ctx context.Context, start int, end int) [
 }
 
 // txWithTicketPrice is a way to perform getrawtransaction and if the
+
 // transaction is unconfirmed, getstakedifficulty, while the chain server's best
 // block remains unchanged. If the transaction is confirmed, the ticket price is
 // queryied from ChainDB's database. This is an ugly solution to atomic RPCs.
@@ -6797,6 +6883,24 @@ func (pgb *ChainDB) SignalHeight(height uint32) {
 			pgb.shutdownDcrdata()
 		}
 	}
+}
+
+// powRewardsFromMap converts a PoW rewards map to []exptypes.PoWSKAReward.
+func powRewardsFromMap(rewards map[uint8]*big.Int) []exptypes.PoWSKAReward {
+	if len(rewards) == 0 {
+		return nil
+	}
+	res := make([]exptypes.PoWSKAReward, 0, len(rewards))
+	for ct, amt := range rewards {
+		res = append(res, exptypes.PoWSKAReward{
+			CoinType: ct,
+			Symbol:   fmt.Sprintf("SKA-%d", ct),
+			Amount:   amt.String(),
+		})
+	}
+	// Sort by CoinType ascending.
+	sort.Slice(res, func(i, j int) bool { return res[i].CoinType < res[j].CoinType })
+	return res
 }
 
 // coinRowsFromAmounts converts a CoinAmounts map to []CoinRowData for the

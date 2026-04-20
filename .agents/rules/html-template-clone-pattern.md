@@ -102,12 +102,13 @@ replaced seamlessly.
 
 ## Existing usages in this codebase
 
-| Template id                 | Declared in         | Consumed by              | Purpose                           |
-| --------------------------- | ------------------- | ------------------------ | --------------------------------- |
-| `pow-ska-reward-template`   | `home_mining.tmpl`  | `mining_controller.js`   | PoW SKA reward rows per block     |
-| `pow-ska-empty-template`    | `home_mining.tmpl`  | `mining_controller.js`   | Empty state when no SKA rewards   |
-| `ska-reward-block-template` | `home_voting.tmpl`  | `voting_controller.js`   | Staking SKA reward rows per block |
-| `fill-bar-template`         | `home_mempool.tmpl` | `homepage_controller.js` | Mempool fill-bar rows per coin    |
+| Template id                    | Declared in         | Consumed by              | Purpose                                      |
+| ------------------------------ | ------------------- | ------------------------ | -------------------------------------------- |
+| `pow-ska-reward-template`      | `home_mining.tmpl`  | `mining_controller.js`   | PoW SKA reward rows per block                |
+| `pow-ska-empty-template`       | `home_mining.tmpl`  | `mining_controller.js`   | Empty state when no SKA rewards              |
+| `ska-reward-block-template`    | `home_voting.tmpl`  | `voting_controller.js`   | Staking SKA reward rows per block            |
+| `fill-bar-template`            | `home_mempool.tmpl` | `homepage_controller.js` | Mempool fill-bar rows per coin               |
+| `home-mempool-tx-row-template` | `home_mempool.tmpl` | `homepage_controller.js` | Latest transaction rows in home mempool card |
 
 ## Rules
 

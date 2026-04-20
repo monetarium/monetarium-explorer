@@ -149,12 +149,19 @@
     white-space: nowrap;
   }
 
+  .total-bar__pct {
+    flex: 0 0 3.5rem;
+    font-size: 0.75rem;
+    text-align: right;
+    white-space: nowrap;
+  }
+
   .total-bar__track {
     position: relative;
     flex: 1 1 auto;
     height: 1.25rem; // Matched to $progress-height
     border-radius: $border-radius;
-    background-color: var(--indicator-track-bg);
+    background-color: var(--indicator-total-track-bg);
     overflow: hidden;
   }
 

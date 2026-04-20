@@ -1,0 +1,98 @@
+{
+    "tasks": [
+        {
+            "type": "parent",
+            "issue_type": "Feature",
+            "title": "[Feature] Latest Blocks: fix Transactions column count and desktop header labels",
+            "description": "Two related corrections to the Latest Blocks table (MAIN_MANIFEST.md §3.1.1.2, §3.1.2, §3.3).\n\n**User-visible outcome:** The Txn column shows the correct count (excluding Vote, Tickets, Revocations), and desktop column headers display full words \"Tickets\" and \"Revokes\" instead of the abbreviated \"Tkt\" / \"Rev\".\n\n**Hard constraints:**\n- Txn = all transactions in block minus Vote, Tickets, Revocations. Includes: regular VAR transfers, miner subsidy, staking reward, SKA transfers, coin emission.\n- Desktop: full words in `<th>` text. Mobile: keep abbreviated forms. Tooltips unchanged.",
+            "assignee": "edshav",
+            "labels": ["enhancement"]
+        },
+        {
+            "type": "sub-issue",
+            "issue_type": "Task",
+            "title": "Fix Transactions aggregation query to exclude Vote/Tickets/Revocations",
+            "description": "**What to change:** The SQL query (or in-memory aggregation) that populates the Txn column currently counts all transactions. It must be corrected to subtract Vote, Ticket-purchase, and Revocation transaction types.\n\n**Spec rule:** MAIN_MANIFEST.md §3.1.1.2 and §3.3 — `Transactions = all txs − Vote − Tickets − Revokes`.\n\n**Done when:** The Txn value in the Latest Blocks table equals the total block transaction count minus the counts shown in the Vote, Tkt, and Rev columns.",
+            "assignee": "yanchenko-igor",
+            "labels": ["enhancement", "backend"],
+            "parent": 0
+        },
+        {
+            "type": "sub-issue",
+            "issue_type": "Task",
+            "title": "Update Latest Blocks column headers: full words on desktop, abbreviated on mobile",
+            "description": "**What to change:** In `cmd/dcrdata/views/` (the relevant `.tmpl` file for the blocks table), update the `<th>` elements for Tkt and Rev columns:\n- Desktop: render \"Tickets\" and \"Revokes\".\n- Mobile breakpoint: render \"Tkt\" and \"Rev\" (existing abbreviated forms).\nTooltips (`title` or `data-tooltip` attributes) remain unchanged.\n\n**Spec rule:** MAIN_MANIFEST.md §3.1.2.\n\n**Done when:** On a wide viewport the column headers read \"Tickets\" and \"Revokes\"; on a narrow/mobile viewport they read \"Tkt\" and \"Rev\". Tooltips are unaffected.",
+            "assignee": "edshav",
+            "labels": ["enhancement", "frontend"],
+            "parent": 0
+        },
+        {
+            "type": "issue",
+            "issue_type": "Task",
+            "title": "Mempool section: horizontal block-fill indicators",
+            "description": "Bars are identical in size; font size is uniform across all labels and percentages. The Total bar uses a darker gray shade than VAR/SKA bars.\n- Indicator for each coin appears automatically when the coin is emitted and never disappears afterward (shows 0% when mempool is empty for that coin).\n- Bar sizes and font sizes are uniform across Total, VAR, and all SKA-n indicators.",
+            "assignee": "edshav",
+            "labels": ["enhancement"]
+        },
+        {
+            "type": "parent",
+            "issue_type": "Feature",
+            "title": "[Feature] Voting section: fix layout and VAR/SKA reward display",
+            "description": "Layout corrections and data-display fixes for the Voting section on the home page (MAIN_MANIFEST.md §5.1).\n\n**User-visible outcome:**\n- Ticket Pool Size and Next Ticket Price swap positions.\n- Total Staked VAR moves to the right column, directly below the green Next Ticket Price Change indicator.\n- Vote VAR Reward first row shows VAR per vote (per ticket), not per VAR coin.\n- Vote SKA Reward: SKA-n/Vote row shows `-` (dash) when no SKA transactions in the latest block; 30-day and yearly rows remain visible and are computed cumulatively regardless of current block content.\n\n**Hard constraints:**\n- Layout changes are purely positional — no data logic changes in the Ticket Pool Size / Next Ticket Price widgets.\n- The dash (`-`) for SKA-n/Vote must be a visible character, not an empty cell or hidden element.",
+            "assignee": "edshav",
+            "labels": ["enhancement"]
+        },
+        {
+            "type": "sub-issue",
+            "issue_type": "Task",
+            "title": "Backend: expose VAR/Vote (per-ticket) reward for last block and fix SKA/Vote dash logic",
+            "description": "**What to change:**\n1. Ensure the API/WebSocket payload for the Voting section includes the VAR reward per vote for the last block (i.e. one ticket's VAR payout = 1/5 of 50% of block subsidy + 1/5 of 50% of VAR fees). This is the value for the `VAR/Vote` first row.\n2. For SKA-n/Vote: when the latest block contains no SKA transactions, the backend must explicitly signal \"no data for this block\" (distinct from zero) so the frontend can render `-`. The 30-day and yearly cumulative figures should always be returned independently.\n\n**Spec rule:** MAIN_MANIFEST.md §5.1.1, §5.1.2, §6.2.\n\n**Done when:** The payload distinguishes between \"zero SKA reward this block\" and \"no SKA in this block\", and the per-ticket VAR reward is available as a dedicated field.",
+            "assignee": "yanchenko-igor",
+            "labels": ["enhancement", "backend"],
+            "parent": 4
+        },
+        {
+            "type": "sub-issue",
+            "issue_type": "Task",
+            "title": "Frontend: swap Ticket Pool Size / Next Ticket Price, move Total Staked VAR, update reward rows",
+            "description": "**What to change:** In the home page template (`cmd/dcrdata/views/`) and associated Stimulus controller:\n1. Swap the DOM positions of the Ticket Pool Size and Next Ticket Price widgets (Pool Size → top-right, Next Ticket Price → second row left).\n2. Move Total Staked VAR to the right column, immediately below the green Next Ticket Price Change indicator (third row right).\n3. Vote VAR Reward first row: change label/value to `VAR/Vote` (per-ticket amount).\n4. Vote SKA Reward SKA-n/Vote row: render `-` when backend signals no SKA in last block; keep 30-day and yearly rows always visible.\n\n**Spec rule:** MAIN_MANIFEST.md §5.1.1, §5.1.2, §5.1.3.\n\n**Done when:** Layout matches §5.1.3 positioning; VAR/Vote shows per-ticket value; SKA-n/Vote shows `-` on blocks without SKA; cumulative rows are always present.",
+            "assignee": "edshav",
+            "labels": ["enhancement", "frontend"],
+            "parent": 4
+        },
+        {
+            "type": "issue",
+            "issue_type": "Task",
+            "title": "Mining section: swap difficulty indicator and PoW SKA Reward positions",
+            "description": "Layout-only change in the Mining section on the home page (MAIN_MANIFEST.md §5.2.3).\n\n**User-visible outcome:** The green difficulty indicator (`Next Block VAR Reward Reduction`) moves to the right column (second row); `PoW SKA Reward` moves below, with room to grow as new SKA types are emitted.\n\n**Hard constraints:** No data or label changes — purely a positional swap in the template.",
+            "assignee": "edshav",
+            "labels": ["enhancement", "frontend"]
+        },
+        {
+            "type": "parent",
+            "issue_type": "Feature",
+            "title": "[Feature] Supply section: remove VAR target row and redesign SKA Coin Supply display",
+            "description": "Corrections to the Supply section on the home page (MAIN_MANIFEST.md §5.3).\n\n**User-visible outcome:**\n- VAR Coin Supply: the `target` row (e.g. `2.75 VAR`) is removed — Monetarium has no such parameter.\n- SKA Coin Supply: each SKA block is redesigned — the circulation count is displayed as a large number with the coin label inline to its right (e.g. `900 000 000 000 000 SKA-1`); the separate \"In Circulation\" label row is removed; two small rows remain below: `Issued: <n>` and `Burned: <n>`.\n- All three numbers (circulation, issued, burned) are displayed as exact integers — no abbreviations (K/M/B/T), no rounding.\n\n**Hard constraints (§2, §5.3.2):**\n- SKA has up to 15 integer digits. The template must accommodate the full number without truncation.\n- The exact-integer rule applies only to SKA Coin Supply; VAR Coin Supply is unaffected by the precision rule change.",
+            "assignee": "edshav",
+            "labels": ["enhancement"]
+        },
+        {
+            "type": "sub-issue",
+            "issue_type": "Task",
+            "title": "Backend: provide exact integer SKA supply figures (issued, burned, circulation)",
+            "description": "**What to change:** Ensure the API/WS payload for the Supply section returns SKA Coin Supply figures (issued, burned, in-circulation) as exact integer strings — not floats, not abbreviated values. Since SKA uses up to 15 integer digits, values must be serialized as strings or big.Int to avoid float64 precision loss.\n\n**Spec rule:** MAIN_MANIFEST.md §5.3.2, §1.2, §1.3 — the big-number module must be used; standard Go numeric types are insufficient.\n\n**Done when:** The payload contains string-encoded exact integer counts for each SKA type; the frontend receives them without precision loss.",
+            "assignee": "yanchenko-igor",
+            "labels": ["enhancement", "backend"],
+            "parent": 8
+        },
+        {
+            "type": "sub-issue",
+            "issue_type": "Task",
+            "title": "Frontend: remove VAR target row and redesign SKA Coin Supply layout",
+            "description": "**What to change:** In the home page template and SCSS:\n1. Remove the `target` row from the VAR Coin Supply widget.\n2. Redesign each SKA Coin Supply block:\n   - Large-font number = circulation count, with `SKA-n` label inline to its right (same line, same treatment as the VAR large number).\n   - Remove the separate \"In Circulation\" label row.\n   - Two small rows below: `Issued: <n>` and `Burned: <n>` (consider also `Total Issued` / `Total Burned` — pick whichever fits better visually).\n3. Render all three numbers as exact integers — use the string values from the backend payload directly, no JS number formatting that would lose precision or add abbreviations.\n\n**Spec rule:** MAIN_MANIFEST.md §5.3.1, §5.3.2, §2 (SKA Coin Supply precision exception).\n\n**Done when:** VAR target row is gone; each SKA block shows large circulation number with inline label, plus two small exact-integer rows; no K/M/B/T abbreviations appear in SKA supply figures.",
+            "assignee": "edshav",
+            "labels": ["enhancement", "frontend"],
+            "parent": 8
+        }
+    ]
+}

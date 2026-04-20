@@ -127,3 +127,46 @@ describe('humanize.skaCoinValue + threeSigFigs', () => {
   it('formats 0.001 coins as "0.00100"', () =>
     expect(humanize.threeSigFigs(humanize.skaCoinValue('1000000000000000'))).toBe('0.00100'))
 })
+
+describe('humanize.formatCoinAtomsFull', () => {
+  // VAR: coinType 0, 8 decimal places, trailing zeros stripped
+  it('returns "0" for empty string', () => expect(humanize.formatCoinAtomsFull('', 0)).toBe('0'))
+  it('returns "0" for invalid input', () =>
+    expect(humanize.formatCoinAtomsFull('notanumber', 0)).toBe('0'))
+  it('formats whole VAR amount — no decimal point', () =>
+    expect(humanize.formatCoinAtomsFull('100000000', 0)).toBe('1'))
+  it('formats VAR with decimal, trailing zeros stripped', () =>
+    expect(humanize.formatCoinAtomsFull('150000000', 0)).toBe('1.5'))
+  it('formats VAR with full 8 decimal precision', () =>
+    expect(humanize.formatCoinAtomsFull('100000001', 0)).toBe('1.00000001'))
+  it('formats VAR zero atoms as "0"', () => expect(humanize.formatCoinAtomsFull('0', 0)).toBe('0'))
+  it('formats large VAR circulating supply (151399680000000 atoms)', () =>
+    expect(humanize.formatCoinAtomsFull('151399680000000', 0)).toBe('1,513,996.8'))
+
+  // SKA: coinType != 0, 18 decimal places, trailing zeros stripped
+  it('returns "0" for empty SKA string', () =>
+    expect(humanize.formatCoinAtomsFull('', 1)).toBe('0'))
+  it('formats whole SKA amount — no decimal point', () =>
+    expect(humanize.formatCoinAtomsFull('1000000000000000000', 1)).toBe('1'))
+  it('formats SKA with trailing-zero stripping', () =>
+    expect(humanize.formatCoinAtomsFull('1500000000000000000', 1)).toBe('1.5'))
+  it('formats SKA with two significant decimals', () =>
+    expect(humanize.formatCoinAtomsFull('1840000000000000000', 1)).toBe('1.84'))
+  it('formats SKA zero atoms as "0"', () => expect(humanize.formatCoinAtomsFull('0', 1)).toBe('0'))
+  it('formats exact WS payload in_circulation value', () =>
+    expect(humanize.formatCoinAtomsFull('899999999991999840000000000000000', 1)).toBe(
+      '899,999,999,991,999.84'
+    ))
+  it('formats exact WS payload total_issued value (whole number)', () =>
+    expect(humanize.formatCoinAtomsFull('900000000000000000000000000000000', 1)).toBe(
+      '900,000,000,000,000'
+    ))
+  it('formats exact WS payload total_burned value', () =>
+    expect(humanize.formatCoinAtomsFull('8000160000000000000000', 1)).toBe('8,000.16'))
+  it('handles a single atom (10^-18)', () =>
+    expect(humanize.formatCoinAtomsFull('1', 1)).toBe('0.000000000000000001'))
+  it('strips all 18 trailing decimal zeros for whole coin', () =>
+    expect(humanize.formatCoinAtomsFull('5000000000000000000', 1)).toBe('5'))
+  it('coinType 2 uses same 18-decimal SKA rules', () =>
+    expect(humanize.formatCoinAtomsFull('1230000000000000000', 2)).toBe('1.23'))
+})

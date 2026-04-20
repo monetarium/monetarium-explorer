@@ -40,6 +40,9 @@ function coinRowsToSKAData(block) {
     }
   }
 
+  totalTxCount -= (block.votes || 0) + (block.tickets || 0) + (block.revocations || 0)
+  if (totalTxCount < 0) totalTxCount = 0
+
   let skaAmount = ''
   if (subRows.length === 1) {
     skaAmount = subRows[0].amount
@@ -50,68 +53,38 @@ function coinRowsToSKAData(block) {
   return { totalTxCount, varTxCount, varAmount, varSize, skaAmount, subRows }
 }
 
-function makeTd(className, text) {
-  const td = document.createElement('td')
-  td.className = className
-  if (text !== undefined) td.textContent = text
-  return td
-}
-
 // Insert a VAR sub-row immediately after newRow (9-column layout).
 function insertVARSubRow(tbody, newRow, varTxCount, varAmount, varSize) {
-  const tr = document.createElement('tr')
-  tr.className = 'ska-sub-row'
-  tr.dataset.skaAccordionTarget = 'subRow'
+  const tmpl = document.getElementById('home-var-sub-row-template')
+  if (!tmpl) return null
+  const clone = document.importNode(tmpl.content, true)
+  const tr = clone.querySelector('tr')
   tr.dataset.blockId = newRow.dataset.blockId
 
-  const labelTd = makeTd('text-end ps-2 ps-sm-4')
-  labelTd.dataset.type = 'sub-label'
-  const labelSpan = document.createElement('span')
-  labelSpan.className = 'coin-label coin-label--var'
-  labelSpan.textContent = 'VAR'
-  labelTd.appendChild(labelSpan)
-  tr.appendChild(labelTd)
-  tr.appendChild(makeTd('text-end num', varTxCount > 0 ? String(varTxCount) : '—'))
-  tr.appendChild(makeTd('text-end num', varAmount))
-  tr.appendChild(makeTd('text-end', '—'))
-  tr.appendChild(makeTd('text-end num d-none d-sm-table-cell d-md-none d-lg-table-cell', varSize))
-  tr.appendChild(makeTd('text-end', '—'))
-  tr.appendChild(makeTd('text-end', '—'))
-  tr.appendChild(makeTd('text-end d-none d-sm-table-cell d-md-none d-lg-table-cell', '—'))
-  tr.appendChild(makeTd('text-end', '—'))
+  clone.querySelector('[data-type="tx"]').textContent = varTxCount > 0 ? String(varTxCount) : '—'
+  clone.querySelector('[data-type="var-amount"]').textContent = varAmount
+  clone.querySelector('[data-type="size"]').textContent = varSize
 
-  tbody.insertBefore(tr, newRow.nextSibling)
+  tbody.insertBefore(clone, newRow.nextSibling)
   return tr
 }
 
 // Insert SKA sub-rows after insertRef (9-column layout).
 function insertSKASubRows(tbody, insertRef, subRows, blockHeight) {
+  const tmpl = document.getElementById('home-ska-sub-row-template')
+  if (!tmpl || !insertRef) return
   const ref = insertRef.nextSibling
   for (const sub of subRows) {
-    const tr = document.createElement('tr')
-    tr.className = 'ska-sub-row'
-    tr.dataset.skaAccordionTarget = 'subRow'
+    const clone = document.importNode(tmpl.content, true)
+    const tr = clone.querySelector('tr')
     tr.dataset.blockId = String(blockHeight)
 
-    const labelTd = makeTd('text-end ps-2 ps-sm-4')
-    labelTd.dataset.type = 'sub-label'
-    const badge = document.createElement('span')
-    badge.className = 'coin-label coin-label--ska'
-    badge.textContent = sub.tokenType
-    labelTd.appendChild(badge)
-    tr.appendChild(labelTd)
-    tr.appendChild(makeTd('text-end num', sub.txCount))
-    tr.appendChild(makeTd('text-end', '—'))
-    tr.appendChild(makeTd('text-end num', sub.amount))
-    tr.appendChild(
-      makeTd('text-end num d-none d-sm-table-cell d-md-none d-lg-table-cell', sub.size)
-    )
-    tr.appendChild(makeTd('text-end', '—'))
-    tr.appendChild(makeTd('text-end', '—'))
-    tr.appendChild(makeTd('text-end d-none d-sm-table-cell d-md-none d-lg-table-cell', '—'))
-    tr.appendChild(makeTd('text-end', '—'))
+    clone.querySelector('.coin-label--ska').textContent = sub.tokenType
+    clone.querySelector('[data-type="tx"]').textContent = sub.txCount
+    clone.querySelector('[data-type="ska-amount"]').textContent = sub.amount
+    clone.querySelector('[data-type="size"]').textContent = sub.size
 
-    tbody.insertBefore(tr, ref)
+    tbody.insertBefore(clone, ref)
   }
 }
 
@@ -157,62 +130,33 @@ export default class extends Controller {
       'tr[data-ska-accordion-target="blockRow"]'
     )
 
-    const newRow = document.createElement('tr')
+    const tmpl = document.getElementById('home-block-row-template')
+    if (!tmpl) return
+    const clone = document.importNode(tmpl.content, true)
+    const newRow = clone.querySelector('tr')
+
     newRow.dataset.height = block.height
     newRow.dataset.linkClass = firstBlockRow.dataset.linkClass
-    newRow.dataset.skaAccordionTarget = 'blockRow'
     newRow.dataset.blockId = String(block.height)
-    newRow.classList.add('block-row-expandable')
+    newRow.dataset.skaAccordionTarget = 'blockRow'
     newRow.dataset.action = 'click->ska-accordion#toggle'
 
-    firstBlockRow.querySelectorAll('td').forEach((td) => {
-      const newTd = document.createElement('td')
-      newTd.className = td.className
-      const dataType = td.dataset.type
-      newTd.dataset.type = dataType
-      switch (dataType) {
-        case 'age':
-          newTd.dataset.age = block.unixStamp
-          newTd.dataset.timeTarget = 'age'
-          newTd.textContent = humanize.timeSince(block.unixStamp)
-          break
-        case 'height': {
-          const chevron = document.createElement('span')
-          chevron.className = 'chevron me-1'
-          newTd.appendChild(chevron)
-          const link = document.createElement('a')
-          link.href = `/block/${block.height}`
-          link.textContent = block.height
-          link.classList.add(firstBlockRow.dataset.linkClass)
-          newTd.appendChild(link)
-          break
-        }
-        case 'tx':
-          newTd.textContent = String(totalTxCount)
-          break
-        case 'var-amount':
-          newTd.textContent = varAmount
-          break
-        case 'ska-amount':
-          newTd.textContent = skaAmount || '—'
-          break
-        case 'size':
-          newTd.textContent = humanize.bytes(block.size)
-          break
-        case 'votes':
-          newTd.textContent = block.votes
-          break
-        case 'tickets':
-          newTd.textContent = block.tickets
-          break
-        case 'revocations':
-          newTd.textContent = block.revocations
-          break
-        default:
-          newTd.textContent = block[dataType]
-      }
-      newRow.appendChild(newTd)
-    })
+    const link = clone.querySelector('[data-type="height"] a')
+    link.href = `/block/${block.height}`
+    link.textContent = block.height
+    link.classList.add(firstBlockRow.dataset.linkClass)
+
+    clone.querySelector('[data-type="tx"]').textContent = String(totalTxCount)
+    clone.querySelector('[data-type="var-amount"]').textContent = varAmount
+    clone.querySelector('[data-type="ska-amount"]').textContent = skaAmount || '—'
+    clone.querySelector('[data-type="size"]').textContent = humanize.bytes(block.size)
+    clone.querySelector('[data-type="votes"]').textContent = block.votes
+    clone.querySelector('[data-type="tickets"]').textContent = block.tickets
+    clone.querySelector('[data-type="revocations"]').textContent = block.revocations
+
+    const ageTd = clone.querySelector('[data-type="age"]')
+    ageTd.dataset.age = block.unixStamp
+    ageTd.textContent = humanize.timeSince(block.unixStamp)
 
     // Insert the new block row before the current first block row (re-queried
     // after removals since the original firstBlockRow may have been detached).

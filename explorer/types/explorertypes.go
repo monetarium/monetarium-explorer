@@ -565,6 +565,7 @@ type BlockInfo struct {
 	TotalMixed            int64
 	StakeValidationHeight int64
 	Subsidy               *chainjson.GetBlockSubsidyResult
+	SKAPoWRewards         []PoWSKAReward `json:"pow_ska_rewards,omitempty"`
 	// CoinAmounts holds per-coin totals (VAR key=0, SKA-n key=n) as decimal atom strings.
 	CoinAmounts map[uint8]string `json:"coin_amounts,omitempty"`
 }
@@ -1208,9 +1209,11 @@ type MempoolVin struct {
 
 // MempoolInput is basic information about a transaction input.
 type MempoolInput struct {
-	TxId   string `json:"txid"`
-	Index  uint32 `json:"index"`
-	Outdex uint32 `json:"vout"`
+	TxId     string `json:"txid"`
+	Index    uint32 `json:"index"`
+	Outdex   uint32 `json:"vout"`
+	CoinType uint8  `json:"coin_type,omitempty"`
+	SKAValue string `json:"ska_value,omitempty"`
 }
 
 type MPTxsByTime []MempoolTx

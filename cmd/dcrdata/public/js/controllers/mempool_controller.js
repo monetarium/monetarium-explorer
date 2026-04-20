@@ -207,7 +207,10 @@ export default class extends Controller {
   }
 
   renderNewTxns(txs) {
-    each(txs, (tx) => {
+    // Process transactions in reverse order so that when each is inserted at the
+    // top, the end result matches the original input order (newest at top).
+    const txsToRender = [...txs].reverse()
+    each(txsToRender, (tx) => {
       incrementValue(this.countTargetMap[tx.Type])
       let rowFn
       switch (tx.Type) {

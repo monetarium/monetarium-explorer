@@ -449,7 +449,7 @@ export default class extends Controller {
     if (typeof offset !== 'undefined' && offset > 0) {
       links =
         `<a href="/${root}?start=${offset - pageSize}&n=${pageSize}&txntype=${txnType}" ` +
-        'class="d-inline-block dcricon-arrow-left m-1 fz20" data-action="click->address#pageNumberLink"></a>' +
+        'class="d-inline-block monicon-arrow-left m-1 fz20" data-action="click->address#pageNumberLink"></a>' +
         '\n'
     }
 
@@ -464,7 +464,7 @@ export default class extends Controller {
       links +=
         '\n' +
         `<a href="/${root}?start=${offset + pageSize}&n=${pageSize}&txntype=${txnType}" ` +
-        'class="d-inline-block dcricon-arrow-right m-1 fs20" data-action="click->address#pageNumberLink"></a>'
+        'class="d-inline-block monicon-arrow-right m-1 fs20" data-action="click->address#pageNumberLink"></a>'
     }
 
     ctrl.tablePaginationTarget.innerHTML = dompurify.sanitize(links)
@@ -829,9 +829,9 @@ export default class extends Controller {
 
   toggleExpand(_e) {
     const btn = this.expandoTarget
-    if (btn.classList.contains('dcricon-expand')) {
-      btn.classList.remove('dcricon-expand')
-      btn.classList.add('dcricon-collapse')
+    if (btn.classList.contains('monicon-expand')) {
+      btn.classList.remove('monicon-expand')
+      btn.classList.add('monicon-collapse')
       this.bigchartTarget.appendChild(this.chartboxTarget)
       this.fullscreenTarget.classList.remove('d-none')
     } else {
@@ -842,8 +842,8 @@ export default class extends Controller {
 
   putChartBack() {
     const btn = this.expandoTarget
-    btn.classList.add('dcricon-expand')
-    btn.classList.remove('dcricon-collapse')
+    btn.classList.add('monicon-expand')
+    btn.classList.remove('monicon-collapse')
     this.littlechartTarget.appendChild(this.chartboxTarget)
     this.fullscreenTarget.classList.add('d-none')
     if (this.graph) this.graph.resize()

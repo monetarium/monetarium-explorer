@@ -5,7 +5,7 @@
 {{template "html-head" headData .CommonPageData "Monetarium Blocks List"}}
     {{template "navbar" . }}
     {{template "blocksBanner" .}}
-    <div class="container px-0 main" data-controller="time pagenavigation blocklist">
+    <div class="container px-0 main" data-controller="time pagenavigation">
         {{$pendingBlocks := 0}}
         {{if gt (len $.Data) 0}}{{$pendingBlocks = ((index .Data 0).Height)}}{{end}}
 
@@ -110,7 +110,7 @@
                         <th class="text-end px-0">Time (UTC)</th>
                     </tr>
                 </thead>
-                <tbody data-blocklist-target="table">
+                <tbody>
                 {{range .Data}}
                     <tr data-height="{{ .Height }}">
                         <td data-type="height" class="text-start ps-0"><a href="/block/{{.Height}}" data-keynav-priority>{{if not .Valid}}<span class="attention">&#9888;</span>{{end}}{{ .Height }}</a></td>
@@ -132,7 +132,7 @@
             <div class="text-end pe-3">
               {{if lt $topBlock .BestBlock}}
                 <a href="/blocks?height={{ add $topBlock (int64 $blocksCount) }}&rows={{.Rows}}"
-                class="d-inline-block dcricon-arrow-left m-1 fs20"></a>
+                class="d-inline-block monicon-arrow-left m-1 fs20"></a>
               {{end}}
               {{range .Pages}}
                 {{if eq .Link ""}}
@@ -143,7 +143,7 @@
               {{end}}
               {{if ge $topBlock .Rows}}
                 <a href="/blocks?height={{ subtract $topBlock (int64 $blocksCount) }}&rows={{.Rows}}"
-                class="d-inline-block dcricon-arrow-right m-1 fs20"></a>
+                class="d-inline-block monicon-arrow-right m-1 fs20"></a>
               {{end}}
             </div>
             {{end}}

@@ -38,19 +38,22 @@ Every feature maps to either one or three issues — never two or four.
 
 ### 7. Automated Issue Creation
 
-To speed up the creation of large milestones, we use a custom Bash script (`.github/scripts/create_issues.sh`) that reads a `tasks.json` file and handles parent/sub-issue linking natively via the GitHub API.
+To speed up the creation of large milestones, we use a custom Node.js script (`.github/scripts/create-issues.js`) that reads a `tasks.json` file and handles parent/sub-issue linking natively via the GitHub API.
 
 #### Prerequisites
 
-- `brew install jq gh`
+- `brew install gh`
 - `gh auth login`
+- Node.js installed
 
 #### JSON Structure & Rules
+
+Your `tasks.json` must declare an array of task objects. Each task requires a unique string `id` to safely resolve parent relationships transparently regardless of array order. 
 
 You can define three types of issues in your `tasks.json`:
 
 - **`parent`**: High-level feature group. Defaults to the "Feature" org issue-type.
-- **`sub-issue`**: Specific developer task. Linked natively to a parent using the zero-based array index of the parent. Defaults to "Task" org issue-type.
+- **`sub-issue`**: Specific developer task. Linked natively to a parent using the parent's string `id`. Defaults to "Task" org issue-type.
 - **`issue`**: A standalone task with no parent. Defaults to "Task" org issue-type.
 
 **Example `tasks.json`:**
@@ -59,21 +62,23 @@ You can define three types of issues in your `tasks.json`:
 {
   "tasks": [
     {
+      "id": "feature-auth",
       "type": "parent",
       "issue_type": "Feature",
-      "title": "Feature group title",
+      "title": "Auth Feature Group",
       "description": "High-level description of the feature.",
-      "assignee": "github-username",
-      "labels": ["enhancement"]
+      "assignee": "yanchenko-igor",
+      "labels": ["enhancement", "backend"]
     },
     {
+      "id": "task-auth-front",
       "type": "sub-issue",
+      "parent": "feature-auth",
       "issue_type": "Task",
-      "title": "Implement specific part",
+      "title": "Implement Frontend Auth",
       "description": "Detailed task description.",
-      "assignee": "github-username",
-      "labels": ["enhancement"],
-      "parent": 0
+      "assignee": "edshav",
+      "labels": ["enhancement", "frontend"]
     }
   ]
 }
@@ -81,27 +86,47 @@ You can define three types of issues in your `tasks.json`:
 
 #### Running the script
 
-The tool features robust title-based idempotency, validation checks, and automatic rate-limit processing. All API activity and errors are permanently recorded to `create_issues.log`. If the script encounters a failure it preserves its internal state file and emits a non-zero exit code to fail any associated CI pipelines.
+The tool features robust ID-based idempotency, validation checks, legacy state auto-migration, and automatic rate-limit processing. All API activity and errors are permanently recorded to `create_issues.log`. If the script encounters a failure it isolates the error, gracefully processes the rest of the stack, and preserves its internal state file so you can retry flawlessly.
 
-**Note on Resuming**: By default, standard live runs will reset the state file automatically to protect against stale data. Use the `--resume` flag if you are intentionally recovering a previously failed workflow.
+**Note on Resuming**: If a previous run failed or was interrupted, use the `--resume` flag to read the existing state file (`.create_issues_state.json`). This ensures the script will skip tasks that were already created and linked, preventing duplicates. The state file is automatically cleaned up upon a completely flawless execution run. Without `--resume`, the script will start fresh and ignore any existing state.
 
 ```bash
 cd .github/scripts
 
-# Dry-run (validates and prints what WILL be created, no API calls):
-bash create_issues.sh --dry-run
-bash create_issues.sh --dry-run --file my_tasks.json
+# Dry-run (validates and prints what WILL be created using deterministic mock IDs, no API calls):
+node create-issues.js --dry-run
+node create-issues.js --dry-run --file my_tasks.json
 
 # Live run (uses defaults: tasks.json, repo and milestone from script config):
 # Will pause to ask for interactive 'yes' confirmation.
-bash create_issues.sh
+node create-issues.js
+
+# Resume a previous failed or interrupted run to prevent duplicate issues:
+node create-issues.js --resume
 
 # Skip the interactive confirmation prompt (useful for CI execution):
-bash create_issues.sh -y
-
-# Resume from a partial failure (skips titles already successfully created):
-bash create_issues.sh --resume
+node create-issues.js -y
 
 # Override repo and/or milestone via environment variables:
-REPO="monetarium/monetarium-explorer" MILESTONE="v2" bash create_issues.sh
+REPO="monetarium/monetarium-explorer" MILESTONE="v2" node create-issues.js
 ```
+
+### 8. Reference: Developers & Labels
+
+**Developers (Assignees):**
+- **yanchenko-igor**: Backend, DevOps
+- **edshav**: Frontend
+
+**Available Labels:**
+- `infrastructure`
+- `backend`
+- `bug`
+- `documentation`
+- `duplicate`
+- `enhancement`
+- `frontend`
+- `good first issue`
+- `help wanted`
+- `invalid`
+- `question`
+- `wontfix`

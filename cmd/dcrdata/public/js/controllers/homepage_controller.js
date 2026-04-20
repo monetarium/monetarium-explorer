@@ -1,6 +1,5 @@
 /* global requestAnimationFrame */
 import { Controller } from '@hotwired/stimulus'
-import dompurify from 'dompurify'
 import { each } from 'lodash-es'
 import { fadeIn } from '../helpers/animation_helper'
 import humanize from '../helpers/humanize_helper'
@@ -8,7 +7,6 @@ import Mempool from '../helpers/mempool_helper'
 import globalEventBus from '../services/event_bus_service'
 import { keyNav } from '../services/keyboard_navigation_service'
 import ws from '../services/messagesocket_service'
-import { alertArea, copyIcon } from './clipboard_controller'
 
 function incrementValue(element) {
   if (element) {
@@ -17,21 +15,50 @@ function incrementValue(element) {
 }
 
 function mempoolTableRow(tx) {
-  const tbody = document.createElement('tbody')
   const link = `/tx/${tx.hash}`
-  tbody.innerHTML = `<tr>
-    <td class="text-start ps-1 clipboard">
-      ${humanize.hashElide(tx.hash, link)}
-      ${copyIcon()}
-      ${alertArea()}
-    </td>
-    <td class="text-start">${tx.Type}</td>
-    <td class="text-end">${humanize.threeSigFigs(tx.total || 0, false, 8)}</td>
-    <td class="text-nowrap text-end">${tx.size} B</td>
-    <td class="text-end pe-1 text-nowrap" data-time-target="age" data-age="${tx.time}">${humanize.timeSince(tx.time)}</td>
-  </tr>`
-  dompurify.sanitize(tbody, { IN_PLACE: true, FORBID_TAGS: ['svg', 'math'] })
-  return tbody.firstElementChild
+
+  // Determine coin label and formatted amount
+  let coin, amount
+  if (tx.ska_totals && Object.keys(tx.ska_totals).length > 0) {
+    const [id, atomStr] = Object.entries(tx.ska_totals)[0]
+    coin = `SKA-${id}`
+    amount = humanize.formatCoinAtoms(atomStr, parseInt(id))
+  } else {
+    coin = 'VAR'
+    amount = humanize.threeSigFigs(tx.total || 0)
+  }
+
+  const tmpl = document.getElementById('home-mempool-tx-row-template')
+  if (!tmpl) return null
+
+  const clone = document.importNode(tmpl.content, true)
+  const hashTd = clone.querySelector('.tx-hash')
+  if (hashTd) {
+    hashTd.innerHTML = humanize.hashElide(tx.hash, link)
+  }
+  const typeTd = clone.querySelector('.tx-type')
+  if (typeTd) {
+    typeTd.textContent = tx.Type
+  }
+  const coinTd = clone.querySelector('.tx-coin')
+  if (coinTd) {
+    coinTd.textContent = coin
+  }
+  const amountTd = clone.querySelector('.tx-amount')
+  if (amountTd) {
+    amountTd.textContent = amount
+  }
+  const sizeTd = clone.querySelector('.tx-size')
+  if (sizeTd) {
+    sizeTd.textContent = `${tx.size} B`
+  }
+  const ageTd = clone.querySelector('.tx-age')
+  if (ageTd) {
+    ageTd.dataset.timeTarget = 'age'
+    ageTd.dataset.age = tx.time
+    ageTd.textContent = humanize.timeSince(tx.time)
+  }
+  return clone.querySelector('tr')
 }
 
 export default class extends Controller {
@@ -71,7 +98,7 @@ export default class extends Controller {
       this.mempool.replace(m)
       this.setMempoolFigures()
       this.updateCoinFillBars(m.coin_fills)
-      this.renderLatestTransactions(m.latest, true)
+      this.renderLatestTransactions(m.latest, false)
       this.updateIndicators(m)
       keyNav(evt, false, true)
     })
@@ -148,17 +175,22 @@ export default class extends Controller {
 
   renderLatestTransactions(txs, incremental) {
     if (!this.hasTransactionsTarget) return
-    each(txs, (tx) => {
+    // Process transactions in reverse order so that when each is inserted at the
+    // top, the end result matches the original input order (newest at top).
+    const txsToRender = [...txs].reverse()
+    each(txsToRender, (tx) => {
       if (incremental) {
         const targetKey = `num${tx.Type}Target`
         incrementValue(this[targetKey])
       }
-      const rows = this.transactionsTarget.querySelectorAll('tr')
-      if (rows.length) {
-        const lastRow = rows[rows.length - 1]
-        this.transactionsTarget.removeChild(lastRow)
-      }
       const row = mempoolTableRow(tx)
+      if (!row) return
+
+      const rows = this.transactionsTarget.querySelectorAll('tr')
+      if (rows.length > 0) {
+        this.transactionsTarget.removeChild(rows[rows.length - 1])
+      }
+
       row.style.opacity = 0.05
       this.transactionsTarget.insertBefore(row, this.transactionsTarget.firstChild)
       fadeIn(row)
@@ -213,11 +245,18 @@ export default class extends Controller {
         }
       })
 
-      // Remove bars for coins no longer in the payload (e.g. after a new block)
+      // Zero out bars for coins no longer in the payload (never remove them)
       if (this.hasIndicatorListTarget) {
         this.indicatorListTarget.querySelectorAll('[data-coin]').forEach((bar) => {
           if (!activeSymbols.has(bar.dataset.coin)) {
-            bar.remove()
+            this._applyFillBar(bar, {
+              symbol: bar.dataset.coin,
+              gq_fill_ratio: 0,
+              extra_fill_ratio: 0,
+              overflow_fill_ratio: 0,
+              gq_position_ratio: 0,
+              status: ''
+            })
           }
         })
       }

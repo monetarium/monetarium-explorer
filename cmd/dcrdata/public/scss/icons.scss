@@ -9,8 +9,8 @@
   font-style: normal;
 }
 
-[class^="dcricon-"],
-[class*=" dcricon-"] {
+[class^="monicon-"],
+[class*=" monicon-"] {
   /* use !important to prevent issues with browser extensions that change fonts */
   font-family: "icomoon", monospace !important;
   speak: none;
@@ -25,115 +25,111 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
-.dcricon-qrcode::before {
+.monicon-qrcode::before {
   content: "\e9f8";
 }
 
-.dcricon-sun-fill::before {
-  content: "\e901";
-}
-
-.dcricon-sun-stroke::before {
-  content: "\e902";
-}
-
-.dcricon-decred::before {
+.monicon-sun-fill::before {
   content: "\e900";
 }
 
-.dcricon-download::before {
+.monicon-sun-stroke::before {
+  content: "\e902";
+}
+
+.monicon-download::before {
   content: "\e95e";
 }
 
-.dcricon-block::before {
+.monicon-block::before {
   content: "\e906";
 }
 
-.dcricon-twoblocks::before {
+.monicon-twoblocks::before {
   content: "\22f0";
 }
 
-.dcricon-affirm::before {
+.monicon-affirm::before {
   content: "\1f3fb";
 }
 
-.dcricon-reject::before {
+.monicon-reject::before {
   content: "\1f3fc";
 }
 
-.dcricon-missing::before {
+.monicon-missing::before {
   content: "\1f3fd";
 }
 
-.dcricon-stack::before {
+.monicon-stack::before {
   content: "\e92e";
 }
 
-.dcricon-ticket::before {
+.monicon-ticket::before {
   content: "\e905";
 }
 
-.dcricon-pickaxe::before {
+.monicon-pickaxe::before {
   content: "\e903";
 }
 
-.dcricon-tree::before {
+.monicon-supply::before {
   content: "\e904";
 }
 
-.dcricon-coin-negative::before {
+.monicon-coin-negative::before {
   content: "\e907";
 }
 
-.dcricon-search::before {
+.monicon-search::before {
   content: "\e908";
 }
 
-.dcricon-arrow-up::before {
+.monicon-arrow-up::before {
   content: "\e911";
 }
 
-.dcricon-arrow-down::before {
+.monicon-arrow-down::before {
   content: "\e910";
 }
 
-.dcricon-arrow-right {
+.monicon-arrow-right {
   transform: rotate(90deg);
 }
 
-.dcricon-arrow-right::before {
+.monicon-arrow-right::before {
   content: "\e911";
 }
 
-.dcricon-arrow-left {
+.monicon-arrow-left {
   transform: rotate(-90deg);
 }
 
-.dcricon-arrow-left::before {
+.monicon-arrow-left::before {
   content: "\e911";
 }
 
-.dcricon-discussion::before {
+.monicon-discussion::before {
   content: "\e912";
 }
 
-.dcricon-back::before {
+.monicon-back::before {
   content: "\e913";
 }
 
-.dcricon-expand::before {
+.monicon-expand::before {
   content: "\e914";
 }
 
-.dcricon-collapse::before {
+.monicon-collapse::before {
   content: "\e915";
 }
 
-.dcricon-copy::before {
+.monicon-copy::before {
   content: "\e92c";
 }
 
-.dcricon-info::before {
+.monicon-info::before {
   content: "\e916";
 }
 

@@ -475,13 +475,19 @@ func (exp *explorerUI) MempoolSignal() chan<- pstypes.HubMessage {
 func (exp *explorerUI) StoreMPData(_ *mempool.StakeData, _ []types.MempoolTx, inv *types.MempoolInfo) {
 	exp.pageData.RLock()
 	blockchainInfo := exp.pageData.BlockchainInfo
+	// Derive the full set of issued SKA coin types from the cached supply data
+	// so that coins with no current mempool activity still get a zero-fill entry.
+	var issuedSKA []uint8
+	for _, entry := range exp.pageData.HomeInfo.SKACoinSupply {
+		issuedSKA = append(issuedSKA, entry.CoinType)
+	}
 	exp.pageData.RUnlock()
 
 	maxBlockSize := 393216.0
 	if blockchainInfo != nil && blockchainInfo.MaxBlockSize > 0 {
 		maxBlockSize = float64(blockchainInfo.MaxBlockSize)
 	}
-	fills, totalFillRatio, activeSKACount := computeCoinFills(inv.CoinStats, maxBlockSize)
+	fills, totalFillRatio, activeSKACount := computeCoinFills(inv.CoinStats, maxBlockSize, issuedSKA)
 	inv.CoinFills = fills
 	inv.MempoolShort.CoinFills = fills
 	inv.MempoolShort.TotalFillRatio = totalFillRatio
@@ -572,6 +578,27 @@ func (exp *explorerUI) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgB
 		p.HomeInfo.SKACoinSupply = entries
 	}
 
+	// Recompute fill bars using the freshly updated issued set so that any
+	// newly issued SKA coin (e.g. via coinbase) gets a zero-fill indicator
+	// broadcast to connected clients even before its first mempool transaction.
+	{
+		var issuedSKA []uint8
+		for _, entry := range p.HomeInfo.SKACoinSupply {
+			issuedSKA = append(issuedSKA, entry.CoinType)
+		}
+		maxBlockSize := 393216.0
+		if p.BlockchainInfo != nil && p.BlockchainInfo.MaxBlockSize > 0 {
+			maxBlockSize = float64(p.BlockchainInfo.MaxBlockSize)
+		}
+		exp.invsMtx.Lock()
+		fills, totalFillRatio, activeSKACount := computeCoinFills(exp.invs.CoinStats, maxBlockSize, issuedSKA)
+		exp.invs.CoinFills = fills
+		exp.invs.MempoolShort.CoinFills = fills
+		exp.invs.MempoolShort.TotalFillRatio = totalFillRatio
+		exp.invs.MempoolShort.ActiveSKACount = activeSKACount
+		exp.invsMtx.Unlock()
+	}
+
 	// If BlockData contains non-nil PoolInfo, copy values.
 	p.HomeInfo.PoolInfo = types.TicketPoolInfo{}
 	if blockData.PoolInfo != nil {
@@ -608,10 +635,8 @@ func (exp *explorerUI) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgB
 		exp.ChainParams.TargetTimePerBlock.Hours()/24)
 
 	// Compute per-SKA vote rewards. Averages are always computed from
-	// historical summaries so they survive SKA-free blocks. PerBlock is only
-	// populated when the current block contains SKA fee data.
-	voters := int64(blockData.Header.Voters)
-
+	// historical summaries so they survive SKA-free blocks. PerBlock is
+	// retrieved from the latest block that contains SKA fee data.
 	blocksIn30Days := int(30 * 24 * time.Hour / exp.ChainParams.TargetTimePerBlock)
 	tip := int(exp.dataSource.Height())
 	start30 := tip - blocksIn30Days
@@ -637,16 +662,42 @@ func (exp *explorerUI) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgB
 		coinTypes[ct] = struct{}{}
 	}
 
+	// Find the latest block with SKA fee data for PerBlock calculation.
+	var latestSkaBlock *apitypes.BlockDataBasic
+	var latestSkaVoters int64
+
+	if len(blockData.ExtraInfo.SSFeeTotalsByCoin) > 0 {
+		// Use current block data directly to avoid redundant DB query
+		latestSkaVoters = int64(blockData.Header.Voters)
+		latestSkaBlock = &apitypes.BlockDataBasic{
+			SSFeeTotalsByCoin: blockData.ExtraInfo.SSFeeTotalsByCoin,
+		}
+	} else {
+		// Fallback: Search backwards through historical summaries
+		for i := len(sum30) - 1; i >= 0; i-- {
+			if len(sum30[i].SSFeeTotalsByCoin) > 0 {
+				latestSkaBlock = sum30[i]
+				// Get full block info to retrieve the voters count for this specific block
+				if bInfo := exp.dataSource.GetExplorerBlock(ctx, latestSkaBlock.Hash); bInfo != nil {
+					latestSkaVoters = int64(bInfo.BlockBasic.Voters)
+				}
+				break
+			}
+		}
+	}
+
 	if len(coinTypes) > 0 {
 		sum30S := toSummaries(sum30)
 		sumYearS := toSummaries(sumYear)
 		rewards := make([]types.SKAVoteReward, 0, len(coinTypes))
 		for ct := range coinTypes {
 			var perBlock string
-			if totalStr, ok := blockData.ExtraInfo.SSFeeTotalsByCoin[ct]; ok {
-				if total, parsed := new(big.Int).SetString(totalStr, 10); parsed && voters > 0 {
-					perVote := new(big.Int).Div(total, big.NewInt(voters))
-					perBlock = txhelpers.FormatSKAAtoms(perVote)
+			if latestSkaBlock != nil {
+				if totalStr, ok := latestSkaBlock.SSFeeTotalsByCoin[ct]; ok {
+					if total, parsed := new(big.Int).SetString(totalStr, 10); parsed && latestSkaVoters > 0 {
+						perVote := new(big.Int).Div(total, big.NewInt(latestSkaVoters))
+						perBlock = txhelpers.FormatSKAAtoms(perVote)
+					}
 				}
 			}
 			rewards = append(rewards, types.SKAVoteReward{
@@ -663,18 +714,49 @@ func (exp *explorerUI) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgB
 		p.HomeInfo.SKAVoteRewards = nil
 	}
 
-	// PoW SKA rewards: per-SKA-type mining reward amounts from the coinbase.
-	if len(blockData.ExtraInfo.SKAPoWRewards) > 0 {
-		powRewards := make([]types.PoWSKAReward, 0, len(blockData.ExtraInfo.SKAPoWRewards))
-		for ct, amountStr := range blockData.ExtraInfo.SKAPoWRewards {
-			powRewards = append(powRewards, types.PoWSKAReward{
-				CoinType: ct,
-				Symbol:   fmt.Sprintf("SKA-%d", ct),
-				Amount:   amountStr,
-			})
-		}
-		sort.Slice(powRewards, func(i, j int) bool { return powRewards[i].CoinType < powRewards[j].CoinType })
+	// PoW SKA rewards: prioritize rewards from the current block (miner-centric),
+	// then fallback to previous blocks if the current one is empty.
+	if len(newBlockData.SKAPoWRewards) > 0 {
+		powRewards := newBlockData.SKAPoWRewards
 		p.HomeInfo.PoWSKARewards = powRewards
+	} else {
+		var powRewardsMap map[uint8]string
+		if len(blockData.ExtraInfo.SKAPoWRewards) > 0 {
+			powRewardsMap = blockData.ExtraInfo.SKAPoWRewards
+		} else {
+			// Fallback: Search backwards from the current block height.
+			currentHeight := newBlockData.Height
+			for h := currentHeight - 1; h >= currentHeight-4320 && h >= 0; h-- {
+				hash, err := exp.dataSource.BlockHash(ctx, h)
+				if err != nil {
+					continue
+				}
+				bInfo := exp.dataSource.GetExplorerBlock(ctx, hash)
+				if bInfo != nil && len(bInfo.SKAPoWRewards) > 0 {
+					// Convert []types.PoWSKAReward back to map[uint8]string for sorting/assignment.
+					powRewardsMap = make(map[uint8]string)
+					for _, r := range bInfo.SKAPoWRewards {
+						powRewardsMap[r.CoinType] = r.Amount
+					}
+					break
+				}
+			}
+		}
+
+		if len(powRewardsMap) > 0 {
+			powRewards := make([]types.PoWSKAReward, 0, len(powRewardsMap))
+			for ct, amountStr := range powRewardsMap {
+				powRewards = append(powRewards, types.PoWSKAReward{
+					CoinType: ct,
+					Symbol:   fmt.Sprintf("SKA-%d", ct),
+					Amount:   amountStr,
+				})
+			}
+			sort.Slice(powRewards, func(i, j int) bool { return powRewards[i].CoinType < powRewards[j].CoinType })
+			p.HomeInfo.PoWSKARewards = powRewards
+		} else {
+			p.HomeInfo.PoWSKARewards = nil
+		}
 	}
 
 	// If exchange monitoring is enabled, set the exchange rate.
@@ -697,6 +779,16 @@ func (exp *explorerUI) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgB
 		case exp.wsHub.HubRelay <- pstypes.HubMessage{Signal: sigNewBlock}:
 		case <-time.After(time.Second * 10):
 			log.Errorf("sigNewBlock send failed: Timeout waiting for WebsocketHub.")
+		}
+	}()
+
+	// Broadcast updated fill bars so clients learn about newly issued coins
+	// (e.g. via coinbase) even before any mempool transactions for them arrive.
+	go func() {
+		select {
+		case exp.wsHub.HubRelay <- pstypes.HubMessage{Signal: sigMempoolUpdate}:
+		case <-time.After(time.Second * 10):
+			log.Errorf("sigMempoolUpdate send failed: Timeout waiting for WebsocketHub.")
 		}
 	}()
 
@@ -738,7 +830,7 @@ func (exp *explorerUI) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgB
 	}
 
 	// Update consensus agendas data every 5 blocks.
-	if newBlockData.Height%5 == 0 {
+	if newBlockData.Height%5 == 0 && exp.agendasSource != nil {
 		go func() {
 			err := exp.agendasSource.UpdateAgendas()
 			if err != nil {
@@ -1036,20 +1128,32 @@ const tcBytes = 393216.0
 // map. VAR is always first in the returned slice; SKA types follow in ascending
 // coin-type order. When stats is empty or nil a single VAR entry with all
 // ratios at 0.0 and status "ok" is returned.
+// issuedSKA is the set of all SKA coin types that have ever been issued on-chain
+// (from SKACoinSupply). Coin types present in issuedSKA but absent from stats
+// are included as zero-fill entries so their indicators are always visible.
 //
 //nolint:unparam // maxBlockSize comes from the node at runtime; test uses 100.0 for easy math.
-func computeCoinFills(stats map[uint8]types.MempoolCoinStats, maxBlockSize float64) ([]types.CoinFillData, float64, int) {
+func computeCoinFills(stats map[uint8]types.MempoolCoinStats, maxBlockSize float64, issuedSKA []uint8) ([]types.CoinFillData, float64, int) {
 	varQuota := maxBlockSize * 0.10
 	skaPool := maxBlockSize * 0.90
 
 	// Collect and sort SKA coin-type keys for deterministic output order.
+	// Seed from both the live mempool stats and the full issued set so that
+	// coins with no current mempool activity still get a zero-fill entry.
+	skaKeySet := make(map[int]struct{})
+	for ct := range stats {
+		if ct != 0 {
+			skaKeySet[int(ct)] = struct{}{}
+		}
+	}
+	for _, ct := range issuedSKA {
+		skaKeySet[int(ct)] = struct{}{}
+	}
 	var skaKeys []int
 	var totalSKASize float64
-	for ct, s := range stats {
-		if ct != 0 {
-			skaKeys = append(skaKeys, int(ct))
-			totalSKASize += float64(s.Size)
-		}
+	for k := range skaKeySet {
+		skaKeys = append(skaKeys, k)
+		totalSKASize += float64(stats[uint8(k)].Size)
 	}
 	sort.Ints(skaKeys)
 	numSKA := len(skaKeys)

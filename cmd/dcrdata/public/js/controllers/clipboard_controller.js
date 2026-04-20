@@ -2,7 +2,7 @@ import { Controller } from '@hotwired/stimulus'
 
 export const copyIcon = () => {
   const copyIcon = document.createElement('span')
-  copyIcon.classList.add('dcricon-copy')
+  copyIcon.classList.add('monicon-copy')
   copyIcon.classList.add('clickable')
   copyIcon.dataset.controller = 'clipboard'
   copyIcon.dataset.action = 'click->clipboard#copyTextToClipboard this'

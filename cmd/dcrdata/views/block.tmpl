@@ -13,7 +13,7 @@
 			<div class="pb-1 ps-1 position-relative">
 				<div class="d-flex justify-content-between flex-wrap">
 					<div class="d-inline-block text-nowrap">
-						<span class="dcricon-block h5"></span>
+						<span class="monicon-block h5"></span>
 						<span class="h5 d-inline-block ps-2">Block #{{.Height}}</span>
 						{{- if gt .Confirmations 0}}
 						<div class="d-inline-block confirmations-box confirmed mx-2 fs14"
@@ -158,7 +158,7 @@
 						<td class="text-end fw-bold text-nowrap pe-2">Nonce: </td>
 						<td class="text-start text-secondary">{{.Nonce}}</td>
 					</tr>
-					{{if and (ne .PoWHash .Hash) (ne .PoWHash "")}} 
+					{{if and (ne .PoWHash .Hash) (ne .PoWHash "")}}
 					<tr>
 						<td class="text-end fw-bold text-nowrap pe-2">PoW Hash: </td>
 						<td colspan="5" class="text-start break-word text-secondary lh1rem"> {{.PoWHash}}</td>

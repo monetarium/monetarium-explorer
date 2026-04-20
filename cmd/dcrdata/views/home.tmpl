@@ -4,13 +4,13 @@
 <html lang="en">
 {{ template "html-head" headData .CommonPageData "Monetarium Block Explorer"}}
     {{ template "navbar" . }}
-    <div class="container main" data-controller="time blocklist homepage mining supply voting"
+    <div class="container main" data-controller="time home-latest-blocks homepage mining supply voting"
          data-action="homepage:block->mining#handleBlock homepage:block->supply#handleBlock homepage:block->voting#handleBlock">
         <div class="row">
             <div class="d-flex flex-column col-md-15 p-0">
                 <div class="bg-white mb-1 py-2 px-3 my-0">
                     <div class="d-inline-block position-relative p-2">
-                        <span class="card-icon dcricon-twoblocks h1 me-2"></span> <a href="/blocks" class="h3 my-3">Latest {{.NetName}} Blocks</a>
+                        <span class="card-icon monicon-twoblocks h1 me-2"></span> <a href="/blocks" class="h3 my-3">Latest {{.NetName}} Blocks</a>
                     </div>
 
                     <div class="row">

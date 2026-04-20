@@ -13,7 +13,7 @@ vi.mock('../services/event_bus_service', () => ({
   default: { on: vi.fn(), off: vi.fn() }
 }))
 
-const { default: BlocklistController } = await import('./blocklist_controller.js')
+const { default: BlocklistController } = await import('./home_latest_blocks_controller.js')
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -67,6 +67,52 @@ function appendBlock(tbody, height, skaCoinRows = []) {
 }
 
 function buildTable(topHeight, blockCount = 1, skaCoinRows = []) {
+  if (!document.getElementById('home-block-row-template')) {
+    const div = document.createElement('div')
+    div.innerHTML = `
+<template id="home-block-row-template">
+  <tr class="block-row-expandable" data-ska-accordion-target="blockRow" data-action="click->ska-accordion#toggle">
+    <td class="text-start ps-1" data-type="height"><span class="chevron me-1"></span><a></a></td>
+    <td class="text-end num" data-type="tx"></td>
+    <td class="text-end num" data-type="var-amount"></td>
+    <td class="text-end num" data-type="ska-amount"></td>
+    <td class="text-end num d-none d-sm-table-cell d-md-none d-lg-table-cell" data-type="size"></td>
+    <td class="text-end num" data-type="votes"></td>
+    <td class="text-end num" data-type="tickets"></td>
+    <td class="text-end num d-none d-sm-table-cell d-md-none d-lg-table-cell" data-type="revocations"></td>
+    <td class="text-end num" data-type="age" data-time-target="age"></td>
+  </tr>
+</template>
+<template id="home-var-sub-row-template">
+  <tr class="ska-sub-row" data-ska-accordion-target="subRow">
+    <td class="text-end ps-2 ps-sm-4" data-type="sub-label"><span class="coin-label coin-label--var">VAR</span></td>
+    <td class="text-end num" data-type="tx"></td>
+    <td class="text-end num" data-type="var-amount"></td>
+    <td class="text-end">—</td>
+    <td class="text-end num d-none d-sm-table-cell d-md-none d-lg-table-cell" data-type="size"></td>
+    <td class="text-end">—</td>
+    <td class="text-end">—</td>
+    <td class="text-end d-none d-sm-table-cell d-md-none d-lg-table-cell">—</td>
+    <td class="text-end">—</td>
+  </tr>
+</template>
+<template id="home-ska-sub-row-template">
+  <tr class="ska-sub-row" data-ska-accordion-target="subRow">
+    <td class="text-end ps-2 ps-sm-4" data-type="sub-label"><span class="coin-label coin-label--ska"></span></td>
+    <td class="text-end num" data-type="tx"></td>
+    <td class="text-end">—</td>
+    <td class="text-end num" data-type="ska-amount"></td>
+    <td class="text-end num d-none d-sm-table-cell d-md-none d-lg-table-cell" data-type="size"></td>
+    <td class="text-end">—</td>
+    <td class="text-end">—</td>
+    <td class="text-end d-none d-sm-table-cell d-md-none d-lg-table-cell">—</td>
+    <td class="text-end">—</td>
+  </tr>
+</template>
+    `
+    document.body.appendChild(div)
+  }
+
   const tbody = document.createElement('tbody')
   for (let i = 0; i < blockCount; i++) appendBlock(tbody, topHeight - i, skaCoinRows)
   const ctrl = new BlocklistController(tbody)
@@ -137,7 +183,7 @@ describe('blocklist_controller — Property 8: WebSocket block prepend matches s
         'tr[data-block-id="1001"][data-ska-accordion-target="blockRow"]'
       )
       const txCell = Array.from(row.querySelectorAll('td')).find((td) => td.dataset.type === 'tx')
-      expect(txCell.textContent).toBe('69')
+      expect(txCell.textContent).toBe('61')
     })
 
     it('falls back to block.tx when no coin_rows', () => {

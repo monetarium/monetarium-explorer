@@ -309,6 +309,7 @@ func threeSigFigs(v float64) string {
 
 // skaDecimals is 10^18 — the number of SKA atoms per coin.
 var skaDecimals = new(big.Int).Exp(big.NewInt(10), big.NewInt(18), nil)
+var varDecimals = big.NewInt(1e8)
 
 // parseInt64 parses a decimal atom string to int64, returning 0 on error.
 func parseInt64(s string) int64 {
@@ -337,6 +338,56 @@ func skaCoinValue(atomStr string) float64 {
 	bf.Quo(bf, divisor)
 	v, _ := bf.Float64()
 	return v
+}
+
+// formatCoinAtomsFull converts a raw atom string to a coin string
+// with full precision (8 decimals for VAR, 18 for SKA).
+func formatCoinAtomsFull(atomStr string, coinType uint8) string {
+	if atomStr == "" {
+		return "0"
+	}
+	atoms := new(big.Int)
+	if _, ok := atoms.SetString(atomStr, 10); !ok {
+		return "0"
+	}
+
+	var decimals int
+	var divisor *big.Int
+	if coinType == 0 {
+		decimals = 8
+		divisor = varDecimals
+	} else {
+		decimals = 18
+		divisor = skaDecimals
+	}
+
+	rat := new(big.Rat).SetFrac(atoms, divisor)
+	s := rat.FloatString(decimals)
+	if strings.Contains(s, ".") {
+		s = strings.TrimRight(s, "0")
+		s = strings.TrimRight(s, ".")
+	}
+
+	parts := strings.Split(s, ".")
+	intPartRaw := parts[0]
+	prefix := ""
+	if len(intPartRaw) > 0 && intPartRaw[0] == '-' {
+		prefix = "-"
+		intPartRaw = intPartRaw[1:]
+	}
+
+	if len(intPartRaw) > 3 {
+		var out []byte
+		for i := 0; i < len(intPartRaw); i++ {
+			if i > 0 && (len(intPartRaw)-i)%3 == 0 {
+				out = append(out, ',')
+			}
+			out = append(out, intPartRaw[i])
+		}
+		parts[0] = prefix + string(out)
+	}
+
+	return strings.Join(parts, ".")
 }
 
 // formatCoinAtoms converts a raw atom string to a threeSigFigs-formatted coin
@@ -548,7 +599,11 @@ func makeTemplateFuncMap(params *chaincfg.Params) template.FuncMap {
 		"toFloat64Amount": func(intAmount int64) float64 {
 			return dcrutil.Amount(intAmount).ToCoin()
 		},
-		"formatCoinAtoms": formatCoinAtoms,
+		"varAtomsToFloat64": func(atomStr string) float64 {
+			return float64(parseInt64(atomStr)) / 1e8
+		},
+		"formatCoinAtoms":     formatCoinAtoms,
+		"formatCoinAtomsFull": formatCoinAtomsFull,
 		"skaDecimalParts": func(atomStr string, useCommas bool, boldNumPlaces ...int) []string {
 			return skaDecimalParts(atomStr, useCommas, boldNumPlaces...)
 		},

@@ -19,7 +19,7 @@
             <div class="d-flex justify-content-between align-items-end">
               <span class="h2 d-flex pt-4 pb-1 pe-2">
                 Windows
-                <span class="dcricon-info fs14 ms-2 mt-2" title="Monetarium Blocks Grouped By Ticket Price Windows"></span>
+                <span class="monicon-info fs14 ms-2 mt-2" title="Monetarium Blocks Grouped By Ticket Price Windows"></span>
               </span>
 
               <div class="pb-1 d-flex justify-content-end align-items-center flex-wrap">
@@ -140,7 +140,7 @@
           <div class="text-end pe-3">
             {{if ne .OffsetWindow 0}}
               <a href="/ticketpricewindows?offset={{ subtract .OffsetWindow .Limit }}&rows={{.Limit}}"
-              class="d-inline-block dcricon-arrow-left m-1 fs20"></a>
+              class="d-inline-block monicon-arrow-left m-1 fs20"></a>
             {{end}}
             {{range .Pages}}
               {{if eq .Link ""}}
@@ -151,7 +151,7 @@
             {{end}}
             {{if lt $oldest $lastWindow}}
               <a href="/ticketpricewindows?offset={{ add .OffsetWindow .Limit }}&rows={{.Limit}}"
-              class="d-inline-block dcricon-arrow-right m-1 fs20"></a>
+              class="d-inline-block monicon-arrow-right m-1 fs20"></a>
             {{end}}
           </div>
         </div>

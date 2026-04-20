@@ -7,6 +7,7 @@
   --status-danger: #{color.mix($blue, $mempool-full, 10%)};
   --status-danger-hatched: #{color.mix($blue, $mempool-full, 10%)};
   --indicator-track-bg: #ddd;
+  --indicator-total-track-bg: #b0b0b0;
 }
 
 /**  testnet theme  **/
@@ -240,4 +241,5 @@ body.darkBG {
   --status-danger: #{color.mix($blue, color.mix($mempool-full, #000, 80%), 10%)};
   --status-danger-hatched: #{color.mix($blue, color.mix($mempool-full, #000, 80%), 10%)};
   --indicator-track-bg: #757575;
+  --indicator-total-track-bg: #4a4a4a;
 }
