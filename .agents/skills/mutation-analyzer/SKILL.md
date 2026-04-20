@@ -30,6 +30,7 @@ cross-layer dependencies, and hidden constraints.
 - If no direct evidence is found, mark it explicitly as **INFERRED** or **ASSUMPTION**.
 - NEVER present assumptions as facts.
 - Always prioritize tracing data FLOW over describing structure.
+- Treat patterns and impact as first-class knowledge derived from flows, not optional additions.
 
 ### Good
 
@@ -142,6 +143,19 @@ Produce a structured knowledge document based on Explore Mode findings.
 
 If new patterns or risks are discovered, update corresponding files.
 
+#### Pattern & Impact Signals
+
+During synthesis, if you observe:
+
+- Reusable architectural behavior
+- Non-trivial mutation risks
+
+Then:
+
+- Briefly mention them in the document
+- Do NOT normalize or extract globally
+- Leave consolidation to Mode 4 — Consolidate
+
 #### Cross-links
 
 Must be:
@@ -161,9 +175,107 @@ If evidence is missing:
 
 ⚠️ INCOMPLETE — list missing code references
 
+Follow the **Synthesis Template (STRICT FORMAT)** defined below.
+
 ---
 
-### Mode 4 — Lint
+### Mode 4 — Consolidate
+
+**Trigger format:**
+
+```
+
+Consolidate: <scope>
+
+```
+
+Examples:
+
+- `Consolidate: transaction`
+- `Consolidate: var-ska`
+- `Consolidate: entire wiki`
+
+#### Purpose
+
+Convert repeated signals from multiple flow files into normalized, reusable knowledge:
+
+- Patterns → `patterns.md`
+- Impact → `impact.md`
+
+This mode operates on top of existing flow documents.  
+It does NOT analyze raw code — it consolidates already discovered knowledge.
+
+#### Extraction Rules
+
+**Extract a Pattern if:**
+
+- The same architectural behavior appears in 2+ flow files
+- OR the behavior is clearly reusable across flows
+- AND it represents structure or logic (not just a single-step flow detail)
+
+**Extract an Impact if:**
+
+- The same mutation risk appears in 2+ flow files
+- OR multiple flows share the same failure mode or propagation path
+- AND the failure is non-trivial (cross-layer or silent corruption)
+
+#### Output Format
+
+**Pattern entry:**
+
+```markdown
+## <Pattern Name>
+
+**Appears in:**
+
+- /wiki/<domain-a>/flow.full.md
+- /wiki/<domain-b>/flow.full.md
+
+**Description:**
+<What the pattern is and why it recurs>
+
+**Constraints:**
+<Rules that must hold wherever this pattern is used>
+```
+
+**Impact entry:**
+
+```markdown
+## Risk: <Short Name>
+
+**Trigger:**
+<What change causes this>
+
+**Affected flows:**
+
+- /wiki/<domain-a>/flow.full.md
+- /wiki/<domain-b>/flow.full.md
+
+**Failure mode:**
+silent / loud
+
+**Description:**
+<What breaks, where, and how it propagates>
+```
+
+#### Linking
+
+After extraction:
+
+- Add `shares-pattern-with` links from each flow to the pattern
+- Add `depends-on` links from each flow to the impact entry
+- Ensure links are consistent and not duplicated
+
+#### Rules
+
+- DO NOT duplicate existing entries — merge when similar
+- Prefer normalization over multiple narrow entries
+- Keep entries domain-specific unless clearly cross-domain
+- Do NOT extract from a single flow unless the pattern/risk is obviously reusable
+
+---
+
+### Mode 5 — Lint
 
 **Trigger format:**
 
@@ -186,6 +298,20 @@ Scan `/wiki/index.md` and related files to detect:
 - Missing links
 - Incomplete flows
 - Constraint violations
+- Missing patterns (repeated behavior across flows without patterns.md entry)
+- Missing impact consolidation (repeated risks not unified in impact.md)
+
+#### Knowledge Gaps
+
+Detect missing derived knowledge:
+
+- If the same behavior appears in 2+ flow files → suggest Pattern extraction
+- If similar mutation risks appear in 2+ flow files → suggest Impact consolidation
+
+Mark as:
+
+- Type: Missing Pattern → Action: Extract to patterns.md
+- Type: Missing Impact → Action: Consolidate into impact.md
 
 #### Output Format
 
