@@ -105,6 +105,7 @@ type Vin struct {
 	ScriptSig    *ScriptSig `json:"scriptSig,omitempty"`
 	Sequence     uint32     `json:"sequence"`
 	AmountIn     float64    `json:"amountin,omitempty"`
+	SKAAmountIn  string     `json:"ska_amountin,omitempty"`
 	BlockHeight  uint32     `json:"blockheight"`
 	BlockIndex   uint32     `json:"blockindex"`
 	CoinType     uint8      `json:"coin_type,omitempty"`
@@ -444,6 +445,7 @@ type VinShort struct {
 	BlockHeight   *uint32 `json:"blockheight,omitempty"`
 	BlockIndex    *uint32 `json:"blockindex,omitempty"`
 	CoinType      uint8   `json:"coin_type,omitempty"`
+	SKAAmountIn   string  `json:"ska_amountin,omitempty"`
 	SKAValue      string  `json:"ska_value,omitempty"`
 }
 

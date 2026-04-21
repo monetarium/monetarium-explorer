@@ -5073,16 +5073,13 @@ func (pgb *ChainDB) GetAPITransaction(ctx context.Context, txid *chainhash.Hash)
 			tx.Total = "0"
 		}
 
-		// Calculate SKA Fee: TotalIn - TotalOut
+		// Calculate SKA Fee: TotalIn - TotalOut (from node response via skaamountin)
 		totalIn := new(big.Int)
-		for i := range msgTx.TxIn {
-			prevOut := &msgTx.TxIn[i].PreviousOutPoint
-			if txhelpers.IsZeroHash(prevOut.Hash) {
-				continue
-			}
-			outInfo, err := txhelpers.OutPointAddressesAll(prevOut, pgb.Client, pgb.chainParams)
-			if err == nil && outInfo.ValueSKA != nil {
-				totalIn.Add(totalIn, outInfo.ValueSKA)
+		for _, vin := range txraw.Vin {
+			if vin.SKAAmountIn != "" {
+				if amt, ok := new(big.Int).SetString(vin.SKAAmountIn, 10); ok {
+					totalIn.Add(totalIn, amt)
+				}
 			}
 		}
 		totalOut := new(big.Int)
@@ -5112,6 +5109,7 @@ func (pgb *ChainDB) GetAPITransaction(ctx context.Context, txid *chainhash.Hash)
 		tx.Vin[i].Tree = vin.Tree
 		tx.Vin[i].Sequence = vin.Sequence
 		tx.Vin[i].AmountIn = vin.AmountIn
+		tx.Vin[i].SKAAmountIn = vin.SKAAmountIn
 		tx.Vin[i].BlockHeight = vin.BlockHeight
 		tx.Vin[i].BlockIndex = vin.BlockIndex
 		if vin.ScriptSig != nil {
@@ -5121,23 +5119,13 @@ func (pgb *ChainDB) GetAPITransaction(ctx context.Context, txid *chainhash.Hash)
 			}
 		}
 
-		// High-precision Vin
-		var valueInRaw string
-		var ct uint8
-		vinMsg := msgTx.TxIn[i]
-		if !txhelpers.IsZeroHash(vinMsg.PreviousOutPoint.Hash) {
-			outInfo, err := txhelpers.OutPointAddressesAll(&vinMsg.PreviousOutPoint, pgb.Client, pgb.chainParams)
-			if err == nil {
-				ct = uint8(outInfo.CoinType)
-				if ct == 0 {
-					valueInRaw = strconv.FormatInt(int64(outInfo.Value), 10)
-				} else if outInfo.ValueSKA != nil {
-					valueInRaw = outInfo.ValueSKA.String()
-				}
-			}
+		// High-precision Vin (from node response via skaamountin)
+		if coinType == 0 { // VAR
+			tx.Vin[i].ValueInRaw = strconv.FormatInt(int64(vin.AmountIn*1e8), 10)
+		} else { // SKA
+			tx.Vin[i].ValueInRaw = vin.SKAAmountIn
 		}
-		tx.Vin[i].ValueInRaw = valueInRaw
-		tx.Vin[i].CoinType = ct
+		tx.Vin[i].CoinType = coinType
 	}
 
 	for i := range txraw.Vout {
@@ -6518,6 +6506,13 @@ func (pgb *ChainDB) GetExplorerTx(ctx context.Context, txid string) *exptypes.Tx
 	inputs := make([]exptypes.Vin, 0, len(txraw.Vin))
 	for i := range txraw.Vin {
 		vin := &txraw.Vin[i]
+		// Accumulate SKA input amount from node response (skaamountin)
+		if tx.CoinType != 0 && vin.SKAAmountIn != "" {
+			if amt, ok := new(big.Int).SetString(vin.SKAAmountIn, 10); ok {
+				totalInSKA.Add(totalInSKA, amt)
+			}
+		}
+
 		// The addresses are may only be obtained by decoding the previous
 		// output's pkscript.
 		var addresses []string
@@ -6540,9 +6535,6 @@ func (pgb *ChainDB) GetExplorerTx(ctx context.Context, txid string) *exptypes.Tx
 			}
 			valueIn = outInfo.Value
 			addresses = outInfo.Addresses
-			if tx.CoinType != 0 && outInfo.ValueSKA != nil {
-				totalInSKA.Add(totalInSKA, outInfo.ValueSKA)
-			}
 			// See if getrawtransaction had correct vin amounts. It should
 			// except for votes on side chain blocks.
 			if valueIn != valueIn0 {
@@ -6571,20 +6563,14 @@ func (pgb *ChainDB) GetExplorerTx(ctx context.Context, txid string) *exptypes.Tx
 			}
 		}
 
-		// Assemble and append this vin.
+		// Assemble and append this vin (values from node response via skaamountin)
 		var valueRaw string
 		var skaValue string
-		if outInfo != nil {
-			if outInfo.CoinType == 0 { // VAR
-				valueRaw = strconv.FormatInt(int64(outInfo.Value), 10)
-			} else { // SKA
-				if outInfo.ValueSKA != nil {
-					valueRaw = outInfo.ValueSKA.String()
-					skaValue = valueRaw
-				} else {
-					valueRaw = "0"
-				}
-			}
+		if tx.CoinType == 0 { // VAR
+			valueRaw = strconv.FormatInt(int64(vin.AmountIn*1e8), 10)
+		} else { // SKA
+			valueRaw = vin.SKAAmountIn
+			skaValue = valueRaw
 		}
 
 		coinIn := valueIn.ToCoin()
@@ -6594,7 +6580,7 @@ func (pgb *ChainDB) GetExplorerTx(ctx context.Context, txid string) *exptypes.Tx
 			FormattedAmount: humanize.Commaf(coinIn),
 			ValueRaw:        valueRaw,
 			Index:           uint32(i),
-			CoinType:        uint8(outInfo.CoinType),
+			CoinType:        tx.CoinType,
 			SKAValue:        skaValue,
 		})
 	}
