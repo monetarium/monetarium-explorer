@@ -20,6 +20,7 @@ import (
 	"github.com/monetarium/monetarium-explorer/explorer/types"
 	"github.com/monetarium/monetarium-explorer/txhelpers"
 	"github.com/monetarium/monetarium-node/chaincfg"
+	"github.com/monetarium/monetarium-node/cointype"
 	"github.com/monetarium/monetarium-node/dcrutil"
 )
 
@@ -836,6 +837,9 @@ func makeTemplateFuncMap(params *chaincfg.Params) template.FuncMap {
 				Data:  data,
 				Title: title,
 			}
+		},
+		"coinSymbol": func(ct uint8) string {
+			return cointype.CoinType(ct).String()
 		},
 	}
 }

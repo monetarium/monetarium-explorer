@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"math/big"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -42,6 +43,8 @@ import (
 	"github.com/monetarium/monetarium-explorer/stakedb"
 	"github.com/monetarium/monetarium-explorer/trylock"
 	"github.com/monetarium/monetarium-explorer/txhelpers"
+
+	"github.com/monetarium/monetarium-node/cointype"
 )
 
 var (
@@ -167,7 +170,7 @@ func (u *utxoStore) Peek(txHash dbtypes.ChainHash, txIndex uint32) *dbtypes.UTXO
 	return txVals[txIndex]
 }
 
-func (u *utxoStore) set(txHash dbtypes.ChainHash, txIndex uint32, voutDbID int64, addrs []string, val int64, mixed bool) {
+func (u *utxoStore) set(txHash dbtypes.ChainHash, txIndex uint32, voutDbID int64, addrs []string, val int64, mixed bool, coinType uint8) {
 	txUTXOVals, ok := u.c[txHash]
 	if !ok {
 		u.c[txHash] = map[uint32]*dbtypes.UTXOData{
@@ -176,6 +179,7 @@ func (u *utxoStore) set(txHash dbtypes.ChainHash, txIndex uint32, voutDbID int64
 				Value:     val,
 				Mixed:     mixed,
 				VoutDbID:  voutDbID,
+				CoinType:  coinType,
 			},
 		}
 	} else {
@@ -184,16 +188,17 @@ func (u *utxoStore) set(txHash dbtypes.ChainHash, txIndex uint32, voutDbID int64
 			Value:     val,
 			Mixed:     mixed,
 			VoutDbID:  voutDbID,
+			CoinType:  coinType,
 		}
 	}
 }
 
 // Set stores the addresses and amount in a UTXOData entry in the cache for the
 // given outpoint.
-func (u *utxoStore) Set(txHash dbtypes.ChainHash, txIndex uint32, voutDbID int64, addrs []string, val int64, mixed bool) {
+func (u *utxoStore) Set(txHash dbtypes.ChainHash, txIndex uint32, voutDbID int64, addrs []string, val int64, mixed bool, coinType uint8) {
 	u.Lock()
 	defer u.Unlock()
-	u.set(txHash, txIndex, voutDbID, addrs, val, mixed)
+	u.set(txHash, txIndex, voutDbID, addrs, val, mixed, coinType)
 }
 
 // Reinit re-initializes the utxoStore with the given UTXOs.
@@ -208,7 +213,7 @@ func (u *utxoStore) Reinit(utxos []dbtypes.UTXO) {
 	prealloc := 2 * len(utxos) / 3
 	u.c = make(map[dbtypes.ChainHash]map[uint32]*dbtypes.UTXOData, prealloc)
 	for i := range utxos {
-		u.set(utxos[i].TxHash, utxos[i].TxIndex, utxos[i].VoutDbID, utxos[i].Addresses, utxos[i].Value, utxos[i].Mixed)
+		u.set(utxos[i].TxHash, utxos[i].TxIndex, utxos[i].VoutDbID, utxos[i].Addresses, utxos[i].Value, utxos[i].Mixed, utxos[i].CoinType)
 	}
 }
 
@@ -1210,12 +1215,36 @@ func (pgb *ChainDB) SpendingTransactions(ctx context.Context, fundingTxID string
 	}
 	ctx, cancel := context.WithTimeout(ctx, pgb.queryTimeout)
 	defer cancel()
+
+	// 1. Check the database for confirmed spenders.
 	_, spendingTxns, vinInds, voutInds, err := retrieveSpendingTxsByFundingTx(ctx, pgb.db, ch)
-	txStrs := make([]string, len(spendingTxns))
-	for i := range spendingTxns {
-		txStrs[i] = spendingTxns[i].String()
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return nil, nil, nil, pgb.replaceCancelError(err)
 	}
-	return txStrs, vinInds, voutInds, pgb.replaceCancelError(err)
+
+	txStrs := make([]string, 0, len(spendingTxns))
+	for i := range spendingTxns {
+		txStrs = append(txStrs, spendingTxns[i].String())
+	}
+
+	// 2. Check the mempool for unconfirmed spenders.
+	mph, mpvi, mpvoi := pgb.MPC.Spenders(fundingTxID)
+	if len(mph) > 0 {
+		// Only add those that are not already in the DB results.
+		isSpent := make(map[uint32]bool)
+		for _, vi := range voutInds {
+			isSpent[vi] = true
+		}
+		for i, vi := range mpvoi {
+			if !isSpent[vi] {
+				txStrs = append(txStrs, mph[i])
+				vinInds = append(vinInds, mpvi[i])
+				voutInds = append(voutInds, vi)
+			}
+		}
+	}
+
+	return txStrs, vinInds, voutInds, nil
 }
 
 // SpendingTransaction returns the transaction that spends the specified
@@ -1226,10 +1255,27 @@ func (pgb *ChainDB) SpendingTransaction(ctx context.Context, fundingTxID string,
 	if err != nil {
 		return "", 0, err
 	}
+
+	// 1. Check the database for a confirmed spender.
 	ctx, cancel := context.WithTimeout(ctx, pgb.queryTimeout)
 	defer cancel()
 	_, spendingTx, vinInd, err := retrieveSpendingTxByTxOut(ctx, pgb.db, ch, fundingTxVout)
-	return spendingTx.String(), vinInd, pgb.replaceCancelError(err)
+	if err == nil {
+		return spendingTx.String(), vinInd, nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return "", 0, pgb.replaceCancelError(err)
+	}
+
+	// 2. Check the mempool for an unconfirmed spender.
+	mph, mpvi, mpvoi := pgb.MPC.Spenders(fundingTxID)
+	for i, vi := range mpvoi {
+		if vi == fundingTxVout {
+			return mph[i], mpvi[i], nil
+		}
+	}
+
+	return "", 0, dbtypes.ErrNoResult
 }
 
 // BlockTransactions retrieves all transactions in the specified block, their
@@ -3887,7 +3933,7 @@ txns:
 				}
 				// Remember this for insertSpendingAddressRow.
 				pgb.utxoCache.Set(vin.PrevTxHash, vin.PrevTxIndex,
-					utxo.VoutDbID, utxo.Addresses, utxo.Value, utxo.Mixed)
+					utxo.VoutDbID, utxo.Addresses, utxo.Value, utxo.Mixed, utxo.CoinType)
 			}
 			if !utxo.Mixed {
 				continue txns
@@ -4264,8 +4310,8 @@ func (pgb *ChainDB) updateUtxoCache(dbVouts [][]*dbtypes.Vout, txns []*dbtypes.T
 	for it, tx := range txns {
 		utxos := make([]*dbtypes.UTXO, 0, tx.NumVout)
 		for iv, vout := range dbVouts[it] {
-			// Do not store zero-value output data.
-			if vout.Value == 0 {
+			// Do not store zero-value output data, unless it is an SKA output.
+			if vout.Value == 0 && vout.CoinType == uint8(cointype.CoinTypeVAR) {
 				continue
 			}
 
@@ -4283,13 +4329,14 @@ func (pgb *ChainDB) updateUtxoCache(dbVouts [][]*dbtypes.Vout, txns []*dbtypes.T
 					Value:     int64(vout.Value),
 					Mixed:     vout.Mixed,
 					VoutDbID:  voutDbID,
+					CoinType:  vout.CoinType,
 				},
 			})
 		}
 
 		// Store each output of this transaction in the UTXO cache.
 		for _, utxo := range utxos {
-			pgb.utxoCache.Set(utxo.TxHash, utxo.TxIndex, utxo.VoutDbID, utxo.Addresses, utxo.Value, utxo.Mixed)
+			pgb.utxoCache.Set(utxo.TxHash, utxo.TxIndex, utxo.VoutDbID, utxo.Addresses, utxo.Value, utxo.Mixed, utxo.CoinType)
 		}
 	}
 }
@@ -4298,12 +4345,11 @@ func (pgb *ChainDB) flattenAddressRows(dbAddressRows [][]dbtypes.AddressRow, txn
 	var totalAddressRows int
 	for it := range dbAddressRows {
 		for ia := range dbAddressRows[it] {
-			if dbAddressRows[it][ia].Value > 0 {
+			if dbAddressRows[it][ia].Value > 0 || dbAddressRows[it][ia].CoinType > 0 {
 				totalAddressRows++
 			}
 		}
 	}
-
 	dbAddressRowsFlat := make([]*dbtypes.AddressRow, 0, totalAddressRows)
 
 	for it, tx := range txns {
@@ -4321,8 +4367,8 @@ func (pgb *ChainDB) flattenAddressRows(dbAddressRows [][]dbtypes.AddressRow, txn
 			// Transaction that pays to the address
 			dba := &dbAddressRows[it][ia]
 
-			// Do not store zero-value output data.
-			if dba.Value == 0 {
+			// Do not store zero-value output data, unless it is an SKA output.
+			if dba.Value == 0 && dba.CoinType == 0 {
 				continue
 			}
 
@@ -5030,6 +5076,12 @@ func (pgb *ChainDB) GetAPITransaction(ctx context.Context, txid *chainhash.Hash)
 
 	txTree := txhelpers.TxTree(msgTx)
 
+	// Determine transaction CoinType.
+	var coinType uint8
+	if len(msgTx.TxOut) > 0 {
+		coinType = uint8(msgTx.TxOut[0].CoinType)
+	}
+
 	tx := &apitypes.Tx{
 		TxShort: apitypes.TxShort{
 			TxID:     txraw.Txid,
@@ -5041,6 +5093,7 @@ func (pgb *ChainDB) GetAPITransaction(ctx context.Context, txid *chainhash.Hash)
 			Vout:     make([]apitypes.Vout, len(txraw.Vout)),
 			Tree:     txTree,
 			Type:     strings.ToLower(txhelpers.TxTypeToString(int(txTree))),
+			CoinType: coinType,
 		},
 		Confirmations: txraw.Confirmations,
 		Block: &apitypes.BlockID{
@@ -5052,11 +5105,86 @@ func (pgb *ChainDB) GetAPITransaction(ctx context.Context, txid *chainhash.Hash)
 		},
 	}
 
-	copy(tx.Vin, txraw.Vin)
+	// Calculate high-precision total and fee.
+	if coinType == 0 { // VAR
+		tx.Total = strconv.FormatInt(int64(txhelpers.TotalVout(txraw.Vout)), 10)
+		fee, _ := txhelpers.TxFeeRate(msgTx)
+		tx.Fee = strconv.FormatInt(int64(fee), 10)
+	} else { // SKA
+		skaTotals := txhelpers.SKATotalsFromMsgTx(msgTx)
+		if total, ok := skaTotals[coinType]; ok {
+			tx.Total = total
+		} else {
+			tx.Total = "0"
+		}
+
+		// Calculate SKA Fee: TotalIn - TotalOut (from node response via skaamountin)
+		totalIn := new(big.Int)
+		for _, vin := range txraw.Vin {
+			if vin.SKAAmountIn != "" {
+				if amt, ok := new(big.Int).SetString(vin.SKAAmountIn, 10); ok {
+					totalIn.Add(totalIn, amt)
+				}
+			}
+		}
+		totalOut := new(big.Int)
+		if totalStr, ok := skaTotals[coinType]; ok {
+			totalOut.SetString(totalStr, 10)
+		}
+		tx.Fee = new(big.Int).Sub(totalIn, totalOut).String()
+
+		// Calculate SKA FeeRate (SKA atoms / kB)
+		txSize := int64(msgTx.SerializeSize())
+		if txSize > 0 {
+			fee := new(big.Int).Sub(totalIn, totalOut)
+			rate := new(big.Int).Mul(fee, big.NewInt(1000))
+			rate.Quo(rate, big.NewInt(txSize))
+			tx.FeeRateRaw = rate.String()
+			tx.FeeRate = "0" // Clear legacy string representation
+		}
+	}
+
+	for i := range txraw.Vin {
+		vin := &txraw.Vin[i]
+		tx.Vin[i].Coinbase = vin.Coinbase
+		tx.Vin[i].Stakebase = vin.Stakebase
+		tx.Vin[i].Treasurybase = vin.Treasurybase
+		tx.Vin[i].Txid = vin.Txid
+		tx.Vin[i].Vout = vin.Vout
+		tx.Vin[i].Tree = vin.Tree
+		tx.Vin[i].Sequence = vin.Sequence
+		tx.Vin[i].AmountIn = vin.AmountIn
+		tx.Vin[i].SKAAmountIn = vin.SKAAmountIn
+		tx.Vin[i].BlockHeight = vin.BlockHeight
+		tx.Vin[i].BlockIndex = vin.BlockIndex
+		if vin.ScriptSig != nil {
+			tx.Vin[i].ScriptSig = &apitypes.ScriptSig{
+				Asm: vin.ScriptSig.Asm,
+				Hex: vin.ScriptSig.Hex,
+			}
+		}
+
+		// High-precision Vin (from node response via skaamountin)
+		if coinType == 0 { // VAR
+			// Use exact atom value from the node's wire transaction to avoid float64 round-trip.
+			tx.Vin[i].ValueInRaw = strconv.FormatInt(msgTx.TxIn[i].ValueIn, 10)
+		} else { // SKA
+			tx.Vin[i].ValueInRaw = vin.SKAAmountIn
+		}
+		tx.Vin[i].CoinType = coinType
+	}
 
 	for i := range txraw.Vout {
 		vout := &txraw.Vout[i]
 		tx.Vout[i].Value = vout.Value
+		var valueRaw string
+		if vout.CoinType == 0 { // VAR
+			// Get exact atom value from the node's wire transaction to avoid float64 round-trip.
+			valueRaw = strconv.FormatInt(msgTx.TxOut[i].Value, 10)
+		} else { // SKA
+			valueRaw = vout.SKAValue
+		}
+		tx.Vout[i].ValueRaw = valueRaw
 		tx.Vout[i].N = vout.N
 		tx.Vout[i].Version = vout.Version
 		tx.Vout[i].CoinType = vout.CoinType
@@ -5089,12 +5217,17 @@ func (pgb *ChainDB) GetTrimmedTransaction(ctx context.Context, txid *chainhash.H
 		return nil
 	}
 	return &apitypes.TrimmedTx{
-		TxID:     tx.TxID,
-		Version:  tx.Version,
-		Locktime: tx.Locktime,
-		Expiry:   tx.Expiry,
-		Vin:      tx.Vin,
-		Vout:     tx.Vout,
+		TxID:       tx.TxID,
+		Version:    tx.Version,
+		Locktime:   tx.Locktime,
+		Expiry:     tx.Expiry,
+		Vin:        tx.Vin,
+		Vout:       tx.Vout,
+		CoinType:   tx.CoinType,
+		Total:      tx.Total,
+		Fee:        tx.Fee,
+		FeeRate:    tx.FeeRate,
+		FeeRateRaw: tx.FeeRateRaw,
 	}
 }
 
@@ -5938,19 +6071,51 @@ func makeExplorerBlockBasic(data *chainjson.GetBlockVerboseResult, params *chain
 func makeExplorerTxBasic(data *chainjson.TxRawResult, ticketPrice int64, msgTx *wire.MsgTx, params *chaincfg.Params) (*exptypes.TxBasic, stake.TxType) {
 	txType := txhelpers.DetermineTxType(msgTx)
 
+	// Determine transaction CoinType.
+	var coinType uint8
+	if len(msgTx.TxOut) > 0 {
+		coinType = uint8(msgTx.TxOut[0].CoinType)
+	}
+
 	tx := &exptypes.TxBasic{
 		TxID:          data.Txid,
 		Type:          txhelpers.TxTypeToString(int(txType)),
 		Version:       data.Version,
 		FormattedSize: humanize.Bytes(uint64(len(data.Hex) / 2)),
-		Total:         txhelpers.TotalVout(data.Vout).ToCoin(),
+		CoinType:      coinType,
 	}
-	tx.Fee, tx.FeeRate = txhelpers.TxFeeRate(msgTx)
+
+	// Calculate high-precision total and fee.
+	if coinType == 0 { // VAR
+		totalAtoms := txhelpers.TotalVout(data.Vout)
+		tx.Total = totalAtoms.ToCoin()
+		tx.TotalRaw = strconv.FormatInt(int64(totalAtoms), 10)
+		fee, feeRate := txhelpers.TxFeeRate(msgTx)
+		tx.Fee, tx.FeeRate = fee, feeRate
+		tx.FeeRaw = strconv.FormatInt(int64(fee), 10)
+	} else { // SKA
+		// For SKA, Total is 0 in legacy float.
+		tx.Total = 0
+		skaTotals := txhelpers.SKATotalsFromMsgTx(msgTx)
+		if total, ok := skaTotals[coinType]; ok {
+			tx.TotalRaw = total
+		} else {
+			tx.TotalRaw = "0"
+		}
+
+		// SKA Fee calculation skipped here; handled in GetExplorerTx and GetAPITransaction
+		// which have access to the DB client for prevout lookups.
+		tx.FeeRaw = "0"
+		tx.Fee = 0     // Deprecated int64 atoms (formerly dcrutil.Amount)
+		tx.FeeRate = 0 // Deprecated int64 atoms (formerly dcrutil.Amount)
+		tx.FeeRateRaw = "0"
+	}
 
 	v0 := &data.Vin[0]
 	switch {
 	case v0.IsCoinBase():
 		tx.Fee, tx.FeeRate = 0, 0
+		tx.FeeRaw = "0"
 		tx.Coinbase = true
 	case v0.Treasurybase:
 		tx.Treasurybase = true
@@ -6384,9 +6549,18 @@ func (pgb *ChainDB) GetExplorerTx(ctx context.Context, txid string) *exptypes.Tx
 		Time:          exptypes.NewTimeDefFromUNIX(txraw.Time),
 	}
 
+	totalInSKA := new(big.Int)
+
 	inputs := make([]exptypes.Vin, 0, len(txraw.Vin))
 	for i := range txraw.Vin {
 		vin := &txraw.Vin[i]
+		// Accumulate SKA input amount from node response (skaamountin)
+		if tx.CoinType != 0 && vin.SKAAmountIn != "" {
+			if amt, ok := new(big.Int).SetString(vin.SKAAmountIn, 10); ok {
+				totalInSKA.Add(totalInSKA, amt)
+			}
+		}
+
 		// The addresses are may only be obtained by decoding the previous
 		// output's pkscript.
 		var addresses []string
@@ -6396,15 +6570,19 @@ func (pgb *ChainDB) GetExplorerTx(ctx context.Context, txid string) *exptypes.Tx
 		// Do not attempt to look up prevout if it is a coinbase or stakebase
 		// input, which does not spend a previous output.
 		prevOut := &msgTx.TxIn[i].PreviousOutPoint
+		var outInfo *txhelpers.OutPointInfo
 		if !txhelpers.IsZeroHash(prevOut.Hash) {
 			// Store the vin amount for comparison.
 			valueIn0 := valueIn
 
-			addresses, valueIn, err = txhelpers.OutPointAddresses(
+			outInfo, err = txhelpers.OutPointAddressesAll(
 				prevOut, pgb.Client, pgb.chainParams)
 			if err != nil {
-				log.Warnf("Failed to get outpoint address from txid: %v", err)
-				continue
+				log.Warnf("Failed to get outpoint address for vin %d of tx %v: %v", i, txid, err)
+				// Do not skip the input; proceed with empty addresses to preserve order.
+			} else {
+				valueIn = outInfo.Value
+				addresses = outInfo.Addresses
 			}
 			// See if getrawtransaction had correct vin amounts. It should
 			// except for votes on side chain blocks.
@@ -6434,16 +6612,51 @@ func (pgb *ChainDB) GetExplorerTx(ctx context.Context, txid string) *exptypes.Tx
 			}
 		}
 
-		// Assemble and append this vin.
+		// Assemble and append this vin (values from node response via skaamountin)
+		var valueRaw string
+		var skaValue string
+		if tx.CoinType == 0 { // VAR
+			// Use exact atom value to avoid float64 round-trip.
+			valueRaw = strconv.FormatInt(int64(valueIn), 10)
+		} else { // SKA
+			valueRaw = vin.SKAAmountIn
+			skaValue = valueRaw
+		}
+
 		coinIn := valueIn.ToCoin()
 		inputs = append(inputs, exptypes.Vin{
 			Vin:             vin,
 			Addresses:       addresses,
 			FormattedAmount: humanize.Commaf(coinIn),
+			ValueRaw:        valueRaw,
 			Index:           uint32(i),
+			CoinType:        tx.CoinType,
+			SKAValue:        skaValue,
 		})
 	}
 	tx.Vin = inputs
+
+	// Calculate SKA fee if applicable
+	if tx.CoinType != 0 {
+		totalOutSKA := new(big.Int)
+		if tx.TotalRaw != "" {
+			totalOutSKA.SetString(tx.TotalRaw, 10)
+		}
+		fee := new(big.Int).Sub(totalInSKA, totalOutSKA)
+		if fee.Sign() < 0 {
+			fee.SetInt64(0)
+		}
+		tx.FeeRaw = fee.String()
+		// TODO: Address C3 WebSocket parity for SKA confirmed transactions.
+		// Calculate FeeRateRaw (SKA atoms / KB)
+		txSize := int64(msgTx.SerializeSize())
+		if txSize > 0 {
+			rate := new(big.Int).Mul(fee, big.NewInt(1000))
+			rate.Quo(rate, big.NewInt(txSize))
+			tx.FeeRateRaw = rate.String()
+			tx.FeeRate = dcrutil.Amount(0) // Clear legacy float representation
+		}
+	}
 
 	if isVote := tx.IsVote(); isVote || tx.IsTicket() {
 		if tx.Confirmations > 0 && pgb.Height() >=
@@ -6639,9 +6852,18 @@ func (pgb *ChainDB) GetExplorerTx(ctx context.Context, txid string) *exptypes.Tx
 		if scriptClass == dbtypes.SCNullData && spk.CommitAmt != nil {
 			scriptClass = dbtypes.SCStakeSubCommit
 		}
+		var valueRaw string
+		if vout.CoinType == 0 { // VAR
+			// Get exact atom value from the node's wire transaction to avoid float64 round-trip.
+			valueRaw = strconv.FormatInt(msgTx.TxOut[i].Value, 10)
+		} else { // SKA
+			valueRaw = vout.SKAValue
+		}
+
 		outputs = append(outputs, exptypes.Vout{
 			Addresses:       spk.Addresses,
 			Amount:          vout.Value,
+			ValueRaw:        valueRaw,
 			FormattedAmount: humanize.Commaf(vout.Value),
 			OP_RETURN:       opReturn,
 			OP_TADD:         opTAdd,
@@ -6649,12 +6871,36 @@ func (pgb *ChainDB) GetExplorerTx(ctx context.Context, txid string) *exptypes.Tx
 			Spent:           spent,
 			Index:           vout.N,
 			Version:         version,
+			CoinType:        vout.CoinType,
+			SKAValue:        vout.SKAValue,
 		})
 	}
 	tx.Vout = outputs
+	// Redundant sort removed (txraw.Vout is index-ordered from the node).
 
 	// Initialize the spending transaction slice for safety.
-	tx.SpendingTxns = make([]exptypes.TxInID, len(outputs))
+	tx.SpendingTxns = make([]exptypes.TxInID, len(tx.Vout))
+	spendHashes, spendVinInds, spendVoutInds, err := pgb.SpendingTransactions(ctx, txid)
+	if err == nil {
+		for i := range spendHashes {
+			voutIdx := spendVoutInds[i]
+			if int(voutIdx) < len(tx.SpendingTxns) {
+				tx.SpendingTxns[voutIdx] = exptypes.TxInID{
+					Hash:  spendHashes[i],
+					Index: spendVinInds[i],
+				}
+				// Mark as spent in Vout slice. Note that Vout is sorted by index.
+				for j := range tx.Vout {
+					if tx.Vout[j].Index == voutIdx {
+						tx.Vout[j].Spent = true
+						break
+					}
+				}
+			}
+		}
+	} else {
+		log.Errorf("SpendingTransactions failed for %s: %v", txid, err)
+	}
 
 	return tx
 }

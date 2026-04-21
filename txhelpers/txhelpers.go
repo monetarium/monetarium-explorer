@@ -740,33 +740,53 @@ func BlockReceivesToAddresses(block *dcrutil.Block, addrs map[string]TxAction,
 	return addrMap
 }
 
+// OutPointInfo models addresses, coin type and high-precision value of a transaction output.
+type OutPointInfo struct {
+	Addresses []string
+	CoinType  cointype.CoinType
+	Value     dcrutil.Amount // VAR atoms
+	ValueSKA  *big.Int       // SKA atoms
+}
+
 // OutPointAddresses gets the addresses paid to by a transaction output.
 func OutPointAddresses(outPoint *wire.OutPoint, c RawTransactionGetter,
 	params *chaincfg.Params) ([]string, dcrutil.Amount, error) {
+	inf, err := OutPointAddressesAll(outPoint, c, params)
+	if err != nil {
+		return nil, 0, err
+	}
+	return inf.Addresses, inf.Value, nil
+}
+
+// OutPointAddressesAll gets the addresses, coin type and amounts of a transaction output.
+func OutPointAddressesAll(outPoint *wire.OutPoint, c RawTransactionGetter,
+	params *chaincfg.Params) (*OutPointInfo, error) {
 	// The addresses are encoded in the pkScript, so we need to get the
 	// raw transaction, and the TxOut that contains the pkScript.
 	prevTx, err := c.GetRawTransaction(context.TODO(), &outPoint.Hash)
 	if err != nil {
-		return nil, 0, fmt.Errorf("unable to get raw transaction for %s", outPoint.Hash.String())
+		return nil, fmt.Errorf("unable to get raw transaction for %s", outPoint.Hash.String())
 	}
 
 	txOuts := prevTx.MsgTx().TxOut
 	if len(txOuts) <= int(outPoint.Index) {
-		return nil, 0, fmt.Errorf("PrevOut index (%d) is beyond the TxOuts slice (length %d)",
+		return nil, fmt.Errorf("PrevOut index (%d) is beyond the TxOuts slice (length %d)",
 			outPoint.Index, len(txOuts))
 	}
 
 	// For the TxOut of interest, extract the list of addresses
 	txOut := txOuts[outPoint.Index]
 	_, txAddrs := stdscript.ExtractAddrs(txOut.Version, txOut.PkScript, params)
-	// Return VAR amount; SKA outputs have Value=0 (use txOut.SKAValue for big.Int precision).
-	value := dcrutil.Amount(txOut.Value)
 	addresses := make([]string, 0, len(txAddrs))
 	for _, txAddr := range txAddrs {
-		addr := txAddr.String()
-		addresses = append(addresses, addr)
+		addresses = append(addresses, txAddr.String())
 	}
-	return addresses, value, nil
+	return &OutPointInfo{
+		Addresses: addresses,
+		CoinType:  txOut.CoinType,
+		Value:     dcrutil.Amount(txOut.Value),
+		ValueSKA:  txOut.SKAValue,
+	}, nil
 }
 
 // OutPointAddressesFromString is the same as OutPointAddresses, but it takes
