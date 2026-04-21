@@ -170,7 +170,7 @@ func (u *utxoStore) Peek(txHash dbtypes.ChainHash, txIndex uint32) *dbtypes.UTXO
 	return txVals[txIndex]
 }
 
-func (u *utxoStore) set(txHash dbtypes.ChainHash, txIndex uint32, voutDbID int64, addrs []string, val int64, mixed bool) {
+func (u *utxoStore) set(txHash dbtypes.ChainHash, txIndex uint32, voutDbID int64, addrs []string, val int64, mixed bool, coinType uint8) {
 	txUTXOVals, ok := u.c[txHash]
 	if !ok {
 		u.c[txHash] = map[uint32]*dbtypes.UTXOData{
@@ -179,6 +179,7 @@ func (u *utxoStore) set(txHash dbtypes.ChainHash, txIndex uint32, voutDbID int64
 				Value:     val,
 				Mixed:     mixed,
 				VoutDbID:  voutDbID,
+				CoinType:  coinType,
 			},
 		}
 	} else {
@@ -187,16 +188,17 @@ func (u *utxoStore) set(txHash dbtypes.ChainHash, txIndex uint32, voutDbID int64
 			Value:     val,
 			Mixed:     mixed,
 			VoutDbID:  voutDbID,
+			CoinType:  coinType,
 		}
 	}
 }
 
 // Set stores the addresses and amount in a UTXOData entry in the cache for the
 // given outpoint.
-func (u *utxoStore) Set(txHash dbtypes.ChainHash, txIndex uint32, voutDbID int64, addrs []string, val int64, mixed bool) {
+func (u *utxoStore) Set(txHash dbtypes.ChainHash, txIndex uint32, voutDbID int64, addrs []string, val int64, mixed bool, coinType uint8) {
 	u.Lock()
 	defer u.Unlock()
-	u.set(txHash, txIndex, voutDbID, addrs, val, mixed)
+	u.set(txHash, txIndex, voutDbID, addrs, val, mixed, coinType)
 }
 
 // Reinit re-initializes the utxoStore with the given UTXOs.
@@ -211,7 +213,7 @@ func (u *utxoStore) Reinit(utxos []dbtypes.UTXO) {
 	prealloc := 2 * len(utxos) / 3
 	u.c = make(map[dbtypes.ChainHash]map[uint32]*dbtypes.UTXOData, prealloc)
 	for i := range utxos {
-		u.set(utxos[i].TxHash, utxos[i].TxIndex, utxos[i].VoutDbID, utxos[i].Addresses, utxos[i].Value, utxos[i].Mixed)
+		u.set(utxos[i].TxHash, utxos[i].TxIndex, utxos[i].VoutDbID, utxos[i].Addresses, utxos[i].Value, utxos[i].Mixed, utxos[i].CoinType)
 	}
 }
 
@@ -3931,7 +3933,7 @@ txns:
 				}
 				// Remember this for insertSpendingAddressRow.
 				pgb.utxoCache.Set(vin.PrevTxHash, vin.PrevTxIndex,
-					utxo.VoutDbID, utxo.Addresses, utxo.Value, utxo.Mixed)
+					utxo.VoutDbID, utxo.Addresses, utxo.Value, utxo.Mixed, utxo.CoinType)
 			}
 			if !utxo.Mixed {
 				continue txns
@@ -4327,13 +4329,14 @@ func (pgb *ChainDB) updateUtxoCache(dbVouts [][]*dbtypes.Vout, txns []*dbtypes.T
 					Value:     int64(vout.Value),
 					Mixed:     vout.Mixed,
 					VoutDbID:  voutDbID,
+					CoinType:  vout.CoinType,
 				},
 			})
 		}
 
 		// Store each output of this transaction in the UTXO cache.
 		for _, utxo := range utxos {
-			pgb.utxoCache.Set(utxo.TxHash, utxo.TxIndex, utxo.VoutDbID, utxo.Addresses, utxo.Value, utxo.Mixed)
+			pgb.utxoCache.Set(utxo.TxHash, utxo.TxIndex, utxo.VoutDbID, utxo.Addresses, utxo.Value, utxo.Mixed, utxo.CoinType)
 		}
 	}
 }
@@ -4342,12 +4345,11 @@ func (pgb *ChainDB) flattenAddressRows(dbAddressRows [][]dbtypes.AddressRow, txn
 	var totalAddressRows int
 	for it := range dbAddressRows {
 		for ia := range dbAddressRows[it] {
-			if dbAddressRows[it][ia].Value > 0 {
+			if dbAddressRows[it][ia].Value > 0 || dbAddressRows[it][ia].CoinType > 0 {
 				totalAddressRows++
 			}
 		}
 	}
-
 	dbAddressRowsFlat := make([]*dbtypes.AddressRow, 0, totalAddressRows)
 
 	for it, tx := range txns {
@@ -4365,8 +4367,8 @@ func (pgb *ChainDB) flattenAddressRows(dbAddressRows [][]dbtypes.AddressRow, txn
 			// Transaction that pays to the address
 			dba := &dbAddressRows[it][ia]
 
-			// Do not store zero-value output data.
-			if dba.Value == 0 {
+			// Do not store zero-value output data, unless it is an SKA output.
+			if dba.Value == 0 && dba.CoinType == 0 {
 				continue
 			}
 
