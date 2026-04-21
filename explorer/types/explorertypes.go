@@ -749,6 +749,34 @@ func getTxFromList(txid string, txns []MempoolTx) (MempoolTx, bool) {
 	return MempoolTx{}, false
 }
 
+// Spenders searches all transaction lists in MempoolInfo for transactions
+// spending from the specified funding transaction. It returns a map of funding
+// output indexes to the spending transaction identify (hash and input index).
+func (mpi *MempoolInfo) Spenders(fundingTxID string) map[uint32]TxInID {
+	mpi.RLock()
+	defer mpi.RUnlock()
+	spenders := make(map[uint32]TxInID)
+	search := func(txns []MempoolTx) {
+		for _, tx := range txns {
+			for i, vin := range tx.Vin {
+				if vin.TxId == fundingTxID {
+					spenders[vin.Outdex] = TxInID{
+						Hash:  tx.TxID,
+						Index: uint32(i),
+					}
+				}
+			}
+		}
+	}
+	search(mpi.Transactions)
+	search(mpi.Tickets)
+	search(mpi.Votes)
+	search(mpi.Revocations)
+	search(mpi.TSpends)
+	search(mpi.TAdds)
+	return spenders
+}
+
 // Tx checks the inventory and searches the appropriate lists for a
 // transaction matching the provided transaction ID.
 func (mpi *MempoolInfo) Tx(txid string) (MempoolTx, bool) {

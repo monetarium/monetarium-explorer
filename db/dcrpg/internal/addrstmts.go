@@ -332,7 +332,7 @@ const (
 
 	UpdateAllAddressesMatchingTxHashRange = `UPDATE addresses SET matching_tx_hash=transactions.tx_hash
 		FROM vouts, transactions
-		WHERE block_height >= $1 AND block_height < $2 AND vouts.value>0 AND addresses.is_funding
+		WHERE block_height >= $1 AND block_height < $2 AND (vouts.value>0 OR vouts.coin_type > 0) AND addresses.is_funding
 			AND vouts.tx_hash=addresses.tx_hash
 			AND vouts.tx_index=addresses.tx_vin_vout_index
 			AND transactions.id=vouts.spend_tx_row_id;`
@@ -340,7 +340,7 @@ const (
 	UpdateAllAddressesMatchingTxHashRangeXX = `UPDATE addresses SET matching_tx_hash=vins.tx_hash
 		FROM vins, transactions
 		WHERE transactions.block_height >= $1 AND transactions.block_height < $2
-			AND addresses.is_funding AND addresses.value > 0 
+			AND addresses.is_funding AND (addresses.value > 0 OR addresses.coin_type > 0)
 			AND vins.prev_tx_hash=addresses.tx_hash
 			AND vins.prev_tx_index=addresses.tx_vin_vout_index
 			AND transactions.tx_hash=vins.tx_hash;`

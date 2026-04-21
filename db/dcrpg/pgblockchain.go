@@ -43,6 +43,8 @@ import (
 	"github.com/monetarium/monetarium-explorer/stakedb"
 	"github.com/monetarium/monetarium-explorer/trylock"
 	"github.com/monetarium/monetarium-explorer/txhelpers"
+
+	"github.com/monetarium/monetarium-node/cointype"
 )
 
 var (
@@ -1211,12 +1213,36 @@ func (pgb *ChainDB) SpendingTransactions(ctx context.Context, fundingTxID string
 	}
 	ctx, cancel := context.WithTimeout(ctx, pgb.queryTimeout)
 	defer cancel()
+
+	// 1. Check the database for confirmed spenders.
 	_, spendingTxns, vinInds, voutInds, err := retrieveSpendingTxsByFundingTx(ctx, pgb.db, ch)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return nil, nil, nil, pgb.replaceCancelError(err)
+	}
+
 	txStrs := make([]string, len(spendingTxns))
 	for i := range spendingTxns {
 		txStrs[i] = spendingTxns[i].String()
 	}
-	return txStrs, vinInds, voutInds, pgb.replaceCancelError(err)
+
+	// 2. Check the mempool for unconfirmed spenders.
+	mph, mpvi, mpvoi := pgb.MPC.Spenders(fundingTxID)
+	if len(mph) > 0 {
+		// Only add those that are not already in the DB results.
+		isSpent := make(map[uint32]bool)
+		for _, vi := range voutInds {
+			isSpent[vi] = true
+		}
+		for i, vi := range mpvoi {
+			if !isSpent[vi] {
+				txStrs = append(txStrs, mph[i])
+				vinInds = append(vinInds, mpvi[i])
+				voutInds = append(voutInds, vi)
+			}
+		}
+	}
+
+	return txStrs, vinInds, voutInds, nil
 }
 
 // SpendingTransaction returns the transaction that spends the specified
@@ -1227,10 +1253,27 @@ func (pgb *ChainDB) SpendingTransaction(ctx context.Context, fundingTxID string,
 	if err != nil {
 		return "", 0, err
 	}
+
+	// 1. Check the database for a confirmed spender.
 	ctx, cancel := context.WithTimeout(ctx, pgb.queryTimeout)
 	defer cancel()
 	_, spendingTx, vinInd, err := retrieveSpendingTxByTxOut(ctx, pgb.db, ch, fundingTxVout)
-	return spendingTx.String(), vinInd, pgb.replaceCancelError(err)
+	if err == nil {
+		return spendingTx.String(), vinInd, nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return "", 0, pgb.replaceCancelError(err)
+	}
+
+	// 2. Check the mempool for an unconfirmed spender.
+	mph, mpvi, mpvoi := pgb.MPC.Spenders(fundingTxID)
+	for i, vi := range mpvoi {
+		if vi == fundingTxVout {
+			return mph[i], mpvi[i], nil
+		}
+	}
+
+	return "", 0, dbtypes.ErrNoResult
 }
 
 // BlockTransactions retrieves all transactions in the specified block, their
@@ -4265,8 +4308,8 @@ func (pgb *ChainDB) updateUtxoCache(dbVouts [][]*dbtypes.Vout, txns []*dbtypes.T
 	for it, tx := range txns {
 		utxos := make([]*dbtypes.UTXO, 0, tx.NumVout)
 		for iv, vout := range dbVouts[it] {
-			// Do not store zero-value output data.
-			if vout.Value == 0 {
+			// Do not store zero-value output data, unless it is an SKA output.
+			if vout.Value == 0 && vout.CoinType == uint8(cointype.CoinTypeVAR) {
 				continue
 			}
 
@@ -6821,9 +6864,33 @@ func (pgb *ChainDB) GetExplorerTx(ctx context.Context, txid string) *exptypes.Tx
 		})
 	}
 	tx.Vout = outputs
+	sort.Slice(tx.Vout, func(i, j int) bool {
+		return tx.Vout[i].Index < tx.Vout[j].Index
+	})
 
 	// Initialize the spending transaction slice for safety.
-	tx.SpendingTxns = make([]exptypes.TxInID, len(outputs))
+	tx.SpendingTxns = make([]exptypes.TxInID, len(tx.Vout))
+	spendHashes, spendVinInds, spendVoutInds, err := pgb.SpendingTransactions(ctx, txid)
+	if err == nil {
+		for i := range spendHashes {
+			voutIdx := spendVoutInds[i]
+			if int(voutIdx) < len(tx.SpendingTxns) {
+				tx.SpendingTxns[voutIdx] = exptypes.TxInID{
+					Hash:  spendHashes[i],
+					Index: spendVinInds[i],
+				}
+				// Mark as spent in Vout slice. Note that Vout is sorted by index.
+				for j := range tx.Vout {
+					if tx.Vout[j].Index == voutIdx {
+						tx.Vout[j].Spent = true
+						break
+					}
+				}
+			}
+		}
+	} else {
+		log.Errorf("SpendingTransactions failed for %s: %v", txid, err)
+	}
 
 	return tx
 }

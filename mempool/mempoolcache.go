@@ -212,3 +212,25 @@ func (c *DataCache) GetTicketPriceCountTime(feeAvgLength int) *apitypes.PriceCou
 		Time:  dbtypes.NewTimeDef(c.timestamp),
 	}
 }
+
+// Spenders searches all transactions in the mempool cache for transactions
+// spending from the specified funding transaction. It returns the spending
+// transaction hashes, input indexes, and the corresponding funding transaction
+// output indexes.
+func (c *DataCache) Spenders(fundingTxID string) ([]string, []uint32, []uint32) {
+	c.mtx.RLock()
+	defer c.mtx.RUnlock()
+	var hashes []string
+	var vinInds []uint32
+	var voutInds []uint32
+	for _, tx := range c.txns {
+		for i, vin := range tx.Vin {
+			if vin.TxId == fundingTxID {
+				hashes = append(hashes, tx.TxID)
+				vinInds = append(vinInds, uint32(i))
+				voutInds = append(voutInds, vin.Outdex)
+			}
+		}
+	}
+	return hashes, vinInds, voutInds
+}
