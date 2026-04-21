@@ -6830,7 +6830,7 @@ func (pgb *ChainDB) GetExplorerTx(ctx context.Context, txid string) *exptypes.Tx
 			Spent:           spent,
 			Index:           vout.N,
 			Version:         version,
-			CoinType:        uint8(vout.CoinType),
+			CoinType:        vout.CoinType,
 			SKAValue:        vout.SKAValue,
 		})
 	}
