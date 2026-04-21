@@ -1220,9 +1220,9 @@ func (pgb *ChainDB) SpendingTransactions(ctx context.Context, fundingTxID string
 		return nil, nil, nil, pgb.replaceCancelError(err)
 	}
 
-	txStrs := make([]string, len(spendingTxns))
+	txStrs := make([]string, 0, len(spendingTxns))
 	for i := range spendingTxns {
-		txStrs[i] = spendingTxns[i].String()
+		txStrs = append(txStrs, spendingTxns[i].String())
 	}
 
 	// 2. Check the mempool for unconfirmed spenders.
