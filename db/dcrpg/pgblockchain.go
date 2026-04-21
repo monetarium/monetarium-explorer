@@ -5166,7 +5166,8 @@ func (pgb *ChainDB) GetAPITransaction(ctx context.Context, txid *chainhash.Hash)
 
 		// High-precision Vin (from node response via skaamountin)
 		if coinType == 0 { // VAR
-			tx.Vin[i].ValueInRaw = strconv.FormatInt(int64(vin.AmountIn*1e8), 10)
+			// Use exact atom value from the node's wire transaction to avoid float64 round-trip.
+			tx.Vin[i].ValueInRaw = strconv.FormatInt(msgTx.TxIn[i].ValueIn, 10)
 		} else { // SKA
 			tx.Vin[i].ValueInRaw = vin.SKAAmountIn
 		}
@@ -5178,7 +5179,8 @@ func (pgb *ChainDB) GetAPITransaction(ctx context.Context, txid *chainhash.Hash)
 		tx.Vout[i].Value = vout.Value
 		var valueRaw string
 		if vout.CoinType == 0 { // VAR
-			valueRaw = strconv.FormatInt(int64(dcrutil.Amount(vout.Value*1e8)), 10)
+			// Get exact atom value from the node's wire transaction to avoid float64 round-trip.
+			valueRaw = strconv.FormatInt(msgTx.TxOut[i].Value, 10)
 		} else { // SKA
 			valueRaw = vout.SKAValue
 		}
@@ -6085,8 +6087,9 @@ func makeExplorerTxBasic(data *chainjson.TxRawResult, ticketPrice int64, msgTx *
 
 	// Calculate high-precision total and fee.
 	if coinType == 0 { // VAR
-		tx.Total = txhelpers.TotalVout(data.Vout).ToCoin()
-		tx.TotalRaw = strconv.FormatInt(int64(txhelpers.TotalVout(data.Vout)), 10)
+		totalAtoms := txhelpers.TotalVout(data.Vout)
+		tx.Total = totalAtoms.ToCoin()
+		tx.TotalRaw = strconv.FormatInt(int64(totalAtoms), 10)
 		fee, feeRate := txhelpers.TxFeeRate(msgTx)
 		tx.Fee, tx.FeeRate = fee, feeRate
 		tx.FeeRaw = strconv.FormatInt(int64(fee), 10)
@@ -6103,8 +6106,8 @@ func makeExplorerTxBasic(data *chainjson.TxRawResult, ticketPrice int64, msgTx *
 		// SKA Fee calculation skipped here; handled in GetExplorerTx and GetAPITransaction
 		// which have access to the DB client for prevout lookups.
 		tx.FeeRaw = "0"
-		tx.Fee = 0 // Deprecated float
-		tx.FeeRate = 0
+		tx.Fee = 0     // Deprecated int64 atoms (formerly dcrutil.Amount)
+		tx.FeeRate = 0 // Deprecated int64 atoms (formerly dcrutil.Amount)
 		tx.FeeRateRaw = "0"
 	}
 
@@ -6575,11 +6578,12 @@ func (pgb *ChainDB) GetExplorerTx(ctx context.Context, txid string) *exptypes.Tx
 			outInfo, err = txhelpers.OutPointAddressesAll(
 				prevOut, pgb.Client, pgb.chainParams)
 			if err != nil {
-				log.Warnf("Failed to get outpoint address from txid: %v", err)
-				continue
+				log.Warnf("Failed to get outpoint address for vin %d of tx %v: %v", i, txid, err)
+				// Do not skip the input; proceed with empty addresses to preserve order.
+			} else {
+				valueIn = outInfo.Value
+				addresses = outInfo.Addresses
 			}
-			valueIn = outInfo.Value
-			addresses = outInfo.Addresses
 			// See if getrawtransaction had correct vin amounts. It should
 			// except for votes on side chain blocks.
 			if valueIn != valueIn0 {
@@ -6612,7 +6616,8 @@ func (pgb *ChainDB) GetExplorerTx(ctx context.Context, txid string) *exptypes.Tx
 		var valueRaw string
 		var skaValue string
 		if tx.CoinType == 0 { // VAR
-			valueRaw = strconv.FormatInt(int64(vin.AmountIn*1e8), 10)
+			// Use exact atom value to avoid float64 round-trip.
+			valueRaw = strconv.FormatInt(int64(valueIn), 10)
 		} else { // SKA
 			valueRaw = vin.SKAAmountIn
 			skaValue = valueRaw
@@ -6638,7 +6643,11 @@ func (pgb *ChainDB) GetExplorerTx(ctx context.Context, txid string) *exptypes.Tx
 			totalOutSKA.SetString(tx.TotalRaw, 10)
 		}
 		fee := new(big.Int).Sub(totalInSKA, totalOutSKA)
+		if fee.Sign() < 0 {
+			fee.SetInt64(0)
+		}
 		tx.FeeRaw = fee.String()
+		// TODO: Address C3 WebSocket parity for SKA confirmed transactions.
 		// Calculate FeeRateRaw (SKA atoms / KB)
 		txSize := int64(msgTx.SerializeSize())
 		if txSize > 0 {
@@ -6845,7 +6854,8 @@ func (pgb *ChainDB) GetExplorerTx(ctx context.Context, txid string) *exptypes.Tx
 		}
 		var valueRaw string
 		if vout.CoinType == 0 { // VAR
-			valueRaw = strconv.FormatInt(int64(dcrutil.Amount(vout.Value*1e8)), 10)
+			// Get exact atom value from the node's wire transaction to avoid float64 round-trip.
+			valueRaw = strconv.FormatInt(msgTx.TxOut[i].Value, 10)
 		} else { // SKA
 			valueRaw = vout.SKAValue
 		}
@@ -6866,9 +6876,7 @@ func (pgb *ChainDB) GetExplorerTx(ctx context.Context, txid string) *exptypes.Tx
 		})
 	}
 	tx.Vout = outputs
-	sort.Slice(tx.Vout, func(i, j int) bool {
-		return tx.Vout[i].Index < tx.Vout[j].Index
-	})
+	// Redundant sort removed (txraw.Vout is index-ordered from the node).
 
 	// Initialize the spending transaction slice for safety.
 	tx.SpendingTxns = make([]exptypes.TxInID, len(tx.Vout))

@@ -197,7 +197,7 @@
 		{{- end}}
 	{{- else -}}
 		<span class="int">{{index . 0}}</span>
-		{{- if gt (len (index . 1)) 0 -}}
+		{{- if or (gt (len (index . 1)) 0) (gt (len (index . 2)) 0) -}}
 		<span class="decimal dot">.</span><span class="decimal">{{index . 1 }}</span>
 		{{- /* trailing zeros  */ -}}
 		<span class="decimal trailing-zeroes">{{index . 2}}</span>
