@@ -186,15 +186,20 @@ type TxBasic struct {
 	Type          string
 	Version       int32
 	FormattedSize string
-	Total         float64
-	Fee           dcrutil.Amount
+	Total         float64        // Deprecated: use TotalRaw
+	TotalRaw      string         // Atom string
+	Fee           dcrutil.Amount // Deprecated: use FeeRaw
+	FeeRaw        string         // Atom string
 	FeeRate       dcrutil.Amount
-	VoteInfo      *VoteInfo
-	Coinbase      bool
-	Treasurybase  bool
-	MixCount      uint32
-	MixDenom      int64
-	SKASent       map[uint8]string
+	FeeRateRaw    string
+	Size          int32
+	*VoteInfo
+	Coinbase     bool
+	Treasurybase bool
+	MixCount     uint32
+	MixDenom     int64
+	CoinType     uint8
+	SKASent      map[uint8]string // Deprecated: use TotalRaw + CoinType
 }
 
 // TrimmedTxInfo for use with /visualblocks
@@ -448,6 +453,7 @@ type Vin struct {
 	*chainjson.Vin
 	Addresses       []string
 	FormattedAmount string
+	ValueRaw        string // Atom string
 	Index           uint32
 	DisplayText     string
 	TextIsHash      bool
@@ -459,7 +465,8 @@ type Vin struct {
 // Vout models basic data about a tx output for display
 type Vout struct {
 	Addresses       []string
-	Amount          float64
+	Amount          float64 // Deprecated: use SKAValue or ValueRaw
+	ValueRaw        string  // Atom string
 	FormattedAmount string
 	Type            string
 	Spent           bool
