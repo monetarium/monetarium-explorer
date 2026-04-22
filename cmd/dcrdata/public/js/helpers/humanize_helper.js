@@ -63,13 +63,13 @@ const humanize = {
       htmlString +=
         `<span class="int">${int}.${decimalVals.substring(0, lgDecimals)}</span>` +
         `<span class="decimal">${decimalVals.substring(lgDecimals, decimalVals.length)}</span>` +
-        `<span class="decimal trailing-zeroes">${trailingZeros}</span>`
+        `<span class="decimal trailing-zeroes"></span>`
     } else if (precision !== 0) {
       htmlString +=
         `<span class="int">${int}</span>` +
         '<span class="decimal dot">.</span>' +
         `<span class="decimal">${decimalVals}</span>` +
-        `<span class="decimal trailing-zeroes">${trailingZeros}</span>`
+        `<span class="decimal trailing-zeroes"></span>`
     } else {
       htmlString += `<span class="int">${int}</span>`
     }
