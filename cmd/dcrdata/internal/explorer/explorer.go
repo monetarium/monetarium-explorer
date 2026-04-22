@@ -715,17 +715,19 @@ func (exp *explorerUI) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgB
 	}
 
 	// PoW SKA rewards: prioritize rewards from the current block (miner-centric),
-	// then fallback to previous blocks if the current one is empty.
+	// then fallback to previous blocks if current block is empty.
 	if len(newBlockData.SKAPoWRewards) > 0 {
 		powRewards := newBlockData.SKAPoWRewards
 		p.HomeInfo.PoWSKARewards = powRewards
 	} else {
 		var powRewardsMap map[uint8]string
 		if len(blockData.ExtraInfo.SKAPoWRewards) > 0 {
+			log.Infof("HOME PoW: Using ExtraInfo.SKAPoWRewards = %v", blockData.ExtraInfo.SKAPoWRewards)
 			powRewardsMap = blockData.ExtraInfo.SKAPoWRewards
 		} else {
 			// Fallback: Search backwards from the current block height.
 			currentHeight := newBlockData.Height
+			log.Infof("HOME PoW: Falling back from height %d", currentHeight)
 			for h := currentHeight - 1; h >= currentHeight-4320 && h >= 0; h-- {
 				hash, err := exp.dataSource.BlockHash(ctx, h)
 				if err != nil {
