@@ -106,7 +106,7 @@ func TestVotingCardTemplate(t *testing.T) {
 		if !strings.Contains(out, "No SKA rewards available") {
 			t.Error("expected 'No SKA rewards available' in output")
 		}
-		if strings.Contains(out, "SKA") {
+		if strings.Contains(out, "SKA1") || strings.Contains(out, "SKA2") {
 			t.Error("expected no SKA symbol rows for empty SKA slice")
 		}
 	})
