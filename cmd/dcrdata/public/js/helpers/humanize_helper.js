@@ -55,7 +55,6 @@ const humanize = {
       }
     }
     const decimalVals = decimal.slice(0, decimal.length - numTrailingZeros)
-    const trailingZeros = numTrailingZeros === 0 ? '' : decimal.slice(-numTrailingZeros)
 
     let htmlString = '<div class="decimal-parts d-inline-block">'
 
