@@ -503,7 +503,7 @@ type VARCoinSupply struct {
 
 // SKACoinSupplyEntry holds per-SKA-type supply data.
 type SKACoinSupplyEntry struct {
-	CoinType      uint8  `json:"coin_type"`      // SKA-n identifier (1, 2, ...)
+	CoinType      uint8  `json:"coin_type"`      // SKAn identifier (1, 2, ...)
 	InCirculation string `json:"in_circulation"` // big.Int atom string
 	TotalIssued   string `json:"total_issued"`   // big.Int atom string
 	TotalBurned   string `json:"total_burned"`   // big.Int atom string (placeholder: "0")
@@ -573,7 +573,7 @@ type BlockInfo struct {
 	StakeValidationHeight int64
 	Subsidy               *chainjson.GetBlockSubsidyResult
 	SKAPoWRewards         []PoWSKAReward `json:"pow_ska_rewards,omitempty"`
-	// CoinAmounts holds per-coin totals (VAR key=0, SKA-n key=n) as decimal atom strings.
+	// CoinAmounts holds per-coin totals (VAR key=0, SKAn key=n) as decimal atom strings.
 	CoinAmounts map[uint8]string `json:"coin_amounts,omitempty"`
 }
 

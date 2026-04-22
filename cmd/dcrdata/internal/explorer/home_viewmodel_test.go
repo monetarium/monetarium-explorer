@@ -123,7 +123,7 @@ func TestBuildHomeBlockRows_WithCoinRows(t *testing.T) {
 			// 1 230 000 000 VAR atoms = 12.3 VAR coins (8 decimals)
 			{CoinType: 0, Symbol: "VAR", TxCount: 5, Amount: "1230000000", Size: 1024},
 			// 1 230 000 000 000 000 000 SKA atoms = 1.23 SKA coins (18 decimals)
-			{CoinType: 1, Symbol: "SKA-1", TxCount: 2, Amount: "1230000000000000000", Size: 512},
+			{CoinType: 1, Symbol: "SKA1", TxCount: 2, Amount: "1230000000000000000", Size: 512},
 		},
 	}
 	rows := buildHomeBlockRows([]*types.BlockBasic{b})
@@ -142,8 +142,8 @@ func TestBuildHomeBlockRows_WithCoinRows(t *testing.T) {
 	if len(r.SKASubRows) != 1 {
 		t.Fatalf("expected 1 SKASubRow, got %d", len(r.SKASubRows))
 	}
-	if r.SKASubRows[0].TokenType != "SKA-1" {
-		t.Errorf("SKASubRow TokenType: got %q, want %q", r.SKASubRows[0].TokenType, "SKA-1")
+	if r.SKASubRows[0].TokenType != "SKA1" {
+		t.Errorf("SKASubRow TokenType: got %q, want %q", r.SKASubRows[0].TokenType, "SKA1")
 	}
 	wantSKA := threeSigFigs(skaCoinValue("1230000000000000000")) // "1.23"
 	if r.SKASubRows[0].Amount != wantSKA {
@@ -164,15 +164,15 @@ func TestBuildHomeBlockRows_TransactionsSumsCoinRows(t *testing.T) {
 		Transactions: 3, // regular-tree only — should NOT appear in the result
 		CoinRows: []types.CoinRowData{
 			{CoinType: 0, Symbol: "VAR", TxCount: 5, Amount: "1000000000", Size: 200},
-			{CoinType: 1, Symbol: "SKA-1", TxCount: 2, Amount: "1000000000000000000", Size: 100},
-			{CoinType: 2, Symbol: "SKA-2", TxCount: 4, Amount: "2000000000000000000", Size: 150},
+			{CoinType: 1, Symbol: "SKA1", TxCount: 2, Amount: "1000000000000000000", Size: 100},
+			{CoinType: 2, Symbol: "SKA2", TxCount: 4, Amount: "2000000000000000000", Size: 150},
 		},
 	}
 	rows := buildHomeBlockRows([]*types.BlockBasic{b})
 	if len(rows) != 1 {
 		t.Fatalf("expected 1 row, got %d", len(rows))
 	}
-	// 5 (VAR) + 2 (SKA-1) + 4 (SKA-2) = 11, not b.Transactions (3)
+	// 5 (VAR) + 2 (SKA1) + 4 (SKA2) = 11, not b.Transactions (3)
 	if rows[0].Transactions != 11 {
 		t.Errorf("Transactions: got %d, want 11 (sum of CoinRows)", rows[0].Transactions)
 	}
@@ -185,8 +185,8 @@ func TestBuildHomeBlockRows_MultipleSKATypes(t *testing.T) {
 		Height: 30,
 		CoinRows: []types.CoinRowData{
 			{CoinType: 0, Symbol: "VAR", TxCount: 3, Amount: "10000000000", Size: 200},
-			{CoinType: 1, Symbol: "SKA-1", TxCount: 1, Amount: "50000000000000000000", Size: 100},
-			{CoinType: 2, Symbol: "SKA-2", TxCount: 2, Amount: "75000000000000000000", Size: 150},
+			{CoinType: 1, Symbol: "SKA1", TxCount: 1, Amount: "50000000000000000000", Size: 100},
+			{CoinType: 2, Symbol: "SKA2", TxCount: 2, Amount: "75000000000000000000", Size: 150},
 		},
 	}
 	rows := buildHomeBlockRows([]*types.BlockBasic{b})
@@ -211,8 +211,8 @@ func TestBuildHomeBlockRows_SKASubRowTokenTypeNonEmpty(t *testing.T) {
 		Height: 40,
 		CoinRows: []types.CoinRowData{
 			{CoinType: 0, Symbol: "VAR", Amount: "1000000000"},
-			{CoinType: 1, Symbol: "SKA-1", Amount: "1000000000000000000"},
-			{CoinType: 3, Symbol: "SKA-3", Amount: "2000000000000000000"},
+			{CoinType: 1, Symbol: "SKA1", Amount: "1000000000000000000"},
+			{CoinType: 3, Symbol: "SKA3", Amount: "2000000000000000000"},
 		},
 	}
 	rows := buildHomeBlockRows([]*types.BlockBasic{b})

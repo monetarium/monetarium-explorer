@@ -38,12 +38,12 @@ func TestParseTxns_CoinStats(t *testing.T) {
 		t.Errorf("VAR Size: want 250, got %d", inv.CoinStats[0].Size)
 	}
 	if inv.CoinStats[1].TxCount != 1 {
-		t.Errorf("SKA-1 TxCount: want 1, got %d", inv.CoinStats[1].TxCount)
+		t.Errorf("SKA1 TxCount: want 1, got %d", inv.CoinStats[1].TxCount)
 	}
 	if inv.CoinStats[1].Size != 300 {
-		t.Errorf("SKA-1 Size: want 300, got %d", inv.CoinStats[1].Size)
+		t.Errorf("SKA1 Size: want 300, got %d", inv.CoinStats[1].Size)
 	}
 	if inv.CoinStats[1].Amount != "1000000000000000000" {
-		t.Errorf("SKA-1 Amount: want 1000000000000000000, got %s", inv.CoinStats[1].Amount)
+		t.Errorf("SKA1 Amount: want 1000000000000000000, got %s", inv.CoinStats[1].Amount)
 	}
 }

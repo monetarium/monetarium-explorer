@@ -760,7 +760,7 @@ func (psh *PubSubHub) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgBl
 			}
 			rewards = append(rewards, exptypes.SKAVoteReward{
 				CoinType:  ct,
-				Symbol:    fmt.Sprintf("SKA-%d", ct),
+				Symbol:    fmt.Sprintf("SKA%d", ct),
 				PerBlock:  perBlock,
 				Per30Days: txhelpers.AvgSSFeeRate(sum30, ct, psh.params.TicketsPerBlock),
 				PerYear:   txhelpers.AvgSSFeeRate(sumYear, ct, psh.params.TicketsPerBlock),
@@ -778,7 +778,7 @@ func (psh *PubSubHub) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgBl
 		for ct, amountStr := range blockData.ExtraInfo.SKAPoWRewards {
 			powRewards = append(powRewards, exptypes.PoWSKAReward{
 				CoinType: ct,
-				Symbol:   fmt.Sprintf("SKA-%d", ct),
+				Symbol:   fmt.Sprintf("SKA%d", ct),
 				Amount:   amountStr,
 			})
 		}

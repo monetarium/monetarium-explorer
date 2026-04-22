@@ -50,7 +50,7 @@ func TestGetBlockSummary_CoinAmounts(t *testing.T) {
 		t.Errorf("VAR: want 100000000, got %s", result.CoinAmounts[0])
 	}
 	if result.CoinAmounts[1] != "1000000000000000000" {
-		t.Errorf("SKA-1: want 1000000000000000000, got %s", result.CoinAmounts[1])
+		t.Errorf("SKA1: want 1000000000000000000, got %s", result.CoinAmounts[1])
 	}
 }
 

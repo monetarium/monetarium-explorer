@@ -39,7 +39,7 @@ export default class extends Controller {
 
       const in_circulation_formatted = humanize.formatCoinAtomsFull(e.in_circulation, e.coin_type)
       clone.querySelector('.int').textContent = in_circulation_formatted
-      clone.querySelector('.symbol').textContent = `SKA-${e.coin_type}`
+      clone.querySelector('.symbol').textContent = `SKA${e.coin_type}`
       clone.querySelector('.issued').textContent = humanize.formatCoinAtomsFull(
         e.total_issued,
         e.coin_type

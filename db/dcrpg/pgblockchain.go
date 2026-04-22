@@ -7140,7 +7140,7 @@ func powRewardsFromMap(rewards map[uint8]*big.Int) []exptypes.PoWSKAReward {
 	for ct, amt := range rewards {
 		res = append(res, exptypes.PoWSKAReward{
 			CoinType: ct,
-			Symbol:   fmt.Sprintf("SKA-%d", ct),
+			Symbol:   fmt.Sprintf("SKA%d", ct),
 			Amount:   amt.String(),
 		})
 	}
@@ -7161,7 +7161,7 @@ func coinRowsFromAmounts(amounts map[uint8]string) []exptypes.CoinRowData {
 		if ct == 0 {
 			symbol = "VAR"
 		} else {
-			symbol = fmt.Sprintf("SKA-%d", ct)
+			symbol = fmt.Sprintf("SKA%d", ct)
 		}
 		rows = append(rows, exptypes.CoinRowData{
 			CoinType: ct,

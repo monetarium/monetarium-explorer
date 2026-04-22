@@ -37,7 +37,7 @@ type HomeBlockRow struct {
 // SKASubRow is one accordion detail row for a specific SKA token type.
 // All numeric fields are pre-formatted strings.
 type SKASubRow struct {
-	TokenType string // e.g. "SKA-1", "SKA-2"
+	TokenType string // e.g. "SKA1", "SKA2"
 	TxCount   string // pre-formatted
 	Amount    string // pre-formatted
 	Size      string // pre-formatted

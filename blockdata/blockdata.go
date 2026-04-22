@@ -402,7 +402,7 @@ func (t *Collector) Collect() (*BlockData, *wire.MsgBlock, error) {
 }
 
 // blockCoinTxStats returns per-coin tx count and total serialized size for all
-// transactions in a block (key 0=VAR, 1-255=SKA-n). Returns nil for empty blocks.
+// transactions in a block (key 0=VAR, 1-255=SKAn). Returns nil for empty blocks.
 func blockCoinTxStats(msgBlock *wire.MsgBlock) map[uint8]apitypes.CoinTxStats {
 	stats := make(map[uint8]apitypes.CoinTxStats)
 	allTxs := append(msgBlock.Transactions, msgBlock.STransactions...)
@@ -430,7 +430,7 @@ func blockCoinTxStats(msgBlock *wire.MsgBlock) map[uint8]apitypes.CoinTxStats {
 }
 
 // blockCoinAmounts iterates all transactions in a block and returns a map of
-// per-coin output totals as decimal atom strings (key 0=VAR, 1-255=SKA-n).
+// per-coin output totals as decimal atom strings (key 0=VAR, 1-255=SKAn).
 func blockCoinAmounts(msgBlock *wire.MsgBlock) map[uint8]string {
 	var varTotal int64
 	skaTotal := make(map[uint8]*big.Int)

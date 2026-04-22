@@ -702,7 +702,7 @@ func (exp *explorerUI) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgB
 			}
 			rewards = append(rewards, types.SKAVoteReward{
 				CoinType:  ct,
-				Symbol:    fmt.Sprintf("SKA-%d", ct),
+				Symbol:    fmt.Sprintf("SKA%d", ct),
 				PerBlock:  perBlock,
 				Per30Days: txhelpers.AvgSSFeeRate(sum30S, ct, exp.ChainParams.TicketsPerBlock),
 				PerYear:   txhelpers.AvgSSFeeRate(sumYearS, ct, exp.ChainParams.TicketsPerBlock),
@@ -748,7 +748,7 @@ func (exp *explorerUI) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgB
 			for ct, amountStr := range powRewardsMap {
 				powRewards = append(powRewards, types.PoWSKAReward{
 					CoinType: ct,
-					Symbol:   fmt.Sprintf("SKA-%d", ct),
+					Symbol:   fmt.Sprintf("SKA%d", ct),
 					Amount:   amountStr,
 				})
 			}
@@ -1211,7 +1211,7 @@ func computeCoinFills(stats map[uint8]types.MempoolCoinStats, maxBlockSize float
 		status := fillStatus(size, perSKAQuota)
 		extra, overflow := extraOrOverflow(size, perSKAQuota, status)
 		fills = append(fills, types.CoinFillData{
-			Symbol:            fmt.Sprintf("SKA-%d", ct),
+			Symbol:            fmt.Sprintf("SKA%d", ct),
 			GQFillRatio:       math.Min(size/perSKAQuota, 1.0),
 			ExtraFillRatio:    extra,
 			OverflowFillRatio: overflow,

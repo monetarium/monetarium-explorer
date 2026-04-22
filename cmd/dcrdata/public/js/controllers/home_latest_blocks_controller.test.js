@@ -161,9 +161,9 @@ function makeBlock(
 }
 
 const SKA_ROWS_3 = [
-  { coin_type: 1, symbol: 'SKA-1', tx_count: 42, amount: '1.25M SKA-1', size: 8400 },
-  { coin_type: 2, symbol: 'SKA-2', tx_count: 17, amount: '450K SKA-2', size: 3200 },
-  { coin_type: 3, symbol: 'SKA-3', tx_count: 5, amount: '2.1B SKA-3', size: 1100 }
+  { coin_type: 1, symbol: 'SKA1', tx_count: 42, amount: '1.25M SKA1', size: 8400 },
+  { coin_type: 2, symbol: 'SKA2', tx_count: 17, amount: '450K SKA2', size: 3200 },
+  { coin_type: 3, symbol: 'SKA3', tx_count: 5, amount: '2.1B SKA3', size: 1100 }
 ]
 
 // ---------------------------------------------------------------------------
@@ -361,7 +361,7 @@ describe('blocklist_controller — Property 8: WebSocket block prepend matches s
         expect(r.querySelectorAll('td').length).toBe(9)
         const label = r.querySelector('td.text-end')
         expect(label).not.toBeNull()
-        expect(label.textContent.trim()).toMatch(/^SKA-\d+$/)
+        expect(label.textContent.trim()).toMatch(/^SKA\d+$/)
       })
     })
 
@@ -392,9 +392,9 @@ describe('blocklist_controller — Property 8: WebSocket block prepend matches s
         fc.array(
           fc.record({
             coin_type: fc.integer({ min: 1, max: 10 }),
-            symbol: fc.constantFrom('SKA-1', 'SKA-2', 'SKA-3'),
+            symbol: fc.constantFrom('SKA1', 'SKA2', 'SKA3'),
             tx_count: fc.integer({ min: 0, max: 100 }),
-            amount: fc.constantFrom('1M SKA-1', '500K SKA-2', '2B SKA-3'),
+            amount: fc.constantFrom('1M SKA1', '500K SKA2', '2B SKA3'),
             size: fc.integer({ min: 100, max: 10000 })
           }),
           { minLength: 0, maxLength: 3 }
@@ -596,9 +596,9 @@ describe('blocklist_controller — home-block-table-hierarchy property tests', (
         fc.array(
           fc.record({
             coin_type: fc.integer({ min: 1, max: 10 }),
-            symbol: fc.constantFrom('SKA-1', 'SKA-2', 'SKA-255'),
+            symbol: fc.constantFrom('SKA1', 'SKA2', 'SKA255'),
             tx_count: fc.integer({ min: 0, max: 100 }),
-            amount: fc.constantFrom('1M SKA-1', '500K SKA-2', '2B SKA-255'),
+            amount: fc.constantFrom('1M SKA1', '500K SKA2', '2B SKA255'),
             size: fc.integer({ min: 100, max: 10000 })
           }),
           { minLength: 0, maxLength: 5 }
@@ -642,9 +642,9 @@ describe('blocklist_controller — home-block-table-hierarchy property tests', (
         fc.array(
           fc.record({
             coin_type: fc.integer({ min: 1, max: 10 }),
-            symbol: fc.constantFrom('SKA-1', 'SKA-2', 'SKA-3'),
+            symbol: fc.constantFrom('SKA1', 'SKA2', 'SKA3'),
             tx_count: fc.integer({ min: 0, max: 100 }),
-            amount: fc.constantFrom('1M SKA-1', '500K SKA-2', '2B SKA-3'),
+            amount: fc.constantFrom('1M SKA1', '500K SKA2', '2B SKA3'),
             size: fc.integer({ min: 100, max: 10000 })
           }),
           { minLength: 0, maxLength: 5 }
@@ -672,9 +672,9 @@ describe('blocklist_controller — home-block-table-hierarchy property tests', (
         fc.array(
           fc.record({
             coin_type: fc.integer({ min: 1, max: 10 }),
-            symbol: fc.constantFrom('SKA-1', 'SKA-2', 'SKA-3'),
+            symbol: fc.constantFrom('SKA1', 'SKA2', 'SKA3'),
             tx_count: fc.integer({ min: 0, max: 100 }),
-            amount: fc.constantFrom('1M SKA-1', '500K SKA-2', '2B SKA-3'),
+            amount: fc.constantFrom('1M SKA1', '500K SKA2', '2B SKA3'),
             size: fc.integer({ min: 100, max: 10000 })
           }),
           { minLength: 0, maxLength: 5 }
@@ -703,9 +703,9 @@ describe('blocklist_controller — home-block-table-hierarchy property tests', (
         fc.array(
           fc.record({
             coin_type: fc.integer({ min: 1, max: 255 }),
-            symbol: fc.constantFrom('SKA-1', 'SKA-2', 'SKA-255'),
+            symbol: fc.constantFrom('SKA1', 'SKA2', 'SKA255'),
             tx_count: fc.integer({ min: 0, max: 100 }),
-            amount: fc.constantFrom('1M SKA-1', '500K SKA-2', '2B SKA-255'),
+            amount: fc.constantFrom('1M SKA1', '500K SKA2', '2B SKA255'),
             size: fc.integer({ min: 100, max: 10000 })
           }),
           { minLength: 1, maxLength: 5 }
@@ -738,9 +738,9 @@ describe('blocklist_controller — home-block-table-hierarchy property tests', (
         fc.array(
           fc.record({
             coin_type: fc.integer({ min: 1, max: 10 }),
-            symbol: fc.constantFrom('SKA-1', 'SKA-2', 'SKA-3'),
+            symbol: fc.constantFrom('SKA1', 'SKA2', 'SKA3'),
             tx_count: fc.integer({ min: 0, max: 100 }),
-            amount: fc.constantFrom('1M SKA-1', '500K SKA-2', '2B SKA-3'),
+            amount: fc.constantFrom('1M SKA1', '500K SKA2', '2B SKA3'),
             size: fc.integer({ min: 100, max: 10000 })
           }),
           { minLength: 0, maxLength: 5 }
@@ -793,9 +793,9 @@ describe('blocklist_controller — home-block-table-hierarchy property tests', (
         fc.array(
           fc.record({
             coin_type: fc.integer({ min: 1, max: 10 }),
-            symbol: fc.constantFrom('SKA-1', 'SKA-2', 'SKA-3'),
+            symbol: fc.constantFrom('SKA1', 'SKA2', 'SKA3'),
             tx_count: fc.integer({ min: 0, max: 100 }),
-            amount: fc.constantFrom('1M SKA-1', '500K SKA-2', '2B SKA-3'),
+            amount: fc.constantFrom('1M SKA1', '500K SKA2', '2B SKA3'),
             size: fc.integer({ min: 100, max: 10000 })
           }),
           { minLength: 0, maxLength: 5 }
@@ -826,9 +826,9 @@ describe('blocklist_controller — home-block-table-hierarchy property tests', (
         fc.array(
           fc.record({
             coin_type: fc.integer({ min: 1, max: 10 }),
-            symbol: fc.constantFrom('SKA-1', 'SKA-2', 'SKA-3'),
+            symbol: fc.constantFrom('SKA1', 'SKA2', 'SKA3'),
             tx_count: fc.integer({ min: 0, max: 100 }),
-            amount: fc.constantFrom('1M SKA-1', '500K SKA-2', '2B SKA-3'),
+            amount: fc.constantFrom('1M SKA1', '500K SKA2', '2B SKA3'),
             size: fc.integer({ min: 100, max: 10000 })
           }),
           { minLength: 0, maxLength: 5 }
@@ -859,9 +859,9 @@ describe('blocklist_controller — home-block-table-hierarchy property tests', (
         fc.array(
           fc.record({
             coin_type: fc.integer({ min: 1, max: 10 }),
-            symbol: fc.constantFrom('SKA-1', 'SKA-2', 'SKA-3'),
+            symbol: fc.constantFrom('SKA1', 'SKA2', 'SKA3'),
             tx_count: fc.integer({ min: 0, max: 100 }),
-            amount: fc.constantFrom('1M SKA-1', '500K SKA-2', '2B SKA-3'),
+            amount: fc.constantFrom('1M SKA1', '500K SKA2', '2B SKA3'),
             size: fc.integer({ min: 100, max: 10000 })
           }),
           { minLength: 0, maxLength: 5 }
@@ -891,9 +891,9 @@ describe('blocklist_controller — home-block-table-hierarchy property tests', (
         fc.array(
           fc.record({
             coin_type: fc.integer({ min: 1, max: 10 }),
-            symbol: fc.constantFrom('SKA-1', 'SKA-2', 'SKA-3'),
+            symbol: fc.constantFrom('SKA1', 'SKA2', 'SKA3'),
             tx_count: fc.integer({ min: 0, max: 100 }),
-            amount: fc.constantFrom('1M SKA-1', '500K SKA-2', '2B SKA-3'),
+            amount: fc.constantFrom('1M SKA1', '500K SKA2', '2B SKA3'),
             size: fc.integer({ min: 100, max: 10000 })
           }),
           { minLength: 0, maxLength: 5 }
