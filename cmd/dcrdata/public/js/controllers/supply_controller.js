@@ -11,7 +11,7 @@ export default class extends Controller {
 
     if (ex.var_coin_supply && this.hasVarCirculatingTarget) {
       this.varCirculatingTarget.innerHTML = humanize.decimalParts(
-        parseInt(ex.var_coin_supply.circulating) / 1e8,
+        humanize.formatCoinAtomsFull(ex.var_coin_supply.circulating, 0),
         true,
         8
       )
