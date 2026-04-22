@@ -119,7 +119,7 @@
                                     <td class="text-start">{{.Type}}</td>
                                     {{- if .SKATotals -}}
                                       {{- range $id, $amt := .SKATotals -}}
-                                    <td class="text-start text-nowrap">SKA-{{$id}}</td>
+                                    <td class="text-start text-nowrap">SKA{{$id}}</td>
                                     <td class="text-end">{{formatCoinAtoms $amt $id}}</td>
                                       {{- end -}}
                                     {{- else -}}

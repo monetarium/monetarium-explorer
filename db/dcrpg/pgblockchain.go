@@ -5022,6 +5022,20 @@ func (pgb *ChainDB) GetBlockByHash(ctx context.Context, hash string) (*wire.MsgB
 	return pgb.Client.GetBlock(ctx, blockHash)
 }
 
+// GetBlockSKAFees calculates SKA PoW fees (transaction fees) for a block by fetching
+// the raw block via RPC and computing: sum(inputs) - sum(outputs) = miner fee.
+func (pgb *ChainDB) GetBlockSKAFees(ctx context.Context, height int64) (map[uint8]string, error) {
+	hash, err := pgb.BlockHash(ctx, height)
+	if err != nil {
+		return nil, err
+	}
+	msgBlock, err := pgb.GetBlockByHash(ctx, hash)
+	if err != nil {
+		return nil, err
+	}
+	return blockdata.BlockSKAFees(msgBlock), nil
+}
+
 // GetHeader fetches the *chainjson.GetBlockHeaderVerboseResult for a given
 // block height.
 func (pgb *ChainDB) GetHeader(idx int) *chainjson.GetBlockHeaderVerboseResult {
@@ -6260,68 +6274,6 @@ func (pgb *ChainDB) GetExplorerBlock(ctx context.Context, hash string) *exptypes
 		}
 
 		block.PoWHash = header.PowHashV2().String()
-	}
-
-	// PoW SKA Rewards Aggregation
-	rewardsMap := make(map[uint8]*big.Int)
-	var minerAddresses = make(map[string]bool)
-
-	// 1. Identify the coinbase transaction and collect all miner addresses.
-	var coinbaseMsgTx *wire.MsgTx
-	for _, tx := range data.RawTx {
-		if msgTx, err := txhelpers.MsgTxFromHex(tx.Hex); err == nil && txhelpers.IsCoinBaseTx(msgTx) {
-			coinbaseMsgTx = msgTx
-			break
-		}
-	}
-	if coinbaseMsgTx == nil {
-		for _, tx := range data.RawSTx {
-			if msgTx, err := txhelpers.MsgTxFromHex(tx.Hex); err == nil && txhelpers.IsCoinBaseTx(msgTx) {
-				coinbaseMsgTx = msgTx
-				break
-			}
-		}
-	}
-
-	if coinbaseMsgTx != nil {
-		for _, out := range coinbaseMsgTx.TxOut {
-			_, addrs := stdscript.ExtractAddrs(out.Version, out.PkScript, pgb.chainParams)
-			for _, addr := range addrs {
-				minerAddresses[addr.String()] = true
-			}
-		}
-
-		// 2. Aggregate all SKA rewards from all block transactions that go to these miners.
-		aggregate := func(txs []chainjson.TxRawResult) {
-			for _, tx := range txs {
-				msgTx, err := txhelpers.MsgTxFromHex(tx.Hex)
-				if err != nil {
-					continue
-				}
-				for _, out := range msgTx.TxOut {
-					_, addrs := stdscript.ExtractAddrs(out.Version, out.PkScript, pgb.chainParams)
-					isMiner := false
-					for _, addr := range addrs {
-						if minerAddresses[addr.String()] {
-							isMiner = true
-							break
-						}
-					}
-					if isMiner && out.CoinType.IsSKA() && out.SKAValue != nil {
-						ct := uint8(out.CoinType)
-						if cur, ok := rewardsMap[ct]; ok {
-							cur.Add(cur, out.SKAValue)
-						} else {
-							rewardsMap[ct] = new(big.Int).Set(out.SKAValue)
-						}
-					}
-				}
-			}
-		}
-
-		aggregate(data.RawTx)
-		aggregate(data.RawSTx)
-		block.SKAPoWRewards = powRewardsFromMap(rewardsMap)
 	}
 
 	votes := make([]*exptypes.TrimmedTxInfo, 0, block.Voters)

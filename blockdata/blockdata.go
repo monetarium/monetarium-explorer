@@ -259,9 +259,9 @@ func (t *Collector) CollectBlockInfo(hash *chainhash.Hash) (*apitypes.BlockDataB
 		extrainfo.SSFeeTotalsByCoin = ssfee
 	}
 
-	// Extract per-SKA-type PoW mining reward amounts from the coinbase.
-	if skaRewards := BlockSKAPoWRewards(msgBlock); len(skaRewards) > 0 {
-		extrainfo.SKAPoWRewards = skaRewards
+	// Extract SKA fees from regular transactions (goes to miner as PoW reward).
+	if skaFees := BlockSKAFees(msgBlock); len(skaFees) > 0 {
+		extrainfo.SKAPoWRewards = skaFees
 	}
 
 	return blockdata, feeInfoBlock, blockHeaderResults, extrainfo, msgBlock, err
@@ -468,6 +468,7 @@ func blockCoinAmounts(msgBlock *wire.MsgBlock) map[uint8]string {
 
 // ExtractSKARewardsFromCoinbase extracts per-SKA-type PoW mining reward amounts from the
 // coinbase transaction. Only SKA outputs (CoinType 1-255) from the coinbase are considered.
+// DEPRECATED: Use BlockSKAFees() instead - SKA rewards are in regular transactions, not coinbase.
 func ExtractSKARewardsFromCoinbase(coinbase *wire.MsgTx) map[uint8]string {
 	if coinbase == nil {
 		return nil
@@ -499,9 +500,68 @@ func ExtractSKARewardsFromCoinbase(coinbase *wire.MsgTx) map[uint8]string {
 // BlockSKAPoWRewards extracts per-SKA-type PoW mining reward amounts from the
 // coinbase transaction of a block. Only SKA outputs (CoinType 1-255) from the
 // coinbase are considered, as those represent the miner's SKA reward.
+// DEPRECATED: Use BlockSKAFees() instead - SKA rewards are in regular transactions, not coinbase.
+// TODO: Remove in next minor version after consumers migrate to BlockSKAFees().
 func BlockSKAPoWRewards(msgBlock *wire.MsgBlock) map[uint8]string {
 	if len(msgBlock.Transactions) == 0 {
 		return nil
 	}
 	return ExtractSKARewardsFromCoinbase(msgBlock.Transactions[0])
+}
+
+// BlockSKAFees extracts SKA transaction fees from regular (non-stake) transactions.
+// These fees are paid to the miner as PoW reward.
+// For each regular transaction, the difference between input SKA and output SKA is the fee.
+// Coin type is derived from outputs since transactions are single-coin.
+func BlockSKAFees(msgBlock *wire.MsgBlock) map[uint8]string {
+	if len(msgBlock.Transactions) == 0 {
+		return nil
+	}
+
+	skaFees := make(map[uint8]*big.Int)
+
+	// Process regular transactions (Transactions, not STransactions)
+	for _, tx := range msgBlock.Transactions {
+		var inputSKA, outputSKA big.Int
+
+		// Sum SKA inputs
+		for _, vin := range tx.TxIn {
+			if vin.SKAValueIn != nil {
+				inputSKA.Add(&inputSKA, vin.SKAValueIn)
+			}
+		}
+
+		// Sum SKA outputs and track coin type
+		var coinType uint8
+		for _, txout := range tx.TxOut {
+			if txout.CoinType.IsSKA() && txout.SKAValue != nil {
+				outputSKA.Add(&outputSKA, txout.SKAValue)
+				if coinType == 0 {
+					coinType = uint8(txout.CoinType)
+				}
+			}
+		}
+
+		// Calculate fee (input - output)
+		if inputSKA.Sign() > 0 && coinType != 0 {
+			fee := new(big.Int).Sub(&inputSKA, &outputSKA)
+			if fee.Sign() > 0 {
+				if skaFees[coinType] == nil {
+					skaFees[coinType] = fee
+				} else {
+					skaFees[coinType].Add(skaFees[coinType], fee)
+				}
+			}
+		}
+	}
+
+	if len(skaFees) == 0 {
+		return nil
+	}
+
+	out := make(map[uint8]string, len(skaFees))
+	for k, v := range skaFees {
+		out[k] = v.String()
+	}
+	return out
 }
