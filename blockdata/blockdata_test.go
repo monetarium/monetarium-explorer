@@ -15,6 +15,60 @@ func mockBlock(txs ...*wire.MsgTx) *wire.MsgBlock {
 	return blk
 }
 
+func TestBlockSKAFees_WithSKATransaction(t *testing.T) {
+	tx := wire.NewMsgTx()
+	tx.AddTxIn(wire.NewTxIn(&wire.OutPoint{}, 0, nil))
+
+	// Input: 100 + 2902901089999999999900 atoms SKA
+	vin1 := wire.NewTxIn(&wire.OutPoint{}, 0, nil)
+	vin1.SKAValueIn = big.NewInt(100)
+	tx.TxIn = append(tx.TxIn, vin1)
+
+	vin2 := wire.NewTxIn(&wire.OutPoint{}, 0, nil)
+	vin2.SKAValueIn, _ = new(big.Int).SetString("2902901089999999999900", 10)
+	tx.TxIn = append(tx.TxIn, vin2)
+
+	// Output: 2901069089999999999900 + 100 atoms SKA
+	tx.AddTxOut(wire.NewTxOut(0, nil))
+	tx.TxOut[0].CoinType = cointype.CoinType(1)
+	tx.TxOut[0].SKAValue, _ = new(big.Int).SetString("2901069089999999999900", 10)
+
+	tx.AddTxOut(wire.NewTxOut(0, nil))
+	tx.TxOut[1].CoinType = cointype.CoinType(1)
+	tx.TxOut[1].SKAValue = big.NewInt(100)
+
+	got := BlockSKAFees(mockBlock(tx))
+
+	if got == nil {
+		t.Fatal("expected non-nil SKA fees")
+	}
+
+	// Expected: 1832000000000000000 atoms
+	expected := "1832000000000000000"
+
+	feeStr, ok := got[1]
+	if !ok {
+		t.Fatal("expected SKA-1 in fees map")
+	}
+
+	if feeStr != expected {
+		t.Errorf("want %s, got %s", expected, feeStr)
+	}
+}
+
+func TestBlockSKAFees_NoSKA(t *testing.T) {
+	// Transaction with no SKA inputs/outputs
+	tx := wire.NewMsgTx()
+	tx.AddTxIn(wire.NewTxIn(&wire.OutPoint{}, 0, nil))
+	tx.AddTxOut(wire.NewTxOut(100000000, nil)) // DCR only
+
+	got := BlockSKAFees(mockBlock(tx))
+
+	if got != nil {
+		t.Errorf("expected nil for no SKA, got %v", got)
+	}
+}
+
 func TestBlockCoinAmounts_VAROnly(t *testing.T) {
 	tx := wire.NewMsgTx()
 	tx.AddTxOut(wire.NewTxOut(500_000_000, nil)) // 5 VAR
