@@ -41,7 +41,8 @@ const humanize = {
     if (isNaN(precision) || precision > 8) {
       precision = 8
     }
-    const formattedVal = parseFloat(v).toFixed(precision)
+    const vClean = v.replace(/,/g, '')
+    const formattedVal = parseFloat(vClean).toFixed(precision)
     const chunks = formattedVal.split('.')
     const int = useCommas ? parseInt(chunks[0]).toLocaleString() : chunks[0]
     const decimal = chunks[1] || ''
