@@ -166,6 +166,15 @@ func (m *mockDataSource) SKACoinSupply(ctx context.Context) ([]*explorerTypes.SK
 	return nil, nil
 }
 
+var mockGetBlockSKAFeesResult map[uint8]string
+
+func (m *mockDataSource) GetBlockSKAFees(ctx context.Context, height int64) (map[uint8]string, error) {
+	if mockGetBlockSKAFeesResult != nil {
+		return mockGetBlockSKAFeesResult, nil
+	}
+	return nil, nil
+}
+
 func TestStore_PoWSKARewardsFallback(t *testing.T) {
 	params := chaincfg.MainNetParams()
 
@@ -193,6 +202,8 @@ func TestStore_PoWSKARewardsFallback(t *testing.T) {
 	}
 
 	t.Run("ImmediateSuccess", func(t *testing.T) {
+		defer func() { mockGetBlockSKAFeesResult = nil }()
+		mockGetBlockSKAFeesResult = nil
 		exp, mockDS := setup()
 		msgBlock := &wire.MsgBlock{Header: wire.BlockHeader{}}
 		hash := msgBlock.BlockHash().String()
@@ -230,6 +241,8 @@ func TestStore_PoWSKARewardsFallback(t *testing.T) {
 	})
 
 	t.Run("FallbackSuccess", func(t *testing.T) {
+		defer func() { mockGetBlockSKAFeesResult = nil }()
+		mockGetBlockSKAFeesResult = map[uint8]string{1: "50"}
 		exp, mockDS := setup()
 		msgBlock := &wire.MsgBlock{Header: wire.BlockHeader{}}
 		hash := msgBlock.BlockHash().String()
@@ -280,6 +293,8 @@ func TestStore_PoWSKARewardsFallback(t *testing.T) {
 	})
 
 	t.Run("ExhaustiveSearch", func(t *testing.T) {
+		defer func() { mockGetBlockSKAFeesResult = nil }()
+		mockGetBlockSKAFeesResult = nil
 		exp, mockDS := setup()
 		msgBlock := &wire.MsgBlock{Header: wire.BlockHeader{}}
 		hash := msgBlock.BlockHash().String()
