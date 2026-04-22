@@ -19,10 +19,10 @@ export default class extends Controller {
   handleBlock({ detail: blockData }) {
     const ex = blockData.extra
     this.difficultyTarget.innerHTML = humanize.threeSigFigs(ex.difficulty)
-    this.hashrateTarget.innerHTML = humanize.decimalParts(ex.hash_rate, false, 8, 2)
+    this.hashrateTarget.innerHTML = humanize.decimalParts(String(ex.hash_rate), false, 8, 2)
     this.hashrateDeltaTarget.innerHTML = humanize.fmtPercentage(ex.hash_rate_change_month)
     this.bsubsidyPowTarget.innerHTML = humanize.decimalParts(
-      ex.subsidy.pow / 100000000,
+      String(ex.subsidy.pow / 100000000),
       false,
       8,
       2

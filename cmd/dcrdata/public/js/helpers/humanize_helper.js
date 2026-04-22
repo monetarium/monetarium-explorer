@@ -41,7 +41,7 @@ const humanize = {
     if (isNaN(precision) || precision > 8) {
       precision = 8
     }
-    const vClean = v.replace(/,/g, '')
+    const vClean = String(v).replace(/,/g, '')
     const formattedVal = parseFloat(vClean).toFixed(precision)
     const chunks = formattedVal.split('.')
     const int = useCommas ? parseInt(chunks[0]).toLocaleString() : chunks[0]
