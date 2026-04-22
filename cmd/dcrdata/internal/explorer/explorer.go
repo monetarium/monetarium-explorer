@@ -122,6 +122,7 @@ type explorerDataSource interface {
 	GetSummaryRange(ctx context.Context, idx0, idx1 int) []*apitypes.BlockDataBasic
 	VARCoinSupply(ctx context.Context) (*types.VARCoinSupply, error)
 	SKACoinSupply(ctx context.Context) ([]*types.SKACoinSupplyEntry, error)
+	GetBlockSKAFees(ctx context.Context, height int64) (map[uint8]string, error)
 }
 
 type PoliteiaBackend interface {
@@ -717,29 +718,22 @@ func (exp *explorerUI) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgB
 	// PoW SKA rewards: prioritize rewards from the current block (miner-centric),
 	// then fallback to previous blocks if current block is empty.
 	if len(newBlockData.SKAPoWRewards) > 0 {
-		powRewards := newBlockData.SKAPoWRewards
-		p.HomeInfo.PoWSKARewards = powRewards
+		p.HomeInfo.PoWSKARewards = newBlockData.SKAPoWRewards
 	} else {
 		var powRewardsMap map[uint8]string
 		if len(blockData.ExtraInfo.SKAPoWRewards) > 0 {
-			log.Infof("HOME PoW: Using ExtraInfo.SKAPoWRewards = %v", blockData.ExtraInfo.SKAPoWRewards)
 			powRewardsMap = blockData.ExtraInfo.SKAPoWRewards
 		} else {
 			// Fallback: Search backwards from the current block height.
+			// Use RPC to compute SKA fees from block transaction data.
 			currentHeight := newBlockData.Height
-			log.Infof("HOME PoW: Falling back from height %d", currentHeight)
 			for h := currentHeight - 1; h >= currentHeight-4320 && h >= 0; h-- {
-				hash, err := exp.dataSource.BlockHash(ctx, h)
+				skaFees, err := exp.dataSource.GetBlockSKAFees(ctx, h)
 				if err != nil {
 					continue
 				}
-				bInfo := exp.dataSource.GetExplorerBlock(ctx, hash)
-				if bInfo != nil && len(bInfo.SKAPoWRewards) > 0 {
-					// Convert []types.PoWSKAReward back to map[uint8]string for sorting/assignment.
-					powRewardsMap = make(map[uint8]string)
-					for _, r := range bInfo.SKAPoWRewards {
-						powRewardsMap[r.CoinType] = r.Amount
-					}
+				if len(skaFees) > 0 {
+					powRewardsMap = skaFees
 					break
 				}
 			}

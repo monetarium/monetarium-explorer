@@ -5022,6 +5022,20 @@ func (pgb *ChainDB) GetBlockByHash(ctx context.Context, hash string) (*wire.MsgB
 	return pgb.Client.GetBlock(ctx, blockHash)
 }
 
+// GetBlockSKAFees calculates SKA PoW fees (transaction fees) for a block by fetching
+// the raw block via RPC and computing: sum(inputs) - sum(outputs) = miner fee.
+func (pgb *ChainDB) GetBlockSKAFees(ctx context.Context, height int64) (map[uint8]string, error) {
+	hash, err := pgb.BlockHash(ctx, height)
+	if err != nil {
+		return nil, err
+	}
+	msgBlock, err := pgb.GetBlockByHash(ctx, hash)
+	if err != nil {
+		return nil, err
+	}
+	return blockdata.BlockSKAFees(msgBlock), nil
+}
+
 // GetHeader fetches the *chainjson.GetBlockHeaderVerboseResult for a given
 // block height.
 func (pgb *ChainDB) GetHeader(idx int) *chainjson.GetBlockHeaderVerboseResult {
