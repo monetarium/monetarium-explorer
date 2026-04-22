@@ -21,7 +21,7 @@ function mempoolTableRow(tx) {
   let coin, amount
   if (tx.ska_totals && Object.keys(tx.ska_totals).length > 0) {
     const [id, atomStr] = Object.entries(tx.ska_totals)[0]
-    coin = `SKA-${id}`
+    coin = `SKA${id}`
     amount = humanize.formatCoinAtoms(atomStr, parseInt(id))
   } else {
     coin = 'VAR'
@@ -370,9 +370,9 @@ export default class extends Controller {
   }
 }
 
-// _coinSortKey returns a numeric sort key: VAR = 0, SKA-n = n.
+// _coinSortKey returns a numeric sort key: VAR = 0, SKAn = n.
 function _coinSortKey(symbol) {
   if (!symbol || symbol === 'VAR') return 0
-  const m = symbol.match(/^SKA-(\d+)$/)
+  const m = symbol.match(/^SKA(\d+)$/)
   return m ? parseInt(m[1], 10) : Number.MAX_SAFE_INTEGER
 }

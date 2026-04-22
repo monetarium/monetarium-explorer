@@ -758,9 +758,9 @@ type BlockDataBasic struct {
 	NumTx      uint32  `json:"txlength"`
 	MiningFee  *int64  `json:"fees,omitempty"`
 	TotalSent  *int64  `json:"total_sent,omitempty"`
-	// CoinAmounts holds per-coin totals (VAR key=0, SKA-n key=n) as decimal atom strings.
+	// CoinAmounts holds per-coin totals (VAR key=0, SKAn key=n) as decimal atom strings.
 	CoinAmounts map[uint8]string `json:"coin_amounts,omitempty"`
-	// CoinTxStats holds per-coin tx count and size (key 0=VAR, 1-255=SKA-n).
+	// CoinTxStats holds per-coin tx count and size (key 0=VAR, 1-255=SKAn).
 	CoinTxStats map[uint8]CoinTxStats `json:"coin_tx_stats,omitempty"`
 	// SSFeeTotalsByCoin holds total SKA atoms distributed via TxTypeSSFee per coin type.
 	SSFeeTotalsByCoin map[uint8]string `json:"ssfee_totals,omitempty"`
@@ -794,9 +794,9 @@ type BlockExplorerExtraInfo struct {
 	TxLen            int                              `json:"tx"`
 	CoinSupply       int64                            `json:"coin_supply"`
 	NextBlockSubsidy *chainjson.GetBlockSubsidyResult `json:"next_block_subsidy"`
-	// CoinAmounts holds per-coin totals (VAR key=0, SKA-n key=n) as decimal atom strings.
+	// CoinAmounts holds per-coin totals (VAR key=0, SKAn key=n) as decimal atom strings.
 	CoinAmounts map[uint8]string `json:"coin_amounts,omitempty"`
-	// CoinTxStats holds per-coin tx count and size (key 0=VAR, 1-255=SKA-n).
+	// CoinTxStats holds per-coin tx count and size (key 0=VAR, 1-255=SKAn).
 	CoinTxStats map[uint8]CoinTxStats `json:"coin_tx_stats,omitempty"`
 	// SSFeeTotalsByCoin holds total SKA atoms distributed via TxTypeSSFee per coin type.
 	SSFeeTotalsByCoin map[uint8]string `json:"ssfee_totals,omitempty"`

@@ -30,7 +30,7 @@ func TestPowRewardsFromMap(t *testing.T) {
 				1: big.NewInt(1000),
 			},
 			want: []exptypes.PoWSKAReward{
-				{CoinType: 1, Symbol: "SKA-1", Amount: "1000"},
+				{CoinType: 1, Symbol: "SKA1", Amount: "1000"},
 			},
 		},
 		{
@@ -41,9 +41,9 @@ func TestPowRewardsFromMap(t *testing.T) {
 				3: big.NewInt(3000),
 			},
 			want: []exptypes.PoWSKAReward{
-				{CoinType: 1, Symbol: "SKA-1", Amount: "1000"},
-				{CoinType: 2, Symbol: "SKA-2", Amount: "2000"},
-				{CoinType: 3, Symbol: "SKA-3", Amount: "3000"},
+				{CoinType: 1, Symbol: "SKA1", Amount: "1000"},
+				{CoinType: 2, Symbol: "SKA2", Amount: "2000"},
+				{CoinType: 3, Symbol: "SKA3", Amount: "3000"},
 			},
 		},
 		{
@@ -55,7 +55,7 @@ func TestPowRewardsFromMap(t *testing.T) {
 				}(),
 			},
 			want: []exptypes.PoWSKAReward{
-				{CoinType: 1, Symbol: "SKA-1", Amount: "12345678901234567890"},
+				{CoinType: 1, Symbol: "SKA1", Amount: "12345678901234567890"},
 			},
 		},
 	}

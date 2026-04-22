@@ -55,7 +55,7 @@ func Test_processTransactions_VAROnly(t *testing.T) {
 }
 
 func Test_processTransactions_SKAOnly(t *testing.T) {
-	// SKA-1 amount exceeding int64 max: 2^63 + 1
+	// SKA1 amount exceeding int64 max: 2^63 + 1
 	bigAmt := new(big.Int).Add(new(big.Int).SetInt64(1<<62), big.NewInt(1<<62))
 	bigAmt.Add(bigAmt, big.NewInt(1000))
 	bigOut := new(big.Int).Sub(bigAmt, big.NewInt(100)) // 100 atoms fee
@@ -86,7 +86,7 @@ func Test_processTransactions_SKAOnly(t *testing.T) {
 	}
 	sentStr, ok := dbTx.SentByCoin[1]
 	if !ok {
-		t.Fatal("SentByCoin missing SKA-1 entry")
+		t.Fatal("SentByCoin missing SKA1 entry")
 	}
 	sentBig, _ := new(big.Int).SetString(sentStr, 10)
 	if sentBig.Cmp(bigOut) != 0 {
@@ -95,7 +95,7 @@ func Test_processTransactions_SKAOnly(t *testing.T) {
 
 	// Vout must carry SKAValue string, not truncated Value
 	if vouts[1][0].CoinType != 1 {
-		t.Errorf("vout CoinType: want 1 (SKA-1), got %d", vouts[1][0].CoinType)
+		t.Errorf("vout CoinType: want 1 (SKA1), got %d", vouts[1][0].CoinType)
 	}
 	if vouts[1][0].Value != 0 {
 		t.Errorf("vout Value must be 0 for SKA output, got %d", vouts[1][0].Value)
@@ -124,7 +124,7 @@ func Test_processTransactions_VinCoinType(t *testing.T) {
 		t.Fatal("expected vin for SKA tx")
 	}
 	if vins[1][0].CoinType != 1 {
-		t.Errorf("vin CoinType: want 1 (SKA-1), got %d", vins[1][0].CoinType)
+		t.Errorf("vin CoinType: want 1 (SKA1), got %d", vins[1][0].CoinType)
 	}
 	if vins[1][0].SKAValue != bigAmt.String() {
 		t.Errorf("vin SKAValue: want %s, got %q", bigAmt, vins[1][0].SKAValue)
@@ -148,7 +148,7 @@ func Test_processTransactions_MixedBlock(t *testing.T) {
 	varTx.AddTxIn(wire.NewTxIn(&wire.OutPoint{}, 500, nil))
 	varTx.AddTxOut(wire.NewTxOut(400, nil))
 
-	// SKA-1 tx
+	// SKA1 tx
 	skaBig := big.NewInt(1_000_000_000_000_000_000) // 1 SKA coin in atoms
 	skaOut := new(big.Int).Sub(skaBig, big.NewInt(50))
 	skaTx := wire.NewMsgTx()

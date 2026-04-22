@@ -50,7 +50,7 @@ func FormatVARAmount(atoms int64, full bool) string {
 // If full is true, returns full decimal precision (18 decimals).
 // If full is false, returns 3 significant figures with K/M/B/T suffix.
 func FormatSKAAmount(atomsStr string, coinType uint8, full bool) string {
-	label := fmt.Sprintf("SKA-%d", coinType)
+	label := fmt.Sprintf("SKA%d", coinType)
 	atoms, ok := new(big.Int).SetString(atomsStr, 10)
 	if !ok {
 		return "0 " + label

@@ -13,7 +13,7 @@ import (
 )
 
 // blockCoinAmounts sums TxOut values per coin type across all transactions in
-// the block. VAR (key 0) is stored as a decimal int64 string; SKA-n as a
+// the block. VAR (key 0) is stored as a decimal int64 string; SKAn as a
 // big.Int decimal string.
 func blockCoinAmounts(msgBlock *wire.MsgBlock) map[uint8]string {
 	varTotal := int64(0)
@@ -45,7 +45,7 @@ func blockCoinAmounts(msgBlock *wire.MsgBlock) map[uint8]string {
 }
 
 // blockCoinTxStats returns per-coin tx count and total serialized size for all
-// transactions in a block (key 0=VAR, 1-255=SKA-n). Returns nil for empty blocks.
+// transactions in a block (key 0=VAR, 1-255=SKAn). Returns nil for empty blocks.
 func blockCoinTxStats(msgBlock *wire.MsgBlock) map[uint8]CoinTxStats {
 	stats := make(map[uint8]CoinTxStats)
 	allTxs := append(msgBlock.Transactions, msgBlock.STransactions...)

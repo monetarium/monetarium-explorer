@@ -33,7 +33,7 @@ func TestBlockCoinAmounts_VAROnly(t *testing.T) {
 }
 
 func TestBlockCoinAmounts_SKAOnly(t *testing.T) {
-	// SKA-1 amount exceeding int64 max
+	// SKA1 amount exceeding int64 max
 	bigAmt := new(big.Int).Add(
 		new(big.Int).Lsh(big.NewInt(1), 63),
 		big.NewInt(999),
@@ -46,7 +46,7 @@ func TestBlockCoinAmounts_SKAOnly(t *testing.T) {
 		t.Fatal("expected non-nil CoinAmounts")
 	}
 	if got[1] != bigAmt.String() {
-		t.Errorf("SKA-1 total: want %s, got %s", bigAmt, got[1])
+		t.Errorf("SKA1 total: want %s, got %s", bigAmt, got[1])
 	}
 	if _, hasVAR := got[0]; hasVAR {
 		t.Error("expected no VAR key for SKA-only block")
@@ -70,7 +70,7 @@ func TestBlockCoinAmounts_Mixed(t *testing.T) {
 		t.Errorf("VAR: want 100000000, got %s", got[0])
 	}
 	if got[1] != skaBig.String() {
-		t.Errorf("SKA-1: want %s, got %s", skaBig, got[1])
+		t.Errorf("SKA1: want %s, got %s", skaBig, got[1])
 	}
 }
 
@@ -102,13 +102,13 @@ func TestBlockCoinTxStats_Mixed(t *testing.T) {
 		t.Errorf("VAR TxCount: want 1, got %d", got[0].TxCount)
 	}
 	if got[1].TxCount != 1 {
-		t.Errorf("SKA-1 TxCount: want 1, got %d", got[1].TxCount)
+		t.Errorf("SKA1 TxCount: want 1, got %d", got[1].TxCount)
 	}
 	if got[0].Size != uint32(varTx.SerializeSize()) {
 		t.Errorf("VAR Size: want %d, got %d", varTx.SerializeSize(), got[0].Size)
 	}
 	if got[1].Size != uint32(skaTx.SerializeSize()) {
-		t.Errorf("SKA-1 Size: want %d, got %d", skaTx.SerializeSize(), got[1].Size)
+		t.Errorf("SKA1 Size: want %d, got %d", skaTx.SerializeSize(), got[1].Size)
 	}
 }
 
@@ -123,18 +123,18 @@ func TestBlockSKAPoWRewards_SKAOnly(t *testing.T) {
 	skaBig := new(big.Int).Mul(big.NewInt(1_000_000), new(big.Int).Exp(big.NewInt(10), big.NewInt(18), nil))
 	coinbase := wire.NewMsgTx()
 	coinbase.AddTxOut(wire.NewTxOut(100_000_000, nil))                     // VAR reward
-	coinbase.AddTxOut(wire.NewTxOutSKA(skaBig, cointype.CoinType(1), nil)) // SKA-1 reward
-	coinbase.AddTxOut(wire.NewTxOutSKA(skaBig, cointype.CoinType(2), nil)) // SKA-2 reward
+	coinbase.AddTxOut(wire.NewTxOutSKA(skaBig, cointype.CoinType(1), nil)) // SKA1 reward
+	coinbase.AddTxOut(wire.NewTxOutSKA(skaBig, cointype.CoinType(2), nil)) // SKA2 reward
 
 	got := BlockSKAPoWRewards(mockBlock(coinbase))
 	if got == nil {
 		t.Fatal("expected non-nil SKAPoWRewards")
 	}
 	if got[1] != skaBig.String() {
-		t.Errorf("SKA-1: want %s, got %s", skaBig, got[1])
+		t.Errorf("SKA1: want %s, got %s", skaBig, got[1])
 	}
 	if got[2] != skaBig.String() {
-		t.Errorf("SKA-2: want %s, got %s", skaBig, got[2])
+		t.Errorf("SKA2: want %s, got %s", skaBig, got[2])
 	}
 	if _, hasVAR := got[0]; hasVAR {
 		t.Error("expected no VAR reward in SKAPoWRewards")
@@ -176,7 +176,7 @@ func TestBlockSKAPoWRewards_Summing(t *testing.T) {
 	}
 	expected := "300"
 	if got[1] != expected {
-		t.Errorf("SKA-1: want %s, got %s", expected, got[1])
+		t.Errorf("SKA1: want %s, got %s", expected, got[1])
 	}
 }
 
@@ -184,18 +184,18 @@ func TestExtractSKARewardsFromCoinbase_Standard(t *testing.T) {
 	skaBig := new(big.Int).Mul(big.NewInt(1_000_000), new(big.Int).Exp(big.NewInt(10), big.NewInt(18), nil))
 	coinbase := wire.NewMsgTx()
 	coinbase.AddTxOut(wire.NewTxOut(100_000_000, nil))                     // VAR reward
-	coinbase.AddTxOut(wire.NewTxOutSKA(skaBig, cointype.CoinType(1), nil)) // SKA-1 reward
-	coinbase.AddTxOut(wire.NewTxOutSKA(skaBig, cointype.CoinType(2), nil)) // SKA-2 reward
+	coinbase.AddTxOut(wire.NewTxOutSKA(skaBig, cointype.CoinType(1), nil)) // SKA1 reward
+	coinbase.AddTxOut(wire.NewTxOutSKA(skaBig, cointype.CoinType(2), nil)) // SKA2 reward
 
 	got := ExtractSKARewardsFromCoinbase(coinbase)
 	if got == nil {
 		t.Fatal("expected non-nil SKARewards")
 	}
 	if got[1] != skaBig.String() {
-		t.Errorf("SKA-1: want %s, got %s", skaBig, got[1])
+		t.Errorf("SKA1: want %s, got %s", skaBig, got[1])
 	}
 	if got[2] != skaBig.String() {
-		t.Errorf("SKA-2: want %s, got %s", skaBig, got[2])
+		t.Errorf("SKA2: want %s, got %s", skaBig, got[2])
 	}
 	if _, hasVAR := got[0]; hasVAR {
 		t.Error("expected no VAR reward in ExtractSKARewardsFromCoinbase")
@@ -235,6 +235,6 @@ func TestExtractSKARewardsFromCoinbase_Summing(t *testing.T) {
 	}
 	expected := "300"
 	if got[1] != expected {
-		t.Errorf("SKA-1: want %s, got %s", expected, got[1])
+		t.Errorf("SKA1: want %s, got %s", expected, got[1])
 	}
 }
