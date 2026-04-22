@@ -726,6 +726,8 @@ func (exp *explorerUI) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgB
 		} else {
 			// Fallback: Search backwards from the current block height.
 			// Use RPC to compute SKA fees from block transaction data.
+			// NOTE: This loop makes up to 4320 RPC calls. Consider caching SKA fees
+			// in the DB to avoid repeated RPC overhead in production.
 			currentHeight := newBlockData.Height
 			for h := currentHeight - 1; h >= currentHeight-4320 && h >= 0; h-- {
 				skaFees, err := exp.dataSource.GetBlockSKAFees(ctx, h)

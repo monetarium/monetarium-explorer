@@ -468,6 +468,7 @@ func blockCoinAmounts(msgBlock *wire.MsgBlock) map[uint8]string {
 
 // ExtractSKARewardsFromCoinbase extracts per-SKA-type PoW mining reward amounts from the
 // coinbase transaction. Only SKA outputs (CoinType 1-255) from the coinbase are considered.
+// DEPRECATED: Use BlockSKAFees() instead - SKA rewards are in regular transactions, not coinbase.
 func ExtractSKARewardsFromCoinbase(coinbase *wire.MsgTx) map[uint8]string {
 	if coinbase == nil {
 		return nil
@@ -500,6 +501,7 @@ func ExtractSKARewardsFromCoinbase(coinbase *wire.MsgTx) map[uint8]string {
 // coinbase transaction of a block. Only SKA outputs (CoinType 1-255) from the
 // coinbase are considered, as those represent the miner's SKA reward.
 // DEPRECATED: Use BlockSKAFees() instead - SKA rewards are in regular transactions, not coinbase.
+// TODO: Remove in next minor version after consumers migrate to BlockSKAFees().
 func BlockSKAPoWRewards(msgBlock *wire.MsgBlock) map[uint8]string {
 	if len(msgBlock.Transactions) == 0 {
 		return nil
@@ -510,6 +512,7 @@ func BlockSKAPoWRewards(msgBlock *wire.MsgBlock) map[uint8]string {
 // BlockSKAFees extracts SKA transaction fees from regular (non-stake) transactions.
 // These fees are paid to the miner as PoW reward.
 // For each regular transaction, the difference between input SKA and output SKA is the fee.
+// Coin type is derived from outputs since transactions are single-coin.
 func BlockSKAFees(msgBlock *wire.MsgBlock) map[uint8]string {
 	if len(msgBlock.Transactions) == 0 {
 		return nil
@@ -520,8 +523,6 @@ func BlockSKAFees(msgBlock *wire.MsgBlock) map[uint8]string {
 	// Process regular transactions (Transactions, not STransactions)
 	for _, tx := range msgBlock.Transactions {
 		var inputSKA, outputSKA big.Int
-		inputSKA.SetInt64(0)
-		outputSKA.SetInt64(0)
 
 		// Sum SKA inputs
 		for _, vin := range tx.TxIn {
@@ -530,22 +531,25 @@ func BlockSKAFees(msgBlock *wire.MsgBlock) map[uint8]string {
 			}
 		}
 
-		// Sum SKA outputs
+		// Sum SKA outputs and track coin type
+		var coinType uint8
 		for _, txout := range tx.TxOut {
 			if txout.CoinType.IsSKA() && txout.SKAValue != nil {
 				outputSKA.Add(&outputSKA, txout.SKAValue)
+				if coinType == 0 {
+					coinType = uint8(txout.CoinType)
+				}
 			}
 		}
 
 		// Calculate fee (input - output)
-		if inputSKA.Sign() > 0 {
+		if inputSKA.Sign() > 0 && coinType != 0 {
 			fee := new(big.Int).Sub(&inputSKA, &outputSKA)
 			if fee.Sign() > 0 {
-				ct := uint8(1)
-				if skaFees[ct] == nil {
-					skaFees[ct] = fee
+				if skaFees[coinType] == nil {
+					skaFees[coinType] = fee
 				} else {
-					skaFees[ct].Add(skaFees[ct], fee)
+					skaFees[coinType].Add(skaFees[coinType], fee)
 				}
 			}
 		}
