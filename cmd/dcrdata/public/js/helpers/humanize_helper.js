@@ -41,7 +41,8 @@ const humanize = {
     if (isNaN(precision) || precision > 8) {
       precision = 8
     }
-    const formattedVal = parseFloat(v).toFixed(precision)
+    const vClean = String(v).replace(/,/g, '')
+    const formattedVal = parseFloat(vClean).toFixed(precision)
     const chunks = formattedVal.split('.')
     const int = useCommas ? parseInt(chunks[0]).toLocaleString() : chunks[0]
     const decimal = chunks[1] || ''
@@ -55,7 +56,6 @@ const humanize = {
       }
     }
     const decimalVals = decimal.slice(0, decimal.length - numTrailingZeros)
-    const trailingZeros = numTrailingZeros === 0 ? '' : decimal.slice(-numTrailingZeros)
 
     let htmlString = '<div class="decimal-parts d-inline-block">'
 
@@ -63,13 +63,13 @@ const humanize = {
       htmlString +=
         `<span class="int">${int}.${decimalVals.substring(0, lgDecimals)}</span>` +
         `<span class="decimal">${decimalVals.substring(lgDecimals, decimalVals.length)}</span>` +
-        `<span class="decimal trailing-zeroes">${trailingZeros}</span>`
+        `<span class="decimal trailing-zeroes"></span>`
     } else if (precision !== 0) {
       htmlString +=
         `<span class="int">${int}</span>` +
         '<span class="decimal dot">.</span>' +
         `<span class="decimal">${decimalVals}</span>` +
-        `<span class="decimal trailing-zeroes">${trailingZeros}</span>`
+        `<span class="decimal trailing-zeroes"></span>`
     } else {
       htmlString += `<span class="int">${int}</span>`
     }
