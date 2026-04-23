@@ -6254,7 +6254,9 @@ func (pgb *ChainDB) GetExplorerBlock(ctx context.Context, hash string) *exptypes
 		block.CoinAmounts = summary.CoinAmounts
 		// Also populate CoinRows on the embedded BlockBasic so the websocket
 		// path (which sends BlockInfo) carries coin_rows for the frontend.
-		block.BlockBasic.CoinRows = coinRowsFromSummary(summary)
+		// Include all ever-emitted SKA types so zero-activity coins still appear.
+		issuedSKA := pgb.issuedSKACoinTypes(ctx)
+		block.BlockBasic.CoinRows = coinRowsFromSummary(summary, issuedSKA)
 	}
 
 	if data.PoWHash != "" {
@@ -6404,6 +6406,9 @@ func (pgb *ChainDB) GetExplorerBlocks(ctx context.Context, start int, end int) [
 	if start < end {
 		return nil
 	}
+	// Fetch the full issued SKA list once for the whole range so every block
+	// row shows zero-activity SKAN coins rather than omitting them.
+	issuedSKA := pgb.issuedSKACoinTypes(ctx)
 	summaries := make([]*exptypes.BlockBasic, 0, start-end)
 	for i := start; i > end; i-- {
 		data := pgb.getBlockVerbose(ctx, i, true)
@@ -6412,7 +6417,7 @@ func (pgb *ChainDB) GetExplorerBlocks(ctx context.Context, start int, end int) [
 			block = makeExplorerBlockBasic(data, pgb.chainParams)
 			// Populate per-coin rows from the stored block summary.
 			if summary := pgb.GetSummaryByHash(ctx, data.Hash, false); summary != nil {
-				block.CoinRows = coinRowsFromSummary(summary)
+				block.CoinRows = coinRowsFromSummary(summary, issuedSKA)
 			}
 		}
 		summaries = append(summaries, block)
@@ -7101,14 +7106,47 @@ func powRewardsFromMap(rewards map[uint8]*big.Int) []exptypes.PoWSKAReward {
 	return res
 }
 
-// coinRowsFromAmounts converts a CoinAmounts map to []CoinRowData for the
-// blocks table. Returns nil when amounts is nil or empty.
-func coinRowsFromAmounts(amounts map[uint8]string) []exptypes.CoinRowData {
-	if len(amounts) == 0 {
+// issuedSKACoinTypes returns the coin type IDs of all SKA coins that have ever
+// been emitted on-chain. Returns nil on error (callers treat nil as no issued
+// SKA, which degrades gracefully to omitting zero-activity rows).
+func (pgb *ChainDB) issuedSKACoinTypes(ctx context.Context) []uint8 {
+	supply, err := pgb.SKACoinSupply(ctx)
+	if err != nil {
+		log.Warnf("issuedSKACoinTypes: SKACoinSupply failed: %v", err)
 		return nil
 	}
-	rows := make([]exptypes.CoinRowData, 0, len(amounts))
-	for ct, atomsStr := range amounts {
+	types := make([]uint8, len(supply))
+	for i, e := range supply {
+		types[i] = e.CoinType
+	}
+	return types
+}
+
+// coinRowsFromAmounts converts a CoinAmounts map to []CoinRowData for the
+// blocks table. issuedSKA is the full set of ever-emitted SKA coin types
+// (from SKACoinSupply); coin types present in issuedSKA but absent from
+// amounts are included as zero-value rows so the accordion always shows all
+// emitted coins, even when a block has no activity for that coin type.
+// Returns nil only when both amounts and issuedSKA are empty.
+func coinRowsFromAmounts(amounts map[uint8]string, issuedSKA []uint8) []exptypes.CoinRowData {
+	// Build the full key set: coins present in amounts + all issued SKA types.
+	keySet := make(map[uint8]struct{}, len(amounts)+len(issuedSKA))
+	for ct := range amounts {
+		keySet[ct] = struct{}{}
+	}
+	for _, ct := range issuedSKA {
+		keySet[ct] = struct{}{}
+	}
+	if len(keySet) == 0 {
+		return nil
+	}
+
+	rows := make([]exptypes.CoinRowData, 0, len(keySet))
+	for ct := range keySet {
+		atomsStr, ok := amounts[ct]
+		if !ok {
+			atomsStr = "0"
+		}
 		var symbol string
 		if ct == 0 {
 			symbol = "VAR"
@@ -7128,8 +7166,9 @@ func coinRowsFromAmounts(amounts map[uint8]string) []exptypes.CoinRowData {
 
 // coinRowsFromSummary builds []CoinRowData from a block summary, merging
 // CoinAmounts with CoinTxStats so each row carries amount, tx count, and size.
-func coinRowsFromSummary(summary *apitypes.BlockDataBasic) []exptypes.CoinRowData {
-	rows := coinRowsFromAmounts(summary.CoinAmounts)
+// issuedSKA ensures all ever-emitted SKA types appear even with zero activity.
+func coinRowsFromSummary(summary *apitypes.BlockDataBasic, issuedSKA []uint8) []exptypes.CoinRowData {
+	rows := coinRowsFromAmounts(summary.CoinAmounts, issuedSKA)
 	for i := range rows {
 		if s, ok := summary.CoinTxStats[rows[i].CoinType]; ok {
 			rows[i].TxCount = s.TxCount
