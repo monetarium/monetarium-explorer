@@ -1,39 +1,39 @@
-# Staking and Reward Mechanics
 
-The Monetarium network implements a hybrid PoW/PoS (Proof-of-Work / Proof-of-Stake) distribution model. This document details how block subsidies and transaction fees are calculated and distributed across miners and voters.
+## Механика стейкинга и вознаграждений (справочно)
 
-## 1. Block Reward Structure (VAR)
+Данный раздел описывает бизнес-логику, необходимую для корректной реализации разделов Voting и Mining.
 
-The total VAR reward generated in a specific block is composed of two pools:
-1. **Subsidy (Emission):** The newly minted core VAR coins (e.g., 32 VAR).
-2. **VAR Fees:** The summation of all transaction fees paid in VAR within that block.
+### 1. Структура вознаграждения за блок
 
-### Distribution Ratio
-The entire VAR pool (both Subsidy + Fees) is split perfectly in half:
-*   **50%** routes to the Miner (PoW Reward).
-*   **50%** routes to the Voters (divided equally among active tickets).
+Общее вознаграждение за блок в монетах VAR состоит из двух частей:
 
-## 2. Voter Payout Mechanics (VAR)
+1. **Субсидия (эмиссия)** — намайненные монеты VAR за блок (например, 32 VAR).
+2. **Комиссии VAR** — суммарные комиссии всех VAR-транзакций в блоке.
 
-For every ticket that successfully casts a vote in a block, the network issues a payout consisting of three components:
-1.  **Ticket Return:** A complete refund of the original VAR cost used to purchase the ticket constraint limit.
-2.  **Subsidy Cut:** A proportionate share of the 50% voter subsidy (e.g., if 5 tickets voted, the ticket earns 1/5th of the 50%).
-3.  **Fee Cut:** A proportionate share of the 50% voter VAR fee pool.
+Распределение:
 
-*Note: The transaction fee paid to originally purchase the ticket rests with the network and is not refunded to the voter.*
+- **50%** от каждой части → майнеру (PoW reward).
+- **50%** от каждой части → голосующим билетам (равномерно между проголосовавшими, т.е. `/5` при 5 голосах).
 
-## 3. Voter Payout Mechanics (SKA)
+### 2. Вознаграждение за голос (VAR)
 
-Unlike VAR, SKA tokens are **not emitted via mining subsidies**. SKA compensation pools are generated entirely from transaction movement operations.
+Выплата на один проголосовавший билет:
 
-The routing constraints mirror the VAR logic:
-*   **50%** of the total SKA-n transaction fees in the block route to the Miner.
-*   **50%** of the total SKA-n transaction fees route to the Voters (divided equally among active tickets).
+- Возврат стоимости билета (цена покупки).
+- Пятая часть от 50% субсидии блока.
+- Пятая часть от 50% суммарных VAR-комиссий блока.
 
-## 4. Yield Calculations (Aggregated Metrics)
+**Комиссия за покупку билета** при этом не возвращается и остаётся в сети.
 
-To visualize macroeconomic yield potential for stakeholders, the platform computes time-series averages:
+### 3. Вознаграждение за голос (SKA)
 
-*   **Per Last Block (VAR/VAR):** The sum reward of the previous block for a single ticket, divided by the active ticket price.
-*   **Per 30 Days:** The cumulative rolling reward over 30 days averaged against block iteration, re-calculated strictly against the *current* network ticket price constraint (ignoring historic ticket cost fluxes).
-*   **Per Year:** Extrapolated directly from the 30-day accumulation metric to a 365-day scale. (If genesis occurred <365 days ago, the actual runtime divides the coefficient).
+SKA-монеты не эмитируются через майнинг. Вознаграждение формируется **только из комиссий SKA-транзакций**:
+
+- 50% суммарных SKA-комиссий блока → майнеру.
+- 50% → голосующим билетам (пятая часть на каждый голос).
+
+### 4. Расчёт доходности стейкинга
+
+- **Per last block (VAR/VAR):** вознаграждение последнего блока на один голос, делённое на текущую цену билета. Формула уточняется (необходимо подтверждение от разработчика).
+- **Per 30 days:** накопленное вознаграждение за период делится на количество блоков, пересчитывается из расчёта на текущую цену билета. Упрощение: цена билета берётся текущая, а не историческая.
+- **Per year:** аналогично 30 дням, умноженное на коэффициент до 365 дней. Если блокчейн работает менее года — делится на фактическое количество дней и умножается на 365.

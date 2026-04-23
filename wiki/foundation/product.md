@@ -1,20 +1,44 @@
-# Product Overview
+# Спецификация Monetarium Explorer
 
-Monetarium Explorer operates as the primary block explorer for the Monetarium blockchain. Engineered on top of `dcrdata` v8 (the core Decred block explorer toolkit), the product maintains the full inherited REST, WebSocket, and Mempool features as a monolithic foundation. There is no active upstream synchronicity with Decred; Monetarium-specific logic sits strictly atop the initial `dcrdata` fork.
+Настоящий документ определяет требования к функциональности и интерфейсу обозревателя блоков Monetarium, построенного на базе `dcrdata`.
 
-### Critical Extensions
-- **Multi-Token Extensibility:** The frontend renders one primary coin (**VAR**) and up to 255 **SKA** token types natively alongside each other.
-- **High-Precision Backend:** The `dcrdata` base was gutted of standard Go `float64` boundaries. Big-number logic natively drives the backend modules to prevent precision destruction for SKA calculations.
-- **Interactive Metrics Expansion:** Core components like the Mempool lists and Block Home pages are modified with multi-layered token tables and specialized accordion dropdowns to display supply statistics universally.
-- **Supply Logic:** The application embeds dynamic Supply widgets detailing the lifecycle state (Issued, Withdrawn, Circulating) natively across every SKA.
+---
 
-### Token Types & Bounds Rules
-| Token    | Integer Digits | Decimal Digits |
-| -------- | -------------- | -------------- |
-| **VAR**  | 8              | 8              |
-| **SKA**  | 15             | 18             |
+## 1. Технические основы и ограничения
 
-### Runtime Prerequisites
-* Monetarium Node running active `--txindex`
-* PostgreSQL 11+
-* Reverse Proxy (Nginx) over Port `7777` domain limits
+### 1.1. Поддержка токенов
+
+- Система должна обеспечивать корректную работу и отображение до **255 типов монет SKA**.
+- Формат отображения монет: **SKAN** (без дефиса), например: SKA1, SKA2.
+
+### 1.2. Разрядность и точность данных
+
+- **Монеты VAR:**
+
+  Используют точность 8 знаков в целой части и 8 знаков после запятой (аналогично DCR).
+
+- **Монеты SKA:**
+
+  Имеют повышенную разрядность — **15 знаков в целой части и 18 знаков после запятой**.
+
+### 1.3. Особенность реализации
+
+Стандартные типы данных Go не поддерживают такую точность, поэтому для всех расчетов на бэкенде используется **специализированный модуль большой разрядности**.
+
+---
+
+## 2. Стандарты интерфейса (UI)
+
+- **Страницы деталей:**
+
+  В деталях блоков и транзакций отображаются **все знаки после запятой** (8 для VAR и 18 для SKA).
+
+- **Адаптивность:**
+
+  Интерфейс строится по принципу **mobile-first** с обязательной поддержкой **темной темы**.
+
+---
+
+## 3. Нерешённые вопросы и неоднозначности
+
+Раздел пуст.
