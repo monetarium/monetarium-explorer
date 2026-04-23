@@ -249,6 +249,7 @@ If a label does not exist, the issue creation script will fail.
 - `bug`
 - `infrastructure`
 - `documentation`
+- `refactoring` (should be used only when behavior does not change)
 
 ---
 
