@@ -3864,11 +3864,10 @@ func retrieveBlockFlags(ctx context.Context, db *sql.DB, hash dbtypes.ChainHash)
 }
 
 // populateCoinStats combines per-coin tx stats and amounts into a single map.
-func populateCoinStats(coinTxStatsJSON, coinAmountsJSON []byte) map[uint8]dbtypes.CoinStat {
+func populateCoinStats(coinTxStatsJSON, coinAmountsJSON []byte, voters, freshStake, revokes int) map[uint8]dbtypes.CoinStat {
 	coinStats := make(map[uint8]dbtypes.CoinStat)
 
 	// Initialize defaults for common coins (0=VAR, 1=SKA1)
-	// This ensures they are always present in the response, even with zeros.
 	coinStats[0] = dbtypes.CoinStat{Amount: "0"}
 	coinStats[1] = dbtypes.CoinStat{Amount: "0"}
 
@@ -3878,7 +3877,16 @@ func populateCoinStats(coinTxStatsJSON, coinAmountsJSON []byte) map[uint8]dbtype
 			for k, v := range stats {
 				coinType, _ := strconv.Atoi(k)
 				stat := coinStats[uint8(coinType)]
-				stat.TxCount = v.TxCount
+				
+				count := v.TxCount
+				if uint8(coinType) == 0 {
+					count -= voters + freshStake + revokes
+					if count < 0 {
+						count = 0
+					}
+				}
+				
+				stat.TxCount = count
 				stat.Size = v.Size
 				coinStats[uint8(coinType)] = stat
 			}
@@ -3939,9 +3947,10 @@ func retrieveBlockSummaryByTimeRange(ctx context.Context, db *sql.DB, minTime, m
 	for rows.Next() {
 		var dbBlock dbtypes.BlockDataBasic
 		var blockTime dbtypes.TimeDef
+		var voters, freshStake, revokes int
 		var coinTxStatsJSON, coinAmountsJSON []byte
 		err = rows.Scan(&dbBlock.Hash, &dbBlock.Height, &dbBlock.Size,
-			&blockTime, &dbBlock.NumTx, &coinTxStatsJSON, &coinAmountsJSON)
+			&blockTime, &dbBlock.NumTx, &voters, &freshStake, &revokes, &coinTxStatsJSON, &coinAmountsJSON)
 		if err != nil {
 			log.Errorf("Unable to scan for block fields: %v", err)
 			return nil, err
@@ -3949,7 +3958,7 @@ func retrieveBlockSummaryByTimeRange(ctx context.Context, db *sql.DB, minTime, m
 		dbBlock.Time = blockTime
 
 		if len(coinTxStatsJSON) > 0 || len(coinAmountsJSON) > 0 {
-			dbBlock.CoinStats = populateCoinStats(coinTxStatsJSON, coinAmountsJSON)
+			dbBlock.CoinStats = populateCoinStats(coinTxStatsJSON, coinAmountsJSON, voters, freshStake, revokes)
 		}
 
 		blocks = append(blocks, dbBlock)
@@ -4419,6 +4428,7 @@ func retrieveBlockSummary(ctx context.Context, db *sql.DB, ind int64) (*apitypes
 	var winners dbtypes.ChainHashArray
 	var isValid bool
 	var val, sbits int64
+	var voters, freshStake, revokes int
 	var hash dbtypes.ChainHash
 	var timestamp dbtypes.TimeDef
 	var coinAmountsJSON []byte
@@ -4426,7 +4436,7 @@ func retrieveBlockSummary(ctx context.Context, db *sql.DB, ind int64) (*apitypes
 	var ssfeeJSON []byte
 	err := db.QueryRowContext(ctx, internal.SelectBlockDataByHeight, ind).Scan(
 		&hash, &bd.Height, &bd.Size, &bd.Difficulty, &sbits, &timestamp,
-		&bd.PoolInfo.Size, &val, &winners, &isValid, &coinAmountsJSON, &coinTxStatsJSON,
+		&bd.PoolInfo.Size, &val, &winners, &isValid, &voters, &freshStake, &revokes, &coinAmountsJSON, &coinTxStatsJSON,
 		&ssfeeJSON)
 	if err != nil {
 		return nil, err
@@ -4440,7 +4450,7 @@ func retrieveBlockSummary(ctx context.Context, db *sql.DB, ind int64) (*apitypes
 		bd.PoolInfo.Winners[i] = winners[i].String()
 	}
 	bd.StakeDiff = toCoin(sbits)
-	bd.CoinStats = populateCoinStats(coinTxStatsJSON, coinAmountsJSON)
+	bd.CoinStats = populateCoinStats(coinTxStatsJSON, coinAmountsJSON, voters, freshStake, revokes)
 	_ = json.Unmarshal(coinAmountsJSON, &bd.CoinAmounts)
 	_ = json.Unmarshal(coinTxStatsJSON, &bd.CoinTxStats)
 	_ = json.Unmarshal(ssfeeJSON, &bd.SSFeeTotalsByCoin)
@@ -4452,6 +4462,7 @@ func retrieveBlockSummaryByHash(ctx context.Context, db *sql.DB, hash dbtypes.Ch
 	bd := apitypes.NewBlockDataBasic()
 	var winners dbtypes.ChainHashArray
 	var isMainchain, isValid bool
+	var voters, freshStake, revokes int
 	var timestamp dbtypes.TimeDef
 	var val, psize sql.NullInt64 // pool value and size are only stored for mainchain blocks
 	var sbits int64
@@ -4460,7 +4471,7 @@ func retrieveBlockSummaryByHash(ctx context.Context, db *sql.DB, hash dbtypes.Ch
 	var ssfeeJSON []byte
 	err := db.QueryRowContext(ctx, internal.SelectBlockDataByHash, hash).Scan(
 		&bd.Height, &bd.Size, &bd.Difficulty, &sbits, &timestamp,
-		&psize, &val, &winners, &isMainchain, &isValid, &coinAmountsJSON, &coinTxStatsJSON, &ssfeeJSON)
+		&psize, &val, &winners, &isMainchain, &isValid, &voters, &freshStake, &revokes, &coinAmountsJSON, &coinTxStatsJSON, &ssfeeJSON)
 	if err != nil {
 		return nil, err
 	}
@@ -4474,7 +4485,7 @@ func retrieveBlockSummaryByHash(ctx context.Context, db *sql.DB, hash dbtypes.Ch
 		bd.PoolInfo.Winners[i] = winners[i].String()
 	}
 	bd.StakeDiff = toCoin(sbits)
-	bd.CoinStats = populateCoinStats(coinTxStatsJSON, coinAmountsJSON)
+	bd.CoinStats = populateCoinStats(coinTxStatsJSON, coinAmountsJSON, voters, freshStake, revokes)
 	_ = json.Unmarshal(coinAmountsJSON, &bd.CoinAmounts)
 	_ = json.Unmarshal(coinTxStatsJSON, &bd.CoinTxStats)
 	_ = json.Unmarshal(ssfeeJSON, &bd.SSFeeTotalsByCoin)
@@ -4509,6 +4520,7 @@ func retrieveBlockSummaryRange(ctx context.Context, db *sql.DB, ind0, ind1 int64
 		var winners dbtypes.ChainHashArray
 		var isValid bool
 		var val, sbits int64
+		var voters, freshStake, revokes int
 		var timestamp dbtypes.TimeDef
 		var hash dbtypes.ChainHash
 		var coinAmountsJSON []byte
@@ -4516,7 +4528,7 @@ func retrieveBlockSummaryRange(ctx context.Context, db *sql.DB, ind0, ind1 int64
 		var ssfeeJSON []byte
 		err := rows.Scan(
 			&hash, &bd.Height, &bd.Size, &bd.Difficulty, &sbits, &timestamp,
-			&bd.PoolInfo.Size, &val, &winners, &isValid, &coinAmountsJSON, &coinTxStatsJSON, &ssfeeJSON,
+			&bd.PoolInfo.Size, &val, &winners, &isValid, &voters, &freshStake, &revokes, &coinAmountsJSON, &coinTxStatsJSON, &ssfeeJSON,
 		)
 		if err != nil {
 			return nil, err
@@ -4530,7 +4542,7 @@ func retrieveBlockSummaryRange(ctx context.Context, db *sql.DB, ind0, ind1 int64
 			bd.PoolInfo.Winners[i] = winners[i].String()
 		}
 		bd.StakeDiff = toCoin(sbits)
-		bd.CoinStats = populateCoinStats(coinTxStatsJSON, coinAmountsJSON)
+		bd.CoinStats = populateCoinStats(coinTxStatsJSON, coinAmountsJSON, voters, freshStake, revokes)
 		_ = json.Unmarshal(coinAmountsJSON, &bd.CoinAmounts)
 		_ = json.Unmarshal(coinTxStatsJSON, &bd.CoinTxStats)
 		_ = json.Unmarshal(ssfeeJSON, &bd.SSFeeTotalsByCoin)
@@ -4573,6 +4585,7 @@ func retrieveBlockSummaryRangeStepped(ctx context.Context, db *sql.DB, ind0, ind
 		var winners dbtypes.ChainHashArray
 		var isValid bool
 		var val, sbits int64
+		var voters, freshStake, revokes int
 		var timestamp dbtypes.TimeDef
 		var hash dbtypes.ChainHash
 		var coinAmountsJSON []byte
@@ -4580,7 +4593,7 @@ func retrieveBlockSummaryRangeStepped(ctx context.Context, db *sql.DB, ind0, ind
 		var ssfeeJSON []byte
 		err := rows.Scan(
 			&hash, &bd.Height, &bd.Size, &bd.Difficulty, &sbits, &timestamp,
-			&bd.PoolInfo.Size, &val, &winners, &isValid, &coinAmountsJSON, &coinTxStatsJSON, &ssfeeJSON,
+			&bd.PoolInfo.Size, &val, &winners, &isValid, &voters, &freshStake, &revokes, &coinAmountsJSON, &coinTxStatsJSON, &ssfeeJSON,
 		)
 		if err != nil {
 			return nil, err
@@ -4594,7 +4607,7 @@ func retrieveBlockSummaryRangeStepped(ctx context.Context, db *sql.DB, ind0, ind
 			bd.PoolInfo.Winners[i] = winners[i].String()
 		}
 		bd.StakeDiff = toCoin(sbits)
-		bd.CoinStats = populateCoinStats(coinTxStatsJSON, coinAmountsJSON)
+		bd.CoinStats = populateCoinStats(coinTxStatsJSON, coinAmountsJSON, voters, freshStake, revokes)
 		_ = json.Unmarshal(coinAmountsJSON, &bd.CoinAmounts)
 		_ = json.Unmarshal(coinTxStatsJSON, &bd.CoinTxStats)
 		_ = json.Unmarshal(ssfeeJSON, &bd.SSFeeTotalsByCoin)
