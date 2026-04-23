@@ -79,10 +79,7 @@ func buildHomeBlockRows(blocks []*types.BlockBasic) []HomeBlockRow {
 					}
 				} else {
 					// SKA row — add to sub-rows
-					txCount := "—"
-					if cr.TxCount > 0 {
-						txCount = fmt.Sprintf("%d", cr.TxCount)
-					}
+					txCount := fmt.Sprintf("%d", cr.TxCount)
 					size := "—"
 					if cr.Size > 0 {
 						size = humanize.Bytes(uint64(cr.Size))
