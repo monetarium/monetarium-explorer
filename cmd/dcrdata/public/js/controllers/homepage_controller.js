@@ -4,6 +4,7 @@ import { each } from 'lodash-es'
 import { fadeIn } from '../helpers/animation_helper'
 import humanize from '../helpers/humanize_helper'
 import Mempool from '../helpers/mempool_helper'
+import { renderCoinType } from '../helpers/ska_helper'
 import globalEventBus from '../services/event_bus_service'
 import { keyNav } from '../services/keyboard_navigation_service'
 import ws from '../services/messagesocket_service'
@@ -21,10 +22,10 @@ function mempoolTableRow(tx) {
   let coin, amount
   if (tx.ska_totals && Object.keys(tx.ska_totals).length > 0) {
     const [id, atomStr] = Object.entries(tx.ska_totals)[0]
-    coin = `SKA${id}`
+    coin = renderCoinType(id)
     amount = humanize.formatCoinAtoms(atomStr, parseInt(id))
   } else {
-    coin = 'VAR'
+    coin = renderCoinType(0)
     amount = humanize.threeSigFigs(tx.total || 0)
   }
 
