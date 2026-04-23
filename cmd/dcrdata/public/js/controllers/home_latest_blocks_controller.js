@@ -35,7 +35,7 @@ function coinRowsToSKAData(block) {
     } else {
       subRows.push({
         tokenType: cr.symbol,
-        txCount: cr.tx_count > 0 ? String(cr.tx_count) : '—',
+        txCount: String(cr.tx_count),
         amount: humanize.formatCoinAtoms(cr.amount, cr.coin_type),
         size: cr.size > 0 ? humanize.bytes(cr.size) : '—'
       })

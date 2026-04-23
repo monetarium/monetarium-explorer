@@ -5,9 +5,9 @@
 - product: foundation/product.md — what are we building, token limits
 - structure: foundation/structure.md — Go modules, folders boundaries
 - tech-stack: foundation/tech-stack.md — packages, node engines
-- ui-standards: foundation/ui-standards.md — precision rules, suffixes, theme
 - homepage-metrics: foundation/homepage-metrics.md — mempool, latest blocks, and supply component rules
 - staking-rewards: foundation/staking-rewards.md — mechanics of pow and pos yields and fee splits
+- blocks-list: foundation/blocks-list.md — rules for rendering list of blocks (block table on block list page)
 
 ## System
 
