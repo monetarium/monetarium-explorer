@@ -3867,6 +3867,11 @@ func retrieveBlockFlags(ctx context.Context, db *sql.DB, hash dbtypes.ChainHash)
 func populateCoinStats(coinTxStatsJSON, coinAmountsJSON []byte) map[uint8]dbtypes.CoinStat {
 	coinStats := make(map[uint8]dbtypes.CoinStat)
 
+	// Initialize defaults for common coins (0=VAR, 1=SKA1)
+	// This ensures they are always present in the response, even with zeros.
+	coinStats[0] = dbtypes.CoinStat{Amount: "0"}
+	coinStats[1] = dbtypes.CoinStat{Amount: "0"}
+
 	var stats map[string]dbtypes.CoinTxStats
 	if len(coinTxStatsJSON) > 0 {
 		if err := json.Unmarshal(coinTxStatsJSON, &stats); err == nil {
