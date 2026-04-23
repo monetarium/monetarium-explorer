@@ -27,7 +27,9 @@ function coinRowsToSKAData(block) {
   for (const cr of coinRows) {
     totalTxCount += cr.tx_count
     if (cr.coin_type === 0) {
-      varTxCount = cr.tx_count
+      varTxCount =
+        cr.tx_count - (block.votes || 0) - (block.tickets || 0) - (block.revocations || 0)
+      if (varTxCount < 0) varTxCount = 0
       varAmount = humanize.formatCoinAtoms(cr.amount, cr.coin_type)
       varSize = cr.size > 0 ? humanize.bytes(cr.size) : '—'
     } else {
