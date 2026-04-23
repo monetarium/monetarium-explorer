@@ -100,9 +100,9 @@ const (
 	IndexBlocksTableOnTime   = `CREATE INDEX ` + IndexOfBlocksTableOnTime + ` ON blocks("time");`
 	DeindexBlocksTableOnTime = `DROP INDEX ` + IndexOfBlocksTableOnTime + ` CASCADE;`
 
-	SelectBlockByTimeRangeSQL = `SELECT hash, height, size, time, numtx
+	SelectBlockByTimeRangeSQL = `SELECT hash, height, size, time, numtx, coin_tx_stats, coin_amounts
 		FROM blocks WHERE time BETWEEN $1 and $2 ORDER BY time DESC LIMIT $3;`
-	SelectBlockByTimeRangeSQLNoLimit = `SELECT hash, height, size, time, numtx
+	SelectBlockByTimeRangeSQLNoLimit = `SELECT hash, height, size, time, numtx, coin_tx_stats, coin_amounts
 		FROM blocks WHERE time BETWEEN $1 and $2 ORDER BY time DESC;`
 	SelectBlockHashByHeight = `SELECT hash FROM blocks WHERE height = $1 AND is_mainchain = true;`
 	SelectBlockHeightByHash = `SELECT height FROM blocks WHERE hash = $1;`

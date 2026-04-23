@@ -762,6 +762,8 @@ type BlockDataBasic struct {
 	CoinAmounts map[uint8]string `json:"coin_amounts,omitempty"`
 	// CoinTxStats holds per-coin tx count and size (key 0=VAR, 1-255=SKAn).
 	CoinTxStats map[uint8]CoinTxStats `json:"coin_tx_stats,omitempty"`
+	// CoinStats holds per-coin tx count and amount (key 0=VAR, 1-255=SKAn).
+	CoinStats map[uint8]dbtypes.CoinStat `json:"coin_stats,omitempty"`
 	// SSFeeTotalsByCoin holds total SKA atoms distributed via TxTypeSSFee per coin type.
 	SSFeeTotalsByCoin map[uint8]string `json:"ssfee_totals,omitempty"`
 	// TicketPoolInfo may be nil for side chain blocks.

@@ -76,15 +76,35 @@ func (b *BlockData) ToStakeInfoExtendedEstimates() apitypes.StakeInfoExtendedEst
 // ToBlockSummary returns an apitypes.BlockDataBasic object from the blockdata
 func (b *BlockData) ToBlockSummary() apitypes.BlockDataBasic {
 	t := dbtypes.NewTimeDefFromUNIX(b.Header.Time)
-	return apitypes.BlockDataBasic{
+	summary := apitypes.BlockDataBasic{
 		Height:     b.Header.Height,
 		Size:       b.Header.Size,
 		Hash:       b.Header.Hash,
 		Difficulty: b.Header.Difficulty,
 		StakeDiff:  b.Header.SBits,
 		Time:       apitypes.TimeAPI{S: t},
+		NumTx:      uint32(b.ExtraInfo.TxLen),
 		PoolInfo:   b.PoolInfo,
+		CoinAmounts: b.ExtraInfo.CoinAmounts,
+		CoinTxStats: b.ExtraInfo.CoinTxStats,
 	}
+
+	// Populate consolidated CoinStats
+	if len(b.ExtraInfo.CoinAmounts) > 0 || len(b.ExtraInfo.CoinTxStats) > 0 {
+		summary.CoinStats = make(map[uint8]dbtypes.CoinStat)
+		for ct, amt := range b.ExtraInfo.CoinAmounts {
+			stat := summary.CoinStats[ct]
+			stat.Amount = amt
+			summary.CoinStats[ct] = stat
+		}
+		for ct, stat := range b.ExtraInfo.CoinTxStats {
+			s := summary.CoinStats[ct]
+			s.TxCount = int(stat.TxCount)
+			summary.CoinStats[ct] = s
+		}
+	}
+
+	return summary
 }
 
 // ToBlockExplorerSummary returns a BlockExplorerBasic

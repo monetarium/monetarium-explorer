@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"strconv"
 	"strings"
 	"time"
 
@@ -3862,7 +3863,40 @@ func retrieveBlockFlags(ctx context.Context, db *sql.DB, hash dbtypes.ChainHash)
 	return
 }
 
+// populateCoinStats combines per-coin tx stats and amounts into a single map.
+func populateCoinStats(coinTxStatsJSON, coinAmountsJSON []byte) map[uint8]dbtypes.CoinStat {
+	coinStats := make(map[uint8]dbtypes.CoinStat)
+
+	var stats map[string]dbtypes.CoinTxStats
+	if len(coinTxStatsJSON) > 0 {
+		if err := json.Unmarshal(coinTxStatsJSON, &stats); err == nil {
+			for k, v := range stats {
+				coinType, _ := strconv.Atoi(k)
+				stat := coinStats[uint8(coinType)]
+				stat.TxCount = v.TxCount
+				stat.Size = v.Size
+				coinStats[uint8(coinType)] = stat
+			}
+		}
+	}
+
+	var amounts map[string]string
+	if len(coinAmountsJSON) > 0 {
+		if err := json.Unmarshal(coinAmountsJSON, &amounts); err == nil {
+			for k, v := range amounts {
+				coinType, _ := strconv.Atoi(k)
+				stat := coinStats[uint8(coinType)]
+				stat.Amount = v
+				coinStats[uint8(coinType)] = stat
+			}
+		}
+	}
+
+	return coinStats
+}
+
 // retrieveBlockSummaryByTimeRange retrieves the slice of block summaries for
+
 // the given time range. The limit specifies the number of most recent block
 // summaries to return. A limit of 0 indicates all blocks in the time range
 // should be included.
@@ -3900,13 +3934,19 @@ func retrieveBlockSummaryByTimeRange(ctx context.Context, db *sql.DB, minTime, m
 	for rows.Next() {
 		var dbBlock dbtypes.BlockDataBasic
 		var blockTime dbtypes.TimeDef
+		var coinTxStatsJSON, coinAmountsJSON []byte
 		err = rows.Scan(&dbBlock.Hash, &dbBlock.Height, &dbBlock.Size,
-			&blockTime, &dbBlock.NumTx)
+			&blockTime, &dbBlock.NumTx, &coinTxStatsJSON, &coinAmountsJSON)
 		if err != nil {
 			log.Errorf("Unable to scan for block fields: %v", err)
 			return nil, err
 		}
 		dbBlock.Time = blockTime
+
+		if len(coinTxStatsJSON) > 0 || len(coinAmountsJSON) > 0 {
+			dbBlock.CoinStats = populateCoinStats(coinTxStatsJSON, coinAmountsJSON)
+		}
+
 		blocks = append(blocks, dbBlock)
 	}
 	if err = rows.Err(); err != nil {
@@ -4395,6 +4435,7 @@ func retrieveBlockSummary(ctx context.Context, db *sql.DB, ind int64) (*apitypes
 		bd.PoolInfo.Winners[i] = winners[i].String()
 	}
 	bd.StakeDiff = toCoin(sbits)
+	bd.CoinStats = populateCoinStats(coinTxStatsJSON, coinAmountsJSON)
 	_ = json.Unmarshal(coinAmountsJSON, &bd.CoinAmounts)
 	_ = json.Unmarshal(coinTxStatsJSON, &bd.CoinTxStats)
 	_ = json.Unmarshal(ssfeeJSON, &bd.SSFeeTotalsByCoin)
@@ -4428,6 +4469,7 @@ func retrieveBlockSummaryByHash(ctx context.Context, db *sql.DB, hash dbtypes.Ch
 		bd.PoolInfo.Winners[i] = winners[i].String()
 	}
 	bd.StakeDiff = toCoin(sbits)
+	bd.CoinStats = populateCoinStats(coinTxStatsJSON, coinAmountsJSON)
 	_ = json.Unmarshal(coinAmountsJSON, &bd.CoinAmounts)
 	_ = json.Unmarshal(coinTxStatsJSON, &bd.CoinTxStats)
 	_ = json.Unmarshal(ssfeeJSON, &bd.SSFeeTotalsByCoin)
@@ -4483,6 +4525,7 @@ func retrieveBlockSummaryRange(ctx context.Context, db *sql.DB, ind0, ind1 int64
 			bd.PoolInfo.Winners[i] = winners[i].String()
 		}
 		bd.StakeDiff = toCoin(sbits)
+		bd.CoinStats = populateCoinStats(coinTxStatsJSON, coinAmountsJSON)
 		_ = json.Unmarshal(coinAmountsJSON, &bd.CoinAmounts)
 		_ = json.Unmarshal(coinTxStatsJSON, &bd.CoinTxStats)
 		_ = json.Unmarshal(ssfeeJSON, &bd.SSFeeTotalsByCoin)
@@ -4491,7 +4534,6 @@ func retrieveBlockSummaryRange(ctx context.Context, db *sql.DB, ind0, ind1 int64
 	if err = rows.Err(); err != nil {
 		return nil, err
 	}
-
 	// error here if count not correct?
 	return blocks, nil
 }
@@ -4547,6 +4589,7 @@ func retrieveBlockSummaryRangeStepped(ctx context.Context, db *sql.DB, ind0, ind
 			bd.PoolInfo.Winners[i] = winners[i].String()
 		}
 		bd.StakeDiff = toCoin(sbits)
+		bd.CoinStats = populateCoinStats(coinTxStatsJSON, coinAmountsJSON)
 		_ = json.Unmarshal(coinAmountsJSON, &bd.CoinAmounts)
 		_ = json.Unmarshal(coinTxStatsJSON, &bd.CoinTxStats)
 		_ = json.Unmarshal(ssfeeJSON, &bd.SSFeeTotalsByCoin)
@@ -4555,7 +4598,6 @@ func retrieveBlockSummaryRangeStepped(ctx context.Context, db *sql.DB, ind0, ind
 	if err = rows.Err(); err != nil {
 		return nil, err
 	}
-
 	// error here if count not correct?
 	return blocks, nil
 }
