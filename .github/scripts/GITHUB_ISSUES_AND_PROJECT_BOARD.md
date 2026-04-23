@@ -1,22 +1,22 @@
-## 1. Rules for GitHub Issues & Project Board
+## Rules for GitHub Issues & Project Board
 
 To maintain a professional and transparent development process for the **Monetarium Explorer**, the team adheres to the following rules:
 
 ---
 
-### 1.1. Single Source of Truth
+### 1. Single Source of Truth
 
 - All feature discussions, bug reports, and technical decisions must take place within **GitHub Issues**, not in external messengers. This ensures a searchable history for the client and the team.
 
 ---
 
-### 1.2. Milestone-Driven Progress
+### 2. Milestone-Driven Progress
 
 - Every issue must be attached to a specific **Milestone** (e.g., `v1`). This allows the Product Owner to track the overall completion percentage of the release.
 
 ---
 
-### 1.3. Assignment Principle
+### 3. Assignment Principle
 
 - **One Responsible Person per Issue:** Each issue must have exactly **one assignee**.
 - Assignment defines ownership and responsibility for delivery.
@@ -24,14 +24,14 @@ To maintain a professional and transparent development process for the **Monetar
 
 ---
 
-### 1.4. No Direct Pushes to Master
+### 4. No Direct Pushes to Master
 
 - All code changes must be submitted via **Pull Requests (PR)**.
 - Every PR should reference its corresponding issue number in the description (e.g., `Closes #12`). This triggers GitHub automation to move the issue to the **Done** column and close it automatically upon merge.
 
 ---
 
-### 1.5. Project Board Management (Board View)
+### 5. Project Board Management (Board View)
 
 - The **Board** view is our primary tool for daily operations.
 - **Status Integrity:** Developers are responsible for keeping their cards updated:
@@ -42,13 +42,13 @@ To maintain a professional and transparent development process for the **Monetar
 
 ---
 
-## 2. Flexible Issue Structure per Feature
+## 6. Flexible Issue Structure per Feature
 
 To support scalable and realistic development workflows, we use a **two-level issue hierarchy**:
 
 ---
 
-### 2.1. Feature (Parent Issue)
+### 6.1. Feature (Parent Issue)
 
 - A **Feature** represents a complete, user-visible functionality (e.g., “Blocks List Page”, “Homepage Latest Blocks”).
 - Each Feature is created as a **parent issue** with `issue_type: Feature`.
@@ -64,7 +64,7 @@ To support scalable and realistic development workflows, we use a **two-level is
 
 ---
 
-### 2.2. Sub-issues (Implementation Tasks)
+### 6.2. Sub-issues (Implementation Tasks)
 
 - A Feature can have **any number of sub-issues** (no fixed limit).
 
@@ -86,7 +86,7 @@ To support scalable and realistic development workflows, we use a **two-level is
 
 ---
 
-### 2.3. Structure Constraints
+### 6.3. Structure Constraints
 
 - Only **two levels are allowed**:
   - Feature → Sub-issues
@@ -99,7 +99,7 @@ To support scalable and realistic development workflows, we use a **two-level is
 
 ---
 
-### 2.4. Naming Convention (Prefixes)
+### 6.4. Naming Convention (Prefixes)
 
 To improve readability and board navigation, sub-issues must use prefixes:
 
@@ -119,7 +119,7 @@ To improve readability and board navigation, sub-issues must use prefixes:
 
 ---
 
-### 2.5. Prefix Selection Rule (Single Responsibility)
+### 6.5. Prefix Selection Rule (Single Responsibility)
 
 Each sub-issue must use **exactly one prefix**.
 
@@ -134,7 +134,7 @@ Prefixes do **not** represent all affected parts of the system. They must reflec
 
 ---
 
-### 2.6. How to Choose the Prefix
+### 6.6. How to Choose the Prefix
 
 Select the prefix based on the **initiator of the change**:
 
@@ -146,7 +146,7 @@ Select the prefix based on the **initiator of the change**:
 
 ---
 
-### 2.7. Splitting Rule
+### 6.7. Splitting Rule
 
 Instead of:
 
@@ -163,13 +163,13 @@ Do:
 
 ---
 
-## 3. Developers & Assignment Strategy
+## 7. Developers & Assignment Strategy
 
 To reflect the evolving workflow, strict frontend/backend ownership is no longer enforced.
 
 ---
 
-### 3.1. General Principle
+### 7.1. General Principle
 
 - Any developer can work on any issue
 - Assignment defines **responsibility**, not specialization
@@ -177,7 +177,7 @@ To reflect the evolving workflow, strict frontend/backend ownership is no longer
 
 ---
 
-### 3.2. Prefix-Based Assignment (Recommended)
+### 7.2. Prefix-Based Assignment (Recommended)
 
 Assignments should be guided by the **issue prefix**, but also balanced across the team.
 
@@ -206,7 +206,7 @@ Assignments should be guided by the **issue prefix**, but also balanced across t
 
 ---
 
-### 3.3. Important Constraints
+### 7.3. Important Constraints
 
 - This mapping is a **guideline, not a restriction**
 - Do **not** split or reassign issues purely based on specialization
@@ -214,7 +214,7 @@ Assignments should be guided by the **issue prefix**, but also balanced across t
 
 ---
 
-### 3.4. Assignment Responsibility
+### 7.4. Assignment Responsibility
 
 - Each issue must have **exactly one assignee**
 - The assignee is responsible for:
@@ -224,7 +224,7 @@ Assignments should be guided by the **issue prefix**, but also balanced across t
 
 ---
 
-### 3.5. Flexibility in Practice
+### 7.5. Flexibility in Practice
 
 - Developers may take issues outside their “preferred” area
 - Cross-domain work is encouraged
@@ -232,7 +232,7 @@ Assignments should be guided by the **issue prefix**, but also balanced across t
 
 ---
 
-### 3.6. Labels
+### 7.6. Labels
 
 We use a **strict and predefined set of labels**.
 
@@ -277,13 +277,13 @@ If a label does not exist, the issue creation script will fail.
 
 ---
 
-## 4. Automated Issue Creation
+## 8. Automated Issue Creation
 
 To speed up the creation of large milestones, we use a custom Node.js script (`.github/scripts/create-issues.js`) that reads a `tasks.json` file and handles parent/sub-issue linking via the GitHub API.
 
 ---
 
-### 4.1. Prerequisites
+### 8.1. Prerequisites
 
 - `brew install gh`
 - `gh auth login`
@@ -291,7 +291,7 @@ To speed up the creation of large milestones, we use a custom Node.js script (`.
 
 ---
 
-### 4.2. JSON Structure & Rules
+### 8.2. JSON Structure & Rules
 
 Your `tasks.json` must declare an array of task objects. Each task requires a unique string `id`.
 
@@ -303,7 +303,7 @@ Your `tasks.json` must declare an array of task objects. Each task requires a un
 
 ---
 
-### 4.3. Important Rules
+### 8.3. Important Rules
 
 - Sub-issues must follow the **prefix naming convention**
 - Issue structure must follow the **two-level hierarchy**
@@ -313,7 +313,7 @@ Your `tasks.json` must declare an array of task objects. Each task requires a un
 
 ---
 
-### 4.4. Example `tasks.json`
+### 8.4. Example `tasks.json`
 
 ```json
 {
@@ -383,7 +383,7 @@ Your `tasks.json` must declare an array of task objects. Each task requires a un
 
 ---
 
-### 4.5. Running the script
+### 8.5. Running the script
 
 ```bash
 cd .github/scripts
@@ -394,5 +394,3 @@ node create-issues.js --resume
 node create-issues.js -y
 REPO="monetarium/monetarium-explorer" MILESTONE="v2" node create-issues.js
 ```
-
----
