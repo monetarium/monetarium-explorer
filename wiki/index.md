@@ -33,3 +33,13 @@
 - flow (full): var-ska-data/flow.full.md — paste into prompt when modifying VAR/SKA logic
 - patterns: var-ska-data/patterns.md — the non-obvious architectural patterns that apply across multiple flows
 - impact: var-ska-data/impact.md — what breaks when VAR/SKA structures change
+
+## Windows
+
+- flow (compact): windows/flow.compact.md — paste into prompt when modifying ticket price windows data pipeline
+- flow (full): windows/flow.full.md — paste into prompt when modifying ticket price windows data pipeline
+
+## Time-Based Blocks
+
+- flow (compact): time-based-blocks/flow.compact.md — paste into prompt when modifying time-grouped block listings
+- flow (full): time-based-blocks/flow.full.md — paste into prompt when modifying time-grouped block listings

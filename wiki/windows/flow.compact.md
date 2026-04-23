@@ -1,0 +1,11 @@
+- **One-line Flow:** RPC → `blocks` Table (PostgreSQL) → `SelectWindowsByLimit` Query → `dbtypes.BlocksGroupedInfo` → `StakeDiffWindows` Handler → `windows.tmpl` Template
+- **Key Architectural Patterns:**
+  - **DB-Side Aggregation:** Heavy lifting for interval groupings is performed in Postgres via integer division (`GROUP BY (height/size)*size`), not in memory.
+  - **Struct Pass-Through:** Handler provides direct array mapping of `dbtypes.BlocksGroupedInfo` directly to the template execution without intermediate transformation.
+- **Critical Constraints:**
+  - Relies on integer division truncation in SQL to establish window boundaries.
+  - Assumes `is_mainchain = true` blocks perfectly represent the voting interval state.
+- **Mutation Checklist:**
+  - [ ] Check `SelectWindowsByLimit` when changing `blocks` schema.
+  - [ ] Ensure `int64` atom values from DB remain compatible with `toFloat64Amount` rendering in `windows.tmpl`.
+  - [ ] Verify pagination math (`bestWindow`) matches any changed `StakeDiffWindowSize`.
