@@ -20,13 +20,21 @@ import (
 	"github.com/monetarium/monetarium-explorer/explorer/types"
 	"github.com/monetarium/monetarium-explorer/txhelpers"
 	"github.com/monetarium/monetarium-node/chaincfg"
-	"github.com/monetarium/monetarium-node/cointype"
 	"github.com/monetarium/monetarium-node/dcrutil"
 )
 
 type pageTemplate struct {
 	file     string
 	template *template.Template
+}
+
+func coinSymbol(ct uint8) string {
+	switch ct {
+	case 0:
+		return "VAR"
+	default:
+		return "SKA" + fmt.Sprintf("%d", ct)
+	}
 }
 
 type templates struct {
@@ -839,7 +847,7 @@ func makeTemplateFuncMap(params *chaincfg.Params) template.FuncMap {
 			}
 		},
 		"coinSymbol": func(ct uint8) string {
-			return cointype.CoinType(ct).String()
+			return coinSymbol(ct)
 		},
 	}
 }
