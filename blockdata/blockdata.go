@@ -77,14 +77,14 @@ func (b *BlockData) ToStakeInfoExtendedEstimates() apitypes.StakeInfoExtendedEst
 func (b *BlockData) ToBlockSummary() apitypes.BlockDataBasic {
 	t := dbtypes.NewTimeDefFromUNIX(b.Header.Time)
 	summary := apitypes.BlockDataBasic{
-		Height:     b.Header.Height,
-		Size:       b.Header.Size,
-		Hash:       b.Header.Hash,
-		Difficulty: b.Header.Difficulty,
-		StakeDiff:  b.Header.SBits,
-		Time:       apitypes.TimeAPI{S: t},
-		NumTx:      uint32(b.ExtraInfo.TxLen),
-		PoolInfo:   b.PoolInfo,
+		Height:      b.Header.Height,
+		Size:        b.Header.Size,
+		Hash:        b.Header.Hash,
+		Difficulty:  b.Header.Difficulty,
+		StakeDiff:   b.Header.SBits,
+		Time:        apitypes.TimeAPI{S: t},
+		NumTx:       uint32(b.ExtraInfo.TxLen),
+		PoolInfo:    b.PoolInfo,
 		CoinAmounts: b.ExtraInfo.CoinAmounts,
 		CoinTxStats: b.ExtraInfo.CoinTxStats,
 	}
@@ -99,7 +99,7 @@ func (b *BlockData) ToBlockSummary() apitypes.BlockDataBasic {
 		}
 		for ct, stat := range b.ExtraInfo.CoinTxStats {
 			s := summary.CoinStats[ct]
-			s.TxCount = int(stat.TxCount)
+			s.TxCount = stat.TxCount
 			summary.CoinStats[ct] = s
 		}
 	}

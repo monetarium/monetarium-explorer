@@ -3877,7 +3877,7 @@ func populateCoinStats(coinTxStatsJSON, coinAmountsJSON []byte, voters, freshSta
 			for k, v := range stats {
 				coinType, _ := strconv.Atoi(k)
 				stat := coinStats[uint8(coinType)]
-				
+
 				count := v.TxCount
 				if uint8(coinType) == 0 {
 					count -= voters + freshStake + revokes
@@ -3885,7 +3885,7 @@ func populateCoinStats(coinTxStatsJSON, coinAmountsJSON []byte, voters, freshSta
 						count = 0
 					}
 				}
-				
+
 				stat.TxCount = count
 				stat.Size = v.Size
 				coinStats[uint8(coinType)] = stat
