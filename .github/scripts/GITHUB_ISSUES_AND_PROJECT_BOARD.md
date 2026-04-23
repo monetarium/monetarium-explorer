@@ -388,9 +388,19 @@ Your `tasks.json` must declare an array of task objects. Each task requires a un
 ```bash
 cd .github/scripts
 
+# Dry-run (validates and prints what WILL be created using deterministic mock IDs, no API calls):
 node create-issues.js --dry-run
+
+# Live run (uses defaults: tasks.json, repo and milestone from script config):
+# Will pause to ask for interactive 'yes' confirmation.
 node create-issues.js
+
+# Resume a previous failed or interrupted run to prevent duplicate issues:
 node create-issues.js --resume
+
+# Skip the interactive confirmation prompt (useful for CI execution):
 node create-issues.js -y
+
+# Override repo and/or milestone via environment variables:
 REPO="monetarium/monetarium-explorer" MILESTONE="v2" node create-issues.js
 ```
