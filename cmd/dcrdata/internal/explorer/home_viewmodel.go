@@ -69,8 +69,11 @@ func buildHomeBlockRows(blocks []*types.BlockBasic) []HomeBlockRow {
 			}
 			for _, cr := range b.CoinRows {
 				if cr.CoinType == 0 {
-					// VAR row
-					varTxCount = cr.TxCount
+					// VAR row - subtract votes, tickets, revokes to get regular txs only
+					varTxCount = cr.TxCount - int(b.Voters) - int(b.FreshStake) - int(b.Revocations)
+					if varTxCount < 0 {
+						varTxCount = 0
+					}
 					varAmount = formatCoinAtoms(cr.Amount, cr.CoinType)
 					if cr.Size > 0 {
 						varSize = humanize.Bytes(uint64(cr.Size))
