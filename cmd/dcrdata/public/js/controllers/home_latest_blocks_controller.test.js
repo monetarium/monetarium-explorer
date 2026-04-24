@@ -918,3 +918,126 @@ describe('blocklist_controller — home-block-table-hierarchy property tests', (
     )
   })
 })
+
+// ---------------------------------------------------------------------------
+// Feature: size-cell formatting — JS must match Go SSR (go-humanize output)
+// ---------------------------------------------------------------------------
+
+describe('blocklist_controller — size cell formatting', () => {
+  // Helper: get the size cell text from a freshly injected row.
+  function getSizeCell(row) {
+    return Array.from(row.querySelectorAll('td')).find((td) => td.dataset.type === 'size')
+      .textContent
+  }
+
+  // Helper: get the size cell from a sub-row by index (0 = VAR, 1+ = SKA).
+  function getSubRowSizeCell(tbody, height, subRowIndex) {
+    const subs = Array.from(
+      tbody.querySelectorAll(`tr[data-block-id="${height}"][data-ska-accordion-target="subRow"]`)
+    )
+    return subs[subRowIndex].querySelector('td[data-type="size"]').textContent
+  }
+
+  // ---- parent block row: uses block.size via humanize.bytes ---------------
+
+  it('parent row: 4000-byte block renders "4.0 kB" (trailing zero preserved)', () => {
+    const { tbody, ctrl } = buildTable(1000, 1)
+    ctrl._processBlock(makeBlock(1001, { size: 4000 }))
+    const row = tbody.querySelector(
+      'tr[data-block-id="1001"][data-ska-accordion-target="blockRow"]'
+    )
+    expect(getSizeCell(row)).toBe('4.0 kB')
+  })
+
+  it('parent row: 6570-byte block renders "6.6 kB"', () => {
+    const { tbody, ctrl } = buildTable(1000, 1)
+    ctrl._processBlock(makeBlock(1001, { size: 6570 }))
+    const row = tbody.querySelector(
+      'tr[data-block-id="1001"][data-ska-accordion-target="blockRow"]'
+    )
+    expect(getSizeCell(row)).toBe('6.6 kB')
+  })
+
+  it('parent row: 10000-byte block renders "10 kB" (no decimal when val >= 10)', () => {
+    const { tbody, ctrl } = buildTable(1000, 1)
+    ctrl._processBlock(makeBlock(1001, { size: 10000 }))
+    const row = tbody.querySelector(
+      'tr[data-block-id="1001"][data-ska-accordion-target="blockRow"]'
+    )
+    expect(getSizeCell(row)).toBe('10 kB')
+  })
+
+  it('parent row: 0-byte block renders "0 B"', () => {
+    const { tbody, ctrl } = buildTable(1000, 1)
+    ctrl._processBlock(makeBlock(1001, { size: 0 }))
+    const row = tbody.querySelector(
+      'tr[data-block-id="1001"][data-ska-accordion-target="blockRow"]'
+    )
+    expect(getSizeCell(row)).toBe('0 B')
+  })
+
+  // ---- VAR sub-row: uses cr.size from coin_rows[0] ------------------------
+
+  it('VAR sub-row: 4000-byte cr.size renders "4.0 kB"', () => {
+    const skaCoinRows = [
+      { coin_type: 1, symbol: 'SKA1', tx_count: 2, amount: '1000000000000000000', size: 512 }
+    ]
+    const { tbody, ctrl } = buildTable(1000, 1, skaCoinRows)
+    // Override VAR coin_row size by constructing the block manually
+    const block = makeBlock(1001, { size: 9000, skaCoinRows: skaCoinRows })
+    block.block.coin_rows[0].size = 4000
+    ctrl._processBlock(block)
+    expect(getSubRowSizeCell(tbody, 1001, 0)).toBe('4.0 kB')
+  })
+
+  it('VAR sub-row: 0-byte cr.size renders "0 B" (not dash)', () => {
+    const skaCoinRows = [
+      { coin_type: 1, symbol: 'SKA1', tx_count: 2, amount: '1000000000000000000', size: 512 }
+    ]
+    const { tbody, ctrl } = buildTable(1000, 1, skaCoinRows)
+    const block = makeBlock(1001, { size: 9000, skaCoinRows: skaCoinRows })
+    block.block.coin_rows[0].size = 0
+    ctrl._processBlock(block)
+    expect(getSubRowSizeCell(tbody, 1001, 0)).toBe('0 B')
+  })
+
+  // ---- SKA sub-rows: uses cr.size from each SKA coin_row ------------------
+
+  it('SKA sub-row: 2930-byte cr.size renders "2.9 kB"', () => {
+    const skaCoinRows = [
+      { coin_type: 1, symbol: 'SKA1', tx_count: 2, amount: '1000000000000000000', size: 2930 }
+    ]
+    const { tbody, ctrl } = buildTable(1000, 1, skaCoinRows)
+    ctrl._processBlock(makeBlock(1001, { size: 9000, skaCoinRows: skaCoinRows }))
+    expect(getSubRowSizeCell(tbody, 1001, 1)).toBe('2.9 kB')
+  })
+
+  it('SKA sub-row: 0-byte cr.size renders "0 B" (not dash)', () => {
+    const skaCoinRows = [
+      { coin_type: 1, symbol: 'SKA1', tx_count: 2, amount: '1000000000000000000', size: 0 }
+    ]
+    const { tbody, ctrl } = buildTable(1000, 1, skaCoinRows)
+    ctrl._processBlock(makeBlock(1001, { size: 9000, skaCoinRows: skaCoinRows }))
+    expect(getSubRowSizeCell(tbody, 1001, 1)).toBe('0 B')
+  })
+
+  it('SKA sub-row: 4000-byte cr.size renders "4.0 kB" (trailing zero preserved)', () => {
+    const skaCoinRows = [
+      { coin_type: 1, symbol: 'SKA1', tx_count: 2, amount: '1000000000000000000', size: 4000 }
+    ]
+    const { tbody, ctrl } = buildTable(1000, 1, skaCoinRows)
+    ctrl._processBlock(makeBlock(1001, { size: 9000, skaCoinRows: skaCoinRows }))
+    expect(getSubRowSizeCell(tbody, 1001, 1)).toBe('4.0 kB')
+  })
+
+  it('multiple SKA sub-rows each render their own size independently', () => {
+    const skaCoinRows = [
+      { coin_type: 1, symbol: 'SKA1', tx_count: 2, amount: '1000000000000000000', size: 4000 },
+      { coin_type: 2, symbol: 'SKA2', tx_count: 1, amount: '2000000000000000000', size: 10000 }
+    ]
+    const { tbody, ctrl } = buildTable(1000, 1, skaCoinRows)
+    ctrl._processBlock(makeBlock(1001, { size: 9000, skaCoinRows: skaCoinRows }))
+    expect(getSubRowSizeCell(tbody, 1001, 1)).toBe('4.0 kB')
+    expect(getSubRowSizeCell(tbody, 1001, 2)).toBe('10 kB')
+  })
+})
