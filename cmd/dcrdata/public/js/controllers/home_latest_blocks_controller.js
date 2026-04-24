@@ -31,13 +31,13 @@ function coinRowsToSKAData(block) {
         cr.tx_count - (block.votes || 0) - (block.tickets || 0) - (block.revocations || 0)
       if (varTxCount < 0) varTxCount = 0
       varAmount = humanize.formatCoinAtoms(cr.amount, cr.coin_type)
-      varSize = cr.size > 0 ? humanize.bytes(cr.size) : '—'
+      varSize = humanize.bytes(cr.size)
     } else {
       subRows.push({
         tokenType: cr.symbol,
         txCount: String(cr.tx_count),
         amount: humanize.formatCoinAtoms(cr.amount, cr.coin_type),
-        size: cr.size > 0 ? humanize.bytes(cr.size) : '—'
+        size: humanize.bytes(cr.size)
       })
     }
   }

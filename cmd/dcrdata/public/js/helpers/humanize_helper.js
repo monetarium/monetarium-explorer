@@ -3,10 +3,6 @@
 function logn(n, b) {
   return Math.log(n) / Math.log(b)
 }
-function round(value, precision) {
-  const multiplier = Math.pow(10, precision || 0)
-  return Math.round(value * multiplier) / multiplier
-}
 
 function hashParts(hash) {
   const clipLen = 6
@@ -165,13 +161,13 @@ const humanize = {
     // from go-humanize
     const sizes = ['B', 'kB', 'MB', 'GB', 'TB', 'PB', 'EB']
     if (s < 10) {
-      return `${s}B`
+      return `${s} B`
     }
     const e = Math.floor(logn(s, 1000))
     const suffix = sizes[e]
     const val = Math.floor((s / Math.pow(1000, e)) * 10 + 0.5) / 10
     const precision = val < 10 ? 1 : 0
-    return `${round(val, precision)} ${suffix}`
+    return `${val.toFixed(precision)} ${suffix}`
   },
   timeSince: function (unixTime, keepOnly) {
     const seconds = Math.floor(new Date().getTime() / 1000 - unixTime)
