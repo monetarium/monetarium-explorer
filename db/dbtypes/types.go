@@ -36,6 +36,13 @@ func init() {
 	}
 }
 
+// CoinStat describes the aggregate transaction count and amount for a particular coin.
+type CoinStat struct {
+	TxCount int    `json:"tx_count"`
+	Amount  string `json:"amount"`
+	Size    uint32 `json:"size"`
+}
+
 // ScriptClass is an enumeration for the list of standard types of script.
 type ScriptClass byte
 
@@ -2191,6 +2198,14 @@ type BlockDataBasic struct {
 	StakeDiff  float64   `json:"sdiff,omitempty"`
 	Time       TimeDef   `json:"time,omitempty"`
 	NumTx      uint32    `json:"txlength,omitempty"`
+	// CoinAmounts holds per-coin totals (VAR key=0, SKAn key=n) as decimal atom strings.
+	CoinAmounts map[uint8]string `json:"coin_amounts,omitempty"`
+	// CoinTxStats holds per-coin tx count and size (key 0=VAR, 1-255=SKAn).
+	CoinTxStats map[uint8]CoinTxStats `json:"coin_tx_stats,omitempty"`
+	// CoinStats holds per-coin tx count and amount (key 0=VAR, 1-255=SKAn).
+	CoinStats map[uint8]CoinStat `json:"coin_stats,omitempty"`
+	// SSFeeTotalsByCoin holds total SKA atoms distributed via TxTypeSSFee per coin type.
+	SSFeeTotalsByCoin map[uint8]string `json:"ssfee_totals,omitempty"`
 }
 
 // BlockStatus describes a block's status in the block chain.
