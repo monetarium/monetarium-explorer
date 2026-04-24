@@ -5,6 +5,7 @@
 package dcrpg
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"database/sql/driver"
@@ -871,11 +872,30 @@ func retrieveWindowBlocks(ctx context.Context, db *sql.DB, windowSize, currentHe
 		var timestamp dbtypes.TimeDef
 		var startBlock, sbits, count int64
 		var blockSizes, votes, txs, revocations, tickets uint64
+		var coinTxStats json.RawMessage
 
 		err = rows.Scan(&startBlock, &difficulty, &txs, &tickets, &votes,
-			&revocations, &blockSizes, &sbits, &timestamp, &count)
+			&revocations, &blockSizes, &sbits, &timestamp, &count, &coinTxStats)
 		if err != nil {
 			return nil, err
+		}
+
+		if len(coinTxStats) > 0 {
+			coinTxStats = bytes.Trim(coinTxStats, "\x00")
+			if len(coinTxStats) > 2 {
+				var allStats []map[string]dbtypes.CoinTxStats
+				if err := json.Unmarshal(coinTxStats, &allStats); err == nil {
+					var skaTxs uint64
+					for _, stats := range allStats {
+						for _, st := range stats {
+							skaTxs += uint64(st.TxCount)
+						}
+					}
+					if skaTxs > uint64(txs) {
+						txs = skaTxs
+					}
+				}
+			}
 		}
 
 		endBlock := startBlock + windowSize - 1
@@ -921,11 +941,30 @@ func retrieveTimeBasedBlockListing(ctx context.Context, db *sql.DB, timeInterval
 		var startTime, endTime, indexVal dbtypes.TimeDef
 		var txs, tickets, votes, revocations, blockSizes uint64
 		var blocksCount, endBlock int64
+		var coinTxStats json.RawMessage
 
 		err = rows.Scan(&indexVal, &endBlock, &txs, &tickets, &votes,
-			&revocations, &blockSizes, &blocksCount, &startTime, &endTime)
+			&revocations, &blockSizes, &blocksCount, &startTime, &endTime, &coinTxStats)
 		if err != nil {
 			return nil, err
+		}
+
+		if len(coinTxStats) > 0 {
+			coinTxStats = bytes.Trim(coinTxStats, "\x00")
+			if len(coinTxStats) > 2 {
+				var allStats []map[string]dbtypes.CoinTxStats
+				if err := json.Unmarshal(coinTxStats, &allStats); err == nil {
+					var skaTxs uint64
+					for _, stats := range allStats {
+						for _, st := range stats {
+							skaTxs += uint64(st.TxCount)
+						}
+					}
+					if skaTxs > uint64(txs) {
+						txs = skaTxs
+					}
+				}
+			}
 		}
 
 		data = append(data, &dbtypes.BlocksGroupedInfo{

@@ -131,15 +131,16 @@ const (
 		SUM(size) AS size,
 		MAX(sbits) AS sbits,
 		MIN(time) AS time,
-		COUNT(*) AS blocks_count
+		COUNT(*) AS blocks_count,
+		JSONB_AGG(coin_tx_stats) AS coin_tx_stats
 		FROM blocks
 		WHERE height BETWEEN $2 AND $3
 			AND is_mainchain
 		GROUP BY window_start
 		ORDER BY window_start DESC;`
 
-	SelectBlocksTimeListingByLimit = `SELECT date_trunc($1, time at time zone 'utc') as index_value,
-		MAX(height),
+	SelectBlocksTimeListingByLimit = `SELECT DATE_TRUNC($1, time at time zone 'utc') AS index_value,
+		MAX(height) AS max_height,
 		SUM(num_rtx) AS txs,
 		SUM(fresh_stake) AS tickets,
 		SUM(voters) AS votes,
@@ -147,9 +148,10 @@ const (
 		SUM(size) AS size,
 		COUNT(*) AS blocks_count,
 		MIN(time) AS start_time,
-		MAX(time) AS end_time
+		MAX(time) AS end_time,
+		JSONB_AGG(coin_tx_stats) AS coin_tx_stats
 		FROM blocks
-		GROUP BY index_value
+		GROUP BY DATE_TRUNC($1, time at time zone 'utc')
 		ORDER BY index_value DESC
 		LIMIT $2 OFFSET $3;`
 

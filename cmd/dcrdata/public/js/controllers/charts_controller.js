@@ -513,7 +513,7 @@ export default class extends Controller {
             d,
             [xlabel, 'Price', 'Tickets Bought'],
             true,
-            'Price (DCR)',
+            'Price (VAR)',
             true,
             false
           )
