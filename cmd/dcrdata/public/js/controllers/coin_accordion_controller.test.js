@@ -16,7 +16,7 @@ vi.mock('@hotwired/stimulus', () => ({
   }
 }))
 
-const { default: SkaAccordionController } = await import('./ska_accordion_controller.js')
+const { default: CoinAccordionController } = await import('./coin_accordion_controller.js')
 
 /**
  * Build a minimal DOM fragment for one block and attach a controller instance.
@@ -31,7 +31,7 @@ function buildDOM(blockId, subRowCount) {
   // Block row — the whole row is the click target (data-action on the tr).
   const blockRow = document.createElement('tr')
   blockRow.dataset.blockId = String(blockId)
-  blockRow.dataset.skaAccordionTarget = 'blockRow'
+  blockRow.dataset.coinAccordionTarget = 'blockRow'
   tbody.appendChild(blockRow)
 
   // Sub-rows
@@ -40,17 +40,17 @@ function buildDOM(blockId, subRowCount) {
     const tr = document.createElement('tr')
     tr.className = 'coin-sub-row'
     tr.dataset.blockId = String(blockId)
-    tr.dataset.skaAccordionTarget = 'subRow'
+    tr.dataset.coinAccordionTarget = 'subRow'
     tbody.appendChild(tr)
     subRows.push(tr)
   }
 
   // Wire up controller with target resolution
-  const ctrl = new SkaAccordionController(tbody)
+  const ctrl = new CoinAccordionController(tbody)
   ctrl.blockRowTargets = Array.from(
-    tbody.querySelectorAll('[data-ska-accordion-target="blockRow"]')
+    tbody.querySelectorAll('[data-coin-accordion-target="blockRow"]')
   )
-  ctrl.subRowTargets = Array.from(tbody.querySelectorAll('[data-ska-accordion-target="subRow"]'))
+  ctrl.subRowTargets = Array.from(tbody.querySelectorAll('[data-coin-accordion-target="subRow"]'))
 
   return { tbody, blockRow, subRows, ctrl }
 }
@@ -124,7 +124,7 @@ describe('ska_accordion_controller — unit tests', () => {
       function addBlock(id, subRowCount) {
         const blockRow = document.createElement('tr')
         blockRow.dataset.blockId = String(id)
-        blockRow.dataset.skaAccordionTarget = 'blockRow'
+        blockRow.dataset.coinAccordionTarget = 'blockRow'
         tbody.appendChild(blockRow)
 
         const subs = []
@@ -132,7 +132,7 @@ describe('ska_accordion_controller — unit tests', () => {
           const tr = document.createElement('tr')
           tr.className = 'coin-sub-row'
           tr.dataset.blockId = String(id)
-          tr.dataset.skaAccordionTarget = 'subRow'
+          tr.dataset.coinAccordionTarget = 'subRow'
           tbody.appendChild(tr)
           subs.push(tr)
         }
@@ -142,12 +142,12 @@ describe('ska_accordion_controller — unit tests', () => {
       const { blockRow: row1, subs: subs1 } = addBlock(100, 2)
       const { blockRow: row2, subs: subs2 } = addBlock(200, 3)
 
-      const ctrl = new SkaAccordionController(tbody)
+      const ctrl = new CoinAccordionController(tbody)
       ctrl.blockRowTargets = Array.from(
-        tbody.querySelectorAll('[data-ska-accordion-target="blockRow"]')
+        tbody.querySelectorAll('[data-coin-accordion-target="blockRow"]')
       )
       ctrl.subRowTargets = Array.from(
-        tbody.querySelectorAll('[data-ska-accordion-target="subRow"]')
+        tbody.querySelectorAll('[data-coin-accordion-target="subRow"]')
       )
 
       // Click block 100

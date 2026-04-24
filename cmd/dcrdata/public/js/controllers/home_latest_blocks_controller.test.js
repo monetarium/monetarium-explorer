@@ -35,12 +35,12 @@ const DATA_TYPES = [
 // Build one server-rendered block row (9 cells) + sub-rows and append to tbody.
 function appendBlock(tbody, height, skaCoinRows = []) {
   const blockRow = document.createElement('tr')
-  blockRow.dataset.skaAccordionTarget = 'blockRow'
+  blockRow.dataset.coinAccordionTarget = 'blockRow'
   blockRow.dataset.blockId = String(height)
   blockRow.dataset.height = String(height)
   blockRow.dataset.linkClass = 'fs18'
   blockRow.classList.add('block-row-expandable')
-  blockRow.dataset.action = 'click->ska-accordion#toggle'
+  blockRow.dataset.action = 'click->coin-accordion#toggle'
   for (const dt of DATA_TYPES) {
     const td = document.createElement('td')
     td.dataset.type = dt
@@ -60,7 +60,7 @@ function appendBlock(tbody, height, skaCoinRows = []) {
   for (let i = 0; i < subRowCount; i++) {
     const tr = document.createElement('tr')
     tr.className = 'coin-sub-row'
-    tr.dataset.skaAccordionTarget = 'subRow'
+    tr.dataset.coinAccordionTarget = 'subRow'
     tr.dataset.blockId = String(height)
     tbody.appendChild(tr)
   }
@@ -71,7 +71,7 @@ function buildTable(topHeight, blockCount = 1, skaCoinRows = []) {
     const div = document.createElement('div')
     div.innerHTML = `
 <template id="home-block-row-template">
-  <tr class="block-row-expandable" data-ska-accordion-target="blockRow" data-action="click->ska-accordion#toggle">
+  <tr class="block-row-expandable" data-coin-accordion-target="blockRow" data-action="click->coin-accordion#toggle">
     <td class="text-start ps-1" data-type="height"><span class="chevron me-1"></span><a></a></td>
     <td class="text-end num" data-type="tx"></td>
     <td class="text-end num" data-type="var-amount"></td>
@@ -84,7 +84,7 @@ function buildTable(topHeight, blockCount = 1, skaCoinRows = []) {
   </tr>
 </template>
 <template id="home-var-sub-row-template">
-  <tr class="coin-sub-row" data-ska-accordion-target="subRow">
+  <tr class="coin-sub-row" data-coin-accordion-target="subRow">
     <td class="text-end ps-2 ps-sm-4" data-type="sub-label"><span class="coin-label coin-label--var">VAR</span></td>
     <td class="text-end num" data-type="tx"></td>
     <td class="text-end num" data-type="var-amount"></td>
@@ -97,7 +97,7 @@ function buildTable(topHeight, blockCount = 1, skaCoinRows = []) {
   </tr>
 </template>
 <template id="home-ska-sub-row-template">
-  <tr class="coin-sub-row" data-ska-accordion-target="subRow">
+  <tr class="coin-sub-row" data-coin-accordion-target="subRow">
     <td class="text-end ps-2 ps-sm-4" data-type="sub-label"><span class="coin-label coin-label--ska"></span></td>
     <td class="text-end num" data-type="tx"></td>
     <td class="text-end">—</td>
@@ -180,7 +180,7 @@ describe('blocklist_controller — Property 8: WebSocket block prepend matches s
       // block.tx = 5 (regular-tree only), but coin_rows sum = 5 + 42 + 17 + 5 = 69
       ctrl._processBlock(makeBlock(1001, { tx: 5, skaCoinRows: SKA_ROWS_3 }))
       const row = tbody.querySelector(
-        'tr[data-block-id="1001"][data-ska-accordion-target="blockRow"]'
+        'tr[data-block-id="1001"][data-coin-accordion-target="blockRow"]'
       )
       const txCell = Array.from(row.querySelectorAll('td')).find((td) => td.dataset.type === 'tx')
       expect(txCell.textContent).toBe('61')
@@ -190,7 +190,7 @@ describe('blocklist_controller — Property 8: WebSocket block prepend matches s
       const { tbody, ctrl } = buildTable(1000, 1)
       ctrl._processBlock(makeBlock(1001, { tx: 7 })) // no skaCoinRows → no coin_rows
       const row = tbody.querySelector(
-        'tr[data-block-id="1001"][data-ska-accordion-target="blockRow"]'
+        'tr[data-block-id="1001"][data-coin-accordion-target="blockRow"]'
       )
       const txCell = Array.from(row.querySelectorAll('td')).find((td) => td.dataset.type === 'tx')
       expect(txCell.textContent).toBe('7')
@@ -207,14 +207,14 @@ describe('blocklist_controller — Property 8: WebSocket block prepend matches s
 
     it('new block row is prepended at the top', () => {
       ctrl._processBlock(makeBlock(1001, { skaCoinRows: SKA_ROWS_3 }))
-      const rows = tbody.querySelectorAll('tr[data-ska-accordion-target="blockRow"]')
+      const rows = tbody.querySelectorAll('tr[data-coin-accordion-target="blockRow"]')
       expect(rows[0].dataset.blockId).toBe('1001')
     })
 
     it('new block row has exactly 9 cells', () => {
       ctrl._processBlock(makeBlock(1001, { skaCoinRows: SKA_ROWS_3 }))
       const row = tbody.querySelector(
-        'tr[data-block-id="1001"][data-ska-accordion-target="blockRow"]'
+        'tr[data-block-id="1001"][data-coin-accordion-target="blockRow"]'
       )
       expect(row.querySelectorAll('td').length).toBe(9)
     })
@@ -222,7 +222,7 @@ describe('blocklist_controller — Property 8: WebSocket block prepend matches s
     it('cell data-type order matches the 9-column spec', () => {
       ctrl._processBlock(makeBlock(1001, { skaCoinRows: SKA_ROWS_3 }))
       const row = tbody.querySelector(
-        'tr[data-block-id="1001"][data-ska-accordion-target="blockRow"]'
+        'tr[data-block-id="1001"][data-coin-accordion-target="blockRow"]'
       )
       expect(Array.from(row.querySelectorAll('td')).map((td) => td.dataset.type)).toEqual(
         DATA_TYPES
@@ -233,10 +233,10 @@ describe('blocklist_controller — Property 8: WebSocket block prepend matches s
       ctrl._processBlock(makeBlock(1001, { skaCoinRows: SKA_ROWS_3 }))
       const all = Array.from(tbody.children)
       const newIdx = all.findIndex(
-        (r) => r.dataset.blockId === '1001' && r.dataset.skaAccordionTarget === 'blockRow'
+        (r) => r.dataset.blockId === '1001' && r.dataset.coinAccordionTarget === 'blockRow'
       )
       const nextIdx = all.findIndex(
-        (r) => r.dataset.blockId === '1000' && r.dataset.skaAccordionTarget === 'blockRow'
+        (r) => r.dataset.blockId === '1000' && r.dataset.coinAccordionTarget === 'blockRow'
       )
       expect(newIdx).toBeLessThan(nextIdx)
       for (let i = newIdx + 1; i < nextIdx; i++) {
@@ -252,22 +252,22 @@ describe('blocklist_controller — Property 8: WebSocket block prepend matches s
       const { tbody, ctrl } = buildTable(1000, 1, SKA_ROWS_3)
       ctrl._processBlock(makeBlock(1001, { skaCoinRows: SKA_ROWS_3 }))
       const row = tbody.querySelector(
-        'tr[data-block-id="1001"][data-ska-accordion-target="blockRow"]'
+        'tr[data-block-id="1001"][data-coin-accordion-target="blockRow"]'
       )
       expect(row.classList.contains('block-row-expandable')).toBe(true)
-      expect(row.dataset.action).toBe('click->ska-accordion#toggle')
+      expect(row.dataset.action).toBe('click->coin-accordion#toggle')
     })
 
     it('block row with no SKA data is still expandable (has VAR sub-row)', () => {
       const { tbody, ctrl } = buildTable(1007, 1)
       ctrl._processBlock(makeBlock(1008)) // no coin_rows → VAR-only
       const row = tbody.querySelector(
-        'tr[data-block-id="1008"][data-ska-accordion-target="blockRow"]'
+        'tr[data-block-id="1008"][data-coin-accordion-target="blockRow"]'
       )
       expect(row.classList.contains('block-row-expandable')).toBe(true)
-      expect(row.dataset.action).toBe('click->ska-accordion#toggle')
+      expect(row.dataset.action).toBe('click->coin-accordion#toggle')
       const subs = tbody.querySelectorAll(
-        'tr[data-block-id="1008"][data-ska-accordion-target="subRow"]'
+        'tr[data-block-id="1008"][data-coin-accordion-target="subRow"]'
       )
       expect(subs.length).toBe(1)
     })
@@ -276,7 +276,7 @@ describe('blocklist_controller — Property 8: WebSocket block prepend matches s
       const { tbody, ctrl } = buildTable(1000, 1, SKA_ROWS_3)
       ctrl._processBlock(makeBlock(1001, { skaCoinRows: SKA_ROWS_3 }))
       const row = tbody.querySelector(
-        'tr[data-block-id="1001"][data-ska-accordion-target="blockRow"]'
+        'tr[data-block-id="1001"][data-coin-accordion-target="blockRow"]'
       )
       const skaCell = Array.from(row.querySelectorAll('td')).find(
         (td) => td.dataset.type === 'ska-amount'
@@ -293,7 +293,7 @@ describe('blocklist_controller — Property 8: WebSocket block prepend matches s
       const { tbody, ctrl } = buildTable(1000, 1, SKA_ROWS_3)
       ctrl._processBlock(makeBlock(1001, { skaCoinRows: SKA_ROWS_3 }))
       const row = tbody.querySelector(
-        'tr[data-block-id="1001"][data-ska-accordion-target="blockRow"]'
+        'tr[data-block-id="1001"][data-coin-accordion-target="blockRow"]'
       )
       const varRow = row.nextElementSibling
       expect(varRow.classList.contains('coin-sub-row')).toBe(true)
@@ -304,7 +304,7 @@ describe('blocklist_controller — Property 8: WebSocket block prepend matches s
       const { tbody, ctrl } = buildTable(1000, 1, SKA_ROWS_3)
       ctrl._processBlock(makeBlock(1001, { skaCoinRows: SKA_ROWS_3 }))
       const row = tbody.querySelector(
-        'tr[data-block-id="1001"][data-ska-accordion-target="blockRow"]'
+        'tr[data-block-id="1001"][data-coin-accordion-target="blockRow"]'
       )
       expect(row.nextElementSibling.querySelectorAll('td').length).toBe(9)
     })
@@ -313,7 +313,7 @@ describe('blocklist_controller — Property 8: WebSocket block prepend matches s
       const { tbody, ctrl } = buildTable(1000, 1, SKA_ROWS_3)
       ctrl._processBlock(makeBlock(1001, { skaCoinRows: SKA_ROWS_3 }))
       const row = tbody.querySelector(
-        'tr[data-block-id="1001"][data-ska-accordion-target="blockRow"]'
+        'tr[data-block-id="1001"][data-coin-accordion-target="blockRow"]'
       )
       const labelCell = row.nextElementSibling.querySelector('td.text-end')
       expect(labelCell).not.toBeNull()
@@ -324,7 +324,7 @@ describe('blocklist_controller — Property 8: WebSocket block prepend matches s
       const { tbody, ctrl } = buildTable(1000, 1, SKA_ROWS_3)
       ctrl._processBlock(makeBlock(1001, { skaCoinRows: SKA_ROWS_3 }))
       const row = tbody.querySelector(
-        'tr[data-block-id="1001"][data-ska-accordion-target="blockRow"]'
+        'tr[data-block-id="1001"][data-coin-accordion-target="blockRow"]'
       )
       expect(row.nextElementSibling.classList.contains('coin-sub-row--visible')).toBe(false)
     })
@@ -337,7 +337,7 @@ describe('blocklist_controller — Property 8: WebSocket block prepend matches s
       const { tbody, ctrl } = buildTable(1000, 1, SKA_ROWS_3)
       ctrl._processBlock(makeBlock(1001, { skaCoinRows: SKA_ROWS_3 }))
       expect(
-        tbody.querySelectorAll('tr[data-block-id="1001"][data-ska-accordion-target="subRow"]')
+        tbody.querySelectorAll('tr[data-block-id="1001"][data-coin-accordion-target="subRow"]')
           .length
       ).toBe(4)
     })
@@ -346,7 +346,7 @@ describe('blocklist_controller — Property 8: WebSocket block prepend matches s
       const { tbody, ctrl } = buildTable(1007, 1)
       ctrl._processBlock(makeBlock(1008)) // no coin_rows
       expect(
-        tbody.querySelectorAll('tr[data-block-id="1008"][data-ska-accordion-target="subRow"]')
+        tbody.querySelectorAll('tr[data-block-id="1008"][data-coin-accordion-target="subRow"]')
           .length
       ).toBe(1)
     })
@@ -355,7 +355,7 @@ describe('blocklist_controller — Property 8: WebSocket block prepend matches s
       const { tbody, ctrl } = buildTable(1000, 1, SKA_ROWS_3)
       ctrl._processBlock(makeBlock(1001, { skaCoinRows: SKA_ROWS_3 }))
       const subs = Array.from(
-        tbody.querySelectorAll('tr[data-block-id="1001"][data-ska-accordion-target="subRow"]')
+        tbody.querySelectorAll('tr[data-block-id="1001"][data-coin-accordion-target="subRow"]')
       ).slice(1) // skip VAR row
       subs.forEach((r) => {
         expect(r.querySelectorAll('td').length).toBe(9)
@@ -369,7 +369,7 @@ describe('blocklist_controller — Property 8: WebSocket block prepend matches s
       const { tbody, ctrl } = buildTable(1000, 1, SKA_ROWS_3)
       ctrl._processBlock(makeBlock(1001, { skaCoinRows: SKA_ROWS_3 }))
       tbody
-        .querySelectorAll('tr[data-block-id="1001"][data-ska-accordion-target="subRow"]')
+        .querySelectorAll('tr[data-block-id="1001"][data-coin-accordion-target="subRow"]')
         .forEach((r) => {
           expect(r.classList.contains('coin-sub-row--visible')).toBe(false)
         })
@@ -410,7 +410,7 @@ describe('blocklist_controller — Property 8: WebSocket block prepend matches s
 
           // 1. One block row at the top
           const newRows = tbody.querySelectorAll(
-            `tr[data-block-id="${height}"][data-ska-accordion-target="blockRow"]`
+            `tr[data-block-id="${height}"][data-coin-accordion-target="blockRow"]`
           )
           expect(newRows.length).toBe(1)
           const newRow = newRows[0]
@@ -423,11 +423,11 @@ describe('blocklist_controller — Property 8: WebSocket block prepend matches s
 
           // 3. Row is always expandable
           expect(newRow.classList.contains('block-row-expandable')).toBe(true)
-          expect(newRow.dataset.action).toBe('click->ska-accordion#toggle')
+          expect(newRow.dataset.action).toBe('click->coin-accordion#toggle')
 
           // 4. Sub-rows: 1 VAR + N SKA, all 9 cells, all collapsed
           const subs = tbody.querySelectorAll(
-            `tr[data-block-id="${height}"][data-ska-accordion-target="subRow"]`
+            `tr[data-block-id="${height}"][data-coin-accordion-target="subRow"]`
           )
           expect(subs.length).toBe(1 + (hasSKA ? skaCoinRows.length : 0))
           subs.forEach((r) => {
@@ -441,7 +441,7 @@ describe('blocklist_controller — Property 8: WebSocket block prepend matches s
           const all = Array.from(tbody.children)
           const newIdx = all.indexOf(newRow)
           const nextBlock = tbody.querySelector(
-            `tr[data-block-id="${topHeight}"][data-ska-accordion-target="blockRow"]`
+            `tr[data-block-id="${topHeight}"][data-coin-accordion-target="blockRow"]`
           )
           if (nextBlock) {
             const nextIdx = all.indexOf(nextBlock)
@@ -468,7 +468,7 @@ describe('blocklist_controller — home-block-table-hierarchy badge & anchor uni
       const { tbody, ctrl } = buildTable(1000, 1, SKA_ROWS_3)
       ctrl._processBlock(makeBlock(1001, { skaCoinRows: SKA_ROWS_3 }))
       const blockRow = tbody.querySelector(
-        'tr[data-block-id="1001"][data-ska-accordion-target="blockRow"]'
+        'tr[data-block-id="1001"][data-coin-accordion-target="blockRow"]'
       )
       const varRow = blockRow.nextElementSibling
       const labelCell = varRow.querySelector('td[data-type="sub-label"]')
@@ -480,7 +480,7 @@ describe('blocklist_controller — home-block-table-hierarchy badge & anchor uni
       const { tbody, ctrl } = buildTable(1000, 1, SKA_ROWS_3)
       ctrl._processBlock(makeBlock(1001, { skaCoinRows: SKA_ROWS_3 }))
       const blockRow = tbody.querySelector(
-        'tr[data-block-id="1001"][data-ska-accordion-target="blockRow"]'
+        'tr[data-block-id="1001"][data-coin-accordion-target="blockRow"]'
       )
       const varRow = blockRow.nextElementSibling
       const badge = varRow.querySelector(
@@ -494,7 +494,7 @@ describe('blocklist_controller — home-block-table-hierarchy badge & anchor uni
       const { tbody, ctrl } = buildTable(1000, 1, SKA_ROWS_3)
       ctrl._processBlock(makeBlock(1001, { skaCoinRows: SKA_ROWS_3 }))
       const blockRow = tbody.querySelector(
-        'tr[data-block-id="1001"][data-ska-accordion-target="blockRow"]'
+        'tr[data-block-id="1001"][data-coin-accordion-target="blockRow"]'
       )
       expect(blockRow.nextElementSibling.querySelectorAll('td').length).toBe(9)
     })
@@ -503,7 +503,7 @@ describe('blocklist_controller — home-block-table-hierarchy badge & anchor uni
       const { tbody, ctrl } = buildTable(1000, 1, SKA_ROWS_3)
       ctrl._processBlock(makeBlock(1001, { skaCoinRows: SKA_ROWS_3 }))
       const blockRow = tbody.querySelector(
-        'tr[data-block-id="1001"][data-ska-accordion-target="blockRow"]'
+        'tr[data-block-id="1001"][data-coin-accordion-target="blockRow"]'
       )
       const cells = Array.from(blockRow.nextElementSibling.querySelectorAll('td'))
       const responsiveClasses = ['d-none', 'd-sm-table-cell', 'd-md-none', 'd-lg-table-cell']
@@ -519,7 +519,7 @@ describe('blocklist_controller — home-block-table-hierarchy badge & anchor uni
       const { tbody, ctrl } = buildTable(1000, 1, SKA_ROWS_3)
       ctrl._processBlock(makeBlock(1001, { skaCoinRows: SKA_ROWS_3 }))
       const subs = Array.from(
-        tbody.querySelectorAll('tr[data-block-id="1001"][data-ska-accordion-target="subRow"]')
+        tbody.querySelectorAll('tr[data-block-id="1001"][data-coin-accordion-target="subRow"]')
       ).slice(1) // skip VAR row
       subs.forEach((r) => {
         const labelCell = r.querySelector('td[data-type="sub-label"]')
@@ -532,7 +532,7 @@ describe('blocklist_controller — home-block-table-hierarchy badge & anchor uni
       const { tbody, ctrl } = buildTable(1000, 1, SKA_ROWS_3)
       ctrl._processBlock(makeBlock(1001, { skaCoinRows: SKA_ROWS_3 }))
       const subs = Array.from(
-        tbody.querySelectorAll('tr[data-block-id="1001"][data-ska-accordion-target="subRow"]')
+        tbody.querySelectorAll('tr[data-block-id="1001"][data-coin-accordion-target="subRow"]')
       ).slice(1)
       subs.forEach((r) => {
         const badge = r.querySelector('td[data-type="sub-label"] span.coin-label.coin-label--ska')
@@ -544,7 +544,7 @@ describe('blocklist_controller — home-block-table-hierarchy badge & anchor uni
       const { tbody, ctrl } = buildTable(1000, 1, SKA_ROWS_3)
       ctrl._processBlock(makeBlock(1001, { skaCoinRows: SKA_ROWS_3 }))
       const subs = Array.from(
-        tbody.querySelectorAll('tr[data-block-id="1001"][data-ska-accordion-target="subRow"]')
+        tbody.querySelectorAll('tr[data-block-id="1001"][data-coin-accordion-target="subRow"]')
       ).slice(1)
       subs.forEach((r) => expect(r.querySelectorAll('td').length).toBe(9))
     })
@@ -553,7 +553,7 @@ describe('blocklist_controller — home-block-table-hierarchy badge & anchor uni
       const { tbody, ctrl } = buildTable(1000, 1, SKA_ROWS_3)
       ctrl._processBlock(makeBlock(1001, { skaCoinRows: SKA_ROWS_3 }))
       const subs = Array.from(
-        tbody.querySelectorAll('tr[data-block-id="1001"][data-ska-accordion-target="subRow"]')
+        tbody.querySelectorAll('tr[data-block-id="1001"][data-coin-accordion-target="subRow"]')
       ).slice(1)
       const responsiveClasses = ['d-none', 'd-sm-table-cell', 'd-md-none', 'd-lg-table-cell']
       subs.forEach((r) => {
@@ -571,7 +571,7 @@ describe('blocklist_controller — home-block-table-hierarchy badge & anchor uni
       const { tbody, ctrl } = buildTable(1000, 1, SKA_ROWS_3)
       ctrl._processBlock(makeBlock(1001, { skaCoinRows: SKA_ROWS_3 }))
       const blockRow = tbody.querySelector(
-        'tr[data-block-id="1001"][data-ska-accordion-target="blockRow"]'
+        'tr[data-block-id="1001"][data-coin-accordion-target="blockRow"]'
       )
       const heightCell = Array.from(blockRow.querySelectorAll('td')).find(
         (td) => td.dataset.type === 'height'
@@ -609,7 +609,7 @@ describe('blocklist_controller — home-block-table-hierarchy property tests', (
           ctrl._processBlock(makeBlock(height, { skaCoinRows }))
 
           const blockRow = tbody.querySelector(
-            `tr[data-block-id="${height}"][data-ska-accordion-target="blockRow"]`
+            `tr[data-block-id="${height}"][data-coin-accordion-target="blockRow"]`
           )
           // chevron in parent row
           const heightCell = Array.from(blockRow.querySelectorAll('td')).find(
@@ -622,7 +622,7 @@ describe('blocklist_controller — home-block-table-hierarchy property tests', (
 
           const allSubs = Array.from(
             tbody.querySelectorAll(
-              `tr[data-block-id="${height}"][data-ska-accordion-target="subRow"]`
+              `tr[data-block-id="${height}"][data-coin-accordion-target="subRow"]`
             )
           ).slice(1)
           allSubs.forEach((r) => {
@@ -685,7 +685,7 @@ describe('blocklist_controller — home-block-table-hierarchy property tests', (
           ctrl._processBlock(makeBlock(height, { skaCoinRows }))
 
           const blockRow = tbody.querySelector(
-            `tr[data-block-id="${height}"][data-ska-accordion-target="blockRow"]`
+            `tr[data-block-id="${height}"][data-coin-accordion-target="blockRow"]`
           )
           const varRow = blockRow.nextElementSibling
           expect(varRow.querySelector('span.coin-label.coin-label--var')).not.toBeNull()
@@ -717,7 +717,7 @@ describe('blocklist_controller — home-block-table-hierarchy property tests', (
 
           const allSubs = Array.from(
             tbody.querySelectorAll(
-              `tr[data-block-id="${height}"][data-ska-accordion-target="subRow"]`
+              `tr[data-block-id="${height}"][data-coin-accordion-target="subRow"]`
             )
           ).slice(1) // skip VAR
           expect(allSubs.length).toBe(skaCoinRows.length)
@@ -751,7 +751,7 @@ describe('blocklist_controller — home-block-table-hierarchy property tests', (
           ctrl._processBlock(makeBlock(height, { skaCoinRows }))
 
           const blockRow = tbody.querySelector(
-            `tr[data-block-id="${height}"][data-ska-accordion-target="blockRow"]`
+            `tr[data-block-id="${height}"][data-coin-accordion-target="blockRow"]`
           )
           const heightCell = Array.from(blockRow.querySelectorAll('td')).find(
             (td) => td.dataset.type === 'height'
@@ -772,7 +772,7 @@ describe('blocklist_controller — home-block-table-hierarchy property tests', (
         ctrl._processBlock(makeBlock(height))
 
         const blockRow = tbody.querySelector(
-          `tr[data-block-id="${height}"][data-ska-accordion-target="blockRow"]`
+          `tr[data-block-id="${height}"][data-coin-accordion-target="blockRow"]`
         )
         const heightCell = Array.from(blockRow.querySelectorAll('td')).find(
           (td) => td.dataset.type === 'height'
@@ -806,7 +806,7 @@ describe('blocklist_controller — home-block-table-hierarchy property tests', (
           ctrl._processBlock(makeBlock(height, { skaCoinRows }))
 
           const allSubs = tbody.querySelectorAll(
-            `tr[data-block-id="${height}"][data-ska-accordion-target="subRow"]`
+            `tr[data-block-id="${height}"][data-coin-accordion-target="subRow"]`
           )
           allSubs.forEach((r) => {
             const firstCell = r.querySelector('td')
@@ -839,7 +839,7 @@ describe('blocklist_controller — home-block-table-hierarchy property tests', (
           ctrl._processBlock(makeBlock(height, { skaCoinRows }))
 
           const allSubs = tbody.querySelectorAll(
-            `tr[data-block-id="${height}"][data-ska-accordion-target="subRow"]`
+            `tr[data-block-id="${height}"][data-coin-accordion-target="subRow"]`
           )
           allSubs.forEach((r) => {
             const firstCell = r.querySelector('td')
@@ -872,7 +872,7 @@ describe('blocklist_controller — home-block-table-hierarchy property tests', (
           ctrl._processBlock(makeBlock(height, { skaCoinRows }))
 
           const allSubs = tbody.querySelectorAll(
-            `tr[data-block-id="${height}"][data-ska-accordion-target="subRow"]`
+            `tr[data-block-id="${height}"][data-coin-accordion-target="subRow"]`
           )
           allSubs.forEach((r) => {
             expect(r.classList.contains('coin-sub-row')).toBe(true)
@@ -933,7 +933,7 @@ describe('blocklist_controller — size cell formatting', () => {
   // Helper: get the size cell from a sub-row by index (0 = VAR, 1+ = SKA).
   function getSubRowSizeCell(tbody, height, subRowIndex) {
     const subs = Array.from(
-      tbody.querySelectorAll(`tr[data-block-id="${height}"][data-ska-accordion-target="subRow"]`)
+      tbody.querySelectorAll(`tr[data-block-id="${height}"][data-coin-accordion-target="subRow"]`)
     )
     return subs[subRowIndex].querySelector('td[data-type="size"]').textContent
   }
@@ -944,7 +944,7 @@ describe('blocklist_controller — size cell formatting', () => {
     const { tbody, ctrl } = buildTable(1000, 1)
     ctrl._processBlock(makeBlock(1001, { size: 4000 }))
     const row = tbody.querySelector(
-      'tr[data-block-id="1001"][data-ska-accordion-target="blockRow"]'
+      'tr[data-block-id="1001"][data-coin-accordion-target="blockRow"]'
     )
     expect(getSizeCell(row)).toBe('4.0 kB')
   })
@@ -953,7 +953,7 @@ describe('blocklist_controller — size cell formatting', () => {
     const { tbody, ctrl } = buildTable(1000, 1)
     ctrl._processBlock(makeBlock(1001, { size: 6570 }))
     const row = tbody.querySelector(
-      'tr[data-block-id="1001"][data-ska-accordion-target="blockRow"]'
+      'tr[data-block-id="1001"][data-coin-accordion-target="blockRow"]'
     )
     expect(getSizeCell(row)).toBe('6.6 kB')
   })
@@ -962,7 +962,7 @@ describe('blocklist_controller — size cell formatting', () => {
     const { tbody, ctrl } = buildTable(1000, 1)
     ctrl._processBlock(makeBlock(1001, { size: 10000 }))
     const row = tbody.querySelector(
-      'tr[data-block-id="1001"][data-ska-accordion-target="blockRow"]'
+      'tr[data-block-id="1001"][data-coin-accordion-target="blockRow"]'
     )
     expect(getSizeCell(row)).toBe('10 kB')
   })
@@ -971,7 +971,7 @@ describe('blocklist_controller — size cell formatting', () => {
     const { tbody, ctrl } = buildTable(1000, 1)
     ctrl._processBlock(makeBlock(1001, { size: 0 }))
     const row = tbody.querySelector(
-      'tr[data-block-id="1001"][data-ska-accordion-target="blockRow"]'
+      'tr[data-block-id="1001"][data-coin-accordion-target="blockRow"]'
     )
     expect(getSizeCell(row)).toBe('0 B')
   })

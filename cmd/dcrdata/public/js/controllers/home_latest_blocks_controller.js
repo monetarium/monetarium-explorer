@@ -109,7 +109,7 @@ export default class extends Controller {
     if (!this.hasTableTarget) return
     const block = blockData.block
 
-    const blockRows = this.tableTarget.querySelectorAll('tr[data-ska-accordion-target="blockRow"]')
+    const blockRows = this.tableTarget.querySelectorAll('tr[data-coin-accordion-target="blockRow"]')
     if (blockRows.length === 0) return
     const firstBlockRow = blockRows[0]
     const lastHeight = parseInt(firstBlockRow.dataset.height)
@@ -129,7 +129,7 @@ export default class extends Controller {
 
     // Re-query after removals — firstBlockRow may have been detached.
     const currentFirstBlockRow = this.tableTarget.querySelector(
-      'tr[data-ska-accordion-target="blockRow"]'
+      'tr[data-coin-accordion-target="blockRow"]'
     )
 
     const tmpl = document.getElementById('home-block-row-template')
@@ -140,8 +140,8 @@ export default class extends Controller {
     newRow.dataset.height = block.height
     newRow.dataset.linkClass = firstBlockRow.dataset.linkClass
     newRow.dataset.blockId = String(block.height)
-    newRow.dataset.skaAccordionTarget = 'blockRow'
-    newRow.dataset.action = 'click->ska-accordion#toggle'
+    newRow.dataset.coinAccordionTarget = 'blockRow'
+    newRow.dataset.action = 'click->coin-accordion#toggle'
 
     const link = clone.querySelector('[data-type="height"] a')
     link.href = `/block/${block.height}`
