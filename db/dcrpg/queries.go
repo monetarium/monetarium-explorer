@@ -891,7 +891,7 @@ func retrieveWindowBlocks(ctx context.Context, db *sql.DB, windowSize, currentHe
 							skaTxs += uint64(st.TxCount)
 						}
 					}
-					if skaTxs > uint64(txs) {
+					if skaTxs > txs {
 						txs = skaTxs
 					}
 				}
@@ -960,7 +960,7 @@ func retrieveTimeBasedBlockListing(ctx context.Context, db *sql.DB, timeInterval
 							skaTxs += uint64(st.TxCount)
 						}
 					}
-					if skaTxs > uint64(txs) {
+					if skaTxs > txs {
 						txs = skaTxs
 					}
 				}
