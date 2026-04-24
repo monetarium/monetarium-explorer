@@ -853,8 +853,36 @@ func retrieveAllVotesDbIDsHeightsTicketDbIDs(ctx context.Context, db *sql.DB) (i
 }
 */
 
-// retrieveWindowBlocks fetches chunks of windows using the limit and offset provided
-// for a window size of chaincfg.Params.StakeDiffWindowSize.
+// parseCoinTxStats aggregates tx_count from all coin types in the aggregated JSONB.
+// Returns the computed total if it exceeds the SQL-provided txs value.
+func parseCoinTxStats(coinTxStats json.RawMessage, txs uint64) uint64 {
+	if len(coinTxStats) == 0 {
+		return txs
+	}
+
+	coinTxStats = bytes.Trim(coinTxStats, "\x00")
+	if len(coinTxStats) <= 2 {
+		return txs
+	}
+
+	var allStats []map[string]dbtypes.CoinTxStats
+	if err := json.Unmarshal(coinTxStats, &allStats); err != nil {
+		return txs
+	}
+
+	var totalCoinTxs uint64
+	for _, stats := range allStats {
+		for _, st := range stats {
+			totalCoinTxs += uint64(st.TxCount)
+		}
+	}
+
+	if totalCoinTxs > txs {
+		return totalCoinTxs
+	}
+	return txs
+}
+
 func retrieveWindowBlocks(ctx context.Context, db *sql.DB, windowSize, currentHeight int64, limit, offset uint64) ([]*dbtypes.BlocksGroupedInfo, error) {
 	endWindow := currentHeight/windowSize - int64(offset)
 	startWindow := endWindow - int64(limit) + 1
@@ -880,23 +908,7 @@ func retrieveWindowBlocks(ctx context.Context, db *sql.DB, windowSize, currentHe
 			return nil, err
 		}
 
-		if len(coinTxStats) > 0 {
-			coinTxStats = bytes.Trim(coinTxStats, "\x00")
-			if len(coinTxStats) > 2 {
-				var allStats []map[string]dbtypes.CoinTxStats
-				if err := json.Unmarshal(coinTxStats, &allStats); err == nil {
-					var skaTxs uint64
-					for _, stats := range allStats {
-						for _, st := range stats {
-							skaTxs += uint64(st.TxCount)
-						}
-					}
-					if skaTxs > txs {
-						txs = skaTxs
-					}
-				}
-			}
-		}
+		txs = parseCoinTxStats(coinTxStats, txs)
 
 		endBlock := startBlock + windowSize - 1
 		index := dbtypes.CalculateWindowIndex(endBlock, windowSize)
@@ -949,23 +961,7 @@ func retrieveTimeBasedBlockListing(ctx context.Context, db *sql.DB, timeInterval
 			return nil, err
 		}
 
-		if len(coinTxStats) > 0 {
-			coinTxStats = bytes.Trim(coinTxStats, "\x00")
-			if len(coinTxStats) > 2 {
-				var allStats []map[string]dbtypes.CoinTxStats
-				if err := json.Unmarshal(coinTxStats, &allStats); err == nil {
-					var skaTxs uint64
-					for _, stats := range allStats {
-						for _, st := range stats {
-							skaTxs += uint64(st.TxCount)
-						}
-					}
-					if skaTxs > txs {
-						txs = skaTxs
-					}
-				}
-			}
-		}
+		txs = parseCoinTxStats(coinTxStats, txs)
 
 		data = append(data, &dbtypes.BlocksGroupedInfo{
 			EndBlock:           endBlock,
