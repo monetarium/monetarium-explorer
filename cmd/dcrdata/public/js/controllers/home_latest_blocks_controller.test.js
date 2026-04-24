@@ -59,7 +59,7 @@ function appendBlock(tbody, height, skaCoinRows = []) {
   const subRowCount = 1 + skaCoinRows.length
   for (let i = 0; i < subRowCount; i++) {
     const tr = document.createElement('tr')
-    tr.className = 'ska-sub-row'
+    tr.className = 'coin-sub-row'
     tr.dataset.skaAccordionTarget = 'subRow'
     tr.dataset.blockId = String(height)
     tbody.appendChild(tr)
@@ -84,7 +84,7 @@ function buildTable(topHeight, blockCount = 1, skaCoinRows = []) {
   </tr>
 </template>
 <template id="home-var-sub-row-template">
-  <tr class="ska-sub-row" data-ska-accordion-target="subRow">
+  <tr class="coin-sub-row" data-ska-accordion-target="subRow">
     <td class="text-end ps-2 ps-sm-4" data-type="sub-label"><span class="coin-label coin-label--var">VAR</span></td>
     <td class="text-end num" data-type="tx"></td>
     <td class="text-end num" data-type="var-amount"></td>
@@ -97,7 +97,7 @@ function buildTable(topHeight, blockCount = 1, skaCoinRows = []) {
   </tr>
 </template>
 <template id="home-ska-sub-row-template">
-  <tr class="ska-sub-row" data-ska-accordion-target="subRow">
+  <tr class="coin-sub-row" data-ska-accordion-target="subRow">
     <td class="text-end ps-2 ps-sm-4" data-type="sub-label"><span class="coin-label coin-label--ska"></span></td>
     <td class="text-end num" data-type="tx"></td>
     <td class="text-end">—</td>
@@ -296,7 +296,7 @@ describe('blocklist_controller — Property 8: WebSocket block prepend matches s
         'tr[data-block-id="1001"][data-ska-accordion-target="blockRow"]'
       )
       const varRow = row.nextElementSibling
-      expect(varRow.classList.contains('ska-sub-row')).toBe(true)
+      expect(varRow.classList.contains('coin-sub-row')).toBe(true)
       expect(varRow.dataset.blockId).toBe('1001')
     })
 
@@ -326,7 +326,7 @@ describe('blocklist_controller — Property 8: WebSocket block prepend matches s
       const row = tbody.querySelector(
         'tr[data-block-id="1001"][data-ska-accordion-target="blockRow"]'
       )
-      expect(row.nextElementSibling.classList.contains('ska-sub-row--visible')).toBe(false)
+      expect(row.nextElementSibling.classList.contains('coin-sub-row--visible')).toBe(false)
     })
   })
 
@@ -371,7 +371,7 @@ describe('blocklist_controller — Property 8: WebSocket block prepend matches s
       tbody
         .querySelectorAll('tr[data-block-id="1001"][data-ska-accordion-target="subRow"]')
         .forEach((r) => {
-          expect(r.classList.contains('ska-sub-row--visible')).toBe(false)
+          expect(r.classList.contains('coin-sub-row--visible')).toBe(false)
         })
     })
   })
@@ -431,9 +431,9 @@ describe('blocklist_controller — Property 8: WebSocket block prepend matches s
           )
           expect(subs.length).toBe(1 + (hasSKA ? skaCoinRows.length : 0))
           subs.forEach((r) => {
-            expect(r.classList.contains('ska-sub-row')).toBe(true)
+            expect(r.classList.contains('coin-sub-row')).toBe(true)
             expect(r.dataset.blockId).toBe(String(height))
-            expect(r.classList.contains('ska-sub-row--visible')).toBe(false)
+            expect(r.classList.contains('coin-sub-row--visible')).toBe(false)
             expect(r.querySelectorAll('td').length).toBe(9)
           })
 
@@ -852,7 +852,7 @@ describe('blocklist_controller — home-block-table-hierarchy property tests', (
   })
 
   // Feature: home-block-table-hierarchy, Property 10: All sub-rows carry subordination class
-  it('Property 10: all sub-rows carry ska-sub-row class', () => {
+  it('Property 10: all sub-rows carry coin-sub-row class', () => {
     fc.assert(
       fc.property(
         fc.integer({ min: 1, max: 999999 }),
@@ -875,7 +875,7 @@ describe('blocklist_controller — home-block-table-hierarchy property tests', (
             `tr[data-block-id="${height}"][data-ska-accordion-target="subRow"]`
           )
           allSubs.forEach((r) => {
-            expect(r.classList.contains('ska-sub-row')).toBe(true)
+            expect(r.classList.contains('coin-sub-row')).toBe(true)
           })
         }
       ),

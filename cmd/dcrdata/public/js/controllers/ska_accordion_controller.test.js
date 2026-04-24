@@ -38,7 +38,7 @@ function buildDOM(blockId, subRowCount) {
   const subRows = []
   for (let i = 0; i < subRowCount; i++) {
     const tr = document.createElement('tr')
-    tr.className = 'ska-sub-row'
+    tr.className = 'coin-sub-row'
     tr.dataset.blockId = String(blockId)
     tr.dataset.skaAccordionTarget = 'subRow'
     tbody.appendChild(tr)
@@ -93,9 +93,9 @@ describe('ska_accordion_controller — unit tests', () => {
       ;({ blockRow, subRows, ctrl } = buildDOM(7, 2))
     })
 
-    it('adds ska-sub-row--visible to all sub-rows on first click', () => {
+    it('adds coin-sub-row--visible to all sub-rows on first click', () => {
       clickRow(blockRow, ctrl)
-      subRows.forEach((r) => expect(r.classList.contains('ska-sub-row--visible')).toBe(true))
+      subRows.forEach((r) => expect(r.classList.contains('coin-sub-row--visible')).toBe(true))
     })
 
     it('adds is-expanded to the block row on first click', () => {
@@ -103,10 +103,10 @@ describe('ska_accordion_controller — unit tests', () => {
       expect(blockRow.classList.contains('is-expanded')).toBe(true)
     })
 
-    it('removes ska-sub-row--visible on second click (collapse)', () => {
+    it('removes coin-sub-row--visible on second click (collapse)', () => {
       clickRow(blockRow, ctrl)
       clickRow(blockRow, ctrl)
-      subRows.forEach((r) => expect(r.classList.contains('ska-sub-row--visible')).toBe(false))
+      subRows.forEach((r) => expect(r.classList.contains('coin-sub-row--visible')).toBe(false))
     })
 
     it('removes is-expanded on second click (collapse)', () => {
@@ -130,7 +130,7 @@ describe('ska_accordion_controller — unit tests', () => {
         const subs = []
         for (let i = 0; i < subRowCount; i++) {
           const tr = document.createElement('tr')
-          tr.className = 'ska-sub-row'
+          tr.className = 'coin-sub-row'
           tr.dataset.blockId = String(id)
           tr.dataset.skaAccordionTarget = 'subRow'
           tbody.appendChild(tr)
@@ -154,11 +154,11 @@ describe('ska_accordion_controller — unit tests', () => {
       clickRow(row1, ctrl)
 
       // Block 100 sub-rows expanded
-      subs1.forEach((r) => expect(r.classList.contains('ska-sub-row--visible')).toBe(true))
+      subs1.forEach((r) => expect(r.classList.contains('coin-sub-row--visible')).toBe(true))
       expect(row1.classList.contains('is-expanded')).toBe(true)
 
       // Block 200 sub-rows untouched
-      subs2.forEach((r) => expect(r.classList.contains('ska-sub-row--visible')).toBe(false))
+      subs2.forEach((r) => expect(r.classList.contains('coin-sub-row--visible')).toBe(false))
       expect(row2.classList.contains('is-expanded')).toBe(false)
     })
   })

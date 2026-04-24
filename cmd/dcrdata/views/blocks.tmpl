@@ -123,7 +123,7 @@
           <td class="text-end px-0" data-type="age" data-time-target="age" data-age="{{.BlockTime.UNIX}}"></td>
           <td class="text-end px-0" data-type="time">{{.BlockTime.DatetimeWithoutTZ}}</td>
         </tr>
-        <tr class="ska-sub-row" data-ska-accordion-target="subRow" data-block-id="{{$blockHeight}}">
+        <tr class="coin-sub-row" data-ska-accordion-target="subRow" data-block-id="{{$blockHeight}}">
           <td class="text-end ps-2 ps-sm-4" data-type="sub-label"><span class="coin-label coin-label--var">VAR</span>
           </td>
           <td class="text-center" data-type="tx">{{if .VARTxCount}}{{.VARTxCount}}{{else}}—{{end}}</td>
@@ -139,7 +139,7 @@
           <td class="text-end px-0" data-type="time">—</td>
         </tr>
         {{range .SKASubRows}}
-        <tr class="ska-sub-row" data-ska-accordion-target="subRow" data-block-id="{{$blockHeight}}">
+        <tr class="coin-sub-row" data-ska-accordion-target="subRow" data-block-id="{{$blockHeight}}">
           <td class="text-end ps-2 ps-sm-4" data-type="sub-label"><span
               class="coin-label coin-label--ska">{{.TokenType}}</span></td>
           <td class="text-center" data-type="tx_count">{{.TxCount}}</td>

@@ -103,11 +103,11 @@ body.darkBG {
       border-bottom: 1px solid #2d2d2d;
     }
 
-    .ska-sub-row--visible {
+    .coin-sub-row--visible {
       background-color: $card-bg-secondary-dark;
     }
 
-    .ska-sub-row {
+    .coin-sub-row {
       color: #c1c1c1; // matches existing .text-secondary dark override
     }
   }
@@ -237,7 +237,7 @@ body.darkBG {
     color: $dark-link-hover-color;
   }
 
-  .ska-sub-row--visible td:first-child {
+  .coin-sub-row--visible td:first-child {
     box-shadow:
       inset 3px 0 0 0 #4a5568,
       inset 0 0 0 9999px var(--bs-table-accent-bg);

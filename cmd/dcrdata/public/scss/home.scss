@@ -145,7 +145,7 @@ $col-min-widths-sm: (
 
 // Sub-row vertical anchor — inset box-shadow avoids layout shift.
 // The second shadow preserves Bootstrap's --bs-table-accent-bg hover tint.
-.ska-sub-row--visible td:first-child {
+.coin-sub-row--visible td:first-child {
   box-shadow:
     inset 3px 0 0 0 $sub-row-anchor-color,
     inset 0 0 0 9999px var(--bs-table-accent-bg);
