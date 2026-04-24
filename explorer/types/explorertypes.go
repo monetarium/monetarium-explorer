@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/dustin/go-humanize"
 	"github.com/monetarium/monetarium-explorer/db/dbtypes"
 	"github.com/monetarium/monetarium-explorer/txhelpers"
 	"github.com/monetarium/monetarium-node/blockchain/stake"
@@ -135,7 +136,7 @@ type BlockBasic struct {
 	// Flattened fields derived from CoinRows for template rendering.
 	VARAmount  string
 	VARTxCount int
-	VARSize    uint32
+	VARSize    string
 	SKAAmount  string
 	SKASubRows []SKASubRow
 }
@@ -148,13 +149,13 @@ func (b *BlockBasic) FlattenCoinRows() {
 		if row.CoinType == 0 {
 			b.VARAmount = row.Amount
 			b.VARTxCount = row.TxCount
-			b.VARSize = row.Size
+			b.VARSize = humanize.Bytes(uint64(row.Size))
 		} else {
 			b.SKASubRows = append(b.SKASubRows, SKASubRow{
 				TokenType: row.Symbol,
 				TxCount:   row.TxCount,
 				Amount:    row.Amount,
-				Size:      row.Size,
+				Size:      humanize.Bytes(uint64(row.Size)),
 			})
 			// Use the first SKA row's amount as the summary; callers may
 			// override SKAAmount with an aggregate if needed.
@@ -492,7 +493,7 @@ type SKASubRow struct {
 	TokenType string
 	TxCount   int
 	Amount    string
-	Size      uint32
+	Size      string
 }
 
 // VARCoinSupply holds VAR circulating supply and target cap.

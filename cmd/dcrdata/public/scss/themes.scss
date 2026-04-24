@@ -102,6 +102,14 @@ body.darkBG {
       color: #fdfdfd; // Set this explicitly to prevent bootstrap > 4.3.1 override
       border-bottom: 1px solid #2d2d2d;
     }
+
+    .ska-sub-row--visible {
+      background-color: $card-bg-secondary-dark;
+    }
+
+    .ska-sub-row {
+      color: #c1c1c1; // matches existing .text-secondary dark override
+    }
   }
 
   table.v3 thead tr {

@@ -82,26 +82,6 @@ body.darkBG .dark-card {
   background-color: #333;
 }
 
-// SKA accordion sub-rows
-.ska-sub-row {
-  display: none;
-  font-size: 0.85em; // ~12px at 14px base; above the 11px floor
-  color: #6c757d; // Bootstrap text-secondary equivalent
-
-  &--visible {
-    display: table-row;
-    background-color: $card-bg-secondary;
-  }
-}
-
-body.darkBG .ska-sub-row--visible {
-  background-color: $card-bg-secondary-dark;
-}
-
-body.darkBG .ska-sub-row {
-  color: #c1c1c1; // matches existing .text-secondary dark override
-}
-
 .last-blocks-table td,
 .last-blocks-table th {
   white-space: nowrap;
@@ -147,7 +127,7 @@ $col-min-widths: (
 }
 
 $col-min-widths-sm: (
-  1: calc(96px)
+  1: 96px
 );
 
 @media (min-width: $breakpoint-sm) {
@@ -210,17 +190,11 @@ $col-min-widths-sm: (
   opacity: 0.4;
 }
 
-.last-blocks-table .block-row-expandable.is-expanded .chevron {
-  transform: rotate(90deg);
-  opacity: 1;
-}
-
-// Coin label dots — colored ::before pseudo-element, no layout impact
 .coin-label {
   display: inline-flex;
   align-items: center;
   text-align: left;
-  width: 60.2px; // SKA-nnn with its colored dot
+  width: 8ch; // SKA{NNN} with its colored dot
 
   &::before {
     content: "";
