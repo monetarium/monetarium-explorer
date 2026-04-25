@@ -82,59 +82,40 @@ body.darkBG .dark-card {
   background-color: #333;
 }
 
-.last-blocks-table td,
-.last-blocks-table th {
+.latest-blocks-table td,
+.latest-blocks-table th {
   white-space: nowrap;
 }
 
 // VAR and SKA amount cells may contain longer formatted strings on small
 // screens. Allow them to wrap and break rather than stretching the table.
-.last-blocks-table td[data-type="var-amount"],
-.last-blocks-table td[data-type="ska-amount"] {
+.latest-blocks-table td[data-type="var-amount"],
+.latest-blocks-table td[data-type="ska-amount"] {
   white-space: normal !important;
   word-break: break-all;
 }
 
-// Column minimum widths — single source of truth.
-// Sized to the widest expected content so expanding sub-rows never shift columns.
-// Formula: max-content-chars × 1ch + Bootstrap cell padding (0.5rem/side = 1rem total).
-// Col  Max content
-// 1    "1,878,074" / "SKA-255"
-// 2    Txn "9999"
-// 3    VAR "100.00B"
-// 4    SKA "100.00B"
-// 5    Size "999.9 MB"
-// 6    Vote "5"
-// 7    Tkt  "5"
-// 8    Rev  "3"
-// 9    Age  "22m 48s"
 $col-min-widths: (
-  1: calc(9ch + 1rem),
+  1: calc(8ch + 1rem),
   2: calc(2ch + 1rem),
   3: calc(5ch + 1rem),
   4: calc(5ch + 1rem),
-  5: calc(6ch + 1rem),
+  5: calc(2ch + 1rem),
   6: calc(2ch + 1rem),
   7: calc(2ch + 1rem),
   8: calc(2ch + 1rem),
-  9: calc(6ch + 1rem)
+  9: calc(2ch + 1rem)
 );
 
 @each $n, $w in $col-min-widths {
-  .last-blocks-table th:nth-child(#{$n}) {
+  .latest-blocks-table th:nth-child(#{$n}) {
     min-width: $w;
   }
 }
 
-$col-min-widths-sm: (
-  1: 96px
-);
-
 @media (min-width: $breakpoint-sm) {
-  @each $n, $w in $col-min-widths-sm {
-    .last-blocks-table th:nth-child(#{$n}) {
-      min-width: $w;
-    }
+  .latest-blocks-table th:nth-child(1) {
+    min-width: calc(8ch + 3rem);
   }
 }
 
@@ -151,28 +132,28 @@ $col-min-widths-sm: (
     inset 0 0 0 9999px var(--bs-table-accent-bg);
 }
 
-.last-blocks-table .block-row-expandable.is-expanded td {
+.latest-blocks-table .block-row-expandable.is-expanded td {
   border-bottom-color: transparent;
 }
 
 // 1. Desktop Hover: Only applies when a real mouse/pointer is used
 @media (hover: hover) and (pointer: fine) {
-  .last-blocks-table .block-row-expandable:hover td {
+  .latest-blocks-table .block-row-expandable:hover td {
     background-color: $block-row-hover;
   }
 
-  body.darkBG .last-blocks-table .block-row-expandable:hover td {
+  body.darkBG .latest-blocks-table .block-row-expandable:hover td {
     background-color: $block-row-hover-dark;
   }
 }
 
 // 2. Kill sticky hover on mobile
 @media (hover: none) {
-  .last-blocks-table .block-row-expandable:hover td {
+  .latest-blocks-table .block-row-expandable:hover td {
     background-color: inherit;
   }
 
-  body.darkBG .last-blocks-table .block-row-expandable:hover td {
+  body.darkBG .latest-blocks-table .block-row-expandable:hover td {
     background-color: inherit;
   }
 }

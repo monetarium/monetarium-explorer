@@ -83,7 +83,6 @@ const humanize = {
     try {
       atoms = BigInt(atomStr)
     } catch {
-      // eslint-disable-line no-unused-vars
       return '0'
     }
 
