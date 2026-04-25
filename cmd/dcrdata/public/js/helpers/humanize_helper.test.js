@@ -170,3 +170,34 @@ describe('humanize.formatCoinAtomsFull', () => {
   it('coinType 2 uses same 18-decimal SKA rules', () =>
     expect(humanize.formatCoinAtomsFull('1230000000000000000', 2)).toBe('1.23'))
 })
+
+describe('humanize.bytes', () => {
+  // sub-10: raw bytes with space
+  it('formats 0 as "0 B"', () => expect(humanize.bytes(0)).toBe('0 B'))
+  it('formats 1 as "1 B"', () => expect(humanize.bytes(1)).toBe('1 B'))
+  it('formats 9 as "9 B"', () => expect(humanize.bytes(9)).toBe('9 B'))
+
+  // boundary: 10 bytes enters the scaled path
+  it('formats 10 as "10 B"', () => expect(humanize.bytes(10)).toBe('10 B'))
+  it('formats 999 as "999 B"', () => expect(humanize.bytes(999)).toBe('999 B'))
+
+  // kB range — one decimal place when val < 10, zero when val >= 10
+  // key regression: trailing zero must be preserved (4.0 kB, not 4 kB)
+  it('formats 4000 as "4.0 kB"', () => expect(humanize.bytes(4000)).toBe('4.0 kB'))
+  it('formats 4096 as "4.1 kB"', () => expect(humanize.bytes(4096)).toBe('4.1 kB'))
+  it('formats 1000 as "1.0 kB"', () => expect(humanize.bytes(1000)).toBe('1.0 kB'))
+  it('formats 1500 as "1.5 kB"', () => expect(humanize.bytes(1500)).toBe('1.5 kB'))
+  it('formats 9900 as "9.9 kB"', () => expect(humanize.bytes(9900)).toBe('9.9 kB'))
+  it('formats 10000 as "10 kB"', () => expect(humanize.bytes(10000)).toBe('10 kB'))
+  it('formats 99000 as "99 kB"', () => expect(humanize.bytes(99000)).toBe('99 kB'))
+  it('formats 6570 as "6.6 kB"', () => expect(humanize.bytes(6570)).toBe('6.6 kB'))
+
+  // MB range
+  it('formats 1000000 as "1.0 MB"', () => expect(humanize.bytes(1000000)).toBe('1.0 MB'))
+  it('formats 2930000 as "2.9 MB"', () => expect(humanize.bytes(2930000)).toBe('2.9 MB'))
+  it('formats 10000000 as "10 MB"', () => expect(humanize.bytes(10000000)).toBe('10 MB'))
+
+  // GB range
+  it('formats 1000000000 as "1.0 GB"', () => expect(humanize.bytes(1000000000)).toBe('1.0 GB'))
+  it('formats 10000000000 as "10 GB"', () => expect(humanize.bytes(10000000000)).toBe('10 GB'))
+})

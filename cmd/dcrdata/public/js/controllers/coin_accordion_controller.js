@@ -16,8 +16,8 @@ export default class extends Controller {
     const blockId = row.dataset.blockId
     const subRows = this.subRowTargets.filter((r) => r.dataset.blockId === blockId)
     if (subRows.length === 0) return
-    const isExpanded = subRows[0].classList.contains('ska-sub-row--visible')
-    subRows.forEach((r) => r.classList.toggle('ska-sub-row--visible', !isExpanded))
+    const isExpanded = subRows[0].classList.contains('coin-sub-row--visible')
+    subRows.forEach((r) => r.classList.toggle('coin-sub-row--visible', !isExpanded))
     row.classList.toggle('is-expanded', !isExpanded)
   }
 }

@@ -1,10 +1,10 @@
 {{define "home_latest_blocks"}}
-  <table class="table w-100 mt-2 mx-auto mb-0 last-blocks-table">
+  <table class="table w-100 mt-2 mx-auto mb-0 latest-blocks-table">
     <thead>
       <tr>
         <th class="text-start ps-2 position-relative" data-tooltip="block height">Height</th>
         <th class="text-end position-relative" data-tooltip="number of transactions">
-          <span class="d-md-none">Txn</span>
+          <span class="d-md-none">Txns</span>
           <span class="d-none d-md-inline">Transactions</span>
         </th>
         <th class="text-end position-relative" data-tooltip="total VAR amount">VAR</th>
@@ -25,16 +25,16 @@
         <th class="text-end position-relative" data-time-target="header" data-jstitle="Age" data-tooltip="block age">Age</th>
       </tr>
     </thead>
-    <tbody data-controller="ska-accordion" data-home-latest-blocks-target="table">
+    <tbody data-controller="coin-accordion" data-home-latest-blocks-target="table">
       {{range .Blocks}}
       {{$blockHeight := .Height}}
       <tr
         class="block-row-expandable"
-        data-ska-accordion-target="blockRow"
+        data-coin-accordion-target="blockRow"
         data-block-id="{{.Height}}"
         data-height="{{.Height}}"
         data-link-class="fs18"
-        data-action="click->ska-accordion#toggle"
+        data-action="click->coin-accordion#toggle"
       >
         <td class="text-start ps-1" data-type="height">
           <span class="chevron me-1"></span>
@@ -51,7 +51,7 @@
           {{.BlockTime.DatetimeWithoutTZ}}
         </td>
       </tr>
-      <tr class="ska-sub-row" data-ska-accordion-target="subRow" data-block-id="{{$blockHeight}}">
+      <tr class="coin-sub-row" data-coin-accordion-target="subRow" data-block-id="{{$blockHeight}}">
         <td class="text-end ps-2 ps-sm-4" data-type="sub-label"><span class="coin-label coin-label--var">VAR</span></td>
         <td class="text-end num" data-type="tx">{{if .VARTxCount}}{{.VARTxCount}}{{else}}—{{end}}</td>
         <td class="text-end num" data-type="var-amount">{{.VARAmount}}</td>
@@ -63,7 +63,7 @@
         <td class="text-end">—</td>
       </tr>
       {{range .SKASubRows}}
-      <tr class="ska-sub-row" data-ska-accordion-target="subRow" data-block-id="{{$blockHeight}}">
+      <tr class="coin-sub-row" data-coin-accordion-target="subRow" data-block-id="{{$blockHeight}}">
         <td class="text-end ps-2 ps-sm-4" data-type="sub-label"><span class="coin-label coin-label--ska">{{.TokenType}}</span></td>
         <td class="text-end num" data-type="tx">{{.TxCount}}</td>
         <td class="text-end">—</td>
@@ -83,9 +83,9 @@
 <template id="home-block-row-template">
   <tr
     class="block-row-expandable"
-    data-ska-accordion-target="blockRow"
+    data-coin-accordion-target="blockRow"
     data-block-id=""
-    data-action="click->ska-accordion#toggle"
+    data-action="click->coin-accordion#toggle"
   >
     <td class="text-start ps-1" data-type="height">
       <span class="chevron me-1"></span>
@@ -103,7 +103,7 @@
 </template>
 
 <template id="home-var-sub-row-template">
-  <tr class="ska-sub-row" data-ska-accordion-target="subRow" data-block-id="">
+  <tr class="coin-sub-row" data-coin-accordion-target="subRow" data-block-id="">
     <td class="text-end ps-2 ps-sm-4" data-type="sub-label"><span class="coin-label coin-label--var">VAR</span></td>
     <td class="text-end num" data-type="tx"></td>
     <td class="text-end num" data-type="var-amount"></td>
@@ -117,7 +117,7 @@
 </template>
 
 <template id="home-ska-sub-row-template">
-  <tr class="ska-sub-row" data-ska-accordion-target="subRow" data-block-id="">
+  <tr class="coin-sub-row" data-coin-accordion-target="subRow" data-block-id="">
     <td class="text-end ps-2 ps-sm-4" data-type="sub-label"><span class="coin-label coin-label--ska"></span></td>
     <td class="text-end num" data-type="tx"></td>
     <td class="text-end">—</td>

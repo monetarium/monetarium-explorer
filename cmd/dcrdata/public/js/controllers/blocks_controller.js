@@ -11,7 +11,6 @@ export default class extends Controller {
   connect() {
     this.processBlock = this._processBlock.bind(this)
     globalEventBus.on('BLOCK_RECEIVED', this.processBlock)
-    this.pageOffset = this.data.get('initialOffset')
   }
 
   disconnect() {
@@ -28,9 +27,11 @@ export default class extends Controller {
     const lastHeight = parseInt(firstBlockRow.dataset.height)
 
     if (block.height === lastHeight) {
+      // Re-broadcast of the current top block — replace all its rows.
       const toRemove = this.tableTarget.querySelectorAll(`tr[data-block-id="${lastHeight}"]`)
       toRemove.forEach((r) => this.tableTarget.removeChild(r))
     } else if (block.height === lastHeight + 1) {
+      // New block — drop the last block's rows to keep the page length stable.
       const lastBlockRow = blockRows[blockRows.length - 1]
       const oldHeight = lastBlockRow.dataset.blockId
       const toRemove = this.tableTarget.querySelectorAll(`tr[data-block-id="${oldHeight}"]`)
@@ -45,13 +46,12 @@ export default class extends Controller {
       'tr[data-coin-accordion-target="blockRow"]'
     )
 
-    const tmpl = document.getElementById('home-block-row-template')
+    const tmpl = document.getElementById('blocks-block-row-template')
     if (!tmpl) return
     const clone = document.importNode(tmpl.content, true)
     const newRow = clone.querySelector('tr')
 
     newRow.dataset.height = block.height
-    newRow.dataset.linkClass = firstBlockRow.dataset.linkClass
     newRow.dataset.blockId = String(block.height)
     newRow.dataset.coinAccordionTarget = 'blockRow'
     newRow.dataset.action = 'click->coin-accordion#toggle'
@@ -59,7 +59,6 @@ export default class extends Controller {
     const link = clone.querySelector('[data-type="height"] a')
     link.href = `/block/${block.height}`
     link.textContent = block.height
-    link.classList.add(firstBlockRow.dataset.linkClass)
 
     clone.querySelector('[data-type="tx"]').textContent = String(totalTxCount)
     clone.querySelector('[data-type="var-amount"]').textContent = varAmount
@@ -68,13 +67,14 @@ export default class extends Controller {
     clone.querySelector('[data-type="votes"]').textContent = block.votes
     clone.querySelector('[data-type="tickets"]').textContent = block.tickets
     clone.querySelector('[data-type="revocations"]').textContent = block.revocations
+    clone.querySelector('[data-type="version"]').textContent = block.version || '—'
 
     const ageTd = clone.querySelector('[data-type="age"]')
     ageTd.dataset.age = block.unixStamp
     ageTd.textContent = humanize.timeSince(block.unixStamp)
 
-    // Insert the new block row before the current first block row (re-queried
-    // after removals since the original firstBlockRow may have been detached).
+    clone.querySelector('[data-type="time"]').textContent = humanize.date(block.time, false)
+
     this.tableTarget.insertBefore(newRow, currentFirstBlockRow)
     const varSubRow = insertVARSubRow(
       this.tableTarget,
@@ -82,14 +82,14 @@ export default class extends Controller {
       varTxCount,
       varAmount,
       varSize,
-      'home-var-sub-row-template'
+      'blocks-var-sub-row-template'
     )
     insertSKASubRows(
       this.tableTarget,
       varSubRow,
       subRows,
       block.height,
-      'home-ska-sub-row-template'
+      'blocks-ska-sub-row-template'
     )
   }
 }

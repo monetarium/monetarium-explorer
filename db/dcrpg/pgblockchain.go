@@ -6419,6 +6419,9 @@ func (pgb *ChainDB) GetExplorerBlocks(ctx context.Context, start int, end int) [
 			if summary := pgb.GetSummaryByHash(ctx, data.Hash, false); summary != nil {
 				block.CoinRows = coinRowsFromSummary(summary, issuedSKA)
 			}
+			// Flatten CoinRows into template-facing fields so the blocks
+			// template can use VARAmount/SKAAmount/SKASubRows directly.
+			block.FlattenCoinRows()
 		}
 		summaries = append(summaries, block)
 	}

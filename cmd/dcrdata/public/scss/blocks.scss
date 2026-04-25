@@ -1,0 +1,33 @@
+$blocks-col-min-widths: (
+  1: calc(8ch + 1rem),
+  2: calc(2ch + 1rem),
+  3: calc(2ch + 1rem),
+  4: calc(2ch + 1rem),
+  5: calc(2ch + 1rem),
+  6: calc(2ch + 1rem),
+  7: calc(2ch + 1rem),
+  8: calc(2ch + 1rem),
+  9: calc(2ch + 1rem),
+  10: calc(2ch + 1rem),
+  11: calc(2ch + 1rem)
+);
+
+@each $n, $w in $blocks-col-min-widths {
+  .blocks-table th:nth-child(#{$n}) {
+    min-width: $w;
+  }
+}
+
+@media (min-width: $breakpoint-sm) {
+  .blocks-table th:nth-child(1) {
+    min-width: calc(8ch + 3rem);
+  }
+}
+
+// VAR and SKA amount cells may contain longer formatted strings on small
+// screens. Allow them to wrap and break rather than stretching the table.
+.blocks-table td[data-type="var-amount"],
+.blocks-table td[data-type="ska-amount"] {
+  white-space: normal !important;
+  word-break: break-all;
+}

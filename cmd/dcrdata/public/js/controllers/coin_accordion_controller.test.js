@@ -16,7 +16,7 @@ vi.mock('@hotwired/stimulus', () => ({
   }
 }))
 
-const { default: SkaAccordionController } = await import('./ska_accordion_controller.js')
+const { default: CoinAccordionController } = await import('./coin_accordion_controller.js')
 
 /**
  * Build a minimal DOM fragment for one block and attach a controller instance.
@@ -31,26 +31,26 @@ function buildDOM(blockId, subRowCount) {
   // Block row — the whole row is the click target (data-action on the tr).
   const blockRow = document.createElement('tr')
   blockRow.dataset.blockId = String(blockId)
-  blockRow.dataset.skaAccordionTarget = 'blockRow'
+  blockRow.dataset.coinAccordionTarget = 'blockRow'
   tbody.appendChild(blockRow)
 
   // Sub-rows
   const subRows = []
   for (let i = 0; i < subRowCount; i++) {
     const tr = document.createElement('tr')
-    tr.className = 'ska-sub-row'
+    tr.className = 'coin-sub-row'
     tr.dataset.blockId = String(blockId)
-    tr.dataset.skaAccordionTarget = 'subRow'
+    tr.dataset.coinAccordionTarget = 'subRow'
     tbody.appendChild(tr)
     subRows.push(tr)
   }
 
   // Wire up controller with target resolution
-  const ctrl = new SkaAccordionController(tbody)
+  const ctrl = new CoinAccordionController(tbody)
   ctrl.blockRowTargets = Array.from(
-    tbody.querySelectorAll('[data-ska-accordion-target="blockRow"]')
+    tbody.querySelectorAll('[data-coin-accordion-target="blockRow"]')
   )
-  ctrl.subRowTargets = Array.from(tbody.querySelectorAll('[data-ska-accordion-target="subRow"]'))
+  ctrl.subRowTargets = Array.from(tbody.querySelectorAll('[data-coin-accordion-target="subRow"]'))
 
   return { tbody, blockRow, subRows, ctrl }
 }
@@ -93,9 +93,9 @@ describe('ska_accordion_controller — unit tests', () => {
       ;({ blockRow, subRows, ctrl } = buildDOM(7, 2))
     })
 
-    it('adds ska-sub-row--visible to all sub-rows on first click', () => {
+    it('adds coin-sub-row--visible to all sub-rows on first click', () => {
       clickRow(blockRow, ctrl)
-      subRows.forEach((r) => expect(r.classList.contains('ska-sub-row--visible')).toBe(true))
+      subRows.forEach((r) => expect(r.classList.contains('coin-sub-row--visible')).toBe(true))
     })
 
     it('adds is-expanded to the block row on first click', () => {
@@ -103,10 +103,10 @@ describe('ska_accordion_controller — unit tests', () => {
       expect(blockRow.classList.contains('is-expanded')).toBe(true)
     })
 
-    it('removes ska-sub-row--visible on second click (collapse)', () => {
+    it('removes coin-sub-row--visible on second click (collapse)', () => {
       clickRow(blockRow, ctrl)
       clickRow(blockRow, ctrl)
-      subRows.forEach((r) => expect(r.classList.contains('ska-sub-row--visible')).toBe(false))
+      subRows.forEach((r) => expect(r.classList.contains('coin-sub-row--visible')).toBe(false))
     })
 
     it('removes is-expanded on second click (collapse)', () => {
@@ -124,15 +124,15 @@ describe('ska_accordion_controller — unit tests', () => {
       function addBlock(id, subRowCount) {
         const blockRow = document.createElement('tr')
         blockRow.dataset.blockId = String(id)
-        blockRow.dataset.skaAccordionTarget = 'blockRow'
+        blockRow.dataset.coinAccordionTarget = 'blockRow'
         tbody.appendChild(blockRow)
 
         const subs = []
         for (let i = 0; i < subRowCount; i++) {
           const tr = document.createElement('tr')
-          tr.className = 'ska-sub-row'
+          tr.className = 'coin-sub-row'
           tr.dataset.blockId = String(id)
-          tr.dataset.skaAccordionTarget = 'subRow'
+          tr.dataset.coinAccordionTarget = 'subRow'
           tbody.appendChild(tr)
           subs.push(tr)
         }
@@ -142,23 +142,23 @@ describe('ska_accordion_controller — unit tests', () => {
       const { blockRow: row1, subs: subs1 } = addBlock(100, 2)
       const { blockRow: row2, subs: subs2 } = addBlock(200, 3)
 
-      const ctrl = new SkaAccordionController(tbody)
+      const ctrl = new CoinAccordionController(tbody)
       ctrl.blockRowTargets = Array.from(
-        tbody.querySelectorAll('[data-ska-accordion-target="blockRow"]')
+        tbody.querySelectorAll('[data-coin-accordion-target="blockRow"]')
       )
       ctrl.subRowTargets = Array.from(
-        tbody.querySelectorAll('[data-ska-accordion-target="subRow"]')
+        tbody.querySelectorAll('[data-coin-accordion-target="subRow"]')
       )
 
       // Click block 100
       clickRow(row1, ctrl)
 
       // Block 100 sub-rows expanded
-      subs1.forEach((r) => expect(r.classList.contains('ska-sub-row--visible')).toBe(true))
+      subs1.forEach((r) => expect(r.classList.contains('coin-sub-row--visible')).toBe(true))
       expect(row1.classList.contains('is-expanded')).toBe(true)
 
       // Block 200 sub-rows untouched
-      subs2.forEach((r) => expect(r.classList.contains('ska-sub-row--visible')).toBe(false))
+      subs2.forEach((r) => expect(r.classList.contains('coin-sub-row--visible')).toBe(false))
       expect(row2.classList.contains('is-expanded')).toBe(false)
     })
   })
