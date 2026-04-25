@@ -148,7 +148,11 @@ func (b *BlockBasic) FlattenCoinRows() {
 	for _, row := range b.CoinRows {
 		if row.CoinType == 0 {
 			b.VARAmount = row.Amount
-			b.VARTxCount = row.TxCount
+			// Subtract votes, tickets, and revocations to get regular VAR txs.
+			b.VARTxCount = row.TxCount - int(b.Voters) - int(b.FreshStake) - int(b.Revocations)
+			if b.VARTxCount < 0 {
+				b.VARTxCount = 0
+			}
 			b.VARSize = humanize.Bytes(uint64(row.Size))
 		} else {
 			b.SKASubRows = append(b.SKASubRows, SKASubRow{
