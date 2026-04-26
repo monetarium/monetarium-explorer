@@ -61,8 +61,8 @@ export default class extends Controller {
       const trailEl = clone.querySelector('.trailing-zeroes')
 
       if (intEl) intEl.textContent = bold ? `${intPart}.${bold}` : intPart
-      if (decEl) decEl.textContent = rest
-      if (trailEl) trailEl.textContent = trailingZeros
+      if (decEl) decEl.textContent = bold ? rest : ''
+      if (trailEl) trailEl.textContent = bold ? trailingZeros : ''
 
       clone.querySelectorAll('.symbol').forEach((el) => {
         el.textContent = r.symbol

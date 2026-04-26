@@ -56,9 +56,11 @@ const humanize = {
     let htmlString = '<div class="decimal-parts d-inline-block">'
 
     if (!isNaN(lgDecimals) && lgDecimals > 0) {
+      const lgPart = decimalVals.substring(0, lgDecimals)
+      const restPart = decimalVals.substring(lgDecimals)
       htmlString +=
-        `<span class="int">${int}.${decimalVals.substring(0, lgDecimals)}</span>` +
-        `<span class="decimal">${decimalVals.substring(lgDecimals, decimalVals.length)}</span>` +
+        `<span class="int">${lgPart ? `${int}.${lgPart}` : int}</span>` +
+        `<span class="decimal">${restPart}</span>` +
         `<span class="decimal trailing-zeroes"></span>`
     } else if (precision !== 0) {
       htmlString +=
