@@ -33,12 +33,11 @@ const humanize = {
     sign = sign + val.toFixed(2)
     return `<span class="${cssClass}">${sign} % </span>`
   },
-  decimalParts: function (v, useCommas, precision, lgDecimals) {
+  decimalParts: function (v, useCommas, precision, lgDecimals, dropTrailingZeros = false) {
     if (isNaN(precision) || precision > 8) {
       precision = 8
     }
-    const vClean = String(v).replace(/,/g, '')
-    const formattedVal = parseFloat(vClean).toFixed(precision)
+    const formattedVal = parseFloat(v).toFixed(precision)
     const chunks = formattedVal.split('.')
     const int = useCommas ? parseInt(chunks[0]).toLocaleString() : chunks[0]
     const decimal = chunks[1] || ''
@@ -53,6 +52,12 @@ const humanize = {
     }
     const decimalVals = decimal.slice(0, decimal.length - numTrailingZeros)
 
+    const trailingZeros = dropTrailingZeros
+      ? ''
+      : numTrailingZeros === 0
+        ? ''
+        : decimal.slice(-numTrailingZeros)
+
     let htmlString = '<div class="decimal-parts d-inline-block">'
 
     if (!isNaN(lgDecimals) && lgDecimals > 0) {
@@ -60,14 +65,20 @@ const humanize = {
       const restPart = decimalVals.substring(lgDecimals)
       htmlString +=
         `<span class="int">${lgPart ? `${int}.${lgPart}` : int}</span>` +
-        `<span class="decimal">${restPart}</span>` +
-        `<span class="decimal trailing-zeroes"></span>`
+        `<span class="decimal">${restPart}</span>`
+
+      if (!dropTrailingZeros) {
+        htmlString += `<span class="decimal trailing-zeroes">${trailingZeros}</span>`
+      }
     } else if (precision !== 0) {
       htmlString +=
         `<span class="int">${int}</span>` +
         '<span class="decimal dot">.</span>' +
-        `<span class="decimal">${decimalVals}</span>` +
-        `<span class="decimal trailing-zeroes"></span>`
+        `<span class="decimal">${decimalVals}</span>`
+
+      if (!dropTrailingZeros) {
+        htmlString += `<span class="decimal trailing-zeroes">${trailingZeros}</span>`
+      }
     } else {
       htmlString += `<span class="int">${int}</span>`
     }

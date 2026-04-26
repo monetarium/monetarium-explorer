@@ -11,11 +11,10 @@ export default class extends Controller {
     const ex = blockData.extra
 
     if (ex.var_coin_supply && this.hasVarCirculatingTarget) {
-      this.varCirculatingTarget.innerHTML = humanize.decimalParts(
-        humanize.formatCoinAtomsFull(ex.var_coin_supply.circulating, 0),
-        true,
-        8
-      )
+      const raw = humanize.formatCoinAtomsFull(ex.var_coin_supply.circulating, 0)
+      const clean = raw.replace(/,/g, '')
+
+      this.varCirculatingTarget.innerHTML = humanize.decimalParts(clean, true, 8, undefined, true)
     }
 
     if (ex.ska_coin_supply && this.hasSkaCoinSupplyTarget) {

@@ -24,37 +24,54 @@ export default class extends Controller {
 
   handleBlock({ detail: blockData }) {
     const ex = blockData.extra
-    this.blocksdiffTarget.innerHTML = humanize.decimalParts(String(ex.sdiff), false, 8, 2)
+    this.blocksdiffTarget.innerHTML = humanize.decimalParts(ex.sdiff, false, 8, 2, true)
     this.nextExpectedSdiffTarget.innerHTML = humanize.decimalParts(
-      String(ex.next_expected_sdiff),
+      ex.next_expected_sdiff,
       false,
       2,
-      2
+      2,
+      true
     )
     this.nextExpectedMinTarget.innerHTML = humanize.decimalParts(
-      String(ex.next_expected_min),
+      ex.next_expected_min,
       false,
       2,
-      2
+      2,
+      true
     )
     this.nextExpectedMaxTarget.innerHTML = humanize.decimalParts(
-      String(ex.next_expected_max),
+      ex.next_expected_max,
       false,
       2,
-      2
+      2,
+      true
     )
     this.windowIndexTarget.textContent = ex.window_idx
     this.posBarTarget.style.width = `${(ex.window_idx / ex.params.window_size) * 100}%`
-    this.poolSizeTarget.innerHTML = humanize.decimalParts(String(ex.pool_info.size), true, 0)
+    this.poolSizeTarget.innerHTML = humanize.decimalParts(
+      ex.pool_info.size,
+      true,
+      0,
+      undefined,
+      true
+    )
     this.targetPctTarget.textContent = parseFloat(ex.pool_info.percent_target - 100).toFixed(2)
-    this.poolValueTarget.innerHTML = humanize.decimalParts(String(ex.pool_info.value), true, 0)
+    this.poolValueTarget.innerHTML = humanize.decimalParts(
+      ex.pool_info.value,
+      true,
+      0,
+      undefined,
+      true
+    )
     this.poolSizePctTarget.textContent = parseFloat(ex.pool_info.percent).toFixed(2)
     this.ticketRewardTarget.innerHTML = `${ex.reward.toFixed(2)}%`
+    // IMPORTANT: no lgDecimals here → split mode (matches Go)
     this.bsubsidyPosTarget.innerHTML = humanize.decimalParts(
-      String(ex.subsidy.pos / 500000000),
+      ex.subsidy.pos / 500000000,
       false,
       8,
-      2
+      undefined,
+      true
     )
 
     if (ex.exchange_rate && this.hasConvertedStakeTarget) {
