@@ -1,45 +1,64 @@
 # Knowledge Index
 
-## Foundation
+## 🧠 Core Architecture & Domain
 
-- product: foundation/product.md — what are we building, token limits
-- structure: foundation/structure.md — Go modules, folders boundaries
-- tech-stack: foundation/tech-stack.md — packages, node engines
-- homepage-metrics: foundation/homepage-metrics.md — mempool, latest blocks, and supply component rules
-- staking-rewards: foundation/staking-rewards.md — mechanics of pow and pos yields and fee splits
-- blocks-list: foundation/blocks-list.md — rules for rendering list of blocks (block table on block list page)
+_Human-curated rules, architecture, and constraints. Read these to understand the project._
 
-## System
+- product: core/product.md — what are we building, token limits
+- structure: core/structure.md — Go modules, folders boundaries
+- tech-stack: core/tech-stack.md — packages, node engines
+- staking-rewards: core/staking-rewards.md — mechanics of pow and pos yields and fee splits
+- constraints: core/constraints.md — cross-domain architectural constraints
+- maintenance: core/maintenance.md — guide for wiki upkeep and structure
 
-- constraints: system/constraints.md — cross-domain architectural constraints
+## 📋 Feature Specifications
 
-## Block
+_Requirements and guidelines for specific features and pages._
 
-- flow (compact): block/flow.compact.md — paste into prompt when modifying block data pipeline
-- flow (full): block/flow.full.md — paste into prompt when modifying block data pipeline
-- patterns: block/patterns.md — the non-obvious architectural patterns that apply across multiple flows
-- impact: block/impact.md — what breaks when block structures change
+- homepage-metrics: specs/homepage-metrics.md — mempool, latest blocks, and supply component rules
+- blocks-list: specs/blocks-list.md — rules for rendering list of blocks (block table on block list page)
 
-## Transaction
+## 🤖 Code Traces
 
-- flow (compact): transaction/flow.compact.md — paste into prompt when modifying transaction data pipeline
-- flow (full): transaction/flow.full.md — paste into prompt when modifying transaction data pipeline
-- patterns: transaction/patterns.md — the non-obvious architectural patterns that apply across multiple flows
-- impact: transaction/impact.md — what breaks when transaction structures change
+_Code-grounded analysis of data flows, cross-layer dependencies, and hidden constraints. Paste these into your prompt when modifying specific areas._
 
-## VAR & SKA
+### Block
 
-- flow (compact): var-ska-data/flow.compact.md — paste into prompt when modifying VAR/SKA logic
-- flow (full): var-ska-data/flow.full.md — paste into prompt when modifying VAR/SKA logic
-- patterns: var-ska-data/patterns.md — the non-obvious architectural patterns that apply across multiple flows
-- impact: var-ska-data/impact.md — what breaks when VAR/SKA structures change
+_Data flow for block rendering, including headers, metrics, and block content parsing._
 
-## Windows
+- flow (compact): code-analysis/block/flow.compact.md — high-level summary of the data path from node/DB to the block UI
+- flow (full): code-analysis/block/flow.full.md — detailed, step-by-step function trace for deep debugging of block logic
+- patterns: code-analysis/block/patterns.md — recurring architectural concepts and invariants to follow when modifying blocks
+- impact: code-analysis/block/impact.md — downstream components and templates that break if block data structures change
 
-- flow (compact): windows/flow.compact.md — paste into prompt when modifying ticket price windows data pipeline
-- flow (full): windows/flow.full.md — paste into prompt when modifying ticket price windows data pipeline
+### Transaction
 
-## Time-Based Blocks
+_End-to-end pipeline for transaction processing, decoding, and rendering inputs/outputs._
 
-- flow (compact): time-based-blocks/flow.compact.md — paste into prompt when modifying time-grouped block listings
-- flow (full): time-based-blocks/flow.full.md — paste into prompt when modifying time-grouped block listings
+- flow (compact): code-analysis/transaction/flow.compact.md — high-level summary of how transaction inputs and outputs are processed
+- flow (full): code-analysis/transaction/flow.full.md — detailed, step-by-step function trace for deep debugging of tx logic
+- patterns: code-analysis/transaction/patterns.md — recurring architectural concepts and invariants to follow when modifying transactions
+- impact: code-analysis/transaction/impact.md — downstream components and templates that break if tx data structures change
+
+### VAR & SKA
+
+_Multi-coin architecture traces covering values, fee separation, and rendering for both token types._
+
+- flow (compact): code-analysis/var-ska-data/flow.compact.md — high-level summary of token splitting, balances, and fee tracking
+- flow (full): code-analysis/var-ska-data/flow.full.md — detailed, step-by-step function trace for deep debugging of multi-coin logic
+- patterns: code-analysis/var-ska-data/patterns.md — recurring architectural concepts and invariants to follow when handling token types
+- impact: code-analysis/var-ska-data/impact.md — downstream components and templates that break if token rendering logic changes
+
+### Windows
+
+_Ticket price window intervals, calculating and displaying current and upcoming ticket prices._
+
+- flow (compact): code-analysis/windows/flow.compact.md — high-level summary of ticket window calculations and database queries
+- flow (full): code-analysis/windows/flow.full.md — detailed, step-by-step function trace for deep debugging of window intervals
+
+### Time-Based Blocks
+
+_Aggregation and grouping of blocks over specific time intervals (days, weeks, months, years)._
+
+- flow (compact): code-analysis/time-based-blocks/flow.compact.md — high-level summary of how blocks are grouped by time periods
+- flow (full): code-analysis/time-based-blocks/flow.full.md — detailed, step-by-step function trace for deep debugging of time aggregations
