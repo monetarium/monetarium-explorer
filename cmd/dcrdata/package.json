@@ -13,7 +13,6 @@
   "scripts": {
     "build": "webpack --config webpack.prod.cjs --progress --color",
     "check": "npm run format:check && npm run lint && npm run lint:css",
-    "precommit": "npm run check",
     "test": "vitest run",
     "watch": "webpack --watch --config webpack.dev.cjs",
     "analyze": "webpack --config webpack.analyze.cjs",

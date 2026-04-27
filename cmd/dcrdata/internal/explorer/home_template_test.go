@@ -45,7 +45,7 @@ func TestHomeTemplate_IndicatorList(t *testing.T) {
 
 	fills := []types.CoinFillData{
 		{Symbol: "VAR", GQFillRatio: 0.5, GQPositionRatio: 0.10, Status: "ok"},
-		{Symbol: "SKA-1", GQFillRatio: 0.8, GQPositionRatio: 0.45, ExtraFillRatio: 0.1, Status: "borrowing"},
+		{Symbol: "SKA1", GQFillRatio: 0.8, GQPositionRatio: 0.45, ExtraFillRatio: 0.1, Status: "borrowing"},
 	}
 	data := struct {
 		*CommonPageData
@@ -158,15 +158,15 @@ func TestHomeTemplate_BlocksTable(t *testing.T) {
 			name: "1 SKA type",
 			blocks: []*types.BlockBasic{makeTestBlock(101, []types.CoinRowData{
 				{CoinType: 0, Symbol: "VAR", Amount: "100000000"},
-				{CoinType: 1, Symbol: "SKA-1", Amount: "1000000000000000000"},
+				{CoinType: 1, Symbol: "SKA1", Amount: "1000000000000000000"},
 			})},
 		},
 		{
 			name: "2 SKA types",
 			blocks: []*types.BlockBasic{makeTestBlock(102, []types.CoinRowData{
 				{CoinType: 0, Symbol: "VAR", Amount: "200000000"},
-				{CoinType: 1, Symbol: "SKA-1", Amount: "500000000000000000"},
-				{CoinType: 2, Symbol: "SKA-2", Amount: "250000000000000000"},
+				{CoinType: 1, Symbol: "SKA1", Amount: "500000000000000000"},
+				{CoinType: 2, Symbol: "SKA2", Amount: "250000000000000000"},
 			})},
 		},
 	}

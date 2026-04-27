@@ -3,10 +3,6 @@
 function logn(n, b) {
   return Math.log(n) / Math.log(b)
 }
-function round(value, precision) {
-  const multiplier = Math.pow(10, precision || 0)
-  return Math.round(value * multiplier) / multiplier
-}
 
 function hashParts(hash) {
   const clipLen = 6
@@ -37,7 +33,7 @@ const humanize = {
     sign = sign + val.toFixed(2)
     return `<span class="${cssClass}">${sign} % </span>`
   },
-  decimalParts: function (v, useCommas, precision, lgDecimals) {
+  decimalParts: function (v, useCommas, precision, lgDecimals, dropTrailingZeros = false) {
     if (isNaN(precision) || precision > 8) {
       precision = 8
     }
@@ -55,21 +51,34 @@ const humanize = {
       }
     }
     const decimalVals = decimal.slice(0, decimal.length - numTrailingZeros)
-    const trailingZeros = numTrailingZeros === 0 ? '' : decimal.slice(-numTrailingZeros)
+
+    const trailingZeros = dropTrailingZeros
+      ? ''
+      : numTrailingZeros === 0
+        ? ''
+        : decimal.slice(-numTrailingZeros)
 
     let htmlString = '<div class="decimal-parts d-inline-block">'
 
     if (!isNaN(lgDecimals) && lgDecimals > 0) {
+      const lgPart = decimalVals.substring(0, lgDecimals)
+      const restPart = decimalVals.substring(lgDecimals)
       htmlString +=
-        `<span class="int">${int}.${decimalVals.substring(0, lgDecimals)}</span>` +
-        `<span class="decimal">${decimalVals.substring(lgDecimals, decimalVals.length)}</span>` +
-        `<span class="decimal trailing-zeroes">${trailingZeros}</span>`
+        `<span class="int">${lgPart ? `${int}.${lgPart}` : int}</span>` +
+        `<span class="decimal">${restPart}</span>`
+
+      if (!dropTrailingZeros) {
+        htmlString += `<span class="decimal trailing-zeroes">${trailingZeros}</span>`
+      }
     } else if (precision !== 0) {
       htmlString +=
         `<span class="int">${int}</span>` +
         '<span class="decimal dot">.</span>' +
-        `<span class="decimal">${decimalVals}</span>` +
-        `<span class="decimal trailing-zeroes">${trailingZeros}</span>`
+        `<span class="decimal">${decimalVals}</span>`
+
+      if (!dropTrailingZeros) {
+        htmlString += `<span class="decimal trailing-zeroes">${trailingZeros}</span>`
+      }
     } else {
       htmlString += `<span class="int">${int}</span>`
     }
@@ -87,7 +96,6 @@ const humanize = {
     try {
       atoms = BigInt(atomStr)
     } catch {
-      // eslint-disable-line no-unused-vars
       return '0'
     }
 
@@ -165,13 +173,13 @@ const humanize = {
     // from go-humanize
     const sizes = ['B', 'kB', 'MB', 'GB', 'TB', 'PB', 'EB']
     if (s < 10) {
-      return `${s}B`
+      return `${s} B`
     }
     const e = Math.floor(logn(s, 1000))
     const suffix = sizes[e]
     const val = Math.floor((s / Math.pow(1000, e)) * 10 + 0.5) / 10
     const precision = val < 10 ? 1 : 0
-    return `${round(val, precision)} ${suffix}`
+    return `${val.toFixed(precision)} ${suffix}`
   },
   timeSince: function (unixTime, keepOnly) {
     const seconds = Math.floor(new Date().getTime() / 1000 - unixTime)

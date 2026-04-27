@@ -8,9 +8,8 @@
 <div class="container main" data-controller="time tx" data-tx-txid="{{.TxID}}">
 {{$isMempool := (eq .BlockHeight 0)}}
     <div class="row mx-2 my-2">
-        <div class="col-24 col-xl-12 bg-white p-3 p-sm-4 position-relative">
-          <div class="card-pointer pointer-right d-none d-xl-block"></div>
-          <div class="card-pointer pointer-bottom d-xl-none"></div>
+        <div class="col-24 bg-white p-3 p-sm-4 position-relative">
+          <div class="card-pointer pointer-bottom"></div>
           <div class="pb-1 ps-1 position-relative">
             {{if or .IsTicket .IsRevocation}}
               <span class="fs22 monicon-ticket"></span>
@@ -39,7 +38,7 @@
                 {{end}}
               </div>
               {{if gt .MixCount 0}}
-              <div class="d-inline-block mix-box mx-2 fs14">Mix: {{.MixCount}} outputs of {{template "decimalParts" (amountAsDecimalParts .MixDenom false)}} DCR
+              <div class="d-inline-block mix-box mx-2 fs14">Mix: {{.MixCount}} outputs of {{if eq .CoinType 0}}{{template "decimalParts" (amountAsDecimalParts .MixDenom false)}}{{else}}{{template "decimalParts" (skaDecimalParts (printf "%d" .MixDenom) false)}}{{end}} {{coinSymbol .CoinType}}
               </div>
               {{- end}}
               {{if $.SwapsFound}}
@@ -57,8 +56,8 @@
             <div class="col-8 text-start">
                 <span class="text-secondary fs13">Total Sent</span>
                 <br>
-                <span class="lh1rem d-inline-block pt-1"
-                  ><span class="fs18 fs14-decimal fw-bold">{{template "decimalParts" (float64AsDecimalParts .Total 8 true 2)}}</span><span class="text-secondary fs14">DCR</span>
+                 <span class="lh1rem d-inline-block pt-1"
+                  ><span class="fs18 fs14-decimal fw-bold">{{if eq .CoinType 0}}{{template "decimalParts" (float64AsDecimalParts .Total 8 true 2)}}{{else}}{{template "decimalParts" (skaDecimalParts .TotalRaw true 2)}}{{end}}</span><span class="text-secondary fs14">{{coinSymbol .CoinType}}</span>
                 </span>
                 {{if $conv.Total}}
                 <br>
@@ -98,8 +97,8 @@
             <div class="col-8 text-start">
                 <span class="text-secondary fs13">Fee</span>
                 <br>
-                <span class="lh1rem d-inline-block pt-1"
-                  ><span class="fs18 fs14-decimal fw-bold">{{template "decimalParts" (float64AsDecimalParts .Fee.ToCoin 8 true 2)}}</span><span class="text-secondary fs14">DCR</span>
+                 <span class="lh1rem d-inline-block pt-1"
+                  ><span class="fs18 fs14-decimal fw-bold">{{if eq .CoinType 0}}{{template "decimalParts" (float64AsDecimalParts .Fee.ToCoin 8 true 2)}}{{else}}{{template "decimalParts" (skaDecimalParts .FeeRaw true 2)}}{{end}}</span><span class="text-secondary fs14">{{coinSymbol .CoinType}}</span>
                 </span>
                 {{if $conv.Fees}}
                 <br>
@@ -211,7 +210,7 @@
             </div>
           {{end}}
         </div>
-        <div class="col-24 col-xl-12 secondary-card py-3 px-3 px-xl-4 d-flex flex-column justify-content-between">
+        <div class="col-24 secondary-card py-3 px-3 px-xl-4 d-flex flex-column justify-content-between">
           <div class="h6 d-inline-block my-2 ps-3">Transaction Details</div>
           <table class="w-100 fs14 my-1 mb-xl-3">
             <tbody>
@@ -241,7 +240,7 @@
                 <td class="text-end medium-sans text-nowrap pe-2 py-2">Version:</td>
                 <td class="text-start py-1 text-secondary">{{.Version}}</td>
                 <td class="text-end medium-sans text-nowrap pe-2 py-2">Rate:</td>
-                <td class="text-start py-1 text-secondary">{{.FeeRate}}/kB</td>
+                <td class="text-start py-1 text-secondary">{{if eq .CoinType 0}}{{.FeeRate}}/kB{{else}}{{.FeeRateRaw}} {{coinSymbol .CoinType}}/kB{{end}}</td>
               </tr>
               <tr>
                 <td class="text-end medium-sans text-nowrap pe-2 py-2">Size:</td>
@@ -465,7 +464,7 @@
                     <th class="text-nowrap">Previous Outpoint</th>
                     <th class="addr-hash-column">Addresses</th>
                     <th class="text-center shrink-to-fit">Block</th>
-                    <th class="text-end shrink-to-fit">DCR</th>
+                    <th class="text-end shrink-to-fit">{{coinSymbol $.Data.CoinType}}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -498,7 +497,7 @@
                         {{end}}
                         </td>
                         <td class="mono fs13 text-end shrink-to-fit">{{if lt .AmountIn 0.0}} N/A {{else}}
-                        {{template "decimalParts" (float64AsDecimalParts .AmountIn 8 false)}} {{end}}
+                        {{if eq $.Data.CoinType 0}}{{template "decimalParts" (float64AsDecimalParts .AmountIn 8 false)}}{{else}}{{template "decimalParts" (skaDecimalParts .ValueRaw false)}}{{end}} {{end}}
                         </td>
                     </tr>
                     {{end}}
@@ -522,7 +521,7 @@
                     <th class="text-start shrink-to-fit">Type</th>
                     <th class="text-start shrink-to-fit"><span class="d-none d-sm-inline">Version</span><span class="d-sm-none">Ver</span></th>
                     <th class="text-start shrink-to-fit">Spent</th>
-                    <th class="text-end shrink-to-fit">DCR</th>
+                    <th class="text-end shrink-to-fit">{{coinSymbol $.Data.CoinType}}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -562,16 +561,16 @@
                               {{if $spending.Hash}}
                                  <a href="/tx/{{$spending.Hash}}/in/{{$spending.Index}}">{{$v.Spent}}</a>
                               {{else}}
-                                {{if or $v.OP_TADD (le $v.Amount 0.0)}}
+                                {{if or $v.OP_TADD (and (eq $v.CoinType 0) (le $v.Amount 0.0))}}
                                   n/a
-                                {{else if gt $v.Amount 0.0}}
+                                {{else}}
                                   {{$v.Spent}}
                                 {{end}}
                               {{end}}
                             {{end}}
                         </td>
 			                  <td class="text-end mono fs13">
-                          {{template "decimalParts" (float64AsDecimalParts .Amount 8 false)}}
+                          {{if eq $.Data.CoinType 0}}{{template "decimalParts" (float64AsDecimalParts .Amount 8 false)}}{{else}}{{template "decimalParts" (skaDecimalParts .ValueRaw false)}}{{end}}
                         </td>
                     </tr>
                     {{end}}

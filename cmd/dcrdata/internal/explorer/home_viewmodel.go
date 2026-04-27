@@ -37,7 +37,7 @@ type HomeBlockRow struct {
 // SKASubRow is one accordion detail row for a specific SKA token type.
 // All numeric fields are pre-formatted strings.
 type SKASubRow struct {
-	TokenType string // e.g. "SKA-1", "SKA-2"
+	TokenType string // e.g. "SKA1", "SKA2"
 	TxCount   string // pre-formatted
 	Amount    string // pre-formatted
 	Size      string // pre-formatted
@@ -69,8 +69,11 @@ func buildHomeBlockRows(blocks []*types.BlockBasic) []HomeBlockRow {
 			}
 			for _, cr := range b.CoinRows {
 				if cr.CoinType == 0 {
-					// VAR row
-					varTxCount = cr.TxCount
+					// VAR row - subtract votes, tickets, revokes to get regular txs only
+					varTxCount = cr.TxCount - int(b.Voters) - int(b.FreshStake) - int(b.Revocations)
+					if varTxCount < 0 {
+						varTxCount = 0
+					}
 					varAmount = formatCoinAtoms(cr.Amount, cr.CoinType)
 					if cr.Size > 0 {
 						varSize = humanize.Bytes(uint64(cr.Size))
@@ -79,14 +82,8 @@ func buildHomeBlockRows(blocks []*types.BlockBasic) []HomeBlockRow {
 					}
 				} else {
 					// SKA row — add to sub-rows
-					txCount := "—"
-					if cr.TxCount > 0 {
-						txCount = fmt.Sprintf("%d", cr.TxCount)
-					}
-					size := "—"
-					if cr.Size > 0 {
-						size = humanize.Bytes(uint64(cr.Size))
-					}
+					txCount := fmt.Sprintf("%d", cr.TxCount)
+					size := humanize.Bytes(uint64(cr.Size))
 					subRows = append(subRows, SKASubRow{
 						TokenType: cr.Symbol,
 						TxCount:   txCount,

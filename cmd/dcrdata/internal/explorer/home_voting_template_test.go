@@ -106,7 +106,7 @@ func TestVotingCardTemplate(t *testing.T) {
 		if !strings.Contains(out, "No SKA rewards available") {
 			t.Error("expected 'No SKA rewards available' in output")
 		}
-		if strings.Contains(out, "SKA-") {
+		if strings.Contains(out, "SKA1") || strings.Contains(out, "SKA2") {
 			t.Error("expected no SKA symbol rows for empty SKA slice")
 		}
 	})
@@ -114,14 +114,14 @@ func TestVotingCardTemplate(t *testing.T) {
 	// Case 5 — Single SKA entry
 	t.Run("SingleSKAEntry", func(t *testing.T) {
 		ska := []types.SKAVoteReward{
-			{CoinType: 1, Symbol: "SKA-1", PerBlock: "0.097178596780181388", Per30Days: "0.038980675541825918", PerYear: "0.038980675541825918"},
+			{CoinType: 1, Symbol: "SKA1", PerBlock: "0.097178596780181388", Per30Days: "0.038980675541825918", PerYear: "0.038980675541825918"},
 		}
 		out := renderVotingCard(t, tmpl, makeHomeInfo(types.VoteVARReward{}, ska))
 		if strings.Contains(out, "No SKA rewards available") {
 			t.Error("should not show placeholder when SKA entries are present")
 		}
-		if !strings.Contains(out, "SKA-1") {
-			t.Error("expected symbol 'SKA-1' in output")
+		if !strings.Contains(out, "SKA1") {
+			t.Error("expected symbol 'SKA1' in output")
 		}
 		// PerBlock rendered via decimalParts: int "0", bold decimals "09", rest "7178596780181388"
 		if !strings.Contains(out, `class="int"`) {
@@ -136,8 +136,8 @@ func TestVotingCardTemplate(t *testing.T) {
 		if !strings.Contains(out, "0.038980675541825918") {
 			t.Error("expected Per30Days value in output")
 		}
-		if !strings.Contains(out, "SKA-1/VAR") {
-			t.Error("expected unit label 'SKA-1/VAR' in output")
+		if !strings.Contains(out, "SKA1/VAR") {
+			t.Error("expected unit label 'SKA1/VAR' in output")
 		}
 	})
 
@@ -154,7 +154,7 @@ func TestVotingCardTemplate(t *testing.T) {
 	t.Run("SKAPerBlockDecimalParts", func(t *testing.T) {
 		ska := []types.SKAVoteReward{
 			// value with significant non-zero decimals beyond the bold 2 places
-			{CoinType: 2, Symbol: "SKA-2", PerBlock: "1.234567890000000000", Per30Days: "30.000000000000000000", PerYear: "365.000000000000000000"},
+			{CoinType: 2, Symbol: "SKA2", PerBlock: "1.234567890000000000", Per30Days: "30.000000000000000000", PerYear: "365.000000000000000000"},
 		}
 		out := renderVotingCard(t, tmpl, makeHomeInfo(types.VoteVARReward{}, ska))
 		if !strings.Contains(out, `class="decimal-parts`) {
@@ -224,7 +224,7 @@ func TestProp_SKASliceOrderPreserved(t *testing.T) {
 		symbols := make([]string, n)
 		for i := 0; i < n; i++ {
 			coinType := rapid.Uint8Range(1, 255).Draw(t, fmt.Sprintf("coinType%d", i))
-			sym := fmt.Sprintf("SKA-%d", coinType)
+			sym := fmt.Sprintf("SKA%d", coinType)
 			skaRewards[i] = types.SKAVoteReward{
 				CoinType:  coinType,
 				Symbol:    sym,
@@ -265,7 +265,7 @@ func TestProp_SKAStringsVerbatim(t *testing.T) {
 		per30Days := rapid.StringMatching(`\d{1,15}\.\d{18}`).Draw(t, "per30Days")
 		perYear := rapid.StringMatching(`\d{1,15}\.\d{18}`).Draw(t, "perYear")
 		ska := []types.SKAVoteReward{
-			{CoinType: 1, Symbol: "SKA-1", PerBlock: perBlock, Per30Days: per30Days, PerYear: perYear},
+			{CoinType: 1, Symbol: "SKA1", PerBlock: perBlock, Per30Days: per30Days, PerYear: perYear},
 		}
 		info := makeHomeInfo(types.VoteVARReward{}, ska)
 		out := renderVotingCard(t, tmpl, info)
@@ -303,7 +303,7 @@ func TestProp_RenderedHTMLWellFormed(t *testing.T) {
 			coinType := rapid.Uint8Range(1, 255).Draw(t, fmt.Sprintf("coinType%d", i))
 			skaRewards[i] = types.SKAVoteReward{
 				CoinType:  coinType,
-				Symbol:    fmt.Sprintf("SKA-%d", coinType),
+				Symbol:    fmt.Sprintf("SKA%d", coinType),
 				PerBlock:  "0.000000000000000001",
 				Per30Days: "0.000000000000000030",
 				PerYear:   "0.000000000000000365",
@@ -329,7 +329,7 @@ func TestProp_SKAVoteRewardsContainerExactlyOnce(t *testing.T) {
 			coinType := rapid.Uint8Range(1, 255).Draw(t, fmt.Sprintf("coinType%d", i))
 			skaRewards[i] = types.SKAVoteReward{
 				CoinType:  coinType,
-				Symbol:    fmt.Sprintf("SKA-%d", coinType),
+				Symbol:    fmt.Sprintf("SKA%d", coinType),
 				PerBlock:  "0.000000000000000001",
 				Per30Days: "0.000000000000000030",
 				PerYear:   "0.000000000000000365",

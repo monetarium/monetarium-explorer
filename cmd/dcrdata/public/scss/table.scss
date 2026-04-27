@@ -113,4 +113,33 @@ table.table.v3 {
   tr:last-child > td {
     border: none;
   }
+
+  @media (max-width: #{$breakpoint-sm}) {
+    tr,
+    th,
+    td {
+      padding: 9px 0.25em;
+      font-size: 14px;
+    }
+  }
+}
+
+// accordion sub-rows
+.coin-sub-row {
+  display: none;
+  font-size: 0.85em; // ~12px at 14px base; above the 11px floor
+  color: #6c757d; // Bootstrap text-secondary equivalent
+
+  &--visible {
+    display: table-row;
+    background-color: $card-bg-secondary;
+  }
+}
+
+.latest-blocks-table,
+.blocks-table {
+  .block-row-expandable.is-expanded .chevron {
+    opacity: 1;
+    transform: rotate(90deg);
+  }
 }

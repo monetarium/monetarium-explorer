@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/dustin/go-humanize"
 	"github.com/monetarium/monetarium-explorer/db/dbtypes"
 	"github.com/monetarium/monetarium-explorer/txhelpers"
 	"github.com/monetarium/monetarium-node/blockchain/stake"
@@ -135,7 +136,7 @@ type BlockBasic struct {
 	// Flattened fields derived from CoinRows for template rendering.
 	VARAmount  string
 	VARTxCount int
-	VARSize    uint32
+	VARSize    string
 	SKAAmount  string
 	SKASubRows []SKASubRow
 }
@@ -147,14 +148,18 @@ func (b *BlockBasic) FlattenCoinRows() {
 	for _, row := range b.CoinRows {
 		if row.CoinType == 0 {
 			b.VARAmount = row.Amount
-			b.VARTxCount = row.TxCount
-			b.VARSize = row.Size
+			// Subtract votes, tickets, and revocations to get regular VAR txs.
+			b.VARTxCount = row.TxCount - int(b.Voters) - int(b.FreshStake) - int(b.Revocations)
+			if b.VARTxCount < 0 {
+				b.VARTxCount = 0
+			}
+			b.VARSize = humanize.Bytes(uint64(row.Size))
 		} else {
 			b.SKASubRows = append(b.SKASubRows, SKASubRow{
 				TokenType: row.Symbol,
 				TxCount:   row.TxCount,
 				Amount:    row.Amount,
-				Size:      row.Size,
+				Size:      humanize.Bytes(uint64(row.Size)),
 			})
 			// Use the first SKA row's amount as the summary; callers may
 			// override SKAAmount with an aggregate if needed.
@@ -186,15 +191,20 @@ type TxBasic struct {
 	Type          string
 	Version       int32
 	FormattedSize string
-	Total         float64
-	Fee           dcrutil.Amount
+	Total         float64        // Deprecated: use TotalRaw
+	TotalRaw      string         // Atom string
+	Fee           dcrutil.Amount // Deprecated: use FeeRaw
+	FeeRaw        string         // Atom string
 	FeeRate       dcrutil.Amount
-	VoteInfo      *VoteInfo
-	Coinbase      bool
-	Treasurybase  bool
-	MixCount      uint32
-	MixDenom      int64
-	SKASent       map[uint8]string
+	FeeRateRaw    string
+	Size          int32
+	*VoteInfo
+	Coinbase     bool
+	Treasurybase bool
+	MixCount     uint32
+	MixDenom     int64
+	CoinType     uint8
+	SKASent      map[uint8]string // Deprecated: use TotalRaw + CoinType
 }
 
 // TrimmedTxInfo for use with /visualblocks
@@ -448,6 +458,7 @@ type Vin struct {
 	*chainjson.Vin
 	Addresses       []string
 	FormattedAmount string
+	ValueRaw        string // Atom string
 	Index           uint32
 	DisplayText     string
 	TextIsHash      bool
@@ -459,7 +470,8 @@ type Vin struct {
 // Vout models basic data about a tx output for display
 type Vout struct {
 	Addresses       []string
-	Amount          float64
+	Amount          float64 // Deprecated: use SKAValue or ValueRaw
+	ValueRaw        string  // Atom string
 	FormattedAmount string
 	Type            string
 	Spent           bool
@@ -485,7 +497,7 @@ type SKASubRow struct {
 	TokenType string
 	TxCount   int
 	Amount    string
-	Size      uint32
+	Size      string
 }
 
 // VARCoinSupply holds VAR circulating supply and target cap.
@@ -496,7 +508,7 @@ type VARCoinSupply struct {
 
 // SKACoinSupplyEntry holds per-SKA-type supply data.
 type SKACoinSupplyEntry struct {
-	CoinType      uint8  `json:"coin_type"`      // SKA-n identifier (1, 2, ...)
+	CoinType      uint8  `json:"coin_type"`      // SKAn identifier (1, 2, ...)
 	InCirculation string `json:"in_circulation"` // big.Int atom string
 	TotalIssued   string `json:"total_issued"`   // big.Int atom string
 	TotalBurned   string `json:"total_burned"`   // big.Int atom string (placeholder: "0")
@@ -566,7 +578,7 @@ type BlockInfo struct {
 	StakeValidationHeight int64
 	Subsidy               *chainjson.GetBlockSubsidyResult
 	SKAPoWRewards         []PoWSKAReward `json:"pow_ska_rewards,omitempty"`
-	// CoinAmounts holds per-coin totals (VAR key=0, SKA-n key=n) as decimal atom strings.
+	// CoinAmounts holds per-coin totals (VAR key=0, SKAn key=n) as decimal atom strings.
 	CoinAmounts map[uint8]string `json:"coin_amounts,omitempty"`
 }
 
@@ -740,6 +752,34 @@ func getTxFromList(txid string, txns []MempoolTx) (MempoolTx, bool) {
 		}
 	}
 	return MempoolTx{}, false
+}
+
+// Spenders searches all transaction lists in MempoolInfo for transactions
+// spending from the specified funding transaction. It returns a map of funding
+// output indexes to the spending transaction identify (hash and input index).
+func (mpi *MempoolInfo) Spenders(fundingTxID string) map[uint32]TxInID {
+	mpi.RLock()
+	defer mpi.RUnlock()
+	spenders := make(map[uint32]TxInID)
+	search := func(txns []MempoolTx) {
+		for _, tx := range txns {
+			for i, vin := range tx.Vin {
+				if vin.TxId == fundingTxID {
+					spenders[vin.Outdex] = TxInID{
+						Hash:  tx.TxID,
+						Index: uint32(i),
+					}
+				}
+			}
+		}
+	}
+	search(mpi.Transactions)
+	search(mpi.Tickets)
+	search(mpi.Votes)
+	search(mpi.Revocations)
+	search(mpi.TSpends)
+	search(mpi.TAdds)
+	return spenders
 }
 
 // Tx checks the inventory and searches the appropriate lists for a

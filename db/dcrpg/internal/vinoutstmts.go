@@ -119,7 +119,7 @@ const (
 	SelectUTXOs = `SELECT vouts.id, vouts.tx_hash, vouts.tx_index, vouts.script_addresses, vouts.value, vouts.mixed, vouts.coin_type, vouts.ska_value
 		FROM vouts
 		JOIN transactions ON transactions.tx_hash=vouts.tx_hash
-		WHERE vouts.spend_tx_row_id IS NULL AND vouts.value>0
+		WHERE vouts.spend_tx_row_id IS NULL AND (vouts.value>0 OR vouts.coin_type>0)
 			AND transactions.is_mainchain AND transactions.is_valid;`
 
 	SetIsValidIsMainchainByTxHash = `UPDATE vins SET is_valid = $1, is_mainchain = $2

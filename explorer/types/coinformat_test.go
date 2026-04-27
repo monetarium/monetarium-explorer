@@ -38,11 +38,11 @@ func TestFormatSKAAmount(t *testing.T) {
 		full     bool
 		want     string
 	}{
-		{oneCoin, 1, true, "1 SKA-1"},
-		{oneAtom, 1, true, "0.000000000000000001 SKA-1"},
-		{bigAmt, 2, false, "1.5M SKA-2"},
-		{"0", 1, true, "0 SKA-1"},
-		{"bad", 1, false, "0 SKA-1"},
+		{oneCoin, 1, true, "1 SKA1"},
+		{oneAtom, 1, true, "0.000000000000000001 SKA1"},
+		{bigAmt, 2, false, "1.5M SKA2"},
+		{"0", 1, true, "0 SKA1"},
+		{"bad", 1, false, "0 SKA1"},
 	}
 	for _, tc := range tests {
 		got := FormatSKAAmount(tc.atoms, tc.coinType, tc.full)

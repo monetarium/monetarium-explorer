@@ -268,7 +268,7 @@ export default class extends Controller {
       colors: ['#FF8C00', '#006600', '#2971FF'],
       title: 'Ticket Price Distribution',
       labelsKMB: true,
-      xlabel: 'Ticket Price (DCR)',
+      xlabel: 'Ticket Price (VAR)',
       ylabel: 'Number of Tickets'
     }
     return new Dygraph(document.getElementById('tickets-by-purchase-price'), d, {

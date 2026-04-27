@@ -28,6 +28,15 @@ type pageTemplate struct {
 	template *template.Template
 }
 
+func coinSymbol(ct uint8) string {
+	switch ct {
+	case 0:
+		return "VAR"
+	default:
+		return "SKA" + fmt.Sprintf("%d", ct)
+	}
+}
+
 type templates struct {
 	templates map[string]pageTemplate
 	common    []string
@@ -141,9 +150,6 @@ func float64Formatting(v float64, numPlaces int, useCommas bool, boldNumPlaces .
 	pow := math.Pow(10, float64(numPlaces))
 	formattedVal := math.Round(v*pow) / pow
 	clipped := fmt.Sprintf("%."+strconv.Itoa(numPlaces)+"f", formattedVal)
-	oldLength := len(clipped)
-	clipped = strings.TrimRight(clipped, "0")
-	trailingZeros := strings.Repeat("0", oldLength-len(clipped))
 	valueChunks := strings.Split(clipped, ".")
 	integer := valueChunks[0]
 
@@ -152,24 +158,27 @@ func float64Formatting(v float64, numPlaces int, useCommas bool, boldNumPlaces .
 		dec = valueChunks[1]
 	}
 
+	// Trim trailing zeros (same as skaDecimalParts).
+	dec = strings.TrimRight(dec, "0")
+
 	if useCommas {
 		integer = humanize.Comma(int64(formattedVal))
 	}
 
 	if len(boldNumPlaces) == 0 {
-		return []string{integer, dec, trailingZeros}
+		return []string{integer, dec, ""}
 	}
 
 	places := boldNumPlaces[0]
 	if places > numPlaces {
-		return []string{integer, dec, trailingZeros}
+		return []string{integer, dec, ""}
 	}
 
 	if len(dec) < places {
 		places = len(dec)
 	}
 
-	return []string{integer, dec[:places], dec[places:], trailingZeros}
+	return []string{integer, dec[:places], dec[places:], ""}
 }
 
 // skaDecimalParts converts a SKA atom string (decimal integer string, 18 decimals)
@@ -836,6 +845,9 @@ func makeTemplateFuncMap(params *chaincfg.Params) template.FuncMap {
 				Data:  data,
 				Title: title,
 			}
+		},
+		"coinSymbol": func(ct uint8) string {
+			return coinSymbol(ct)
 		},
 	}
 }

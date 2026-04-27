@@ -1,5 +1,6 @@
 import { Controller } from '@hotwired/stimulus'
 import humanize from '../helpers/humanize_helper'
+import { renderCoinType } from '../helpers/ska_helper'
 
 export default class extends Controller {
   static get targets() {
@@ -10,11 +11,10 @@ export default class extends Controller {
     const ex = blockData.extra
 
     if (ex.var_coin_supply && this.hasVarCirculatingTarget) {
-      this.varCirculatingTarget.innerHTML = humanize.decimalParts(
-        parseInt(ex.var_coin_supply.circulating) / 1e8,
-        true,
-        0
-      )
+      const raw = humanize.formatCoinAtomsFull(ex.var_coin_supply.circulating, 0)
+      const clean = raw.replace(/,/g, '')
+
+      this.varCirculatingTarget.innerHTML = humanize.decimalParts(clean, true, 8, undefined, true)
     }
 
     if (ex.ska_coin_supply && this.hasSkaCoinSupplyTarget) {
@@ -39,7 +39,7 @@ export default class extends Controller {
 
       const in_circulation_formatted = humanize.formatCoinAtomsFull(e.in_circulation, e.coin_type)
       clone.querySelector('.int').textContent = in_circulation_formatted
-      clone.querySelector('.symbol').textContent = `SKA-${e.coin_type}`
+      clone.querySelector('.symbol').textContent = renderCoinType(e.coin_type)
       clone.querySelector('.issued').textContent = humanize.formatCoinAtomsFull(
         e.total_issued,
         e.coin_type

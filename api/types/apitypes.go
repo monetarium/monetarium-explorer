@@ -88,20 +88,46 @@ type Tx struct {
 	Block         *BlockID `json:"block,omitempty"`
 }
 
-// Vin is an alias for dcrd's rpc/jsonrpc/types/v4.Vin type.
-type Vin = chainjson.Vin
+// ScriptSig models a transaction input's signature script.
+type ScriptSig struct {
+	Asm string `json:"asm"`
+	Hex string `json:"hex"`
+}
+
+// Vin models basic data about a transaction input.
+type Vin struct {
+	Coinbase     string     `json:"coinbase,omitempty"`
+	Stakebase    string     `json:"stakebase,omitempty"`
+	Treasurybase bool       `json:"treasurybase,omitempty"`
+	Txid         string     `json:"txid,omitempty"`
+	Vout         uint32     `json:"vout,omitempty"`
+	Tree         int8       `json:"tree,omitempty"`
+	ScriptSig    *ScriptSig `json:"scriptSig,omitempty"`
+	Sequence     uint32     `json:"sequence"`
+	AmountIn     float64    `json:"amountin,omitempty"`
+	SKAAmountIn  string     `json:"ska_amountin,omitempty"`
+	BlockHeight  uint32     `json:"blockheight"`
+	BlockIndex   uint32     `json:"blockindex"`
+	CoinType     uint8      `json:"coin_type,omitempty"`
+	ValueInRaw   string     `json:"value_in_raw,omitempty"`
+}
 
 // TxShort models info about transaction TxID
 type TxShort struct {
-	TxID     string `json:"txid"`
-	Size     int32  `json:"size"`
-	Version  int32  `json:"version"`
-	Locktime uint32 `json:"locktime"`
-	Expiry   uint32 `json:"expiry"`
-	Vin      []Vin  `json:"vin"`
-	Vout     []Vout `json:"vout"`
-	Tree     int8   `json:"tree"`
-	Type     string `json:"type"`
+	TxID       string `json:"txid"`
+	Size       int32  `json:"size"`
+	Version    int32  `json:"version"`
+	Locktime   uint32 `json:"locktime"`
+	Expiry     uint32 `json:"expiry"`
+	Vin        []Vin  `json:"vin"`
+	Vout       []Vout `json:"vout"`
+	Tree       int8   `json:"tree"`
+	Type       string `json:"type"`
+	CoinType   uint8  `json:"coin_type"`
+	Total      string `json:"total"` // Atom string
+	Fee        string `json:"fee"`   // Atom string
+	FeeRate    string `json:"fee_rate,omitempty"`
+	FeeRateRaw string `json:"fee_rate_raw,omitempty"`
 }
 
 // AgendasInfo holds the high level details about an agenda.
@@ -121,12 +147,17 @@ type AgendaAPIResponse struct {
 
 // TrimmedTx models data to resemble to result of the decoderawtransaction RPC.
 type TrimmedTx struct {
-	TxID     string `json:"txid"`
-	Version  int32  `json:"version"`
-	Locktime uint32 `json:"locktime"`
-	Expiry   uint32 `json:"expiry"`
-	Vin      []Vin  `json:"vin"`
-	Vout     []Vout `json:"vout"`
+	TxID       string `json:"txid"`
+	Version    int32  `json:"version"`
+	Locktime   uint32 `json:"locktime"`
+	Expiry     uint32 `json:"expiry"`
+	Vin        []Vin  `json:"vin"`
+	Vout       []Vout `json:"vout"`
+	CoinType   uint8  `json:"coin_type"`
+	Total      string `json:"total"` // Atom string
+	Fee        string `json:"fee"`   // Atom string
+	FeeRate    string `json:"fee_rate,omitempty"`
+	FeeRateRaw string `json:"fee_rate_raw,omitempty"`
 }
 
 // Txns models the multi transaction post data structure
@@ -195,7 +226,8 @@ type VoutMined struct {
 
 // Vout defines a transaction output
 type Vout struct {
-	Value               float64      `json:"value"`
+	Value               float64      `json:"value"` // Deprecated: use ValueRaw
+	ValueRaw            string       `json:"value_raw"`
 	N                   uint32       `json:"n"`
 	Version             uint16       `json:"version"`
 	ScriptPubKeyDecoded ScriptPubKey `json:"scriptPubKey"`
@@ -413,6 +445,7 @@ type VinShort struct {
 	BlockHeight   *uint32 `json:"blockheight,omitempty"`
 	BlockIndex    *uint32 `json:"blockindex,omitempty"`
 	CoinType      uint8   `json:"coin_type,omitempty"`
+	SKAAmountIn   string  `json:"ska_amountin,omitempty"`
 	SKAValue      string  `json:"ska_value,omitempty"`
 }
 
@@ -725,10 +758,12 @@ type BlockDataBasic struct {
 	NumTx      uint32  `json:"txlength"`
 	MiningFee  *int64  `json:"fees,omitempty"`
 	TotalSent  *int64  `json:"total_sent,omitempty"`
-	// CoinAmounts holds per-coin totals (VAR key=0, SKA-n key=n) as decimal atom strings.
+	// CoinAmounts holds per-coin totals (VAR key=0, SKAn key=n) as decimal atom strings.
 	CoinAmounts map[uint8]string `json:"coin_amounts,omitempty"`
-	// CoinTxStats holds per-coin tx count and size (key 0=VAR, 1-255=SKA-n).
+	// CoinTxStats holds per-coin tx count and size (key 0=VAR, 1-255=SKAn).
 	CoinTxStats map[uint8]CoinTxStats `json:"coin_tx_stats,omitempty"`
+	// CoinStats holds per-coin tx count and amount (key 0=VAR, 1-255=SKAn).
+	CoinStats map[uint8]dbtypes.CoinStat `json:"coin_stats,omitempty"`
 	// SSFeeTotalsByCoin holds total SKA atoms distributed via TxTypeSSFee per coin type.
 	SSFeeTotalsByCoin map[uint8]string `json:"ssfee_totals,omitempty"`
 	// TicketPoolInfo may be nil for side chain blocks.
@@ -761,9 +796,9 @@ type BlockExplorerExtraInfo struct {
 	TxLen            int                              `json:"tx"`
 	CoinSupply       int64                            `json:"coin_supply"`
 	NextBlockSubsidy *chainjson.GetBlockSubsidyResult `json:"next_block_subsidy"`
-	// CoinAmounts holds per-coin totals (VAR key=0, SKA-n key=n) as decimal atom strings.
+	// CoinAmounts holds per-coin totals (VAR key=0, SKAn key=n) as decimal atom strings.
 	CoinAmounts map[uint8]string `json:"coin_amounts,omitempty"`
-	// CoinTxStats holds per-coin tx count and size (key 0=VAR, 1-255=SKA-n).
+	// CoinTxStats holds per-coin tx count and size (key 0=VAR, 1-255=SKAn).
 	CoinTxStats map[uint8]CoinTxStats `json:"coin_tx_stats,omitempty"`
 	// SSFeeTotalsByCoin holds total SKA atoms distributed via TxTypeSSFee per coin type.
 	SSFeeTotalsByCoin map[uint8]string `json:"ssfee_totals,omitempty"`

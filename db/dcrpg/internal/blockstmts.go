@@ -100,9 +100,9 @@ const (
 	IndexBlocksTableOnTime   = `CREATE INDEX ` + IndexOfBlocksTableOnTime + ` ON blocks("time");`
 	DeindexBlocksTableOnTime = `DROP INDEX ` + IndexOfBlocksTableOnTime + ` CASCADE;`
 
-	SelectBlockByTimeRangeSQL = `SELECT hash, height, size, time, numtx
+	SelectBlockByTimeRangeSQL = `SELECT hash, height, size, time, numtx, voters, fresh_stake, revocations, coin_tx_stats, coin_amounts
 		FROM blocks WHERE time BETWEEN $1 and $2 ORDER BY time DESC LIMIT $3;`
-	SelectBlockByTimeRangeSQLNoLimit = `SELECT hash, height, size, time, numtx
+	SelectBlockByTimeRangeSQLNoLimit = `SELECT hash, height, size, time, numtx, voters, fresh_stake, revocations, coin_tx_stats, coin_amounts
 		FROM blocks WHERE time BETWEEN $1 and $2 ORDER BY time DESC;`
 	SelectBlockHashByHeight = `SELECT hash FROM blocks WHERE height = $1 AND is_mainchain = true;`
 	SelectBlockHeightByHash = `SELECT height FROM blocks WHERE hash = $1;`
@@ -131,15 +131,16 @@ const (
 		SUM(size) AS size,
 		MAX(sbits) AS sbits,
 		MIN(time) AS time,
-		COUNT(*) AS blocks_count
+		COUNT(*) AS blocks_count,
+		JSONB_AGG(coin_tx_stats) AS coin_tx_stats
 		FROM blocks
 		WHERE height BETWEEN $2 AND $3
 			AND is_mainchain
 		GROUP BY window_start
 		ORDER BY window_start DESC;`
 
-	SelectBlocksTimeListingByLimit = `SELECT date_trunc($1, time at time zone 'utc') as index_value,
-		MAX(height),
+	SelectBlocksTimeListingByLimit = `SELECT DATE_TRUNC($1, time at time zone 'utc') AS index_value,
+		MAX(height) AS max_height,
 		SUM(num_rtx) AS txs,
 		SUM(fresh_stake) AS tickets,
 		SUM(voters) AS votes,
@@ -147,9 +148,10 @@ const (
 		SUM(size) AS size,
 		COUNT(*) AS blocks_count,
 		MIN(time) AS start_time,
-		MAX(time) AS end_time
+		MAX(time) AS end_time,
+		JSONB_AGG(coin_tx_stats) AS coin_tx_stats
 		FROM blocks
-		GROUP BY index_value
+		GROUP BY DATE_TRUNC($1, time at time zone 'utc')
 		ORDER BY index_value DESC
 		LIMIT $2 OFFSET $3;`
 
@@ -228,54 +230,49 @@ const (
 	SelectBlockDataByHeight = `
 		SELECT blocks.hash, blocks.height, blocks.size,
 			blocks.difficulty, blocks.sbits, blocks.time, stats.pool_size,
-			stats.pool_val, blocks.winners, blocks.is_valid, blocks.coin_amounts,
+			stats.pool_val, blocks.winners, blocks.is_valid, blocks.voters, blocks.fresh_stake, blocks.revocations, blocks.coin_amounts,
 			blocks.coin_tx_stats, blocks.ssfee_totals
 		FROM blocks INNER JOIN stats ON blocks.id = stats.blocks_id
 		WHERE blocks.height = $1;`
-
 	SelectBlockDataRange = `
 		SELECT blocks.hash, blocks.height, blocks.size,
 			blocks.difficulty, blocks.sbits, blocks.time, stats.pool_size,
-			stats.pool_val, blocks.winners, blocks.is_valid, blocks.coin_amounts,
+			stats.pool_val, blocks.winners, blocks.is_valid, blocks.voters, blocks.fresh_stake, blocks.revocations, blocks.coin_amounts,
 			blocks.coin_tx_stats, blocks.ssfee_totals
 		FROM blocks INNER JOIN stats ON blocks.id = stats.blocks_id
 		WHERE blocks.height BETWEEN $1 AND $2
 		ORDER BY blocks.height;`
-
 	SelectBlockDataRangeDesc = `
 		SELECT blocks.hash, blocks.height, blocks.size,
 			blocks.difficulty, blocks.sbits, blocks.time, stats.pool_size,
-			stats.pool_val, blocks.winners, blocks.is_valid, blocks.coin_amounts,
+			stats.pool_val, blocks.winners, blocks.is_valid, blocks.voters, blocks.fresh_stake, blocks.revocations, blocks.coin_amounts,
 			blocks.coin_tx_stats, blocks.ssfee_totals
 		FROM blocks INNER JOIN stats ON blocks.id = stats.blocks_id
 		WHERE blocks.height BETWEEN $1 AND $2
 		ORDER BY blocks.height DESC;`
-
 	SelectBlockDataRangeWithSkip = `
 		SELECT blocks.hash, blocks.height, blocks.size,
 			blocks.difficulty, blocks.sbits, blocks.time, stats.pool_size,
-			stats.pool_val, blocks.winners, blocks.is_valid, blocks.coin_amounts,
+			stats.pool_val, blocks.winners, blocks.is_valid, blocks.voters, blocks.fresh_stake, blocks.revocations, blocks.coin_amounts,
 			blocks.coin_tx_stats, blocks.ssfee_totals
 		FROM blocks INNER JOIN stats ON blocks.id = stats.blocks_id
 		WHERE blocks.height BETWEEN $1 AND $2
 			AND blocks.height %% %d = %d
 		ORDER BY blocks.height;`
-
 	SelectBlockDataRangeWithSkipDesc = `
 		SELECT blocks.hash, blocks.height, blocks.size,
 			blocks.difficulty, blocks.sbits, blocks.time, stats.pool_size,
-			stats.pool_val, blocks.winners, blocks.is_valid, blocks.coin_amounts,
+			stats.pool_val, blocks.winners, blocks.is_valid, blocks.voters, blocks.fresh_stake, blocks.revocations, blocks.coin_amounts,
 			blocks.coin_tx_stats, blocks.ssfee_totals
 		FROM blocks INNER JOIN stats ON blocks.id = stats.blocks_id
 		WHERE blocks.height BETWEEN $1 AND $2
 			AND blocks.height %% %d = %d
 		ORDER BY blocks.height DESC;`
-
 	SelectBlockDataByHash = `
 			SELECT blocks.height, blocks.size,
 				blocks.difficulty, blocks.sbits, blocks.time, stats.pool_size,
-				stats.pool_val, blocks.winners, blocks.is_mainchain, blocks.is_valid,
-				blocks.coin_amounts, blocks.coin_tx_stats, blocks.ssfee_totals
+				stats.pool_val, blocks.winners, blocks.is_mainchain, blocks.is_valid, blocks.voters, blocks.fresh_stake, blocks.revocations, blocks.coin_amounts,
+				blocks.coin_tx_stats, blocks.ssfee_totals
 			FROM blocks INNER JOIN stats ON blocks.id = stats.blocks_id
 			WHERE blocks.hash = $1;`
 

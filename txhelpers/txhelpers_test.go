@@ -325,7 +325,7 @@ func TestSKATotalsFromMsgTx(t *testing.T) {
 	}
 	want := new(big.Int).Add(ska1, ska1b).String()
 	if got[1] != want {
-		t.Errorf("SKA-1 total: want %s, got %s", want, got[1])
+		t.Errorf("SKA1 total: want %s, got %s", want, got[1])
 	}
 	if _, hasVAR := got[0]; hasVAR {
 		t.Error("SKATotals should not contain VAR key")
