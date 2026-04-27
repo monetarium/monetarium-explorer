@@ -69,3 +69,11 @@ _Multi-token aggregation, websocket data preparation, and template rendering for
 
 - flow (compact): code-analysis/mempool/flow.compact.md — high-level summary of mempool state aggregation
 - flow (full): code-analysis/mempool/flow.full.md — detailed, step-by-step function trace for deep debugging of mempool data tracking
+
+### Charts
+
+_Historical data fetching, cache aggregation, and payload serialization for UI charts._
+
+- flow (compact): code-analysis/charts/flow.compact.md — high-level summary of the chart data pipeline
+- flow (full): code-analysis/charts/flow.full.md — detailed, step-by-step function trace for debugging chart API and rendering
+
