@@ -62,3 +62,10 @@ _Aggregation and grouping of blocks over specific time intervals (days, weeks, m
 
 - flow (compact): code-analysis/time-based-blocks/flow.compact.md — high-level summary of how blocks are grouped by time periods
 - flow (full): code-analysis/time-based-blocks/flow.full.md — detailed, step-by-step function trace for deep debugging of time aggregations
+
+### Mempool
+
+_Multi-token aggregation, websocket data preparation, and template rendering for unconfirmed transactions._
+
+- flow (compact): code-analysis/mempool/flow.compact.md — high-level summary of mempool state aggregation
+- flow (full): code-analysis/mempool/flow.full.md — detailed, step-by-step function trace for deep debugging of mempool data tracking
