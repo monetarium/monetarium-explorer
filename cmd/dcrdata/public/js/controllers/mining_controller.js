@@ -12,8 +12,7 @@ export default class extends Controller {
       'powConverted',
       'powBar',
       'rewardIdx',
-      'powSkaRewards',
-      'blockHeight'
+      'powSkaRewards'
     ]
   }
 
