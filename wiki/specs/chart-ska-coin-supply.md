@@ -20,6 +20,10 @@
 
 ## **2. Units & Labeling**
 
+### **Удаление Mixed Coins**
+
+Удаляется control **"VISIBILITY Mixed Coins"**
+
 ### **Изменение**
 
 Все текстовые упоминания монеты должны быть **динамическими**:
@@ -30,7 +34,7 @@
 ### **Где применяется**
 
 - Y-axis label
-- Legend (все строки: Coin Supply, Unminted, Mixed)
+- Legend (все строки: Coin Supply, Unminted)
 
 ---
 
