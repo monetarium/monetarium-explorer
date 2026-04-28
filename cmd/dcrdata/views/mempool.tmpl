@@ -20,37 +20,28 @@
                         <span class="h6 d-inline-block ps-2">Current Mempool</span>
                     </div>
                     <div class="row">
-                        <div class="col-24 col-md-12 col-lg-24 col-xl-12 row pb-2 pb-sm-3 pt-2 pt-md-0 pt-lg-2 pt-xl-0">
-                            <div class="col-12 text-center">
-                                <div class="d-inline-block text-center text-md-start text-lg-center text-xl-start">
-                                    <span class="text-secondary fs13">Total Sent</span>
-                                    <br>
-                                    <span class="h4" data-mempool-target="likelyTotal">{{threeSigFigs .LikelyMineable.Total}}</span> <span class="text-secondary">DCR</span>
-                                </div>
+                        <div class="col-12 text-center">
+                            <span class="text-secondary fs13">Total Sent</span>
+                            {{range $ct, $stats := .CoinStats}}
+                            <div class="d-block">
+                                <span class="fs12 text-muted">{{coinSymbol $ct}}</span>
+                                <span class="h5" data-mempool-target="coinTotal">{{formatCoinAtoms $stats.Amount $ct}}</span>
                             </div>
-                            <div class="col-12 text-center">
-                                <div class="d-inline-block text-center text-md-start text-lg-center text-xl-start">
-                                    <span class="text-secondary fs13">Last Block</span>
-                                    <br>
-                                    <span class="h4"><a href="/block/{{.LastBlockHeight}}" data-mempool-target="bestBlock" data-hash="{{.LastBlockHash}}" data-keynav-priority>{{.LastBlockHeight}}</a></span>
-                                </div>
-                            </div>
+                            {{end}}
                         </div>
-                        <div class="col-24 col-md-12 col-lg-24 col-xl-12 row pb-3 pt-2 pt-md-0 pt-lg-2 pt-xl-0">
-                            <div class="col-12 text-center">
-                                <div class="d-inline-block text-center text-md-start text-lg-center text-xl-start">
-                                    <span class="text-secondary fs13" data-time-target="header" data-jstitle="Since Last Block">Last Block</span>
-                                    <br>
-                                    <span class="h4" data-mempool-target="bestBlockTime" data-time-target="age" data-age="{{.LastBlockTime}}"><span class="fs13">{{.FormattedBlockTime}}</span></span>
-                                </div>
-                            </div>
-                            <div class="col-12 text-center">
-                                <div class="d-inline-block text-center text-md-start text-lg-center text-xl-start">
-                                    <span class="text-secondary fs13">Size</span>
-                                    <br>
-                                    <span class="h4" data-mempool-target="mempoolSize">{{.LikelyMineable.FormattedSize}}</span>
-                                </div>
-                            </div>
+                        <div class="col-12 text-center">
+                            <span class="text-secondary fs13">Last Block</span>
+                            <div class="h4"><a href="/block/{{.LastBlockHeight}}" data-mempool-target="bestBlock" data-hash="{{.LastBlockHash}}" data-keynav-priority>{{.LastBlockHeight}}</a></div>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-12 text-center">
+                            <span class="text-secondary fs13" data-time-target="header" data-jstitle="Since Last Block">Last Block</span>
+                            <div class="h5" data-mempool-target="bestBlockTime" data-time-target="age" data-age="{{.LastBlockTime}}"><span class="fs13">{{.FormattedBlockTime}}</span></div>
+                        </div>
+                        <div class="col-12 text-center">
+                            <span class="text-secondary fs13">Size</span>
+                            <div class="h5" data-mempool-target="mempoolSize">{{.LikelyMineable.FormattedSize}}</div>
                         </div>
                     </div>
                 </div>
@@ -302,39 +293,41 @@
               <div class="row">
                   <div class="col-sm-24">
                   <h4 class="pt-5 pb-2"><span>Transactions</span></h4>
-                      <table class="table">
-                          <thead>
-                            <tr>
-                              <th>Transaction ID</th>
-                              <th class="text-end">Total DCR</th>
-                              <th class="text-end">Size</th>
-                              <th class="text-end">Fee Rate</th>
-                              <th class="text-end">Time in Mempool</th>
-                            </tr>
-                          </thead>
-                          <tbody data-mempool-target="regularTransactions">
-                              {{if gt .NumRegular 0 -}}
-                              {{- range .Transactions -}}
-                              <tr>
-                                  <td class="break-word clipboard">
-                                      <a class="hash lh1rem" href="/tx/{{.Hash}}">{{.Hash}}</a>
-                                      {{template "copyTextIcon"}}
-                                  </td>
-                                  <td class="mono fs15 text-end">
-                                    {{template "decimalParts" (float64AsDecimalParts .TotalOut 8 false)}}
-                                  </td>
-                                  <td class="mono fs15 text-end">{{.Size}} B</td>
-                                  <td class="mono fs15 text-end">{{printf "%.8f" (.FeeRate)}} DCR/kB</td>
-                                  <td class="mono fs15 text-end" data-time-target="age" data-age="{{.Time}}"></td>
-                              </tr>
-                              {{- end -}}
-                              {{- else -}}
-                              <tr class="no-tx-tr">
-                                  <td colspan="5">No regular transactions in mempool.</td>
-                              </tr>
-                              {{- end}}
-                          </tbody>
-                      </table>
+<table class="table">
+                           <thead>
+                             <tr>
+                               <th>Transaction ID</th>
+                               <th class="text-end">Coin</th>
+                               <th class="text-end">Amount</th>
+                               <th class="text-end">Size</th>
+                               <th class="text-end">Fee Rate</th>
+                               <th class="text-end">Time in Mempool</th>
+                             </tr>
+                           </thead>
+                           <tbody data-mempool-target="regularTransactions">
+                               {{if gt .NumRegular 0 -}}
+                               {{- range .Transactions -}}
+                               <tr>
+                                   <td class="break-word clipboard">
+                                       <a class="hash lh1rem" href="/tx/{{.Hash}}">{{.Hash}}</a>
+                                       {{template "copyTextIcon"}}
+                                   </td>
+                                   <td class="mono fs15 text-end">{{coinSymbol .CoinType}}</td>
+                                   <td class="mono fs15 text-end">
+                                     {{if .SKASent}}{{formatCoinAtomsFull (index .SKASent .CoinType) .CoinType}}{{else}}{{template "decimalParts" (float64AsDecimalParts .TotalOut 8 false)}}{{end}}
+                                   </td>
+                                   <td class="mono fs15 text-end">{{.Size}} B</td>
+                                   <td class="mono fs15 text-end">{{printf "%.8f" (.FeeRate)}} DCR/kB</td>
+                                   <td class="mono fs15 text-end" data-time-target="age" data-age="{{.Time}}"></td>
+                               </tr>
+                               {{- end -}}
+                               {{- else -}}
+                               <tr class="no-tx-tr">
+                                   <td colspan="6">No regular transactions in mempool.</td>
+                               </tr>
+                               {{- end}}
+                           </tbody>
+                       </table>
                   </div>
               </div>
             </div>
