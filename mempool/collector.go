@@ -521,6 +521,10 @@ func ParseTxns(txs []exptypes.MempoolTx, params *chaincfg.Params, lastBlock *Blo
 		size    int32
 		varAmt  int64
 		skaAmt  map[uint8]*big.Int
+		regCount int
+		tixCount int
+		voteCount int
+		revCount int
 	}
 	accum := make(map[uint8]*coinAccum)
 	getAccum := func(ct uint8) *coinAccum {
@@ -535,6 +539,16 @@ func ParseTxns(txs []exptypes.MempoolTx, params *chaincfg.Params, lastBlock *Blo
 			a.txCount++
 			a.size += tx.Size
 			a.varAmt += int64(tx.TotalOut * 1e8)
+			switch tx.Type {
+			case "Regular":
+				a.regCount++
+			case "Ticket":
+				a.tixCount++
+			case "Vote":
+				a.voteCount++
+			case "Revocation":
+				a.revCount++
+			}
 		} else {
 			for ct, amtStr := range tx.SKATotals {
 				a := getAccum(ct)
@@ -550,12 +564,29 @@ func ParseTxns(txs []exptypes.MempoolTx, params *chaincfg.Params, lastBlock *Blo
 					}
 					a.skaAmt[ct].Add(a.skaAmt[ct], v)
 				}
+				switch tx.Type {
+				case "Regular":
+					a.regCount++
+				case "Ticket":
+					a.tixCount++
+				case "Vote":
+					a.voteCount++
+				case "Revocation":
+					a.revCount++
+				}
 			}
 		}
 	}
 	coinStats := make(map[uint8]exptypes.MempoolCoinStats, len(accum))
 	for ct, a := range accum {
-		s := exptypes.MempoolCoinStats{TxCount: a.txCount, Size: a.size}
+		s := exptypes.MempoolCoinStats{
+			TxCount:      a.txCount,
+			Size:         a.size,
+			RegularCount: a.regCount,
+			TicketCount:  a.tixCount,
+			VoteCount:    a.voteCount,
+			RevokeCount:  a.revCount,
+		}
 		if ct == 0 {
 			s.Amount = fmt.Sprintf("%d", a.varAmt)
 		} else if a.skaAmt != nil {

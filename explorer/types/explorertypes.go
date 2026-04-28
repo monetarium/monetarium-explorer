@@ -526,9 +526,13 @@ type CoinFillData struct {
 
 // MempoolCoinStats holds per-coin mempool transaction count, size, and amount.
 type MempoolCoinStats struct {
-	TxCount int    `json:"tx_count"`
-	Size    int32  `json:"size"`
-	Amount  string `json:"amount"` // VAR: int64 atom string; SKA: big.Int atom string
+	TxCount      int    `json:"tx_count"`
+	Size         int32  `json:"size"`
+	Amount       string `json:"amount"` // VAR: int64 atom string; SKA: big.Int atom string
+	RegularCount int    `json:"regular_count"`
+	TicketCount  int    `json:"ticket_count"`
+	VoteCount    int    `json:"vote_count"`
+	RevokeCount  int    `json:"revoke_count"`
 }
 
 // TrimmedBlockInfo models data needed to display block info on the new home page
@@ -664,6 +668,7 @@ type TrimmedMempoolInfo struct {
 	CoinFills      []CoinFillData `json:"coin_fills,omitempty"`
 	TotalFillRatio float64        `json:"total_fill_ratio"`
 	ActiveSKACount int            `json:"active_ska_count"`
+	CoinStats      map[uint8]MempoolCoinStats `json:"coin_stats,omitempty"`
 }
 
 // MempoolInfo models data to update mempool info on the home page.
@@ -724,6 +729,7 @@ func (mpi *MempoolInfo) Trim() *TrimmedMempoolInfo {
 		CoinFills:      mpi.MempoolShort.CoinFills,
 		TotalFillRatio: mpi.MempoolShort.TotalFillRatio,
 		ActiveSKACount: mpi.MempoolShort.ActiveSKACount,
+		CoinStats:      mpi.MempoolShort.CoinStats,
 	}
 
 	mpi.RUnlock()
@@ -872,14 +878,19 @@ func TrimMempoolTx(tx *MempoolTx) (trimmedTx *TrimmedTxInfo) {
 		Fee:           fee,
 		FeeRate:       feeRate,
 		VoteInfo:      tx.VoteInfo,
+		CoinType: func() uint8 {
+			for ct := range tx.SKATotals {
+				return ct
+			}
+			return 0
+		}(),
+		SKASent: tx.SKATotals,
 		// TreasuryBase and Coinbase are not in mempool
 	}
-
 	var voteValid bool
 	if tx.VoteInfo != nil {
 		voteValid = tx.VoteInfo.Validation.Validity
 	}
-
 	return &TrimmedTxInfo{
 		TxBasic:   txBasic,
 		Fees:      tx.Fees,
