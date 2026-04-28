@@ -748,6 +748,8 @@ func (psh *PubSubHub) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgBl
 		coinTypes[ct] = struct{}{}
 	}
 
+	voteRewardsBlockHeight := int64(blockData.Header.Height)
+
 	if len(coinTypes) > 0 {
 		rewards := make([]exptypes.SKAVoteReward, 0, len(coinTypes))
 		for ct := range coinTypes {
@@ -759,11 +761,12 @@ func (psh *PubSubHub) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgBl
 				}
 			}
 			rewards = append(rewards, exptypes.SKAVoteReward{
-				CoinType:  ct,
-				Symbol:    fmt.Sprintf("SKA%d", ct),
-				PerBlock:  perBlock,
-				Per30Days: txhelpers.AvgSSFeeRate(sum30, ct, psh.params.TicketsPerBlock),
-				PerYear:   txhelpers.AvgSSFeeRate(sumYear, ct, psh.params.TicketsPerBlock),
+				CoinType:    ct,
+				Symbol:      fmt.Sprintf("SKA%d", ct),
+				PerBlock:    perBlock,
+				Per30Days:   txhelpers.AvgSSFeeRate(sum30, ct, psh.params.TicketsPerBlock),
+				PerYear:     txhelpers.AvgSSFeeRate(sumYear, ct, psh.params.TicketsPerBlock),
+				BlockHeight: voteRewardsBlockHeight,
 			})
 		}
 		sort.Slice(rewards, func(i, j int) bool { return rewards[i].CoinType < rewards[j].CoinType })
@@ -779,8 +782,8 @@ func (psh *PubSubHub) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgBl
 		for ct, amountStr := range blockData.ExtraInfo.SKAPoWRewards {
 			powRewards = append(powRewards, exptypes.PoWSKAReward{
 				CoinType:    ct,
-				Symbol:     fmt.Sprintf("SKA%d", ct),
-				Amount:     amountStr,
+				Symbol:      fmt.Sprintf("SKA%d", ct),
+				Amount:      amountStr,
 				BlockHeight: blockHeight,
 			})
 		}

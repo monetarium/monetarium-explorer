@@ -666,9 +666,11 @@ func (exp *explorerUI) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgB
 	// Find the latest block with SKA fee data for PerBlock calculation.
 	var latestSkaBlock *apitypes.BlockDataBasic
 	var latestSkaVoters int64
+	var voteRewardsBlockHeight int64
 
 	if len(blockData.ExtraInfo.SSFeeTotalsByCoin) > 0 {
 		// Use current block data directly to avoid redundant DB query
+		voteRewardsBlockHeight = int64(blockData.Header.Height)
 		latestSkaVoters = int64(blockData.Header.Voters)
 		latestSkaBlock = &apitypes.BlockDataBasic{
 			SSFeeTotalsByCoin: blockData.ExtraInfo.SSFeeTotalsByCoin,
@@ -678,6 +680,7 @@ func (exp *explorerUI) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgB
 		for i := len(sum30) - 1; i >= 0; i-- {
 			if len(sum30[i].SSFeeTotalsByCoin) > 0 {
 				latestSkaBlock = sum30[i]
+				voteRewardsBlockHeight = int64(sum30[i].Height)
 				// Get full block info to retrieve the voters count for this specific block
 				if bInfo := exp.dataSource.GetExplorerBlock(ctx, latestSkaBlock.Hash); bInfo != nil {
 					latestSkaVoters = int64(bInfo.BlockBasic.Voters)
@@ -702,11 +705,12 @@ func (exp *explorerUI) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgB
 				}
 			}
 			rewards = append(rewards, types.SKAVoteReward{
-				CoinType:  ct,
-				Symbol:    fmt.Sprintf("SKA%d", ct),
-				PerBlock:  perBlock,
-				Per30Days: txhelpers.AvgSSFeeRate(sum30S, ct, exp.ChainParams.TicketsPerBlock),
-				PerYear:   txhelpers.AvgSSFeeRate(sumYearS, ct, exp.ChainParams.TicketsPerBlock),
+				CoinType:    ct,
+				Symbol:     fmt.Sprintf("SKA%d", ct),
+				PerBlock:   perBlock,
+				Per30Days:  txhelpers.AvgSSFeeRate(sum30S, ct, exp.ChainParams.TicketsPerBlock),
+				PerYear:    txhelpers.AvgSSFeeRate(sumYearS, ct, exp.ChainParams.TicketsPerBlock),
+				BlockHeight: voteRewardsBlockHeight,
 			})
 		}
 		sort.Slice(rewards, func(i, j int) bool { return rewards[i].CoinType < rewards[j].CoinType })
