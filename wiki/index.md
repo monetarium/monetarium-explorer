@@ -16,6 +16,7 @@ _Human-curated rules, architecture, and constraints. Read these to understand th
 _Requirements and guidelines for specific features and pages._
 
 - homepage-metrics: specs/homepage-metrics.md — mempool, latest blocks, and supply component rules
+- block-details: specs/block-details.md — rendering rules for block details page
 - blocks-list: specs/blocks-list.md — rules for rendering list of blocks (block table on block list page)
 - chart-ska-coin-supply: specs/chart-ska-coin-supply.md — rendering and logic rules for SKA coin supply charts
 - mempool-page: specs/mempool-page.md — full multi-coin mempool page layout and logic
