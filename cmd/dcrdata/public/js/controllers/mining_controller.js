@@ -12,7 +12,8 @@ export default class extends Controller {
       'powConverted',
       'powBar',
       'rewardIdx',
-      'powSkaRewards'
+      'powSkaRewards',
+      'blockHeight'
     ]
   }
 
@@ -60,10 +61,24 @@ export default class extends Controller {
       const intEl = clone.querySelector('.int')
       const decEl = clone.querySelector('.decimal:not(.trailing-zeroes)')
       const trailEl = clone.querySelector('.trailing-zeroes')
+      const blockHeightEl = clone.querySelector('[data-block-height]')
+      const blockHeightTextEl = clone.querySelector('[data-block-height-text]')
 
       if (intEl) intEl.textContent = bold ? `${intPart}.${bold}` : intPart
       if (decEl) decEl.textContent = bold ? rest : ''
       if (trailEl) trailEl.textContent = bold ? trailingZeros : ''
+
+      const height = r.block_height
+      if (blockHeightEl && height) {
+        blockHeightEl.href = `/block/${height}`
+      }
+      if (blockHeightTextEl) {
+        if (height) {
+          blockHeightTextEl.textContent = `per block ${height}`
+        } else {
+          blockHeightTextEl.textContent = 'per last block'
+        }
+      }
 
       clone.querySelectorAll('.symbol').forEach((el) => {
         el.textContent = r.symbol

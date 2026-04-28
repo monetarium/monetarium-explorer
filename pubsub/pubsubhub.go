@@ -774,12 +774,14 @@ func (psh *PubSubHub) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgBl
 
 	// PoW SKA rewards: per-SKA-type mining reward amounts from the coinbase.
 	if len(blockData.ExtraInfo.SKAPoWRewards) > 0 {
+		blockHeight := int64(blockData.Header.Height)
 		powRewards := make([]exptypes.PoWSKAReward, 0, len(blockData.ExtraInfo.SKAPoWRewards))
 		for ct, amountStr := range blockData.ExtraInfo.SKAPoWRewards {
 			powRewards = append(powRewards, exptypes.PoWSKAReward{
-				CoinType: ct,
-				Symbol:   fmt.Sprintf("SKA%d", ct),
-				Amount:   amountStr,
+				CoinType:    ct,
+				Symbol:     fmt.Sprintf("SKA%d", ct),
+				Amount:     amountStr,
+				BlockHeight: blockHeight,
 			})
 		}
 		sort.Slice(powRewards, func(i, j int) bool { return powRewards[i].CoinType < powRewards[j].CoinType })
