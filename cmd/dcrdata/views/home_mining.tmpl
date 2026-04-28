@@ -72,19 +72,12 @@
             <div class="fs13 text-secondary">PoW SKA Reward</div>
             <div data-mining-target="powSkaRewards">
             {{range .PoWSKARewards}}
-            {{if .BlockHeight}}
-            <a class="text-decoration-none" href="/block/{{.BlockHeight}}">
+            <a class="text-decoration-none"{{if .BlockHeight}} href="/block/{{.BlockHeight}}"{{end}}>
                 <div class="mono lh1rem p03rem0 fs14-decimal fs24 p03rem0 d-flex align-items-baseline">
                     <span>{{template "decimalParts" (skaDecimalParts .Amount true 2)}}</span>
-                    <span class="ps-1 unit lh15rem">{{.Symbol}} <span class="text-black-50 ms-1 fs12">per block {{.BlockHeight}}</span></span>
+                    <span class="ps-1 unit lh15rem">{{.Symbol}} {{if .BlockHeight}}<span class="text-black-50 ms-1 fs12">per block {{.BlockHeight}}</span>{{else}}<span class="text-black-50 ms-1 fs12">per last block</span>{{end}}</span>
                 </div>
             </a>
-            {{else}}
-            <div class="mono lh1rem p03rem0 fs14-decimal fs24 p03rem0 d-flex align-items-baseline">
-                <span>{{template "decimalParts" (skaDecimalParts .Amount true 2)}}</span>
-                <span class="ps-1 unit lh15rem">{{.Symbol}} <span class="text-black-50 ms-1 fs12">per last block</span></span>
-            </div>
-            {{end}}
             {{end}}
             </div>
         </div>

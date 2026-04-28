@@ -104,8 +104,7 @@
             <div class="fs13 text-secondary">Vote SKA Reward</div>
             <div data-voting-target="skaVoteRewards">
                 {{if $page.Info.SKAVoteRewards}}{{range $page.Info.SKAVoteRewards}}
-                {{if .BlockHeight}}
-                <a class="text-decoration-none" href="/block/{{.BlockHeight}}">
+                <a class="text-decoration-none"{{if .BlockHeight}} href="/block/{{.BlockHeight}}"{{end}}>
                     <div class="mono lh1rem fs14-decimal fs24 pt-1 pb-1 d-flex flex-column flex-lg-row align-items-baseline">
                         {{if .PerBlock}}
                         {{template "decimalParts" (skaSplitParts .PerBlock)}}
@@ -117,18 +116,6 @@
                     <div class="fs12 lh1rem text-black-50">{{.Per30Days}} {{.Symbol}}/VAR per 30 days</div>
                     <div class="fs12 lh1rem text-black-50">{{.PerYear}} {{.Symbol}}/VAR per year</div>
                 </a>
-                {{else}}
-                <div class="mono lh1rem fs14-decimal fs24 pt-1 pb-1 d-flex flex-column flex-lg-row align-items-baseline">
-                    {{if .PerBlock}}
-                    {{template "decimalParts" (skaSplitParts .PerBlock)}}
-                    <span class="ps-1 unit lh15rem fs13">{{.Symbol}}/Vote</span>
-                    {{else}}
-                    <span class="ps-1 unit lh15rem fs13">&mdash; {{.Symbol}}/Vote</span>
-                    {{end}}
-                </div>
-                <div class="fs12 lh1rem text-black-50">{{.Per30Days}} {{.Symbol}}/VAR per 30 days</div>
-                <div class="fs12 lh1rem text-black-50">{{.PerYear}} {{.Symbol}}/VAR per year</div>
-                {{end}}
                 {{end}}{{else}}
                 <div class="fs12 lh1rem text-black-50">No SKA rewards available</div>
                 {{end}}
