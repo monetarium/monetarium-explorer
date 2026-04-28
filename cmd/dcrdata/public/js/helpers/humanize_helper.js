@@ -13,6 +13,13 @@ function hashParts(hash) {
   return [hash.substring(0, hashLen), hash.substring(hashLen)]
 }
 
+// coinSymbol returns the display label for a coin type.
+// 0 = VAR, 1 = SKA1, 2 = SKA2, etc.
+function coinSymbol(coinType) {
+  if (coinType === 0) return 'VAR'
+  return `SKA${coinType}`
+}
+
 const humanize = {
   commaWithDecimal: function (val, decimal) {
     if (isNaN(val) || val === 0) return '0'
@@ -263,4 +270,5 @@ const humanize = {
   }
 }
 
+humanize.coinSymbol = coinSymbol
 export default humanize

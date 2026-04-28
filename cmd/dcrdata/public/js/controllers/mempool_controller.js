@@ -20,13 +20,19 @@ function rowNode(rowText) {
 }
 
 function txTableRow(tx) {
+  const skaTotals = tx.ska_totals || {}
+  const coinType = Object.keys(skaTotals).length > 0 ? parseInt(Object.keys(skaTotals)[0]) : 0
+  const amount = coinType === 0
+    ? humanize.decimalParts(String(tx.total), false, 8)
+    : humanize.formatCoinAtomsFull(skaTotals[coinType], coinType)
   return rowNode(`<tr class="flash">
         <td class="break-word clipboard">
           <a class="hash" href="/tx/${tx.hash}" title="${tx.hash}">${tx.hash}</a>
           ${copyIcon()}
           ${alertArea()}
         </td>
-        <td class="mono fs15 text-end">${humanize.decimalParts(String(tx.total), false, 8)}</td>
+        <td class="mono fs15 text-end">${humanize.coinSymbol(coinType)}</td>
+        <td class="mono fs15 text-end">${amount}</td>
         <td class="mono fs15 text-end">${tx.size} B</td>
         <td class="mono fs15 text-end">${tx.fee_rate} DCR/kB</td>
         <td class="mono fs15 text-end" data-time-target="age" data-age="${tx.time}">${humanize.timeSince(tx.time)}</td>
