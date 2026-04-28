@@ -17,6 +17,8 @@ _Requirements and guidelines for specific features and pages._
 
 - homepage-metrics: specs/homepage-metrics.md — mempool, latest blocks, and supply component rules
 - blocks-list: specs/blocks-list.md — rules for rendering list of blocks (block table on block list page)
+- chart-ska-coin-supply: specs/chart-ska-coin-supply.md — rendering and logic rules for SKA coin supply charts
+- mempool-page: specs/mempool-page.md — full multi-coin mempool page layout and logic
 
 ## 🤖 Code Traces
 
@@ -76,4 +78,3 @@ _Historical data fetching, cache aggregation, and payload serialization for UI c
 
 - flow (compact): code-analysis/charts/flow.compact.md — high-level summary of the chart data pipeline
 - flow (full): code-analysis/charts/flow.full.md — detailed, step-by-step function trace for debugging chart API and rendering
-
