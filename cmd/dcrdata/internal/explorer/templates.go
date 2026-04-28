@@ -511,15 +511,6 @@ func skaSplitParts(s string, boldPlaces int) []string {
 	return []string{integer, bold, rest, trailingZeros}
 }
 
-// coinSymbol returns the display label for a coin type.
-// 0 = VAR, 1 = SKA1, 2 = SKA2, etc.
-func coinSymbol(coinType uint8) string {
-	if coinType == 0 {
-		return "VAR"
-	}
-	return fmt.Sprintf("SKA%d", coinType)
-}
-
 func makeTemplateFuncMap(params *chaincfg.Params) template.FuncMap {
 	netTheme := "theme-" + strings.ToLower(netName(params))
 	netName := netName(params)
@@ -855,9 +846,6 @@ func makeTemplateFuncMap(params *chaincfg.Params) template.FuncMap {
 				Data:  data,
 				Title: title,
 			}
-		},
-		"coinSymbol": func(ct uint8) string {
-			return coinSymbol(ct)
 		},
 	}
 }
