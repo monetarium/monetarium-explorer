@@ -37,6 +37,13 @@ func coinSymbol(ct uint8) string {
 	}
 }
 
+func primaryCoinType(skaTotals map[uint8]string) uint8 {
+	for ct := range skaTotals {
+		return ct
+	}
+	return 0
+}
+
 type templates struct {
 	templates map[string]pageTemplate
 	common    []string
@@ -614,6 +621,7 @@ func makeTemplateFuncMap(params *chaincfg.Params) template.FuncMap {
 		"formatCoinAtoms":     formatCoinAtoms,
 		"formatCoinAtomsFull": formatCoinAtomsFull,
 		"coinSymbol":       coinSymbol,
+		"primaryCoinType": primaryCoinType,
 		"skaDecimalParts": func(atomStr string, useCommas bool, boldNumPlaces ...int) []string {
 			return skaDecimalParts(atomStr, useCommas, boldNumPlaces...)
 		},

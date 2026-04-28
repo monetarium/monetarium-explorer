@@ -312,9 +312,10 @@
                                        <a class="hash lh1rem" href="/tx/{{.Hash}}">{{.Hash}}</a>
                                        {{template "copyTextIcon"}}
                                    </td>
-                                   <td class="mono fs15 text-end">{{coinSymbol .CoinType}}</td>
+                                   {{$ct := primaryCoinType .SKATotals}}
+                                   <td class="mono fs15 text-end">{{coinSymbol $ct}}</td>
                                    <td class="mono fs15 text-end">
-                                     {{if .SKASent}}{{formatCoinAtomsFull (index .SKASent .CoinType) .CoinType}}{{else}}{{template "decimalParts" (float64AsDecimalParts .TotalOut 8 false)}}{{end}}
+                                     {{if .SKATotals}}{{formatCoinAtomsFull (index .SKATotals $ct) $ct}}{{else}}{{template "decimalParts" (float64AsDecimalParts .TotalOut 8 false)}}{{end}}
                                    </td>
                                    <td class="mono fs15 text-end">{{.Size}} B</td>
                                    <td class="mono fs15 text-end">{{printf "%.8f" (.FeeRate)}} DCR/kB</td>
