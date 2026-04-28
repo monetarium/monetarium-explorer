@@ -706,10 +706,10 @@ func (exp *explorerUI) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgB
 			}
 			rewards = append(rewards, types.SKAVoteReward{
 				CoinType:    ct,
-				Symbol:     fmt.Sprintf("SKA%d", ct),
-				PerBlock:   perBlock,
-				Per30Days:  txhelpers.AvgSSFeeRate(sum30S, ct, exp.ChainParams.TicketsPerBlock),
-				PerYear:    txhelpers.AvgSSFeeRate(sumYearS, ct, exp.ChainParams.TicketsPerBlock),
+				Symbol:      fmt.Sprintf("SKA%d", ct),
+				PerBlock:    perBlock,
+				Per30Days:   txhelpers.AvgSSFeeRate(sum30S, ct, exp.ChainParams.TicketsPerBlock),
+				PerYear:     txhelpers.AvgSSFeeRate(sumYearS, ct, exp.ChainParams.TicketsPerBlock),
 				BlockHeight: voteRewardsBlockHeight,
 			})
 		}
@@ -757,8 +757,8 @@ func (exp *explorerUI) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgB
 			for ct, amountStr := range powRewardsMap {
 				powRewards = append(powRewards, types.PoWSKAReward{
 					CoinType:    ct,
-					Symbol:     fmt.Sprintf("SKA%d", ct),
-					Amount:     amountStr,
+					Symbol:      fmt.Sprintf("SKA%d", ct),
+					Amount:      amountStr,
 					BlockHeight: powRewardsBlockHeight,
 				})
 			}
