@@ -6407,7 +6407,7 @@ func (pgb *ChainDB) GetExplorerBlocks(ctx context.Context, start int, end int) [
 		return nil
 	}
 	// Fetch the full issued SKA list once for the whole range so every block
-	// row shows zero-activity SKAN coins rather than omitting them.
+	// row shows zero-activity SKA{n} coins rather than omitting them.
 	issuedSKA := pgb.issuedSKACoinTypes(ctx)
 	summaries := make([]*exptypes.BlockBasic, 0, start-end)
 	for i := start; i > end; i-- {
