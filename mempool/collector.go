@@ -517,14 +517,14 @@ func ParseTxns(txs []exptypes.MempoolTx, params *chaincfg.Params, lastBlock *Blo
 	// Build per-coin stats: accumulate counts/sizes and amounts natively,
 	// then convert amounts to strings once at the end.
 	type coinAccum struct {
-		txCount int
-		size    int32
-		varAmt  int64
-		skaAmt  map[uint8]*big.Int
-		regCount int
-		tixCount int
+		txCount   int
+		size      int32
+		varAmt    int64
+		skaAmt    map[uint8]*big.Int
+		regCount  int
+		tixCount  int
 		voteCount int
-		revCount int
+		revCount  int
 	}
 	accum := make(map[uint8]*coinAccum)
 	getAccum := func(ct uint8) *coinAccum {

@@ -665,9 +665,9 @@ type TrimmedMempoolInfo struct {
 	Total          float64
 	Time           int64
 	Fees           float64
-	CoinFills      []CoinFillData `json:"coin_fills,omitempty"`
-	TotalFillRatio float64        `json:"total_fill_ratio"`
-	ActiveSKACount int            `json:"active_ska_count"`
+	CoinFills      []CoinFillData             `json:"coin_fills,omitempty"`
+	TotalFillRatio float64                    `json:"total_fill_ratio"`
+	ActiveSKACount int                        `json:"active_ska_count"`
 	CoinStats      map[uint8]MempoolCoinStats `json:"coin_stats,omitempty"`
 }
 
@@ -862,13 +862,25 @@ func TrimMempoolTxs(txs []MempoolTx) []*TrimmedTxInfo {
 	return trimmedTxs
 }
 
-// TrimMempoolTx converts the input []MempoolTx to a []*TrimmedTxInfo.
+// primaryCoinType extracts the coin type from a mempool transaction's SKATotals map.
+// INVARIANT: A mempool transaction contains outputs of exactly one coin type
+// (either VAR with no SKATotals, or exactly one SKA coin type). This function
+// returns the coin type found, or 0 for VAR (empty SKATotals map).
+func primaryCoinType(tx *MempoolTx) uint8 {
+	for ct := range tx.SKATotals {
+		return ct
+	}
+	return 0
+}
+
+// TrimMempoolTx converts the input MempoolTx to a TrimmedTxInfo for display.
 func TrimMempoolTx(tx *MempoolTx) (trimmedTx *TrimmedTxInfo) {
 	fee, _ := dcrutil.NewAmount(tx.Fees) // non-nil error returns 0 fee
 	var feeRate dcrutil.Amount
 	if tx.Size > 0 {
 		feeRate = fee / dcrutil.Amount(int64(tx.Size))
 	}
+	coinType := primaryCoinType(tx)
 	txBasic := &TxBasic{
 		TxID:          tx.TxID,
 		Type:          tx.Type,
@@ -878,13 +890,8 @@ func TrimMempoolTx(tx *MempoolTx) (trimmedTx *TrimmedTxInfo) {
 		Fee:           fee,
 		FeeRate:       feeRate,
 		VoteInfo:      tx.VoteInfo,
-		CoinType: func() uint8 {
-			for ct := range tx.SKATotals {
-				return ct
-			}
-			return 0
-		}(),
-		SKASent: tx.SKATotals,
+		CoinType:      coinType,
+		SKASent:       tx.SKATotals,
 		// TreasuryBase and Coinbase are not in mempool
 	}
 	var voteValid bool
