@@ -12,7 +12,9 @@ export default class extends Controller {
       'powConverted',
       'powBar',
       'rewardIdx',
-      'powSkaRewards'
+      'powSkaRewards',
+      'powSubsidy',
+      'powFee'
     ]
   }
 
@@ -28,6 +30,9 @@ export default class extends Controller {
       2,
       true
     )
+    this.powSubsidyTarget.textContent = (ex.subsidy.pow / 100000000).toFixed(8)
+    this.powFeeTarget.textContent = (ex.mining_fee || 0).toFixed(8)
+
     this.rewardIdxTarget.textContent = ex.reward_idx
     this.powBarTarget.style.width = `${(ex.reward_idx / ex.params.reward_window_size) * 100}%`
 
