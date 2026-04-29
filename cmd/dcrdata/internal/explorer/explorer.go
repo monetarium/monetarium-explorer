@@ -560,6 +560,16 @@ func (exp *explorerUI) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgB
 	p.HomeInfo.NBlockSubsidy.PoW = blockData.ExtraInfo.NextBlockSubsidy.PoW
 	p.HomeInfo.NBlockSubsidy.Total = blockData.ExtraInfo.NextBlockSubsidy.Total
 
+	// Total reward = subsidy + mining fees (~16 + <1 VAR)
+	// MiningFee from current block being processed
+	blockInfo := exp.dataSource.GetExplorerBlock(ctx, msgBlock.BlockHash().String())
+	if blockInfo != nil {
+		p.HomeInfo.MiningFee = blockInfo.MiningFee
+		p.HomeInfo.LBlockTotal = dcrutil.Amount(p.HomeInfo.NBlockSubsidy.PoW).ToCoin() + p.HomeInfo.MiningFee
+		p.HomeInfo.LBlockTotalAtoms = p.HomeInfo.NBlockSubsidy.PoW + int64(blockInfo.MiningFee*1e8)
+		log.Debugf("MiningFee: %.8f, Total: %.8f", p.HomeInfo.MiningFee, p.HomeInfo.LBlockTotal)
+	}
+
 	// New Supply section data
 	varSupply, err := exp.dataSource.VARCoinSupply(ctx)
 	if err != nil {

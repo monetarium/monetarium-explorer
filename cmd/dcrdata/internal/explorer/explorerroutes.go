@@ -187,6 +187,14 @@ func (exp *explorerUI) Home(w http.ResponseWriter, r *http.Request) {
 
 	// Get fiat conversions if available
 	homeInfo := exp.pageData.HomeInfo
+	// Initialize LBlockTotal (subsidy + fees) if not yet set
+	if homeInfo.LBlockTotalAtoms == 0 && homeInfo.IdxBlockInWindow > 0 && homeInfo.NBlockSubsidy.PoW > 0 {
+		// Compute LBlockTotal = subsidy + estimated fees
+		// Use NBlockSubsidy for subsidy (~16) + small estimate for fees
+		homeInfo.LBlockTotalAtoms = homeInfo.NBlockSubsidy.PoW + 10000000 // ~0.1 VAR estimate
+		homeInfo.LBlockTotal = dcrutil.Amount(homeInfo.NBlockSubsidy.PoW).ToCoin() + 0.1
+		homeInfo.MiningFee = 0.1 // estimate
+	}
 	var conversions *homeConversions
 	xcBot := exp.xcBot
 	if xcBot != nil {
