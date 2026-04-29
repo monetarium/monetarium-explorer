@@ -748,9 +748,16 @@ func (psh *PubSubHub) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgBl
 		coinTypes[ct] = struct{}{}
 	}
 
-	voteRewardsBlockHeight := int64(blockData.Header.Height)
-
 	if len(coinTypes) > 0 {
+		// Only set block height when current block has SKA fee data.
+		var voteRewardsBlockHeight int64
+		if len(blockData.ExtraInfo.SSFeeTotalsByCoin) > 0 {
+			voteRewardsBlockHeight = int64(blockData.Header.Height)
+		}
+		// Note: When current block has no SKA fees, perBlock is empty and
+		// voteRewardsBlockHeight stays 0. The template handles this as
+		// non-clickable, matching the explorer.go behavior.
+
 		rewards := make([]exptypes.SKAVoteReward, 0, len(coinTypes))
 		for ct := range coinTypes {
 			var perBlock string
