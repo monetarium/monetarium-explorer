@@ -75,7 +75,7 @@
             <a class="text-decoration-none"{{if .BlockHeight}} href="/block/{{.BlockHeight}}"{{end}}>
                 <div class="mono lh1rem p03rem0 fs14-decimal fs24 p03rem0 d-flex align-items-baseline">
                     <span>{{template "decimalParts" (skaDecimalParts .Amount true 2)}}</span>
-                    <span class="ps-1 unit lh15rem">{{.Symbol}} {{if .BlockHeight}}<span class="text-black-50 ms-1 fs12">per block {{.BlockHeight}}</span>{{else}}<span class="text-black-50 ms-1 fs12">per last block</span>{{end}}</span>
+                    <span class="ps-1 unit lh15rem">{{.Symbol}} <span class="text-black-50 ms-1 fs12">per last block</span></span>
                 </div>
             </a>
             {{end}}
@@ -96,7 +96,7 @@
                 <div class="decimal-parts d-inline-block">
                     <span class="int"></span><span class="decimal"></span><span class="decimal trailing-zeroes"></span>
                 </div>
-                <span class="ps-1 unit lh15rem"><span class="symbol"></span> <span class="text-black-50 ms-1 fs12" data-block-height-text></span></span>
+                <span class="ps-1 unit lh15rem"><span class="symbol"></span> <span class="text-black-50 ms-1 fs12">per last block</span></span>
             </div>
             </a>
         </template>
