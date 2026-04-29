@@ -796,6 +796,7 @@ type BlockExplorerExtraInfo struct {
 	TxLen            int                              `json:"tx"`
 	CoinSupply       int64                            `json:"coin_supply"`
 	NextBlockSubsidy *chainjson.GetBlockSubsidyResult `json:"next_block_subsidy"`
+	MiningFeeAtoms   int64                            `json:"mining_fee_atoms"`
 	// CoinAmounts holds per-coin totals (VAR key=0, SKAn key=n) as decimal atom strings.
 	CoinAmounts map[uint8]string `json:"coin_amounts,omitempty"`
 	// CoinTxStats holds per-coin tx count and size (key 0=VAR, 1-255=SKAn).

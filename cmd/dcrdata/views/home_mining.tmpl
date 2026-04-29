@@ -37,7 +37,7 @@
                 Subsidy: <span data-mining-target="powSubsidy">{{printf "%.8f" (toFloat64Amount .NBlockSubsidy.PoW)}}</span>
             </div>
             <div class="fs12 lh1rem text-black-50">
-                Fee: <span data-mining-target="powFee">{{printf "%.8f" .MiningFee}}</span>
+                Fee: <span data-mining-target="powFee">{{printf "%.8f" (toFloat64Amount .MiningFeeAtoms)}}</span>
             </div>
         </div>
         {{/* Row 2 right: Next Block VAR Reward Reduction (swapped from below) */}}

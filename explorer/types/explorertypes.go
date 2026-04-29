@@ -632,7 +632,7 @@ type HomeInfo struct {
 	ASR                   float64              `json:"ASR"`
 	NBlockSubsidy         BlockSubsidy         `json:"subsidy"`
 	LBlockSubsidy         BlockSubsidy         `json:"lblock_subsidy"`
-	MiningFee             float64              `json:"mining_fee"`
+	MiningFeeAtoms       int64                `json:"mining_fee_atoms"`
 	LBlockTotal           float64              `json:"lblock_total"`
 	LBlockTotalAtoms      int64                `json:"lblock_total_atoms"`
 	Params                ChainParams          `json:"params"`

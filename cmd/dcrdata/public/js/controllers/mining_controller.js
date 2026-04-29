@@ -31,7 +31,7 @@ export default class extends Controller {
       true
     )
     this.powSubsidyTarget.textContent = (ex.subsidy.pow / 100000000).toFixed(8)
-    this.powFeeTarget.textContent = (ex.mining_fee || 0).toFixed(8)
+    this.powFeeTarget.textContent = ((ex.mining_fee_atoms || 0) / 100000000).toFixed(8)
 
     this.rewardIdxTarget.textContent = ex.reward_idx
     this.powBarTarget.style.width = `${(ex.reward_idx / ex.params.reward_window_size) * 100}%`

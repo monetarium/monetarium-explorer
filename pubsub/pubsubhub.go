@@ -685,10 +685,10 @@ func (psh *PubSubHub) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgBl
 
 	// Total reward = subsidy + mining fees (~16 + <1 VAR)
 	// MiningFee from blockData (computed in collector)
-	p.GeneralInfo.MiningFee = blockData.ExtraInfo.MiningFee
-	p.GeneralInfo.LBlockTotal = dcrutil.Amount(p.GeneralInfo.NBlockSubsidy.PoW).ToCoin() + p.GeneralInfo.MiningFee
-	p.GeneralInfo.LBlockTotalAtoms = p.GeneralInfo.NBlockSubsidy.PoW + int64(blockData.ExtraInfo.MiningFee*1e8)
-	log.Debugf("PUB LBlockTotalAtoms: %d (MiningFee: %.8f, NBlockSubsidy.PoW: %d)", p.GeneralInfo.LBlockTotalAtoms, p.GeneralInfo.MiningFee, p.GeneralInfo.NBlockSubsidy.PoW)
+	p.GeneralInfo.MiningFeeAtoms = blockData.ExtraInfo.MiningFeeAtoms
+	p.GeneralInfo.LBlockTotal = dcrutil.Amount(p.GeneralInfo.NBlockSubsidy.PoW).ToCoin() + dcrutil.Amount(blockData.ExtraInfo.MiningFeeAtoms).ToCoin()
+	p.GeneralInfo.LBlockTotalAtoms = p.GeneralInfo.NBlockSubsidy.PoW + blockData.ExtraInfo.MiningFeeAtoms
+	log.Debugf("PUB LBlockTotalAtoms: %d (MiningFee: %.8f, NBlockSubsidy.PoW: %d)", p.GeneralInfo.LBlockTotalAtoms, dcrutil.Amount(blockData.ExtraInfo.MiningFeeAtoms).ToCoin(), p.GeneralInfo.NBlockSubsidy.PoW)
 
 	// If BlockData contains non-nil PoolInfo, copy values.
 	p.GeneralInfo.PoolInfo = exptypes.TicketPoolInfo{}
