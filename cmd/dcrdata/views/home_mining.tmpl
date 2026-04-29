@@ -72,10 +72,12 @@
             <div class="fs13 text-secondary">PoW SKA Reward</div>
             <div data-mining-target="powSkaRewards">
             {{range .PoWSKARewards}}
-            <div class="mono lh1rem p03rem0 fs14-decimal fs24 p03rem0 d-flex align-items-baseline">
-                <span>{{template "decimalParts" (skaDecimalParts .Amount true 2)}}</span>
-                <span class="ps-1 unit lh15rem">{{.Symbol}} <span class="text-black-50 ms-1 fs12">per last block</span></span>
-            </div>
+            <a class="text-decoration-none"{{if .BlockHeight}} href="/block/{{.BlockHeight}}"{{end}}>
+                <div class="mono lh1rem p03rem0 fs14-decimal fs24 p03rem0 d-flex align-items-baseline">
+                    <span>{{template "decimalParts" (skaDecimalParts .Amount true 2)}}</span>
+                    <span class="ps-1 unit lh15rem">{{.Symbol}} <span class="text-black-50 ms-1 fs12">per last block</span></span>
+                </div>
+            </a>
             {{end}}
             </div>
         </div>
@@ -89,12 +91,14 @@
         {{end}}
         {{/* Templates for JS live-update cloning */}}
         <template id="pow-ska-reward-template">
+            <a class="text-decoration-none" data-block-height>
             <div class="mono lh1rem p03rem0 fs14-decimal fs24 p03rem0 d-flex align-items-baseline">
                 <div class="decimal-parts d-inline-block">
                     <span class="int"></span><span class="decimal"></span><span class="decimal trailing-zeroes"></span>
                 </div>
                 <span class="ps-1 unit lh15rem"><span class="symbol"></span> <span class="text-black-50 ms-1 fs12">per last block</span></span>
             </div>
+            </a>
         </template>
         <template id="pow-ska-empty-template">
             <div class="fs12 lh1rem text-black-50">No SKA rewards available</div>

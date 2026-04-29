@@ -594,11 +594,12 @@ type Conversion struct {
 
 // SKAVoteReward holds per-SKA-type staker reward rates expressed as SKA atoms per VAR atom.
 type SKAVoteReward struct {
-	CoinType  uint8  `json:"coin_type"`
-	Symbol    string `json:"symbol"`
-	PerBlock  string `json:"per_block"`   // SKA/VAR ratio for last block, 18dp decimal string
-	Per30Days string `json:"per_30_days"` // 30-day average
-	PerYear   string `json:"per_year"`    // annualised average
+	CoinType    uint8  `json:"coin_type"`
+	Symbol      string `json:"symbol"`
+	PerBlock    string `json:"per_block"`   // SKA/VAR ratio for last block, 18dp decimal string
+	Per30Days   string `json:"per_30_days"` // 30-day average
+	PerYear     string `json:"per_year"`    // annualised average
+	BlockHeight int64  `json:"block_height,omitempty"`
 }
 
 // VoteVARReward holds the VAR staker reward rate expressed as VAR earned per
@@ -611,9 +612,10 @@ type VoteVARReward struct {
 
 // PoWSKAReward holds the PoW mining reward for a single SKA coin type.
 type PoWSKAReward struct {
-	CoinType uint8  `json:"coin_type"`
-	Symbol   string `json:"symbol"`
-	Amount   string `json:"amount"` // SKA atoms as decimal string (18 decimals)
+	CoinType    uint8  `json:"coin_type"`
+	Symbol      string `json:"symbol"`
+	Amount      string `json:"amount"`
+	BlockHeight int64  `json:"block_height,omitempty"`
 }
 
 // HomeInfo represents data used for the home page

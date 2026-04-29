@@ -104,10 +104,16 @@ export default class extends Controller {
       const intEl = clone.querySelector('.int')
       const decEl = clone.querySelector('.decimal:not(.trailing-zeroes)')
       const trailEl = clone.querySelector('.trailing-zeroes')
+      const blockHeightEl = clone.querySelector('[data-block-height]')
 
       if (intEl) intEl.textContent = bold ? `${intPart}.${bold}` : intPart
       if (decEl) decEl.textContent = rest
       if (trailEl) trailEl.textContent = trailingZeros
+
+      const height = r.block_height
+      if (blockHeightEl && height) {
+        blockHeightEl.href = `/block/${height}`
+      }
 
       clone.querySelectorAll('[data-field]').forEach((el) => {
         const field = el.dataset.field

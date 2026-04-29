@@ -666,9 +666,11 @@ func (exp *explorerUI) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgB
 	// Find the latest block with SKA fee data for PerBlock calculation.
 	var latestSkaBlock *apitypes.BlockDataBasic
 	var latestSkaVoters int64
+	var voteRewardsBlockHeight int64
 
 	if len(blockData.ExtraInfo.SSFeeTotalsByCoin) > 0 {
 		// Use current block data directly to avoid redundant DB query
+		voteRewardsBlockHeight = int64(blockData.Header.Height)
 		latestSkaVoters = int64(blockData.Header.Voters)
 		latestSkaBlock = &apitypes.BlockDataBasic{
 			SSFeeTotalsByCoin: blockData.ExtraInfo.SSFeeTotalsByCoin,
@@ -678,6 +680,7 @@ func (exp *explorerUI) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgB
 		for i := len(sum30) - 1; i >= 0; i-- {
 			if len(sum30[i].SSFeeTotalsByCoin) > 0 {
 				latestSkaBlock = sum30[i]
+				voteRewardsBlockHeight = int64(sum30[i].Height)
 				// Get full block info to retrieve the voters count for this specific block
 				if bInfo := exp.dataSource.GetExplorerBlock(ctx, latestSkaBlock.Hash); bInfo != nil {
 					latestSkaVoters = int64(bInfo.BlockBasic.Voters)
@@ -702,11 +705,12 @@ func (exp *explorerUI) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgB
 				}
 			}
 			rewards = append(rewards, types.SKAVoteReward{
-				CoinType:  ct,
-				Symbol:    fmt.Sprintf("SKA%d", ct),
-				PerBlock:  perBlock,
-				Per30Days: txhelpers.AvgSSFeeRate(sum30S, ct, exp.ChainParams.TicketsPerBlock),
-				PerYear:   txhelpers.AvgSSFeeRate(sumYearS, ct, exp.ChainParams.TicketsPerBlock),
+				CoinType:    ct,
+				Symbol:      fmt.Sprintf("SKA%d", ct),
+				PerBlock:    perBlock,
+				Per30Days:   txhelpers.AvgSSFeeRate(sum30S, ct, exp.ChainParams.TicketsPerBlock),
+				PerYear:     txhelpers.AvgSSFeeRate(sumYearS, ct, exp.ChainParams.TicketsPerBlock),
+				BlockHeight: voteRewardsBlockHeight,
 			})
 		}
 		sort.Slice(rewards, func(i, j int) bool { return rewards[i].CoinType < rewards[j].CoinType })
@@ -717,11 +721,17 @@ func (exp *explorerUI) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgB
 
 	// PoW SKA rewards: prioritize rewards from the current block (miner-centric),
 	// then fallback to previous blocks if current block is empty.
+	var powRewardsBlockHeight int64
 	if len(newBlockData.SKAPoWRewards) > 0 {
+		powRewardsBlockHeight = newBlockData.Height
+		for i := range newBlockData.SKAPoWRewards {
+			newBlockData.SKAPoWRewards[i].BlockHeight = powRewardsBlockHeight
+		}
 		p.HomeInfo.PoWSKARewards = newBlockData.SKAPoWRewards
 	} else {
 		var powRewardsMap map[uint8]string
 		if len(blockData.ExtraInfo.SKAPoWRewards) > 0 {
+			powRewardsBlockHeight = newBlockData.Height
 			powRewardsMap = blockData.ExtraInfo.SKAPoWRewards
 		} else {
 			// Fallback: Search backwards from the current block height.
@@ -735,6 +745,7 @@ func (exp *explorerUI) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgB
 					continue
 				}
 				if len(skaFees) > 0 {
+					powRewardsBlockHeight = h
 					powRewardsMap = skaFees
 					break
 				}
@@ -745,9 +756,10 @@ func (exp *explorerUI) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgB
 			powRewards := make([]types.PoWSKAReward, 0, len(powRewardsMap))
 			for ct, amountStr := range powRewardsMap {
 				powRewards = append(powRewards, types.PoWSKAReward{
-					CoinType: ct,
-					Symbol:   fmt.Sprintf("SKA%d", ct),
-					Amount:   amountStr,
+					CoinType:    ct,
+					Symbol:      fmt.Sprintf("SKA%d", ct),
+					Amount:      amountStr,
+					BlockHeight: powRewardsBlockHeight,
 				})
 			}
 			sort.Slice(powRewards, func(i, j int) bool { return powRewards[i].CoinType < powRewards[j].CoinType })
