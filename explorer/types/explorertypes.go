@@ -633,6 +633,9 @@ type HomeInfo struct {
 	RewardPeriod          string               `json:"reward_period"`
 	ASR                   float64              `json:"ASR"`
 	NBlockSubsidy         BlockSubsidy         `json:"subsidy"`
+	MiningFeeAtoms        int64                `json:"mining_fee_atoms"`
+	LBlockTotal           float64              `json:"lblock_total"`
+	LBlockTotalAtoms      int64                `json:"lblock_total_atoms"`
 	Params                ChainParams          `json:"params"`
 	PoolInfo              TicketPoolInfo       `json:"pool_info"`
 	TotalLockedVAR        float64              `json:"total_locked_var"`

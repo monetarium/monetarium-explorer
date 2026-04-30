@@ -12,7 +12,9 @@ export default class extends Controller {
       'powConverted',
       'powBar',
       'rewardIdx',
-      'powSkaRewards'
+      'powSkaRewards',
+      'powSubsidy',
+      'powFee'
     ]
   }
 
@@ -22,18 +24,22 @@ export default class extends Controller {
     this.hashrateTarget.innerHTML = humanize.decimalParts(String(ex.hash_rate), false, 8, 2, true)
     this.hashrateDeltaTarget.innerHTML = humanize.fmtPercentage(ex.hash_rate_change_month)
     this.bsubsidyPowTarget.innerHTML = humanize.decimalParts(
-      String(ex.subsidy.pow / 100000000),
+      String((ex.lblock_total_atoms || ex.subsidy.pow) / 100000000),
       false,
       8,
       2,
       true
     )
+    this.powSubsidyTarget.textContent = (ex.subsidy.pow / 100000000).toFixed(8)
+    this.powFeeTarget.textContent = ((ex.mining_fee_atoms || 0) / 100000000).toFixed(8)
+
     this.rewardIdxTarget.textContent = ex.reward_idx
     this.powBarTarget.style.width = `${(ex.reward_idx / ex.params.reward_window_size) * 100}%`
 
     if (ex.exchange_rate && this.hasPowConvertedTarget) {
       const { value: xcRate, index } = ex.exchange_rate
-      this.powConvertedTarget.textContent = `${humanize.twoDecimals((ex.subsidy.pow / 1e8) * xcRate)} ${index}`
+      const total = (ex.lblock_total_atoms || ex.subsidy.pow) / 100000000
+      this.powConvertedTarget.textContent = `${humanize.twoDecimals(total * xcRate)} ${index}`
     }
 
     this._renderPoWSkaRewards(ex.pow_ska_rewards)
