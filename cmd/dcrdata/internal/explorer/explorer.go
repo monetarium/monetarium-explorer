@@ -18,6 +18,8 @@ import (
 	"os/signal"
 	"reflect"
 	"sort"
+	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -123,6 +125,7 @@ type explorerDataSource interface {
 	VARCoinSupply(ctx context.Context) (*types.VARCoinSupply, error)
 	SKACoinSupply(ctx context.Context) ([]*types.SKACoinSupplyEntry, error)
 	GetBlockSKAFees(ctx context.Context, height int64) (map[uint8]string, error)
+	GetVoteTicketDataByBlock(ctx context.Context, blockHash string) ([]dbtypes.VoteTicketData, error)
 }
 
 type PoliteiaBackend interface {
@@ -642,82 +645,141 @@ func (exp *explorerUI) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgB
 	p.HomeInfo.RewardPeriod = fmt.Sprintf("%.2f days", float64(avgSSTxToSSGenMaturity)*
 		exp.ChainParams.TargetTimePerBlock.Hours()/24)
 
-	// Compute per-SKA vote rewards. Averages are always computed from
-	// historical summaries so they survive SKA-free blocks. PerBlock is
-	// retrieved from the latest block that contains SKA fee data.
-	blocksIn30Days := int(30 * 24 * time.Hour / exp.ChainParams.TargetTimePerBlock)
+	// Compute per-SKA vote rewards. PerBlock is retrieved from the latest block
+	// that contains SKA fee data.
 	tip := int(exp.dataSource.Height())
+	blocksIn30Days := int(30 * 24 * time.Hour / exp.ChainParams.TargetTimePerBlock)
 	start30 := tip - blocksIn30Days
 	if start30 < 0 {
 		start30 = 0
 	}
-	startYear := tip - blocksIn30Days*12
-	if startYear < 0 {
-		startYear = 0
-	}
 	sum30 := exp.dataSource.GetSummaryRange(ctx, start30, tip)
-	sumYear := exp.dataSource.GetSummaryRange(ctx, startYear, tip)
-	toSummaries := func(blocks []*apitypes.BlockDataBasic) []txhelpers.SSFeeSummary {
-		s := make([]txhelpers.SSFeeSummary, len(blocks))
-		for i, b := range blocks {
-			s[i] = txhelpers.SSFeeSummary{SSFeeTotalsByCoin: b.SSFeeTotalsByCoin, StakeDiff: b.StakeDiff}
+
+	blocksPerYear := float64(365 * 24 * time.Hour / exp.ChainParams.TargetTimePerBlock)
+
+	coinTypes := make(map[uint8]struct{})
+	for ct, totals := range blockData.ExtraInfo.SSFeeTotalsByCoin {
+		if totals != "" {
+			coinTypes[ct] = struct{}{}
 		}
-		return s
 	}
-
-	coinTypes := txhelpers.SSFeeCoinTypes(toSummaries(sumYear))
-	for ct := range blockData.ExtraInfo.SSFeeTotalsByCoin {
-		coinTypes[ct] = struct{}{}
-	}
-
-	// Find the latest block with SKA fee data for PerBlock calculation.
-	var latestSkaBlock *apitypes.BlockDataBasic
-	var latestSkaVoters int64
-	var voteRewardsBlockHeight int64
-
-	if len(blockData.ExtraInfo.SSFeeTotalsByCoin) > 0 {
-		// Use current block data directly to avoid redundant DB query
-		voteRewardsBlockHeight = int64(blockData.Header.Height)
-		latestSkaVoters = int64(blockData.Header.Voters)
-		latestSkaBlock = &apitypes.BlockDataBasic{
-			SSFeeTotalsByCoin: blockData.ExtraInfo.SSFeeTotalsByCoin,
-		}
-	} else {
-		// Fallback: Search backwards through historical summaries
-		for i := len(sum30) - 1; i >= 0; i-- {
-			if len(sum30[i].SSFeeTotalsByCoin) > 0 {
-				latestSkaBlock = sum30[i]
-				voteRewardsBlockHeight = int64(sum30[i].Height)
-				// Get full block info to retrieve the voters count for this specific block
-				if bInfo := exp.dataSource.GetExplorerBlock(ctx, latestSkaBlock.Hash); bInfo != nil {
-					latestSkaVoters = int64(bInfo.BlockBasic.Voters)
-				}
-				break
-			}
+	// Also check historical summaries to make sure we don't miss coins that haven't
+	// appeared in the current block but did in the last 30 days.
+	for _, s := range sum30 {
+		for ct := range s.SSFeeTotalsByCoin {
+			coinTypes[ct] = struct{}{}
 		}
 	}
 
 	if len(coinTypes) > 0 {
-		sum30S := toSummaries(sum30)
-		sumYearS := toSummaries(sumYear)
 		rewards := make([]types.SKAVoteReward, 0, len(coinTypes))
 		for ct := range coinTypes {
 			var perBlock string
-			if latestSkaBlock != nil {
-				if totalStr, ok := latestSkaBlock.SSFeeTotalsByCoin[ct]; ok {
-					if total, parsed := new(big.Int).SetString(totalStr, 10); parsed && latestSkaVoters > 0 {
-						perVote := new(big.Int).Div(total, big.NewInt(latestSkaVoters))
-						perBlock = txhelpers.FormatSKAAtoms(perVote)
+			var blockHeight int64
+			var blockHash string
+			var totalReward *big.Int
+
+			// Find the latest block specifically for this coin type
+			if totalStr, ok := blockData.ExtraInfo.SSFeeTotalsByCoin[ct]; ok && totalStr != "" {
+				if total, parsed := new(big.Int).SetString(totalStr, 10); parsed && blockData.Header.Voters > 0 {
+					perVote := new(big.Int).Div(total, big.NewInt(int64(blockData.Header.Voters)))
+					perBlock = txhelpers.FormatSKAAtoms(perVote)
+					blockHeight = int64(blockData.Header.Height)
+					blockHash = blockData.Header.Hash
+					totalReward = total
+				}
+			}
+
+			if perBlock == "" {
+				// Fallback: Search backwards through historical summaries for this coin
+				for i := len(sum30) - 1; i >= 0; i-- {
+					if totalStr, ok := sum30[i].SSFeeTotalsByCoin[ct]; ok && totalStr != "" {
+						if total, parsed := new(big.Int).SetString(totalStr, 10); parsed {
+							bInfo := exp.dataSource.GetExplorerBlock(ctx, sum30[i].Hash)
+							if bInfo != nil && bInfo.BlockBasic.Voters > 0 {
+								perVote := new(big.Int).Div(total, big.NewInt(int64(bInfo.BlockBasic.Voters)))
+								perBlock = txhelpers.FormatSKAAtoms(perVote)
+								blockHeight = int64(sum30[i].Height)
+								blockHash = sum30[i].Hash
+								totalReward = total
+								break
+							}
+						}
 					}
 				}
 			}
+
+			perYear := "0.000000000000000000"
+			if blockHash != "" {
+				voteData, err := exp.dataSource.GetVoteTicketDataByBlock(ctx, blockHash)
+				if err == nil && len(voteData) > 0 {
+					// Get total reward for this coin in this block
+					if totalReward == nil {
+						// This should ideally not happen given the logic above
+						for _, s := range sum30 {
+							if int64(s.Height) == blockHeight {
+								if ts, ok := s.SSFeeTotalsByCoin[ct]; ok {
+									totalReward, _ = new(big.Int).SetString(ts, 10)
+								}
+								break
+							}
+						}
+					}
+
+					if totalReward != nil {
+						// rewardPerTicket is the reward for a single ticket slot.
+						// We divide by TicketsPerBlock (fixed at 5) because the total reward
+						// is distributed across all possible voting slots in the block,
+						// regardless of whether every slot was filled.
+						rewardPerTicket := new(big.Float).SetInt(totalReward)
+						rewardPerTicket.Quo(rewardPerTicket, big.NewFloat(1e18))
+						rewardPerTicket.Quo(rewardPerTicket, big.NewFloat(float64(exp.ChainParams.TicketsPerBlock)))
+
+						var sumAPY float64
+						var count int
+						for _, vd := range voteData {
+							priceStr := vd.TicketPrice
+							if !strings.Contains(priceStr, ".") {
+								priceFloat, err := strconv.ParseFloat(priceStr, 64)
+								if err == nil {
+									priceStr = fmt.Sprintf("%.8f", priceFloat/1e8)
+								}
+							}
+							price, parsedP := new(big.Float).SetString(priceStr)
+							if !parsedP || price.Cmp(big.NewFloat(0)) <= 0 {
+								continue
+							}
+							age := float64(vd.VoteHeight - vd.PurchaseHeight)
+							if age <= 0 {
+								continue
+							}
+
+							// APY_i = (BlocksPerYear * (rewardPerTicket / ticketPrice)) / age
+							term := new(big.Float).Copy(rewardPerTicket)
+							term.Quo(term, price)
+							term.Mul(term, big.NewFloat(blocksPerYear))
+							term.Quo(term, big.NewFloat(age))
+
+							val, _ := term.Float64()
+							sumAPY += val
+							count++
+						}
+						if count > 0 {
+							avgAPY := sumAPY / float64(count)
+							// Format as 18dp decimal string (since it's SKA/VAR ratio)
+							// Note: the ratio is typically small, so we format it as a decimal.
+							perYear = fmt.Sprintf("%.18f", avgAPY)
+						}
+					}
+				}
+			}
+
 			rewards = append(rewards, types.SKAVoteReward{
 				CoinType:    ct,
 				Symbol:      fmt.Sprintf("SKA%d", ct),
 				PerBlock:    perBlock,
-				Per30Days:   txhelpers.AvgSSFeeRate(sum30S, ct, exp.ChainParams.TicketsPerBlock),
-				PerYear:     txhelpers.AvgSSFeeRate(sumYearS, ct, exp.ChainParams.TicketsPerBlock),
-				BlockHeight: voteRewardsBlockHeight,
+				PerYear:     perYear,
+				BlockHeight: blockHeight,
 			})
 		}
 		sort.Slice(rewards, func(i, j int) bool { return rewards[i].CoinType < rewards[j].CoinType })

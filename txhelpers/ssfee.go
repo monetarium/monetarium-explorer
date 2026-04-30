@@ -28,13 +28,35 @@ func BlockSSFeeTotals(msgBlock *wire.MsgBlock) map[uint8]string {
 		if stake.DetermineTxType(tx) != stake.TxTypeSSFee {
 			continue
 		}
+
+		var inputSKA, outputSKA big.Int
+		var coinType uint8
+
+		// Sum all SKA inputs
+		for _, vin := range tx.TxIn {
+			if vin.SKAValueIn != nil {
+				inputSKA.Add(&inputSKA, vin.SKAValueIn)
+			}
+		}
+
+		// Sum all SKA outputs and track coin type
 		for _, out := range tx.TxOut {
 			if out.CoinType.IsSKA() && out.SKAValue != nil {
-				ct := uint8(out.CoinType)
-				if totals[ct] == nil {
-					totals[ct] = new(big.Int)
+				outputSKA.Add(&outputSKA, out.SKAValue)
+				if coinType == 0 {
+					coinType = uint8(out.CoinType)
 				}
-				totals[ct].Add(totals[ct], out.SKAValue)
+			}
+		}
+
+		// Calculate actual reward: output - input (positive = to voters)
+		if coinType != 0 && outputSKA.Sign() > 0 && inputSKA.Sign() > 0 {
+			reward := new(big.Int).Sub(&outputSKA, &inputSKA)
+			if reward.Sign() > 0 {
+				if totals[coinType] == nil {
+					totals[coinType] = new(big.Int)
+				}
+				totals[coinType].Add(totals[coinType], reward)
 			}
 		}
 	}

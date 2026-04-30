@@ -43,6 +43,13 @@ type CoinStat struct {
 	Size    uint32 `json:"size"`
 }
 
+// VoteTicketData holds data for a single vote and its associated ticket purchase.
+type VoteTicketData struct {
+	TicketPrice    string `json:"ticket_price"`
+	VoteHeight     int    `json:"vote_height"`
+	PurchaseHeight int    `json:"purchase_height"`
+}
+
 // ScriptClass is an enumeration for the list of standard types of script.
 type ScriptClass byte
 
