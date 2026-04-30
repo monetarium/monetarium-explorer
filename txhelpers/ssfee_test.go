@@ -150,8 +150,8 @@ func TestCalculateAverageTicketAPY(t *testing.T) {
 
 	t.Run("empty vote data returns zero sentinel", func(t *testing.T) {
 		got := CalculateAverageTicketAPY(nil, oneReward, 52560)
-		if got != "0.000000000000000000" {
-			t.Errorf("got %q, want zero sentinel", got)
+		if got != "0" {
+			t.Errorf("got %q, want \"0\"", got)
 		}
 	})
 

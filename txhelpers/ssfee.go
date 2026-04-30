@@ -113,10 +113,10 @@ type VoteTicket struct {
 }
 
 // CalculateAverageTicketAPY computes the average annual percentage yield for a set of tickets.
-// It returns the average as a decimal string with 18 decimal places.
+// It returns the average as a big.Int atom string (18dp).
 func CalculateAverageTicketAPY(voteData []VoteTicket, rewardPerTicket *big.Float, blocksPerYear float64) string {
 	if len(voteData) == 0 {
-		return "0.000000000000000000"
+		return "0"
 	}
 
 	var sumAPY float64
