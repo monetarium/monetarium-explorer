@@ -596,9 +596,9 @@ type Conversion struct {
 type SKAVoteReward struct {
 	CoinType    uint8  `json:"coin_type"`
 	Symbol      string `json:"symbol"`
-	PerBlock    string `json:"per_block"`   // SKA/VAR ratio for last block, 18dp decimal string
-	Per30Days   string `json:"per_30_days"` // 30-day average
-	PerYear     string `json:"per_year"`    // annualised average
+	PerBlock    string `json:"per_block"`   // SKA/VAR ratio for last block, big.Int atom string (18dp)
+	Per30Days   string `json:"per_30_days"` // 30-day average, big.Int atom string (18dp)
+	PerYear     string `json:"per_year"`    // annualised average, big.Int atom string (18dp)
 	BlockHeight int64  `json:"block_height,omitempty"`
 }
 

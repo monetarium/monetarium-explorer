@@ -1,6 +1,6 @@
 import { Controller } from '@hotwired/stimulus'
 import humanize from '../helpers/humanize_helper'
-import { splitSkaValue } from '../helpers/ska_helper'
+import { splitSkaAtoms } from '../helpers/ska_helper'
 
 export default class extends Controller {
   static get targets() {
@@ -99,7 +99,7 @@ export default class extends Controller {
       const decimalPartsEl = clone.querySelector('.decimal-parts')
       if (decimalPartsEl && isDash) decimalPartsEl.style.display = 'none'
 
-      const { intPart, bold, rest, trailingZeros } = splitSkaValue(s)
+      const { intPart, bold, rest, trailingZeros } = splitSkaAtoms(s)
 
       const intEl = clone.querySelector('.int')
       const decEl = clone.querySelector('.decimal:not(.trailing-zeroes)')
@@ -120,9 +120,9 @@ export default class extends Controller {
         if (field === 'unit') {
           el.textContent = isDash ? `— ${r.symbol}/Vote` : `${r.symbol}/Vote`
         } else if (field === 'per30d') {
-          el.textContent = `${r.per_30_days} ${r.symbol}/VAR per 30 days`
+          el.textContent = `${humanize.formatCoinAtomsFull(r.per_30_days, 1)} ${r.symbol}/VAR per 30 days`
         } else if (field === 'peryear') {
-          el.textContent = `${r.per_year} ${r.symbol}/VAR per year`
+          el.textContent = `${humanize.formatCoinAtomsFull(r.per_year, 1)} ${r.symbol}/VAR per year`
         }
         el.removeAttribute('data-field')
       })

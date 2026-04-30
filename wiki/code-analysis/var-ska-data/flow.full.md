@@ -26,7 +26,7 @@ Tracing the dual-token end-to-end data lifecycle of VAR (primary) and SKA (custo
 
 ### 4. Cross-Layer Dependencies
 
-- **String Formatting Protocol Coupling:** The string chopping rules in backend Go templates (`skaSplitParts` / `skaDecimalParts`) are tightly coupled to the exact slicing mechanisms in the client side (`splitSkaAtoms` and `splitSkaValue`). Altering display digits (e.g. bolding 3 decimals instead of 2) requires synchronized updates across both JS and Go borders.
+- **String Formatting Protocol Coupling:** The string chopping rules in backend Go templates (`skaSplitParts` / `skaDecimalParts`) are tightly coupled to the exact slicing mechanisms in the client side (`splitSkaAtoms`). Altering display digits (e.g. bolding 3 decimals instead of 2) requires synchronized updates across both JS and Go borders.
 - **WebSocket to DOM `<template>:`** The JSON structure broadcasted from PubSubHub (`r.amount` string) strictly expects the historic `.tmpl` HTML to contain an inert, identical `<template>` tag. If either deviates visually, real-time rendering breaks parity.
 
 ### 5. Critical Constraints

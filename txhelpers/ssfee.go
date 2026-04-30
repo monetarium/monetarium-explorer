@@ -48,13 +48,12 @@ func BlockSSFeeTotals(msgBlock *wire.MsgBlock) map[uint8]string {
 	return result
 }
 
-// FormatSKAAtoms converts SKA atoms (1e18) to a fixed-point decimal string with 18 decimal places.
+// FormatSKAAtoms converts SKA atoms (1e18) to an atom string (integer string).
 func FormatSKAAtoms(skaAtoms *big.Int) string {
 	if skaAtoms == nil || skaAtoms.Sign() <= 0 {
-		return "0.000000000000000000"
+		return "0"
 	}
-	intPart, fracPart := new(big.Int).DivMod(skaAtoms, ssfeeDp, new(big.Int))
-	return fmt.Sprintf("%s.%018d", intPart.String(), fracPart.Int64())
+	return skaAtoms.String()
 }
 
 // FormatSKAPerVAR computes (skaAtoms/1e18) / (varAtoms/1e8) — SKA coins per
@@ -110,9 +109,8 @@ func AvgSSFeeRate(summaries []SSFeeSummary, coinType uint8, ticketsPerBlock uint
 		count++
 	}
 	if count == 0 {
-		return "0.000000000000000000"
+		return "0"
 	}
 	avg := new(big.Int).Div(total, big.NewInt(int64(count)))
-	intPart, fracPart := new(big.Int).DivMod(avg, ssfeeDp, new(big.Int))
-	return fmt.Sprintf("%s.%018d", intPart.String(), fracPart.Int64())
+	return avg.String()
 }

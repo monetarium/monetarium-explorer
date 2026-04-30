@@ -103,6 +103,8 @@ export default class TurboQuery {
         return false
       case 'true':
         return true
+      default:
+        break
     }
     if (!isNaN(parseFloat(v)) && isFinite(v)) {
       if (String(v).includes('.')) {
