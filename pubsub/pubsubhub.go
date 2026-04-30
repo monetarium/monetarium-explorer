@@ -13,7 +13,6 @@ import (
 	"net/http"
 	"sort"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -735,7 +734,7 @@ func (psh *PubSubHub) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgBl
 	toSummaries := func(blocks []*apitypes.BlockDataBasic) []txhelpers.SSFeeSummary {
 		s := make([]txhelpers.SSFeeSummary, len(blocks))
 		for i, b := range blocks {
-			s[i] = txhelpers.SSFeeSummary{SSFeeTotalsByCoin: b.SSFeeTotalsByCoin, StakeDiff: b.StakeDiff}
+			s[i] = txhelpers.SSFeeSummary{SSFeeTotalsByCoin: b.SSFeeTotalsByCoin, StakeDiff: b.StakeDiff, Hash: b.Hash, Height: int(b.Height)}
 		}
 		return s
 	}
@@ -771,17 +770,15 @@ func (psh *PubSubHub) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgBl
 
 			if perBlock == "" {
 				// Fallback: Search backwards through historical summaries for this coin
-				blocksYear := psh.sourceBase.GetSummaryRange(ctx, startYear, tip)
-				for i := len(blocksYear) - 1; i >= 0; i-- {
-					b := blocksYear[i]
-					if totalStr, ok := b.SSFeeTotalsByCoin[ct]; ok && totalStr != "" {
+				for i := len(sumYear) - 1; i >= 0; i-- {
+					if totalStr, ok := sumYear[i].SSFeeTotalsByCoin[ct]; ok && totalStr != "" {
 						if total, parsed := new(big.Int).SetString(totalStr, 10); parsed {
-							bInfo := psh.sourceBase.GetExplorerBlock(ctx, b.Hash)
+							bInfo := psh.sourceBase.GetExplorerBlock(ctx, sumYear[i].Hash)
 							if bInfo != nil && bInfo.BlockBasic.Voters > 0 {
 								perVote := new(big.Int).Div(total, big.NewInt(int64(bInfo.BlockBasic.Voters)))
 								perBlock = txhelpers.FormatSKAAtoms(perVote)
-								blockHeight = int64(b.Height)
-								blockHash = b.Hash
+								blockHeight = int64(sumYear[i].Height)
+								blockHash = sumYear[i].Hash
 								break
 							}
 						}
@@ -797,10 +794,9 @@ func (psh *PubSubHub) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgBl
 					if totalStr, ok := blockData.ExtraInfo.SSFeeTotalsByCoin[ct]; ok {
 						totalReward, _ = new(big.Int).SetString(totalStr, 10)
 					} else {
-						blocksYear := psh.sourceBase.GetSummaryRange(ctx, startYear, tip)
-						for _, b := range blocksYear {
-							if int64(b.Height) == blockHeight {
-								if ts, ok := b.SSFeeTotalsByCoin[ct]; ok {
+						for _, s := range sumYear {
+							if int64(s.Height) == blockHeight {
+								if ts, ok := s.SSFeeTotalsByCoin[ct]; ok {
 									totalReward, _ = new(big.Int).SetString(ts, 10)
 								}
 								break
@@ -814,36 +810,15 @@ func (psh *PubSubHub) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgBl
 						rewardPerTicket.Quo(rewardPerTicket, big.NewFloat(1e18))
 						rewardPerTicket.Quo(rewardPerTicket, big.NewFloat(float64(psh.params.TicketsPerBlock)))
 
-						var sumAPY float64
-						var count int
-						for _, vd := range voteData {
-							priceStr := vd.TicketPrice
-							if !strings.Contains(priceStr, ".") {
-								priceFloat, err := strconv.ParseFloat(priceStr, 64)
-								if err == nil {
-									priceStr = fmt.Sprintf("%.8f", priceFloat/1e8)
-								}
+						tickets := make([]txhelpers.VoteTicket, len(voteData))
+						for i, vd := range voteData {
+							tickets[i] = txhelpers.VoteTicket{
+								TicketPrice:    vd.TicketPrice,
+								VoteHeight:     vd.VoteHeight,
+								PurchaseHeight: vd.PurchaseHeight,
 							}
-							price, parsedP := new(big.Float).SetString(priceStr)
-							if !parsedP || price.Cmp(big.NewFloat(0)) <= 0 {
-								continue
-							}
-							age := float64(vd.VoteHeight - vd.PurchaseHeight)
-							if age <= 0 {
-								continue
-							}
-							term := new(big.Float).Copy(rewardPerTicket)
-							term.Quo(term, price)
-							term.Mul(term, big.NewFloat(blocksPerYear))
-							term.Quo(term, big.NewFloat(age))
-							val, _ := term.Float64()
-							sumAPY += val
-							count++
 						}
-						if count > 0 {
-							avgAPY := sumAPY / float64(count)
-							perYear = fmt.Sprintf("%.18f", avgAPY)
-						}
+						perYear = txhelpers.CalculateAverageTicketAPY(tickets, rewardPerTicket, blocksPerYear)
 					}
 				}
 			}
@@ -880,6 +855,22 @@ func (psh *PubSubHub) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgBl
 		p.GeneralInfo.PoWSKARewards = nil
 	}
 
+	// Coin supply data for the Supply section.
+	if varSupply, err := psh.sourceBase.VARCoinSupply(ctx); err != nil {
+		log.Errorf("Store: VARCoinSupply failed: %v", err)
+	} else {
+		p.GeneralInfo.VARCoinSupply = varSupply
+	}
+	if skaSupply, err := psh.sourceBase.SKACoinSupply(ctx); err != nil {
+		log.Errorf("Store: SKACoinSupply failed: %v", err)
+	} else {
+		entries := make([]exptypes.SKACoinSupplyEntry, len(skaSupply))
+		for i, e := range skaSupply {
+			entries[i] = *e
+		}
+		p.GeneralInfo.SKACoinSupply = entries
+	}
+
 	p.mtx.Unlock()
 
 	// Signal to the websocket hub that a new block was received, but do not
@@ -893,7 +884,7 @@ func (psh *PubSubHub) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgBl
 	}()
 
 	// Broadcast updated fill bars so clients learn about newly issued coins
-	// (e.g. via coinbase) even before they arriveT.
+	// (e.g. via coinbase) even before they arrive.
 	go func() {
 		select {
 		case psh.wsHub.HubRelay <- pstypes.HubMessage{Signal: sigMempoolUpdate}:

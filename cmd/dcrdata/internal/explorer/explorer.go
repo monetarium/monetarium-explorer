@@ -735,41 +735,15 @@ func (exp *explorerUI) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgB
 						rewardPerTicket.Quo(rewardPerTicket, big.NewFloat(1e18))
 						rewardPerTicket.Quo(rewardPerTicket, big.NewFloat(float64(exp.ChainParams.TicketsPerBlock)))
 
-						var sumAPY float64
-						var count int
-						for _, vd := range voteData {
-							priceStr := vd.TicketPrice
-							if !strings.Contains(priceStr, ".") {
-								priceFloat, err := strconv.ParseFloat(priceStr, 64)
-								if err == nil {
-									priceStr = fmt.Sprintf("%.8f", priceFloat/1e8)
-								}
+						tickets := make([]txhelpers.VoteTicket, len(voteData))
+						for i, vd := range voteData {
+							tickets[i] = txhelpers.VoteTicket{
+								TicketPrice:    vd.TicketPrice,
+								VoteHeight:     vd.VoteHeight,
+								PurchaseHeight: vd.PurchaseHeight,
 							}
-							price, parsedP := new(big.Float).SetString(priceStr)
-							if !parsedP || price.Cmp(big.NewFloat(0)) <= 0 {
-								continue
-							}
-							age := float64(vd.VoteHeight - vd.PurchaseHeight)
-							if age <= 0 {
-								continue
-							}
-
-							// APY_i = (BlocksPerYear * (rewardPerTicket / ticketPrice)) / age
-							term := new(big.Float).Copy(rewardPerTicket)
-							term.Quo(term, price)
-							term.Mul(term, big.NewFloat(blocksPerYear))
-							term.Quo(term, big.NewFloat(age))
-
-							val, _ := term.Float64()
-							sumAPY += val
-							count++
 						}
-						if count > 0 {
-							avgAPY := sumAPY / float64(count)
-							// Format as 18dp decimal string (since it's SKA/VAR ratio)
-							// Note: the ratio is typically small, so we format it as a decimal.
-							perYear = fmt.Sprintf("%.18f", avgAPY)
-						}
+						perYear = txhelpers.CalculateAverageTicketAPY(tickets, rewardPerTicket, blocksPerYear)
 					}
 				}
 			}
