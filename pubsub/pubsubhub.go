@@ -732,10 +732,6 @@ func (psh *PubSubHub) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgBl
 
 	blocksIn30Days := int(30 * 24 * time.Hour / psh.params.TargetTimePerBlock)
 	tip := int(psh.sourceBase.Height())
-	start30 := tip - blocksIn30Days
-	if start30 < 0 {
-		start30 = 0
-	}
 	startYear := tip - blocksIn30Days*12
 	if startYear < 0 {
 		startYear = 0
@@ -747,7 +743,6 @@ func (psh *PubSubHub) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgBl
 		}
 		return s
 	}
-	sum30 := toSummaries(psh.sourceBase.GetSummaryRange(ctx, start30, tip))
 	sumYear := toSummaries(psh.sourceBase.GetSummaryRange(ctx, startYear, tip))
 
 	coinTypes := txhelpers.SSFeeCoinTypes(sumYear)
@@ -778,7 +773,6 @@ func (psh *PubSubHub) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgBl
 				CoinType:    ct,
 				Symbol:      fmt.Sprintf("SKA%d", ct),
 				PerBlock:    perBlock,
-				Per30Days:   txhelpers.AvgSSFeeRate(sum30, ct, psh.params.TicketsPerBlock),
 				PerYear:     txhelpers.AvgSSFeeRate(sumYear, ct, psh.params.TicketsPerBlock),
 				BlockHeight: voteRewardsBlockHeight,
 			})

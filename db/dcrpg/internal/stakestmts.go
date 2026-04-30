@@ -247,6 +247,11 @@ const (
 	SelectAllVoteDbIDsHeightsTicketHashes = `SELECT id, height, ticket_hash FROM votes;`
 	SelectAllVoteDbIDsHeightsTicketDbIDs  = `SELECT id, height, ticket_tx_db_id FROM votes;`
 
+	SelectVoteTicketDataByBlock = `SELECT v.ticket_price, v.height, t.block_height 
+		FROM votes v 
+		JOIN tickets t ON v.ticket_hash = t.tx_hash 
+		WHERE v.block_hash = $1;`
+
 	UpdateVotesMainchainAll = `UPDATE votes
 		SET is_mainchain=b.is_mainchain
 		FROM (

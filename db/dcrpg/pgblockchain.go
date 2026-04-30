@@ -1308,6 +1308,19 @@ func (pgb *ChainDB) Transaction(ctx context.Context, txHash string) ([]*dbtypes.
 	return dbTxs, pgb.replaceCancelError(err)
 }
 
+// GetVoteTicketDataByBlock retrieves vote and ticket purchase data for all votes in the
+// specified block, and an error value.
+func (pgb *ChainDB) GetVoteTicketDataByBlock(ctx context.Context, blockHash string) ([]dbtypes.VoteTicketData, error) {
+	ch, err := chainHashFromStr(blockHash)
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := context.WithTimeout(ctx, pgb.queryTimeout)
+	defer cancel()
+	data, err := retrieveVoteTicketDataByBlock(ctx, pgb.db, ch)
+	return data, pgb.replaceCancelError(err)
+}
+
 // BlockMissedVotes retrieves the ticket IDs for all missed votes in the
 // specified block, and an error value.
 func (pgb *ChainDB) BlockMissedVotes(ctx context.Context, blockHash string) ([]string, error) {
