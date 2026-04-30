@@ -114,7 +114,7 @@ func TestVotingCardTemplate(t *testing.T) {
 	// Case 5 — Single SKA entry
 	t.Run("SingleSKAEntry", func(t *testing.T) {
 		ska := []types.SKAVoteReward{
-			{CoinType: 1, Symbol: "SKA1", PerBlock: "97178596780181388", Per30Days: "38980675541825918", PerYear: "38980675541825918"},
+			{CoinType: 1, Symbol: "SKA1", PerBlock: "97178596780181388", PerYear: "38980675541825918"},
 		}
 		out := renderVotingCard(t, tmpl, makeHomeInfo(types.VoteVARReward{}, ska))
 		if strings.Contains(out, "No SKA rewards available") {
@@ -132,9 +132,6 @@ func TestVotingCardTemplate(t *testing.T) {
 		}
 		if !strings.Contains(out, "7178596780181388") {
 			t.Error("expected trailing decimal digits of PerBlock in output")
-		}
-		if !strings.Contains(out, "0.038980675541825918") {
-			t.Error("expected Per30Days value in output")
 		}
 		if !strings.Contains(out, "SKA1/VAR") {
 			t.Error("expected unit label 'SKA1/VAR' in output")
@@ -154,7 +151,7 @@ func TestVotingCardTemplate(t *testing.T) {
 	t.Run("SKAPerBlockDecimalParts", func(t *testing.T) {
 		ska := []types.SKAVoteReward{
 			// value with significant non-zero decimals beyond the bold 2 places
-			{CoinType: 2, Symbol: "SKA2", PerBlock: "1234567890000000000", Per30Days: "30000000000000000000", PerYear: "365000000000000000000"},
+			{CoinType: 2, Symbol: "SKA2", PerBlock: "1234567890000000000", PerYear: "365000000000000000000"},
 		}
 		out := renderVotingCard(t, tmpl, makeHomeInfo(types.VoteVARReward{}, ska))
 		if !strings.Contains(out, `class="decimal-parts`) {
@@ -226,11 +223,10 @@ func TestProp_SKASliceOrderPreserved(t *testing.T) {
 			coinType := rapid.Uint8Range(1, 255).Draw(t, fmt.Sprintf("coinType%d", i))
 			sym := fmt.Sprintf("SKA%d", coinType)
 			skaRewards[i] = types.SKAVoteReward{
-				CoinType:  coinType,
-				Symbol:    sym,
-				PerBlock:  "1",
-				Per30Days: "30",
-				PerYear:   "365",
+				CoinType: coinType,
+				Symbol:   sym,
+				PerBlock: "1",
+				PerYear:  "365",
 			}
 			symbols[i] = sym
 		}
@@ -263,10 +259,9 @@ func TestProp_SKAAtomsRendered(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		// PerBlock must be an atom string (integer string).
 		perBlock := rapid.StringMatching(`[1-9]\d{0,30}`).Draw(t, "perBlock")
-		per30Days := rapid.StringMatching(`[1-9]\d{0,30}`).Draw(t, "per30Days")
 		perYear := rapid.StringMatching(`[1-9]\d{0,30}`).Draw(t, "perYear")
 		ska := []types.SKAVoteReward{
-			{CoinType: 1, Symbol: "SKA1", PerBlock: perBlock, Per30Days: per30Days, PerYear: perYear},
+			{CoinType: 1, Symbol: "SKA1", PerBlock: perBlock, PerYear: perYear},
 		}
 		info := makeHomeInfo(types.VoteVARReward{}, ska)
 		out := renderVotingCard(t, tmpl, info)
@@ -287,14 +282,13 @@ func TestProp_RenderedHTMLWellFormed(t *testing.T) {
 		for i := 0; i < n; i++ {
 			coinType := rapid.Uint8Range(1, 255).Draw(t, fmt.Sprintf("coinType%d", i))
 			skaRewards[i] = types.SKAVoteReward{
-				CoinType:  coinType,
-				Symbol:    fmt.Sprintf("SKA%d", coinType),
-				PerBlock:  "1",
-				Per30Days: "30",
-				PerYear:   "365",
+				CoinType: coinType,
+				Symbol:   fmt.Sprintf("SKA%d", coinType),
+				PerBlock: "1",
+				PerYear:  "365",
 			}
 		}
-		info := makeHomeInfo(types.VoteVARReward{PerBlock: 1.0, Per30Days: 5.0, PerYear: 60.0}, skaRewards)
+		info := makeHomeInfo(types.VoteVARReward{PerBlock: 1.0, PerYear: 60.0}, skaRewards)
 		out := renderVotingCard(t, tmpl, info)
 
 		_, err := html.Parse(strings.NewReader(out))
@@ -313,11 +307,10 @@ func TestProp_SKAVoteRewardsContainerExactlyOnce(t *testing.T) {
 		for i := 0; i < n; i++ {
 			coinType := rapid.Uint8Range(1, 255).Draw(t, fmt.Sprintf("coinType%d", i))
 			skaRewards[i] = types.SKAVoteReward{
-				CoinType:  coinType,
-				Symbol:    fmt.Sprintf("SKA%d", coinType),
-				PerBlock:  "1",
-				Per30Days: "30",
-				PerYear:   "365",
+				CoinType: coinType,
+				Symbol:   fmt.Sprintf("SKA%d", coinType),
+				PerBlock: "1",
+				PerYear:  "365",
 			}
 		}
 		info := makeHomeInfo(types.VoteVARReward{}, skaRewards)

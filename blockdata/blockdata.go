@@ -239,6 +239,8 @@ func (t *Collector) CollectBlockInfo(hash *chainhash.Hash) (*apitypes.BlockDataB
 	if feeInfoBlock == nil {
 		log.Error("FeeInfoBlock failed")
 	}
+	// Compute mining fee (total fees from all transactions in block)
+	miningFee := computeMiningFee(msgBlock)
 
 	// Work/Stake difficulty
 	diff := txhelpers.GetDifficultyRatio(header.Bits, t.netParams)
@@ -258,6 +260,7 @@ func (t *Collector) CollectBlockInfo(hash *chainhash.Hash) (*apitypes.BlockDataB
 		TxLen:            txLen,
 		CoinSupply:       int64(coinSupply),
 		NextBlockSubsidy: nbSubsidy,
+		MiningFeeAtoms:   miningFee,
 	}
 
 	// Accumulate per-coin output totals from all transactions in the block.
@@ -584,4 +587,23 @@ func BlockSKAFees(msgBlock *wire.MsgBlock) map[uint8]string {
 		out[k] = v.String()
 	}
 	return out
+}
+
+// computeMiningFee calculates total mining fees from a block (sum of all tx fees).
+func computeMiningFee(msgBlock *wire.MsgBlock) int64 {
+	var totalFee int64
+	for i, tx := range msgBlock.Transactions {
+		if i == 0 {
+			continue // skip coinbase
+		}
+		var in, out int64
+		for _, vin := range tx.TxIn {
+			in += vin.ValueIn
+		}
+		for _, vout := range tx.TxOut {
+			out += vout.Value
+		}
+		totalFee += in - out
+	}
+	return totalFee
 }

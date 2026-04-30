@@ -30,14 +30,15 @@
         <div class="col-12 mb-3 mb-sm-2 mb-md-3 mb-lg-3">
             <div class="fs13 text-secondary">PoW VAR Reward</div>
             <div class="mono lh1rem p03rem0 fs14-decimal fs24 p03rem0 d-flex align-items-baseline">
-                <span data-mining-target="bsubsidyPow">{{template "decimalParts" (float64AsDecimalParts (toFloat64Amount .NBlockSubsidy.PoW) 8 true 2)}}</span>
+                <span data-mining-target="bsubsidyPow">{{template "decimalParts" (float64AsDecimalParts (toFloat64Amount .LBlockTotalAtoms) 8 true 2)}}</span>
                 <span class="ps-1 unit lh15rem">VAR</span>
             </div>
-            {{if $conv -}}
             <div class="fs12 lh1rem text-black-50">
-                <span data-mining-target="powConverted">{{$conv.PowSplit.TwoDecimals}} {{$conv.PowSplit.Index}}</span>
+                Subsidy: <span data-mining-target="powSubsidy">{{printf "%.8f" (toFloat64Amount .NBlockSubsidy.PoW)}}</span>
             </div>
-            {{- end}}
+            <div class="fs12 lh1rem text-black-50">
+                Fee: <span data-mining-target="powFee">{{printf "%.8f" (toFloat64Amount .MiningFeeAtoms)}}</span>
+            </div>
         </div>
         {{/* Row 2 right: Next Block VAR Reward Reduction (swapped from below) */}}
         <div class="col-12 mb-3 mb-sm-2 mb-md-3 mb-lg-3">
