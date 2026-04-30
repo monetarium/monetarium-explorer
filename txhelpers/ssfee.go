@@ -166,5 +166,16 @@ func CalculateAverageTicketAPY(voteData []VoteTicket, rewardPerTicket *big.Float
 	}
 
 	avgAPY := sumAPY / float64(count)
-	return fmt.Sprintf("%.18f", avgAPY)
+
+	// Convert the APY ratio to SKA atoms (1e18) so the result is consistent
+	// with PerBlock and can be consumed by formatAtomsAsCoinString in templates.
+	atomsFloat := new(big.Float).SetPrec(128).SetFloat64(avgAPY)
+	scale := new(big.Float).SetPrec(128).SetInt(ssfeeDp) // 1e18
+	atomsFloat.Mul(atomsFloat, scale)
+
+	atomsInt, _ := atomsFloat.Int(nil)
+	if atomsInt == nil || atomsInt.Sign() <= 0 {
+		return "0"
+	}
+	return atomsInt.String()
 }
