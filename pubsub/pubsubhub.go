@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -57,6 +58,7 @@ type DataSource interface {
 	GetSummaryRange(ctx context.Context, idx0, idx1 int) []*apitypes.BlockDataBasic
 	VARCoinSupply(ctx context.Context) (*exptypes.VARCoinSupply, error)
 	SKACoinSupply(ctx context.Context) ([]*exptypes.SKACoinSupplyEntry, error)
+	GetVoteTicketDataByBlock(ctx context.Context, blockHash string) ([]dbtypes.VoteTicketData, error)
 }
 
 // State represents the current state of block chain.
@@ -629,8 +631,6 @@ func (psh *PubSubHub) StoreMPData(_ *mempool.StakeData, _ []exptypes.MempoolTx, 
 func (psh *PubSubHub) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgBlock) error {
 	ctx := context.TODO()
 
-	// treasuryActive := txhelpers.IsTreasuryActive(psh.params.Net, int64(msgBlock.Header.Height))
-
 	// Retrieve block data for the passed block hash.
 	newBlockData := psh.sourceBase.GetExplorerBlock(ctx, msgBlock.BlockHash().String())
 
@@ -710,7 +710,6 @@ func (psh *PubSubHub) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgBl
 	p.GeneralInfo.TicketReward = ticketRewardPct
 	p.GeneralInfo.VoteVARReward = exptypes.VoteVARReward{
 		PerBlock:  posSubsPerVote,
-		Per30Days: ticketRewardPct,
 		PerYear:   p.GeneralInfo.ASR, // ASR not recomputed in pubsub path; use last known value
 	}
 
@@ -723,13 +722,10 @@ func (psh *PubSubHub) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgBl
 		int64(psh.params.CoinbaseMaturity)
 	p.GeneralInfo.RewardPeriod = fmt.Sprintf("%.2f days", float64(avgSSTxToSSGenMaturity)*
 		psh.params.TargetTimePerBlock.Hours()/24)
-	//p.GeneralInfo.ASR = ASR
 
-	// Compute per-SKA vote rewards. Averages are always computed from
-	// historical summaries so they survive SKA-free blocks. PerBlock is only
-	// populated when the current block contains SKA fee data.
+	// Compute per-SKA vote rewards. PerBlock is retrieved from the latest block
+	// that contains SKA fee data.
 	voters := int64(blockData.Header.Voters)
-
 	blocksIn30Days := int(30 * 24 * time.Hour / psh.params.TargetTimePerBlock)
 	tip := int(psh.sourceBase.Height())
 	startYear := tip - blocksIn30Days*12
@@ -756,24 +752,107 @@ func (psh *PubSubHub) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgBl
 		if len(blockData.ExtraInfo.SSFeeTotalsByCoin) > 0 {
 			voteRewardsBlockHeight = int64(blockData.Header.Height)
 		}
-		// Note: When current block has no SKA fees, perBlock is empty and
-		// voteRewardsBlockHeight stays 0. The template handles this as
-		// non-clickable, matching the explorer.go behavior.
 
 		rewards := make([]exptypes.SKAVoteReward, 0, len(coinTypes))
 		for ct := range coinTypes {
 			var perBlock string
-			if totalStr, ok := blockData.ExtraInfo.SSFeeTotalsByCoin[ct]; ok {
+			var blockHeight int64
+			var blockHash string
+
+			// Find the latest block specifically for this coin type
+			if totalStr, ok := blockData.ExtraInfo.SSFeeTotalsByCoin[ct]; ok && totalStr != "" {
 				if total, parsed := new(big.Int).SetString(totalStr, 10); parsed && voters > 0 {
 					perVote := new(big.Int).Div(total, big.NewInt(voters))
 					perBlock = txhelpers.FormatSKAAtoms(perVote)
+					blockHeight = int64(blockData.Header.Height)
+					blockHash = blockData.Header.Hash
 				}
 			}
+
+			if perBlock == "" {
+				// Fallback: Search backwards through historical summaries for this coin
+				blocksYear := psh.sourceBase.GetSummaryRange(ctx, startYear, tip)
+				for i := len(blocksYear) - 1; i >= 0; i-- {
+					b := blocksYear[i]
+					if totalStr, ok := b.SSFeeTotalsByCoin[ct]; ok && totalStr != "" {
+						if total, parsed := new(big.Int).SetString(totalStr, 10); parsed {
+							bInfo := psh.sourceBase.GetExplorerBlock(ctx, b.Hash)
+							if bInfo != nil && bInfo.BlockBasic.Voters > 0 {
+								perVote := new(big.Int).Div(total, big.NewInt(int64(bInfo.BlockBasic.Voters)))
+								perBlock = txhelpers.FormatSKAAtoms(perVote)
+								blockHeight = int64(b.Height)
+								blockHash = b.Hash
+								break
+							}
+						}
+					}
+				}
+			}
+
+			perYear := "0.000000000000000000"
+			if blockHash != "" {
+				voteData, err := psh.sourceBase.GetVoteTicketDataByBlock(ctx, blockHash)
+				if err == nil && len(voteData) > 0 {
+					var totalReward *big.Int
+					if totalStr, ok := blockData.ExtraInfo.SSFeeTotalsByCoin[ct]; ok {
+						totalReward, _ = new(big.Int).SetString(totalStr, 10)
+					} else {
+						blocksYear := psh.sourceBase.GetSummaryRange(ctx, startYear, tip)
+						for _, b := range blocksYear {
+							if int64(b.Height) == blockHeight {
+								if ts, ok := b.SSFeeTotalsByCoin[ct]; ok {
+									totalReward, _ = new(big.Int).SetString(ts, 10)
+								}
+								break
+							}
+						}
+					}
+
+					if totalReward != nil {
+						blocksPerYear := float64(365 * 24 * time.Hour / psh.params.TargetTimePerBlock)
+						rewardPerTicket := new(big.Float).SetInt(totalReward)
+						rewardPerTicket.Quo(rewardPerTicket, big.NewFloat(1e18))
+						rewardPerTicket.Quo(rewardPerTicket, big.NewFloat(float64(psh.params.TicketsPerBlock)))
+
+						var sumAPY float64
+						var count int
+						for _, vd := range voteData {
+							priceStr := vd.TicketPrice
+							if !strings.Contains(priceStr, ".") {
+								priceFloat, err := strconv.ParseFloat(priceStr, 64)
+								if err == nil {
+									priceStr = fmt.Sprintf("%.8f", priceFloat/1e8)
+								}
+							}
+							price, parsedP := new(big.Float).SetString(priceStr)
+							if !parsedP || price.Cmp(big.NewFloat(0)) <= 0 {
+								continue
+							}
+							age := float64(vd.VoteHeight - vd.PurchaseHeight)
+							if age <= 0 {
+								continue
+							}
+							term := new(big.Float).Copy(rewardPerTicket)
+							term.Quo(term, price)
+							term.Mul(term, big.NewFloat(blocksPerYear))
+							term.Quo(term, big.NewFloat(age))
+							val, _ := term.Float64()
+							sumAPY += val
+							count++
+						}
+						if count > 0 {
+							avgAPY := sumAPY / float64(count)
+							perYear = fmt.Sprintf("%.18f", avgAPY)
+						}
+					}
+				}
+			}
+
 			rewards = append(rewards, exptypes.SKAVoteReward{
 				CoinType:    ct,
 				Symbol:      fmt.Sprintf("SKA%d", ct),
 				PerBlock:    perBlock,
-				PerYear:     txhelpers.AvgSSFeeRate(sumYear, ct, psh.params.TicketsPerBlock),
+				PerYear:     perYear,
 				BlockHeight: voteRewardsBlockHeight,
 			})
 		}
@@ -785,36 +864,20 @@ func (psh *PubSubHub) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgBl
 
 	// PoW SKA rewards: per-SKA-type mining reward amounts from the coinbase.
 	if len(blockData.ExtraInfo.SKAPoWRewards) > 0 {
-		blockHeight := int64(blockData.Header.Height)
+		powRewardsBlockHeight := int64(blockData.Header.Height)
 		powRewards := make([]exptypes.PoWSKAReward, 0, len(blockData.ExtraInfo.SKAPoWRewards))
 		for ct, amountStr := range blockData.ExtraInfo.SKAPoWRewards {
 			powRewards = append(powRewards, exptypes.PoWSKAReward{
 				CoinType:    ct,
 				Symbol:      fmt.Sprintf("SKA%d", ct),
 				Amount:      amountStr,
-				BlockHeight: blockHeight,
+				BlockHeight: powRewardsBlockHeight,
 			})
 		}
 		sort.Slice(powRewards, func(i, j int) bool { return powRewards[i].CoinType < powRewards[j].CoinType })
 		p.GeneralInfo.PoWSKARewards = powRewards
 	} else {
 		p.GeneralInfo.PoWSKARewards = nil
-	}
-
-	// Coin supply data for the Supply section.
-	if varSupply, err := psh.sourceBase.VARCoinSupply(ctx); err != nil {
-		log.Errorf("Store: VARCoinSupply failed: %v", err)
-	} else {
-		p.GeneralInfo.VARCoinSupply = varSupply
-	}
-	if skaSupply, err := psh.sourceBase.SKACoinSupply(ctx); err != nil {
-		log.Errorf("Store: SKACoinSupply failed: %v", err)
-	} else {
-		entries := make([]exptypes.SKACoinSupplyEntry, len(skaSupply))
-		for i, e := range skaSupply {
-			entries[i] = *e
-		}
-		p.GeneralInfo.SKACoinSupply = entries
 	}
 
 	p.mtx.Unlock()
@@ -826,6 +889,16 @@ func (psh *PubSubHub) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgBl
 		case psh.wsHub.HubRelay <- pstypes.HubMessage{Signal: sigNewBlock}:
 		case <-time.After(time.Second * 10):
 			log.Errorf("sigNewBlock send failed: Timeout waiting for WebsocketHub.")
+		}
+	}()
+
+	// Broadcast updated fill bars so clients learn about newly issued coins
+	// (e.g. via coinbase) even before they arriveT.
+	go func() {
+		select {
+		case psh.wsHub.HubRelay <- pstypes.HubMessage{Signal: sigMempoolUpdate}:
+		case <-time.After(time.Second * 10):
+			log.Errorf("sigMempoolUpdate send failed: Timeout waiting for WebsocketHub.")
 		}
 	}()
 

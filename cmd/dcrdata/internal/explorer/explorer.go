@@ -18,6 +18,8 @@ import (
 	"os/signal"
 	"reflect"
 	"sort"
+	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -675,6 +677,7 @@ func (exp *explorerUI) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgB
 			var perBlock string
 			var blockHeight int64
 			var blockHash string
+			var totalReward *big.Int
 
 			// Find the latest block specifically for this coin type
 			if totalStr, ok := blockData.ExtraInfo.SSFeeTotalsByCoin[ct]; ok && totalStr != "" {
@@ -683,6 +686,7 @@ func (exp *explorerUI) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgB
 					perBlock = txhelpers.FormatSKAAtoms(perVote)
 					blockHeight = int64(blockData.Header.Height)
 					blockHash = blockData.Header.Hash
+					totalReward = total
 				}
 			}
 
@@ -697,6 +701,7 @@ func (exp *explorerUI) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgB
 								perBlock = txhelpers.FormatSKAAtoms(perVote)
 								blockHeight = int64(sum30[i].Height)
 								blockHash = sum30[i].Hash
+								totalReward = total
 								break
 							}
 						}
@@ -709,11 +714,8 @@ func (exp *explorerUI) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgB
 				voteData, err := exp.dataSource.GetVoteTicketDataByBlock(ctx, blockHash)
 				if err == nil && len(voteData) > 0 {
 					// Get total reward for this coin in this block
-					var totalReward *big.Int
-					if totalStr, ok := blockData.ExtraInfo.SSFeeTotalsByCoin[ct]; ok {
-						totalReward, _ = new(big.Int).SetString(totalStr, 10)
-					} else {
-						// Search in summary if not in current block
+					if totalReward == nil {
+						// This should ideally not happen given the logic above
 						for _, s := range sum30 {
 							if int64(s.Height) == blockHeight {
 								if ts, ok := s.SSFeeTotalsByCoin[ct]; ok {
@@ -725,6 +727,10 @@ func (exp *explorerUI) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgB
 					}
 
 					if totalReward != nil {
+						// rewardPerTicket is the reward for a single ticket slot.
+						// We divide by TicketsPerBlock (fixed at 5) because the total reward
+						// is distributed across all possible voting slots in the block,
+						// regardless of whether every slot was filled.
 						rewardPerTicket := new(big.Float).SetInt(totalReward)
 						rewardPerTicket.Quo(rewardPerTicket, big.NewFloat(1e18))
 						rewardPerTicket.Quo(rewardPerTicket, big.NewFloat(float64(exp.ChainParams.TicketsPerBlock)))
@@ -732,7 +738,14 @@ func (exp *explorerUI) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgB
 						var sumAPY float64
 						var count int
 						for _, vd := range voteData {
-							price, parsedP := new(big.Float).SetString(vd.TicketPrice)
+							priceStr := vd.TicketPrice
+							if !strings.Contains(priceStr, ".") {
+								priceFloat, err := strconv.ParseFloat(priceStr, 64)
+								if err == nil {
+									priceStr = fmt.Sprintf("%.8f", priceFloat/1e8)
+								}
+							}
+							price, parsedP := new(big.Float).SetString(priceStr)
 							if !parsedP || price.Cmp(big.NewFloat(0)) <= 0 {
 								continue
 							}
