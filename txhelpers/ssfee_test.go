@@ -149,7 +149,7 @@ func TestCalculateAverageTicketAPY(t *testing.T) {
 	oneReward := big.NewFloat(1.0) // 1 SKA coin per ticket
 
 	t.Run("empty vote data returns zero sentinel", func(t *testing.T) {
-		got := CalculateAverageTicketAPY(nil, oneReward, 52560)
+		got := CalculateAverageTicketAPY(nil, oneReward, big.NewFloat(52560))
 		if got != "0" {
 			t.Errorf("got %q, want \"0\"", got)
 		}
@@ -161,7 +161,7 @@ func TestCalculateAverageTicketAPY(t *testing.T) {
 			{TicketPrice: "0", VoteHeight: 100, PurchaseHeight: 90},
 			{TicketPrice: "100000000", VoteHeight: 50, PurchaseHeight: 100}, // age <= 0
 		}
-		got := CalculateAverageTicketAPY(data, oneReward, 52560)
+		got := CalculateAverageTicketAPY(data, oneReward, big.NewFloat(52560))
 		if got != "0" {
 			t.Errorf("got %q, want \"0\"", got)
 		}
@@ -172,7 +172,7 @@ func TestCalculateAverageTicketAPY(t *testing.T) {
 			// ticket price 100 VAR in atoms, held for 144 blocks
 			{TicketPrice: "10000000000", VoteHeight: 244, PurchaseHeight: 100},
 		}
-		got := CalculateAverageTicketAPY(data, oneReward, 52560)
+		got := CalculateAverageTicketAPY(data, oneReward, big.NewFloat(52560))
 		if got == "0" || got == "0.000000000000000000" {
 			t.Fatalf("expected non-zero result, got %q", got)
 		}
@@ -191,8 +191,8 @@ func TestCalculateAverageTicketAPY(t *testing.T) {
 		decimalData := []VoteTicket{
 			{TicketPrice: "100.00000000", VoteHeight: 244, PurchaseHeight: 100},
 		}
-		gotAtom := CalculateAverageTicketAPY(atomData, oneReward, 52560)
-		gotDecimal := CalculateAverageTicketAPY(decimalData, oneReward, 52560)
+		gotAtom := CalculateAverageTicketAPY(atomData, oneReward, big.NewFloat(52560))
+		gotDecimal := CalculateAverageTicketAPY(decimalData, oneReward, big.NewFloat(52560))
 		if gotAtom != gotDecimal {
 			t.Errorf("atom path %q != decimal path %q", gotAtom, gotDecimal)
 		}
@@ -205,8 +205,8 @@ func TestCalculateAverageTicketAPY(t *testing.T) {
 		lowReward := big.NewFloat(0.5)
 		highReward := big.NewFloat(2.0)
 
-		low := mustInt(CalculateAverageTicketAPY(data, lowReward, 52560))
-		high := mustInt(CalculateAverageTicketAPY(data, highReward, 52560))
+		low := mustInt(CalculateAverageTicketAPY(data, lowReward, big.NewFloat(52560)))
+		high := mustInt(CalculateAverageTicketAPY(data, highReward, big.NewFloat(52560)))
 
 		if high.Cmp(low) <= 0 {
 			t.Errorf("expected high reward (%s) > low reward (%s)", high, low)
@@ -222,7 +222,7 @@ func TestCalculateAverageTicketAPY(t *testing.T) {
 			{TicketPrice: "100000000000000000000000", VoteHeight: 1_000_000_000, PurchaseHeight: 0},
 		}
 		tinyReward := new(big.Float).SetFloat64(1e-30) // effectively zero SKA
-		got := CalculateAverageTicketAPY(data, tinyReward, 52560)
+		got := CalculateAverageTicketAPY(data, tinyReward, big.NewFloat(52560))
 		if got != "0" {
 			t.Errorf("expected \"0\" for near-zero reward, got %q", got)
 		}
@@ -235,9 +235,9 @@ func TestCalculateAverageTicketAPY(t *testing.T) {
 			{TicketPrice: "10000000000", VoteHeight: 200, PurchaseHeight: 100}, // age 100
 			{TicketPrice: "10000000000", VoteHeight: 400, PurchaseHeight: 100}, // age 300
 		}
-		single100 := mustInt(CalculateAverageTicketAPY([]VoteTicket{data[0]}, oneReward, 52560))
-		single300 := mustInt(CalculateAverageTicketAPY([]VoteTicket{data[1]}, oneReward, 52560))
-		avg := mustInt(CalculateAverageTicketAPY(data, oneReward, 52560))
+		single100 := mustInt(CalculateAverageTicketAPY([]VoteTicket{data[0]}, oneReward, big.NewFloat(52560)))
+		single300 := mustInt(CalculateAverageTicketAPY([]VoteTicket{data[1]}, oneReward, big.NewFloat(52560)))
+		avg := mustInt(CalculateAverageTicketAPY(data, oneReward, big.NewFloat(52560)))
 
 		// avg must be strictly between single300 and single100
 		if avg.Cmp(single300) <= 0 || avg.Cmp(single100) >= 0 {

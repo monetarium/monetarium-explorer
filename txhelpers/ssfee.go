@@ -114,50 +114,62 @@ type VoteTicket struct {
 
 // CalculateAverageTicketAPY computes the average annual percentage yield for a set of tickets.
 // It returns the average as a big.Int atom string (18dp).
-func CalculateAverageTicketAPY(voteData []VoteTicket, rewardPerTicket *big.Float, blocksPerYear float64) string {
+func CalculateAverageTicketAPY(voteData []VoteTicket, rewardPerTicket *big.Float, blocksPerYear *big.Float) string {
 	if len(voteData) == 0 {
 		return "0"
 	}
 
-	var sumAPY float64
-	var count int
+	const prec = 256
+	sumAPY := new(big.Float).SetPrec(prec)
+	count := 0
+
+	// Pre-allocate or use constants where possible
+	zero := new(big.Float).SetPrec(prec).SetInt64(0)
+	varAtomsScale := new(big.Float).SetPrec(prec).SetInt64(100_000_000)
+
+	// Pre-allocate loop variables to reduce allocations
+	price := new(big.Float).SetPrec(prec)
+	ageBF := new(big.Float).SetPrec(prec)
+	term := new(big.Float).SetPrec(prec)
+	atoms := new(big.Int)
 
 	for _, vd := range voteData {
-		price := new(big.Float)
 		if !strings.Contains(vd.TicketPrice, ".") {
 			// Atoms
-			atoms := new(big.Int)
 			if _, ok := atoms.SetString(vd.TicketPrice, 10); !ok {
 				continue
 			}
 			price.SetInt(atoms)
-			price.Quo(price, big.NewFloat(1e8))
+			price.Quo(price, varAtomsScale)
 		} else {
 			// Decimal string
 			var err error
-			price, _, err = big.ParseFloat(vd.TicketPrice, 10, 256, big.ToNearestEven)
+			var p *big.Float
+			p, _, err = big.ParseFloat(vd.TicketPrice, 10, prec, big.ToNearestEven)
 			if err != nil {
 				continue
 			}
+			price.Set(p)
 		}
 
-		if price.Cmp(big.NewFloat(0)) <= 0 {
+		if price.Cmp(zero) <= 0 {
 			continue
 		}
 
-		age := float64(vd.VoteHeight - vd.PurchaseHeight)
+		age := int64(vd.VoteHeight - vd.PurchaseHeight)
 		if age <= 0 {
 			continue
 		}
+		ageBF.SetInt64(age)
 
 		// APY_i = (BlocksPerYear * (rewardPerTicket / ticketPrice)) / age
-		term := new(big.Float).Copy(rewardPerTicket)
+		// Ensure we use high precision for rewardPerTicket and blocksPerYear copies.
+		term.Copy(rewardPerTicket)
 		term.Quo(term, price)
-		term.Mul(term, big.NewFloat(blocksPerYear))
-		term.Quo(term, big.NewFloat(age))
+		term.Mul(term, blocksPerYear)
+		term.Quo(term, ageBF)
 
-		val, _ := term.Float64()
-		sumAPY += val
+		sumAPY.Add(sumAPY, term)
 		count++
 	}
 
@@ -165,15 +177,16 @@ func CalculateAverageTicketAPY(voteData []VoteTicket, rewardPerTicket *big.Float
 		return "0"
 	}
 
-	avgAPY := sumAPY / float64(count)
+	// avgAPY = sumAPY / count
+	countBF := new(big.Float).SetPrec(prec).SetInt64(int64(count))
+	avgAPY := new(big.Float).SetPrec(prec).Quo(sumAPY, countBF)
 
 	// Convert the APY ratio to SKA atoms (1e18) so the result is consistent
 	// with PerBlock and can be consumed by formatAtomsAsCoinString in templates.
-	atomsFloat := new(big.Float).SetPrec(128).SetFloat64(avgAPY)
-	scale := new(big.Float).SetPrec(128).SetInt(ssfeeDp) // 1e18
-	atomsFloat.Mul(atomsFloat, scale)
+	scale := new(big.Float).SetPrec(prec).SetInt(ssfeeDp) // 1e18
+	avgAPY.Mul(avgAPY, scale)
 
-	atomsInt, _ := atomsFloat.Int(nil)
+	atomsInt, _ := avgAPY.Int(nil)
 	if atomsInt == nil || atomsInt.Sign() <= 0 {
 		return "0"
 	}

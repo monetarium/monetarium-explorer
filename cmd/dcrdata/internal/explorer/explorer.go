@@ -653,7 +653,8 @@ func (exp *explorerUI) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgB
 	}
 	sum30 := exp.dataSource.GetSummaryRange(ctx, start30, tip)
 
-	blocksPerYear := float64(365 * 24 * time.Hour / exp.ChainParams.TargetTimePerBlock)
+	blocksPerYear := 365 * 24 * time.Hour / exp.ChainParams.TargetTimePerBlock
+	blocksPerYearBF := new(big.Float).SetPrec(256).SetInt64(int64(blocksPerYear))
 
 	coinTypes := make(map[uint8]struct{})
 	for ct, totals := range blockData.ExtraInfo.SSFeeTotalsByCoin {
@@ -729,9 +730,9 @@ func (exp *explorerUI) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgB
 						// We divide by TicketsPerBlock (fixed at 5) because the total reward
 						// is distributed across all possible voting slots in the block,
 						// regardless of whether every slot was filled.
-						rewardPerTicket := new(big.Float).SetInt(totalReward)
-						rewardPerTicket.Quo(rewardPerTicket, big.NewFloat(1e18))
-						rewardPerTicket.Quo(rewardPerTicket, big.NewFloat(float64(exp.ChainParams.TicketsPerBlock)))
+						rewardPerTicket := new(big.Float).SetPrec(256).SetInt(totalReward)
+						rewardPerTicket.Quo(rewardPerTicket, new(big.Float).SetPrec(256).SetInt64(1_000_000_000_000_000_000))
+						rewardPerTicket.Quo(rewardPerTicket, new(big.Float).SetPrec(256).SetInt64(int64(exp.ChainParams.TicketsPerBlock)))
 
 						tickets := make([]txhelpers.VoteTicket, len(voteData))
 						for i, vd := range voteData {
@@ -741,7 +742,7 @@ func (exp *explorerUI) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgB
 								PurchaseHeight: vd.PurchaseHeight,
 							}
 						}
-						perYear = txhelpers.CalculateAverageTicketAPY(tickets, rewardPerTicket, blocksPerYear)
+						perYear = txhelpers.CalculateAverageTicketAPY(tickets, rewardPerTicket, blocksPerYearBF)
 					}
 				}
 			}
