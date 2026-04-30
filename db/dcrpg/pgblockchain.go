@@ -7167,9 +7167,6 @@ func coinRowsFromAmounts(amounts map[uint8]string, issuedSKA []uint8) []exptypes
 	return rows
 }
 
-// coinRowsFromSummary builds []CoinRowData from a block summary, merging
-// CoinAmounts with CoinTxStats so each row carries amount, tx count, and size.
-// issuedSKA ensures all ever-emitted SKA types appear even with zero activity.
 func coinRowsFromSummary(summary *apitypes.BlockDataBasic, issuedSKA []uint8) []exptypes.CoinRowData {
 	rows := coinRowsFromAmounts(summary.CoinAmounts, issuedSKA)
 	for i := range rows {
