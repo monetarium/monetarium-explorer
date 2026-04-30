@@ -3,6 +3,7 @@ package txhelpers
 import (
 	"fmt"
 	"math/big"
+	"strings"
 
 	"github.com/monetarium/monetarium-node/blockchain/stake"
 	"github.com/monetarium/monetarium-node/wire"
@@ -18,6 +19,8 @@ var (
 type SSFeeSummary struct {
 	SSFeeTotalsByCoin map[uint8]string
 	StakeDiff         float64 // ticket price in VAR coins
+	Hash              string
+	Height            int
 }
 
 // BlockSSFeeTotals sums TxTypeSSFee output SKAValues per coin type for a block.
@@ -28,13 +31,35 @@ func BlockSSFeeTotals(msgBlock *wire.MsgBlock) map[uint8]string {
 		if stake.DetermineTxType(tx) != stake.TxTypeSSFee {
 			continue
 		}
+
+		var inputSKA, outputSKA big.Int
+		var coinType uint8
+
+		// Sum all SKA inputs
+		for _, vin := range tx.TxIn {
+			if vin.SKAValueIn != nil {
+				inputSKA.Add(&inputSKA, vin.SKAValueIn)
+			}
+		}
+
+		// Sum all SKA outputs and track coin type
 		for _, out := range tx.TxOut {
 			if out.CoinType.IsSKA() && out.SKAValue != nil {
-				ct := uint8(out.CoinType)
-				if totals[ct] == nil {
-					totals[ct] = new(big.Int)
+				outputSKA.Add(&outputSKA, out.SKAValue)
+				if coinType == 0 {
+					coinType = uint8(out.CoinType)
 				}
-				totals[ct].Add(totals[ct], out.SKAValue)
+			}
+		}
+
+		// Calculate actual reward: output - input (positive = to voters)
+		if coinType != 0 && outputSKA.Sign() > 0 && inputSKA.Sign() > 0 {
+			reward := new(big.Int).Sub(&outputSKA, &inputSKA)
+			if reward.Sign() > 0 {
+				if totals[coinType] == nil {
+					totals[coinType] = new(big.Int)
+				}
+				totals[coinType].Add(totals[coinType], reward)
 			}
 		}
 	}
@@ -81,38 +106,66 @@ func SSFeeCoinTypes(summaries []SSFeeSummary) map[uint8]struct{} {
 	return out
 }
 
-// AvgSSFeeRate returns the average SKA/VAR staker reward rate over the provided
-// block summaries for the given coin type and voter count per block.
-func AvgSSFeeRate(summaries []SSFeeSummary, coinType uint8, ticketsPerBlock uint16) string {
-	total := new(big.Int)
+// VoteTicket holds data for a single vote and its associated ticket purchase.
+type VoteTicket struct {
+	TicketPrice    string
+	VoteHeight     int
+	PurchaseHeight int
+}
+
+// CalculateAverageTicketAPY computes the average annual percentage yield for a set of tickets.
+// It returns the average as a decimal string with 18 decimal places.
+func CalculateAverageTicketAPY(voteData []VoteTicket, rewardPerTicket *big.Float, blocksPerYear float64) string {
+	if len(voteData) == 0 {
+		return "0.000000000000000000"
+	}
+
+	var sumAPY float64
 	var count int
-	voters := int64(ticketsPerBlock)
-	for _, s := range summaries {
-		if s.SSFeeTotalsByCoin == nil {
+
+	for _, vd := range voteData {
+		price := new(big.Float)
+		if !strings.Contains(vd.TicketPrice, ".") {
+			// Atoms
+			atoms := new(big.Int)
+			if _, ok := atoms.SetString(vd.TicketPrice, 10); !ok {
+				continue
+			}
+			price.SetInt(atoms)
+			price.Quo(price, big.NewFloat(1e8))
+		} else {
+			// Decimal string
+			var err error
+			price, _, err = big.ParseFloat(vd.TicketPrice, 10, 256, big.ToNearestEven)
+			if err != nil {
+				continue
+			}
+		}
+
+		if price.Cmp(big.NewFloat(0)) <= 0 {
 			continue
 		}
-		v, ok := s.SSFeeTotalsByCoin[coinType]
-		if !ok {
+
+		age := float64(vd.VoteHeight - vd.PurchaseHeight)
+		if age <= 0 {
 			continue
 		}
-		amt, ok := new(big.Int).SetString(v, 10)
-		if !ok {
-			continue
-		}
-		ticketPriceAtoms := int64(s.StakeDiff * 1e8)
-		if ticketPriceAtoms <= 0 {
-			continue
-		}
-		perVote := new(big.Int).Div(amt, big.NewInt(voters))
-		rs := new(big.Int).Mul(perVote, ssfeeVarScale)
-		ratio := new(big.Int).Div(rs, big.NewInt(ticketPriceAtoms))
-		total.Add(total, ratio)
+
+		// APY_i = (BlocksPerYear * (rewardPerTicket / ticketPrice)) / age
+		term := new(big.Float).Copy(rewardPerTicket)
+		term.Quo(term, price)
+		term.Mul(term, big.NewFloat(blocksPerYear))
+		term.Quo(term, big.NewFloat(age))
+
+		val, _ := term.Float64()
+		sumAPY += val
 		count++
 	}
+
 	if count == 0 {
 		return "0.000000000000000000"
 	}
-	avg := new(big.Int).Div(total, big.NewInt(int64(count)))
-	intPart, fracPart := new(big.Int).DivMod(avg, ssfeeDp, new(big.Int))
-	return fmt.Sprintf("%s.%018d", intPart.String(), fracPart.Int64())
+
+	avgAPY := sumAPY / float64(count)
+	return fmt.Sprintf("%.18f", avgAPY)
 }

@@ -165,6 +165,9 @@ func (m *mockDataSource) VARCoinSupply(ctx context.Context) (*explorerTypes.VARC
 func (m *mockDataSource) SKACoinSupply(ctx context.Context) ([]*explorerTypes.SKACoinSupplyEntry, error) {
 	return nil, nil
 }
+func (m *mockDataSource) GetVoteTicketDataByBlock(ctx context.Context, blockHash string) ([]dbtypes.VoteTicketData, error) {
+	return nil, nil
+}
 
 var mockGetBlockSKAFeesResult map[uint8]string
 
