@@ -596,8 +596,8 @@ type Conversion struct {
 type SKAVoteReward struct {
 	CoinType    uint8  `json:"coin_type"`
 	Symbol      string `json:"symbol"`
-	PerBlock    string `json:"per_block"`   // SKA/VAR ratio for last block, 18dp decimal string
-	PerYear     string `json:"per_year"`    // annualised average
+	PerBlock    string `json:"per_block"` // SKA/VAR ratio for last block, 18dp decimal string
+	PerYear     string `json:"per_year"`  // annualised average
 	BlockHeight int64  `json:"block_height,omitempty"`
 }
 
