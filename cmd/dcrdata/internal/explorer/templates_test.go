@@ -1,9 +1,13 @@
 package explorer
 
 import (
+	"html/template"
+	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/monetarium/monetarium-explorer/explorer/types"
+	"github.com/monetarium/monetarium-node/chaincfg"
 )
 
 func TestBlockVoteBitsStr(t *testing.T) {
@@ -484,4 +488,158 @@ func TestComputeCoinFills(t *testing.T) {
 			t.Errorf("SKA1 should appear exactly once, got %d", count)
 		}
 	})
+}
+
+func TestFloat64Formatting(t *testing.T) {
+	tests := []struct {
+		name       string
+		value      float64
+		numPlaces  int
+		useCommas  bool
+		boldPlaces []int
+		expected   []string
+	}{
+		{
+			name:       "normal value with bold",
+			value:      332.39617174,
+			numPlaces:  8,
+			useCommas:  false,
+			boldPlaces: []int{2},
+			expected:   []string{"332", "39", "617174", ""},
+		},
+		{
+			name:       "short decimal (previously broken case)",
+			value:      3.2,
+			numPlaces:  8,
+			useCommas:  false,
+			boldPlaces: []int{2},
+			expected:   []string{"3", "20", "", "000000"},
+		},
+		{
+			name:       "no bold mode",
+			value:      3.2,
+			numPlaces:  8,
+			useCommas:  false,
+			boldPlaces: nil,
+			expected:   []string{"3", "2", "0000000"},
+		},
+		{
+			name:       "integer value",
+			value:      5.0,
+			numPlaces:  8,
+			useCommas:  false,
+			boldPlaces: []int{2},
+			expected:   []string{"5", "00", "", "000000"},
+		},
+		{
+			name:       "rounding case",
+			value:      1.999999999,
+			numPlaces:  8,
+			useCommas:  false,
+			boldPlaces: []int{2},
+			expected:   []string{"2", "00", "", "000000"},
+		},
+		{
+			name:       "with commas",
+			value:      12345.67,
+			numPlaces:  8,
+			useCommas:  true,
+			boldPlaces: []int{2},
+			expected:   []string{"12,345", "67", "", "000000"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var result []string
+
+			if tt.boldPlaces != nil {
+				result = float64Formatting(tt.value, tt.numPlaces, tt.useCommas, tt.boldPlaces...)
+			} else {
+				result = float64Formatting(tt.value, tt.numPlaces, tt.useCommas)
+			}
+
+			if !reflect.DeepEqual(result, tt.expected) {
+				t.Errorf("unexpected result\nexpected: %#v\ngot:      %#v", tt.expected, result)
+			}
+		})
+	}
+}
+
+func TestFloat64FormattingNoTrailing(t *testing.T) {
+	got := float64FormattingNoTrailing(3.2, 8, false, 2)
+
+	expected := []string{"3", "20", "", ""}
+
+	if !reflect.DeepEqual(got, expected) {
+		t.Fatalf("expected %#v, got %#v", expected, got)
+	}
+}
+func TestDecimalPartsTemplate(t *testing.T) {
+	funcMap := makeTemplateFuncMap(chaincfg.SimNetParams())
+	// Mock asset function which is used in some templates but not decimalParts
+	funcMap["asset"] = func(name string) string { return name }
+
+	// Create a template and parse the extras.tmpl file. In tests, the path
+	// is relative to the package directory.
+	tmpl, err := template.New("base").Funcs(funcMap).ParseFiles("../../views/extras.tmpl")
+	if err != nil {
+		t.Fatalf("failed to parse template: %v", err)
+	}
+
+	tests := []struct {
+		name     string
+		input    []string
+		expected string
+	}{
+		{
+			name:  "User requested case: 4 parts, empty index 2",
+			input: []string{"3", "20", "", "000000"},
+			// Based on line 183-197 of extras.tmpl:
+			// len is 4.
+			// index 1 is "20" (len > 0), so it renders "{{ index . 0 }}.{{index . 1 }}" in span class="int"
+			// index 2 is "", index 3 is "000000", so the second if block IS rendered.
+			expected: `<div class="decimal-parts d-inline-block"><span class="int">3.20</span><span class="decimal"></span><span class="decimal trailing-zeroes">000000</span></div>`,
+		},
+		{
+			name:     "4 parts, non-empty index 2",
+			input:    []string{"3", "20", "1", "00000"},
+			expected: `<div class="decimal-parts d-inline-block"><span class="int">3.20</span><span class="decimal">1</span><span class="decimal trailing-zeroes">00000</span></div>`,
+		},
+		{
+			name:     "4 parts, no decimals in int span",
+			input:    []string{"3", "", "1", "00000"},
+			expected: `<div class="decimal-parts d-inline-block"><span class="int">3</span><span class="decimal">1</span><span class="decimal trailing-zeroes">00000</span></div>`,
+		},
+		{
+			name:     "3 parts, normal",
+			input:    []string{"3", "2", "0000000"},
+			expected: `<div class="decimal-parts d-inline-block"><span class="int">3</span><span class="decimal dot">.</span><span class="decimal">2</span><span class="decimal trailing-zeroes">0000000</span></div>`,
+		},
+		{
+			name:     "3 parts, only trailing zeros",
+			input:    []string{"3", "", "00000000"},
+			expected: `<div class="decimal-parts d-inline-block"><span class="int">3</span><span class="decimal dot">.</span><span class="decimal"></span><span class="decimal trailing-zeroes">00000000</span></div>`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var out strings.Builder
+			err := tmpl.ExecuteTemplate(&out, "decimalParts", tt.input)
+			if err != nil {
+				t.Fatalf("failed to execute template: %v", err)
+			}
+
+			got := strings.TrimSpace(out.String())
+			// Remove any internal newlines/tabs that might be present due to template formatting
+			// although the template uses {{- and -}} to control whitespace.
+			got = strings.ReplaceAll(got, "\n", "")
+			got = strings.ReplaceAll(got, "\t", "")
+
+			if got != tt.expected {
+				t.Errorf("expected:\n%s\ngot:\n%s", tt.expected, got)
+			}
+		})
+	}
 }

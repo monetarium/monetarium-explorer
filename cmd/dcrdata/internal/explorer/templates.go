@@ -149,7 +149,10 @@ var toInt64 = func(v interface{}) int64 {
 func float64Formatting(v float64, numPlaces int, useCommas bool, boldNumPlaces ...int) []string {
 	pow := math.Pow(10, float64(numPlaces))
 	formattedVal := math.Round(v*pow) / pow
+
+	// Always keep full precision here
 	clipped := fmt.Sprintf("%."+strconv.Itoa(numPlaces)+"f", formattedVal)
+
 	valueChunks := strings.Split(clipped, ".")
 	integer := valueChunks[0]
 
@@ -158,27 +161,59 @@ func float64Formatting(v float64, numPlaces int, useCommas bool, boldNumPlaces .
 		dec = valueChunks[1]
 	}
 
-	// Trim trailing zeros (same as skaDecimalParts).
-	dec = strings.TrimRight(dec, "0")
-
 	if useCommas {
 		integer = humanize.Comma(int64(formattedVal))
 	}
 
+	// No bold mode → trim zeros like before
 	if len(boldNumPlaces) == 0 {
-		return []string{integer, dec, ""}
+		trimmed := strings.TrimRight(dec, "0")
+		trailingZeros := dec[len(trimmed):]
+		return []string{integer, trimmed, trailingZeros}
 	}
 
 	places := boldNumPlaces[0]
 	if places > numPlaces {
-		return []string{integer, dec, ""}
+		places = numPlaces
 	}
 
-	if len(dec) < places {
-		places = len(dec)
+	// Ensure dec always has numPlaces length (it should, but just in case)
+	if len(dec) < numPlaces {
+		dec += strings.Repeat("0", numPlaces-len(dec))
 	}
 
-	return []string{integer, dec[:places], dec[places:], ""}
+	// Split into bold + rest
+	bold := dec[:places]
+	rest := dec[places:]
+
+	// Now extract trailing zeros from the "rest" part only
+	trimmedRest := strings.TrimRight(rest, "0")
+	trailingZeros := rest[len(trimmedRest):]
+
+	return []string{integer, bold, trimmedRest, trailingZeros}
+}
+
+func float64FormattingNoTrailing(
+	v float64,
+	numPlaces int,
+	useCommas bool,
+	boldNumPlaces ...int,
+) []string {
+	parts := float64Formatting(v, numPlaces, useCommas, boldNumPlaces...)
+
+	// len == 4 → bold mode
+	if len(parts) == 4 {
+		parts[3] = "" // remove trailing zeros only
+		return parts
+	}
+
+	// len == 3 → non-bold mode
+	if len(parts) == 3 {
+		parts[2] = ""
+		return parts
+	}
+
+	return parts
 }
 
 // skaDecimalParts converts a SKA atom string (decimal integer string, 18 decimals)
@@ -601,7 +636,8 @@ func makeTemplateFuncMap(params *chaincfg.Params) template.FuncMap {
 			p := (float64(i) / float64(params.SubsidyReductionInterval)) * 100
 			return p
 		},
-		"float64AsDecimalParts": float64Formatting,
+		"float64AsDecimalParts":           float64Formatting,
+		"float64AsDecimalPartsNoTrailing": float64FormattingNoTrailing,
 		"amountAsDecimalParts": func(v int64, useCommas bool) []string {
 			return float64Formatting(dcrutil.Amount(v).ToCoin(), 8, useCommas)
 		},

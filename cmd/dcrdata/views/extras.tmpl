@@ -190,7 +190,7 @@
 			{{index . 0 }}
 		{{- end -}}
 	    </span>
-		{{- if gt (len (index . 2)) 0 -}}
+		{{- if or (gt (len (index . 2)) 0) (gt (len (index . 3)) 0) -}}
 		<span class="decimal">{{ index . 2 }}</span>
 		{{- /* trailing zeros  */ -}}
 		<span class="decimal trailing-zeroes">{{ index . 3 }}</span>
