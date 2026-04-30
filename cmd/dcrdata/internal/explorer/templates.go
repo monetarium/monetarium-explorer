@@ -384,12 +384,15 @@ func skaCoinValue(atomStr string) float64 {
 	return v
 }
 
-// formatCoinAtomsFull converts a raw atom string to a coin string
-// with full precision (8 decimals for VAR, 18 for SKA).
-func formatCoinAtomsFull(atomStr string, coinType uint8) string {
+// formatAtomsAsCoinString converts a base-10 atomic amount string into a formatted coin value.
+// It performs exact division (no rounding) using fixed precision (8 decimals for VAR, 18 for SKA),
+// trims trailing zeros from the fractional part while keeping at least minDecimals digits,
+// and inserts thousands separators into the integer part.
+func formatAtomsAsCoinString(atomStr string, coinType uint8, minDecimals int) string {
 	if atomStr == "" {
 		return "0"
 	}
+
 	atoms := new(big.Int)
 	if _, ok := atoms.SetString(atomStr, 10); !ok {
 		return "0"
@@ -405,33 +408,46 @@ func formatCoinAtomsFull(atomStr string, coinType uint8) string {
 		divisor = skaDecimals
 	}
 
-	rat := new(big.Rat).SetFrac(atoms, divisor)
-	s := rat.FloatString(decimals)
-	if strings.Contains(s, ".") {
-		s = strings.TrimRight(s, "0")
-		s = strings.TrimRight(s, ".")
+	// integer + remainder (NO rounding)
+	intPart := new(big.Int).Div(atoms, divisor)
+	rem := new(big.Int).Mod(atoms, divisor)
+
+	// fractional part (zero-padded to full precision)
+	fracStr := rem.String()
+	if len(fracStr) < decimals {
+		fracStr = strings.Repeat("0", decimals-len(fracStr)) + fracStr
 	}
 
-	parts := strings.Split(s, ".")
-	intPartRaw := parts[0]
+	// trim trailing zeros BUT keep at least minDecimals digits
+	trimmed := strings.TrimRight(fracStr, "0")
+	if len(trimmed) < minDecimals {
+		fracStr = fracStr[:minDecimals]
+	} else {
+		fracStr = trimmed
+	}
+
+	// format integer part with commas
+	intStr := intPart.String()
 	prefix := ""
-	if len(intPartRaw) > 0 && intPartRaw[0] == '-' {
+	if strings.HasPrefix(intStr, "-") {
 		prefix = "-"
-		intPartRaw = intPartRaw[1:]
+		intStr = intStr[1:]
 	}
 
-	if len(intPartRaw) > 3 {
+	if len(intStr) > 3 {
 		var out []byte
-		for i := 0; i < len(intPartRaw); i++ {
-			if i > 0 && (len(intPartRaw)-i)%3 == 0 {
+		for i := 0; i < len(intStr); i++ {
+			if i > 0 && (len(intStr)-i)%3 == 0 {
 				out = append(out, ',')
 			}
-			out = append(out, intPartRaw[i])
+			out = append(out, intStr[i])
 		}
-		parts[0] = prefix + string(out)
+		intStr = string(out)
 	}
 
-	return strings.Join(parts, ".")
+	intStr = prefix + intStr
+
+	return intStr + "." + fracStr
 }
 
 // formatCoinAtoms converts a raw atom string to a threeSigFigs-formatted coin
@@ -616,8 +632,8 @@ func makeTemplateFuncMap(params *chaincfg.Params) template.FuncMap {
 		"varAtomsToFloat64": func(atomStr string) float64 {
 			return float64(parseInt64(atomStr)) / 1e8
 		},
-		"formatCoinAtoms":     formatCoinAtoms,
-		"formatCoinAtomsFull": formatCoinAtomsFull,
+		"formatCoinAtoms":         formatCoinAtoms,
+		"formatAtomsAsCoinString": formatAtomsAsCoinString,
 		"skaDecimalParts": func(atomStr string, useCommas bool, boldNumPlaces ...int) []string {
 			return skaDecimalParts(atomStr, useCommas, boldNumPlaces...)
 		},

@@ -26,7 +26,7 @@ Coin type labels (`VAR`, `SKA1`–`SKA255`) are produced by dedicated functions 
 Related JS helpers in `ska_helper.js` and `humanize_helper.js` that operate on coin values (not labels):
 
 - `formatCoinAtoms(atomStr, coinType)` — formats a raw atom string to three significant figures; routes to VAR (8 decimals) or SKA (18 decimals) path based on `coinType`
-- `formatCoinAtomsFull(atomStr, coinType)` — same routing, full precision with trailing zeros stripped
+- `formatAtomsAsCoinString(atomStr, coinType)` — same routing, full precision with trailing zeros stripped
 - `splitSkaAtoms(atomStr)` — splits a raw SKA atom string into display parts (`intPart`, `bold`, `rest`, `trailingZeros`) using BigInt to avoid float64 loss
 
 - **Implication for mutation:** Never construct coin type labels inline (e.g. `` `SKA${n}` `` or hardcoded `"VAR"` strings). Always call the canonical function for the environment you are in. If the label format ever changes, both `coinSymbol` and `renderCoinType` must be updated together. If you add a new formatting helper for coin values, add it to `ska_helper.js` or `humanize_helper.js` — not inline in a controller.

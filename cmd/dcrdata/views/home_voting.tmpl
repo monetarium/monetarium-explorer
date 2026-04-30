@@ -113,8 +113,8 @@
                         <span class="ps-1 unit lh15rem fs13">&mdash; {{.Symbol}}/Vote</span>
                         {{end}}
                     </div>
-                    <div class="fs12 lh1rem text-black-50">{{formatCoinAtomsFull .Per30Days 1}} {{.Symbol}}/VAR per 30 days</div>
-                    <div class="fs12 lh1rem text-black-50">{{formatCoinAtomsFull .PerYear 1}} {{.Symbol}}/VAR per year</div>
+                    <div class="fs12 lh1rem text-black-50">{{formatAtomsAsCoinString .Per30Days 1 2}} {{.Symbol}}/VAR per 30 days</div>
+                    <div class="fs12 lh1rem text-black-50">{{formatAtomsAsCoinString .PerYear 1 2}} {{.Symbol}}/VAR per year</div>
                 </a>
                 {{end}}{{else}}
                 <div class="fs12 lh1rem text-black-50">No SKA rewards available</div>
