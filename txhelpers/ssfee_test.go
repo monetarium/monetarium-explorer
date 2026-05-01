@@ -204,15 +204,14 @@ func TestCalculateAverageTicketAPY(t *testing.T) {
 		}
 		lowReward := big.NewFloat(0.5)
 		highReward := big.NewFloat(2.0)
-		
+
 		low := mustInt(CalculateAverageTicketAPY(data, lowReward, big.NewFloat(52560)))
 		high := mustInt(CalculateAverageTicketAPY(data, highReward, big.NewFloat(52560)))
-		
+
 		if high.Cmp(low) <= 0 {
 			t.Errorf("expected high reward (%s) > low reward (%s)", high, low)
 		}
 	})
-
 
 	t.Run("reward rounds to zero atoms returns zero", func(t *testing.T) {
 		// A reward so small that avgAPY * 1e18 < 1 atom → should return "0".
@@ -239,7 +238,7 @@ func TestCalculateAverageTicketAPY(t *testing.T) {
 		single100 := mustInt(CalculateAverageTicketAPY([]VoteTicketData{data[0]}, oneReward, big.NewFloat(52560)))
 		single300 := mustInt(CalculateAverageTicketAPY([]VoteTicketData{data[1]}, oneReward, big.NewFloat(52560)))
 		avg := mustInt(CalculateAverageTicketAPY(data, oneReward, big.NewFloat(52560)))
-		
+
 		// avg must be strictly between single300 and single100
 		if avg.Cmp(single300) <= 0 || avg.Cmp(single100) >= 0 {
 			t.Errorf("average %s not between %s (age=300) and %s (age=100)", avg, single300, single100)
