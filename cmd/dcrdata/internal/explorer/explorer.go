@@ -18,6 +18,7 @@ import (
 	"os/signal"
 	"reflect"
 	"sort"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -643,9 +644,21 @@ func (exp *explorerUI) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgB
 
 	// Calculate Vote VAR Reward (most recent)
 	var latestVarFee float64
+	var numWinners int
 	if fStr, ok := blockData.ExtraInfo.SSFeeTotalsByCoin[0]; ok && fStr != "" {
 		if f, err := strconv.ParseInt(fStr, 10, 64); err == nil {
 			latestVarFee = float64(f) / 1e8
+		}
+	}
+
+	for _, tx := range msgBlock.STransactions {
+		if stake.DetermineTxType(tx) == stake.TxTypeSSGen {
+			for _, out := range tx.TxOut {
+				if out.CoinType == cointype.CoinTypeVAR {
+					numWinners++
+				}
+			}
+			break
 		}
 	}
 
@@ -661,8 +674,7 @@ func (exp *explorerUI) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgB
 			}
 		}
 	}
-	res := txhelpers.ComputeVoteVARReward(latestVarFee, txVoteData, exp.ChainParams, int64(newBlockData.Voters))
-
+	res := txhelpers.ComputeVoteVARReward(latestVarFee, numWinners, txVoteData, exp.ChainParams, int64(newBlockData.Voters))
 
 	p.HomeInfo.VoteVARReward = types.VoteVARReward{
 		PerBlock: res.PerBlock,

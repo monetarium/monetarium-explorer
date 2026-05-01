@@ -28,13 +28,33 @@ type VoteVARRewardResult struct {
 }
 
 // ComputeVoteVARReward calculates the empirical reward per vote and ROI for a given block.
-// It uses the provided latest block's VAR fee for calculations.
-func ComputeVoteVARReward(latestVarFee float64, voteData []VoteTicketData, params *chaincfg.Params, voters int64) VoteVARRewardResult {
+// It uses the provided latest block's VAR fee and the number of winners to exclude returned ticket values.
+func ComputeVoteVARReward(latestVarFee float64, numWinners int, voteData []VoteTicketData, params *chaincfg.Params, voters int64) VoteVARRewardResult {
 	var subsidyPerVote, feePerVote float64
 	if voters > 0 {
 		const totalPoSSubsidy = 16.0
 		subsidyPerVote = totalPoSSubsidy / float64(voters)
-		feePerVote = latestVarFee / float64(voters)
+
+		var totalTicketPrice float64
+		for _, vd := range voteData {
+			price, err := strconv.ParseFloat(vd.TicketPrice, 64)
+			if err == nil {
+				totalTicketPrice += price
+			}
+		}
+
+		avgTicketPrice := 0.0
+		if len(voteData) > 0 {
+			avgTicketPrice = totalTicketPrice / float64(len(voteData))
+		}
+
+		// latestVarFee is TotalSSGenVAR - Subsidy.
+		// It includes (numWinners * TicketPrice) + TotalFees.
+		actualTotalFees := latestVarFee - (float64(numWinners) * avgTicketPrice)
+		if actualTotalFees < 0 {
+			actualTotalFees = 0
+		}
+		feePerVote = actualTotalFees / float64(voters)
 	}
 
 	totalRewardPerVote := subsidyPerVote + feePerVote
