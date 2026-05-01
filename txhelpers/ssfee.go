@@ -28,26 +28,13 @@ type VoteVARRewardResult struct {
 }
 
 // ComputeVoteVARReward calculates the empirical reward per vote and ROI for a given block.
-// It uses a 30-day average for the fee to ensure UI stability.
-func ComputeVoteVARReward(sum30 []BlockSummary, voteData []VoteTicketData, params *chaincfg.Params, voters int64) VoteVARRewardResult {
+// It uses the provided latest block's VAR fee for calculations.
+func ComputeVoteVARReward(latestVarFee float64, voteData []VoteTicketData, params *chaincfg.Params, voters int64) VoteVARRewardResult {
 	var subsidyPerVote, feePerVote float64
 	if voters > 0 {
 		const totalPoSSubsidy = 16.0
 		subsidyPerVote = totalPoSSubsidy / float64(voters)
-
-		var totalFees30d, totalVoters30d float64
-		for _, s := range sum30 {
-			if fStr, ok := s.SSFeeTotalsByCoin[0]; ok && fStr != "" {
-				if f, err := strconv.ParseInt(fStr, 10, 64); err == nil {
-					totalFees30d += float64(f) / 1e8
-				}
-			}
-			totalVoters30d += float64(s.Voters)
-		}
-
-		if totalVoters30d > 0 {
-			feePerVote = totalFees30d / totalVoters30d
-		}
+		feePerVote = latestVarFee / float64(voters)
 	}
 
 	totalRewardPerVote := subsidyPerVote + feePerVote

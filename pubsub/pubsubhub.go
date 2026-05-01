@@ -722,6 +722,13 @@ func (psh *PubSubHub) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgBl
 	}
 
 	// Calculate Vote VAR Reward (most recent)
+	var latestVarFee float64
+	if fStr, ok := blockData.ExtraInfo.SSFeeTotalsByCoin[0]; ok && fStr != "" {
+		if f, err := strconv.ParseInt(fStr, 10, 64); err == nil {
+			latestVarFee = float64(f) / 1e8
+		}
+	}
+
 	voteData, err := psh.sourceBase.GetVoteTicketDataByBlock(ctx, blockData.Header.Hash)
 	var txVoteData []txhelpers.VoteTicketData
 	if err == nil {
@@ -734,7 +741,7 @@ func (psh *PubSubHub) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgBl
 			}
 		}
 	}
-	res := txhelpers.ComputeVoteVARReward(sum30, txVoteData, psh.params, int64(blockData.Header.Voters))
+	res := txhelpers.ComputeVoteVARReward(latestVarFee, txVoteData, psh.params, int64(blockData.Header.Voters))
 
 	p.GeneralInfo.VoteVARReward = exptypes.VoteVARReward{
 		PerBlock: res.PerBlock,

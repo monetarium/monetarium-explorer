@@ -642,6 +642,12 @@ func (exp *explorerUI) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgB
 	// blocksPerYear is calculated as a float64 to preserve truncation of integer division (365*24h / targetTime)
 
 	// Calculate Vote VAR Reward (most recent)
+	var latestVarFee float64
+	if fStr, ok := blockData.ExtraInfo.SSFeeTotalsByCoin[0]; ok && fStr != "" {
+		if f, err := strconv.ParseInt(fStr, 10, 64); err == nil {
+			latestVarFee = float64(f) / 1e8
+		}
+	}
 
 	voteData, err := exp.dataSource.GetVoteTicketDataByBlock(ctx, newBlockData.Hash)
 	var txVoteData []txhelpers.VoteTicketData
@@ -655,7 +661,8 @@ func (exp *explorerUI) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgB
 			}
 		}
 	}
-	res := txhelpers.ComputeVoteVARReward(sum30, txVoteData, exp.ChainParams, int64(newBlockData.Voters))
+	res := txhelpers.ComputeVoteVARReward(latestVarFee, txVoteData, exp.ChainParams, int64(newBlockData.Voters))
+
 
 	p.HomeInfo.VoteVARReward = types.VoteVARReward{
 		PerBlock: res.PerBlock,
