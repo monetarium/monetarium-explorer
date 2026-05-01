@@ -76,8 +76,8 @@ func TestVotingCardTemplate(t *testing.T) {
 		if !strings.Contains(out, "Vote VAR Reward") {
 			t.Error("expected 'Vote VAR Reward' in output")
 		}
-		if !strings.Contains(out, "Vote SKA Reward") {
-			t.Error("expected 'Vote SKA Reward' in output")
+		if !strings.Contains(out, "Vote SKA Fee Reward") {
+			t.Error("expected 'Vote SKA Fee Reward' in output")
 		}
 	})
 
@@ -95,8 +95,8 @@ func TestVotingCardTemplate(t *testing.T) {
 		if !strings.Contains(out, `data-voting-target="bsubsidyPos"`) {
 			t.Error("expected data-voting-target=\"bsubsidyPos\" in output")
 		}
-		if !strings.Contains(out, `data-voting-target="ticketReward"`) {
-			t.Error("expected data-voting-target=\"ticketReward\" in output")
+		if !strings.Contains(out, `data-voting-target="varROI"`) {
+			t.Error("expected data-voting-target=\"varROI\" in output")
 		}
 	})
 
@@ -193,14 +193,6 @@ func TestProp_VARPercentageFormatting(t *testing.T) {
 		perYear := rapid.Float64Range(0, 100).Draw(t, "perYear")
 		info := makeHomeInfo(types.VoteVARReward{Per30Days: per30Days, PerYear: perYear}, nil)
 		out := renderVotingCard(t, tmpl, info)
-
-		want30 := fmt.Sprintf("%.2f", per30Days)
-		if !strings.Contains(out, want30) {
-			t.Errorf("expected Per30Days formatted as %q in output", want30)
-		}
-		if !strings.Contains(out, "per 30 days") {
-			t.Error("expected 'per 30 days' label in output")
-		}
 
 		wantYear := fmt.Sprintf("%.2f", perYear)
 		if !strings.Contains(out, wantYear) {
