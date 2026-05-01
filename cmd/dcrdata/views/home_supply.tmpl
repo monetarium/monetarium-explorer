@@ -3,13 +3,12 @@
 {{with .Info -}}
 <div class="bg-white mb-1 p-2 px-3 mx-1 flex-grow-1">
   <div class="my-3 h4">
-    <span class="monicon-coin-supply d-inline-block pe-2 h4"></span>
+    <span class="monicon-coin-supply d-inline-block pe-2 h3"></span>
     Coin Supply
   </div>
   <div class="row mt-1">
     {{if .VARCoinSupply}}
     <div class="col-12 mb-3 mb-sm-2 mb-md-3 mb-lg-3">
-      <div class="fs13 text-secondary">VAR Coin Supply</div>
       <div class="mono lh1rem fs14-decimal fs24 p03rem0 d-flex align-items-baseline">
         <span data-supply-target="varCirculating">
           {{template "decimalParts" (float64AsDecimalPartsNoTrailing (varAtomsToFloat64 .VARCoinSupply.Circulating) 8 true 2)}}
@@ -20,7 +19,6 @@
     {{end}}
     {{if .SKACoinSupply}}
     <div class="col-24 mb-3 mb-sm-2 mb-md-3 mb-lg-3">
-      <div class="fs13 text-secondary">SKA Coins Supply</div>
       <div data-supply-target="skaCoinSupply">
         {{range .SKACoinSupply}}
         <div class="mt-2">
@@ -31,11 +29,11 @@
           <div class="fs12 fs12-decimal lh1rem text-black-50 label-value-grid mt-1">
             <span class="text-start">Issued:</span>
             <span class="text-start">
-              <span class="mono decimal-parts d-inline-block">{{template "decimalParts" (skaDecimalPartsNoTrailing .TotalIssued false 2)}}</span>
+              <span class="mono decimal-parts d-inline-block">{{template "decimalParts" (skaDecimalPartsNoTrailing .TotalIssued true 2)}}</span>
             </span>
             <span class="text-start">Burned:</span>
             <span class="text-start">
-              <span class="mono decimal-parts d-inline-block">{{template "decimalParts" (skaDecimalPartsNoTrailing .TotalBurned false 2)}}</span>
+              <span class="mono decimal-parts d-inline-block">{{template "decimalParts" (skaDecimalPartsNoTrailing .TotalBurned true 2)}}</span>
             </span>
           </div>
         </div>

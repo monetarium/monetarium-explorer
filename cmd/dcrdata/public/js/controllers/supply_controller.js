@@ -48,10 +48,14 @@ export default class extends Controller {
       }
 
       const issuedEl = clone.querySelector('.issued')
-      if (issuedEl) this._fillDecimalParts(issuedEl, splitSkaAtomsNoTrailing(e.total_issued || ''))
+      if (issuedEl) {
+        this._fillDecimalParts(issuedEl, splitSkaAtomsNoTrailing(e.total_issued || '', true))
+      }
 
       const burnedEl = clone.querySelector('.burned')
-      if (burnedEl) this._fillDecimalParts(burnedEl, splitSkaAtomsNoTrailing(e.total_burned || ''))
+      if (burnedEl) {
+        this._fillDecimalParts(burnedEl, splitSkaAtomsNoTrailing(e.total_burned || '', true))
+      }
 
       container.appendChild(clone)
     })
