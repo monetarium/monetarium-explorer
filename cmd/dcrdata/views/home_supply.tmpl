@@ -25,13 +25,19 @@
         {{range .SKACoinSupply}}
         <div class="mt-2">
           <div class="mono lh1rem fs14-decimal fs24 p03rem0 d-flex align-items-baseline">
-            <span class="int">{{formatAtomsAsCoinString .InCirculation .CoinType 2}}</span>
+            <span class="mono decimal-parts d-inline-block">{{template "decimalParts" (skaDecimalPartsNoTrailing .InCirculation true 2)}}</span>
             <span class="ps-1 unit lh15rem">SKA{{.CoinType}}</span>
           </div>
-          <div class="fs12 fs12-decimal lh1rem text-black-50">Issued: <span class="mono">{{formatAtomsAsCoinString .TotalIssued
-              .CoinType 2}}</span></div>
-          <div class="fs12 fs12-decimal lh1rem text-black-50">Burned: <span class="mono">{{formatAtomsAsCoinString .TotalBurned
-              .CoinType 2}}</span></div>
+          <div class="fs12 fs12-decimal lh1rem text-black-50 label-value-grid mt-1">
+            <span class="text-start">Issued:</span>
+            <span class="text-start">
+              <span class="mono decimal-parts d-inline-block">{{template "decimalParts" (skaDecimalPartsNoTrailing .TotalIssued false 2)}}</span>
+            </span>
+            <span class="text-start">Burned:</span>
+            <span class="text-start">
+              <span class="mono decimal-parts d-inline-block">{{template "decimalParts" (skaDecimalPartsNoTrailing .TotalBurned false 2)}}</span>
+            </span>
+          </div>
         </div>
         {{end}}
       </div>
@@ -55,11 +61,15 @@
 <template id="ska-supply-block-template">
   <div class="mt-2">
     <div class="mono lh1rem fs14-decimal fs24 p03rem0 d-flex align-items-baseline">
-      <span class="int"></span>
+      <span class="mono decimal-parts d-inline-block in-circulation"></span>
       <span class="ps-1 unit lh15rem"><span class="symbol"></span></span>
     </div>
-    <div class="fs12 fs12-decimal lh1rem text-black-50">Issued: <span class="mono issued"></span></div>
-    <div class="fs12 fs12-decimal lh1rem text-black-50">Burned: <span class="mono burned"></span></div>
+    <div class="fs12 fs12-decimal lh1rem text-black-50 label-value-grid mt-1">
+      <span class="text-start">Issued:</span>
+      <span class="text-start"><span class="mono decimal-parts d-inline-block issued"></span></span>
+      <span class="text-start">Burned:</span>
+      <span class="text-start"><span class="mono decimal-parts d-inline-block burned"></span></span>
+    </div>
   </div>
 </template>
 

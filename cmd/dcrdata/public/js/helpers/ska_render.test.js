@@ -105,11 +105,15 @@ describe('_fillDecimalParts DOM output matches SSR decimalParts template', () =>
     expect(el.querySelectorAll('.trailing-zeroes')).toHaveLength(0)
   })
 
-  it('renders a whole-number value: .int only, no .decimal spans', () => {
-    // 1.000000000000000000 — bold is empty, so no decimal spans
+  it('renders a whole-number value: .int shows bold zeros, trailing-zeroes span for rest', () => {
+    // 1.000000000000000000 — fixed behavior: bold="00", trailingZeros="0000000000000000"
+    // .int shows "1.00", trailing-zeroes span shows the remaining 16 zeros
     const el = render('1000000000000000000')
-    expect(el.querySelector('.int').textContent).toBe('1')
-    expect(el.querySelectorAll('.decimal')).toHaveLength(0)
+    expect(el.querySelector('.int').textContent).toBe('1.00')
+    expect(el.querySelectorAll('.decimal:not(.trailing-zeroes)')).toHaveLength(0)
+    const trailSpans = el.querySelectorAll('.trailing-zeroes')
+    expect(trailSpans).toHaveLength(1)
+    expect(trailSpans[0].textContent).toBe('0000000000000000')
   })
 
   it('renders a value with bold digits and trailing zeros but no rest', () => {

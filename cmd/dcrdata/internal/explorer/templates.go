@@ -257,15 +257,41 @@ func skaDecimalParts(atomStr string, useCommas bool, boldNumPlaces ...int) []str
 		return []string{integer, right, trailingZeros}
 	}
 
+	// Bold mode: split dec (full 18-char zero-padded string) into bold + rest,
+	// then extract trailing zeros from rest only — mirrors float64Formatting.
 	places := boldNumPlaces[0]
-	if places > len(right) {
-		places = len(right)
-	}
-	if places == 0 {
-		return []string{integer, right, trailingZeros}
+	if places > skaDecimals {
+		places = skaDecimals
 	}
 
-	return []string{integer, right[:places], right[places:], trailingZeros}
+	bold := dec[:places]
+	rest := dec[places:]
+
+	trimmedRest := strings.TrimRight(rest, "0")
+	trailingZerosBold := rest[len(trimmedRest):]
+
+	return []string{integer, bold, trimmedRest, trailingZerosBold}
+}
+
+// skaDecimalPartsNoTrailing is the SKA-atom equivalent of float64FormattingNoTrailing.
+// It calls skaDecimalParts and then strips the trailing-zeros element so the
+// caller never has to render dimmed zeros.
+func skaDecimalPartsNoTrailing(atomStr string, useCommas bool, boldNumPlaces ...int) []string {
+	parts := skaDecimalParts(atomStr, useCommas, boldNumPlaces...)
+
+	// len == 4 → bold mode: trailing zeros are in parts[3]
+	if len(parts) == 4 {
+		parts[3] = ""
+		return parts
+	}
+
+	// len == 3 → non-bold mode: trailing zeros are in parts[2]
+	if len(parts) == 3 {
+		parts[2] = ""
+		return parts
+	}
+
+	return parts
 }
 
 func amountAsDecimalPartsTrimmed(v, numPlaces int64, useCommas bool) []string {
@@ -636,6 +662,9 @@ func makeTemplateFuncMap(params *chaincfg.Params) template.FuncMap {
 		"formatAtomsAsCoinString": formatAtomsAsCoinString,
 		"skaDecimalParts": func(atomStr string, useCommas bool, boldNumPlaces ...int) []string {
 			return skaDecimalParts(atomStr, useCommas, boldNumPlaces...)
+		},
+		"skaDecimalPartsNoTrailing": func(atomStr string, useCommas bool, boldNumPlaces ...int) []string {
+			return skaDecimalPartsNoTrailing(atomStr, useCommas, boldNumPlaces...)
 		},
 		"dcrPerKbToAtomsPerByte": func(amt dcrutil.Amount) int64 {
 			return int64(math.Round(float64(amt) / 1e3))
