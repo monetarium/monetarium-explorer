@@ -105,6 +105,6 @@ Verified using `dlv` breakpoints in `txhelpers.RewardsAtBlock` and `explorer.go`
 ### 3. Vote VAR Reward ROI Calculation
 Verified the ROI calculation logic for the most recent block:
 - For each ticket that voted in the block, ROI is calculated as:
-  `ROI = (RewardPerVote / TicketPrice) * (BlocksPerYear / (VoteHeight - PurchaseHeight)) * 100`
+  `ROI = (RewardPerVote / TicketPrice) * (BlocksPerYear / (VoteHeight - PurchaseHeight + CoinbaseMaturity)) * 100`
 - The final displayed ROI is the average of these individual ROIs across all voters in the block.
 
