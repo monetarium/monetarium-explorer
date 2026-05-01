@@ -4,8 +4,10 @@ import { renderCoinType, splitSkaAtomsNoTrailing } from '../helpers/ska_helper'
 
 export default class extends Controller {
   static get targets() {
-    return ['varCirculating', 'skaCoinSupply', 'exchangeRate']
+    return ['varCirculating', 'varSupplyShare', 'skaCoinSupply', 'exchangeRate']
   }
+
+  static VAR_MAX_SUPPLY = 54_000_000
 
   handleBlock({ detail: blockData }) {
     const ex = blockData.extra
@@ -15,6 +17,12 @@ export default class extends Controller {
       const clean = raw.replace(/,/g, '')
 
       this.varCirculatingTarget.innerHTML = humanize.decimalParts(clean, true, 8, 2, true)
+
+      if (this.hasVarSupplyShareTarget) {
+        const coins = parseFloat(clean)
+        const pct = (coins / this.constructor.VAR_MAX_SUPPLY) * 100
+        this.varSupplyShareTarget.textContent = `${pct.toFixed(1)}% of ~54M`
+      }
     }
 
     if (ex.ska_coin_supply && this.hasSkaCoinSupplyTarget) {

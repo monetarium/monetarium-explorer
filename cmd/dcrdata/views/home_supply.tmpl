@@ -15,6 +15,9 @@
         </span>
         <span class="ps-1 unit lh15rem">VAR</span>
       </div>
+      <div class="fs12 lh1rem text-black-50" data-supply-target="varSupplyShare">
+        {{printf "%.1f%%" (mulf (divideFloat (varAtomsToFloat64 .VARCoinSupply.Circulating) 54000000.0) 100.0)}} of ~54M
+      </div>
     </div>
     {{end}}
     {{if .SKACoinSupply}}
