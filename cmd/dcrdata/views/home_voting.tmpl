@@ -74,7 +74,7 @@
         </div>
         {{/* Row 3 left: Vote VAR Reward */}}
         <div class="col-12 mb-3 mb-sm-2 mb-md-3 mb-lg-3">
-            <div class="fs13 text-secondary">Vote VAR Reward</div>
+            <div class="fs13 text-secondary">Vote VAR Reward (most recent)</div>
             <div class="mono lh1rem fs14-decimal fs24 pt-1 pb-1 d-flex align-items-baseline">
                 <span data-voting-target="bsubsidyPos">
                     {{template "decimalParts" (float64AsDecimalParts $page.Info.VoteVARReward.PerBlock 8 false)}}
@@ -82,9 +82,12 @@
                  <span class="ps-1 unit lh15rem fs13">VAR/Vote</span>
             </div>
             <div class="fs12 lh1rem text-black-50">
-                <span data-voting-target="ticketReward">{{printf "%.2f" $page.Info.VoteVARReward.Per30Days}}%</span> per 30 days
+                Subsidy: {{template "decimalParts" (float64AsDecimalParts $page.Info.VoteVARReward.Subsidy 8 false)}}
             </div>
-            <div class="fs12 lh1rem text-black-50">{{printf "%.2f" $page.Info.VoteVARReward.PerYear}}% per year</div>
+            <div class="fs12 lh1rem text-black-50">
+                Fee: {{template "decimalParts" (float64AsDecimalParts $page.Info.VoteVARReward.Fee 8 false)}}
+            </div>
+            <div class="fs12 lh1rem text-black-50">ROI: {{printf "%.2f" $page.Info.VoteVARReward.ROI}}% per year</div>
         </div>
         {{/* Row 3 right: Total Staked VAR (moved from bottom-left, now below Next Ticket Price Change) */}}
         <div class="col-12 mb-3 mb-sm-2 mb-md-3 mb-lg-3">
