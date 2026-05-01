@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/monetarium/monetarium-node/blockchain/stake"
+	"github.com/monetarium/monetarium-node/cointype"
 	"github.com/monetarium/monetarium-node/wire"
 )
 
@@ -27,34 +28,59 @@ type SSFeeSummary struct {
 // Returns nil if no SSFee transactions are present.
 func BlockSSFeeTotals(msgBlock *wire.MsgBlock) map[uint8]string {
 	totals := make(map[uint8]*big.Int)
+
+	// 1. Calculate VAR fees from SSGen transactions
+	// Total PoS Reward = Sum of all SSGen reward outputs.
+	// Total VAR Fee = Total PoS Reward - 16 VAR subsidy.
+	var totalVARReward int64
+	var ssGenFound bool
+	for _, tx := range msgBlock.STransactions {
+		if stake.DetermineTxType(tx) == stake.TxTypeSSGen {
+			ssGenFound = true
+			for _, out := range tx.TxOut {
+				if out.CoinType == cointype.CoinTypeVAR {
+					totalVARReward += out.Value
+				}
+			}
+		}
+	}
+	if ssGenFound {
+		const totalPoSSubsidy = 16 * 1e8
+		feeVAR := totalVARReward - totalPoSSubsidy
+		if feeVAR > 0 {
+			totals[uint8(cointype.CoinTypeVAR)] = big.NewInt(feeVAR)
+		}
+	}
+
+	// 2. Calculate SKA fees from TxTypeSSFee transactions
 	for _, tx := range msgBlock.STransactions {
 		if stake.DetermineTxType(tx) != stake.TxTypeSSFee {
 			continue
 		}
 
-		var inputSKA, outputSKA big.Int
+		var inputTotal, outputTotal big.Int
 		var coinType uint8
 
-		// Sum all SKA inputs
+		// Sum all inputs for the primary coin type of this fee transaction
 		for _, vin := range tx.TxIn {
 			if vin.SKAValueIn != nil {
-				inputSKA.Add(&inputSKA, vin.SKAValueIn)
+				inputTotal.Add(&inputTotal, vin.SKAValueIn)
 			}
 		}
 
-		// Sum all SKA outputs and track coin type
+		// Sum all outputs
 		for _, out := range tx.TxOut {
 			if out.CoinType.IsSKA() && out.SKAValue != nil {
-				outputSKA.Add(&outputSKA, out.SKAValue)
+				outputTotal.Add(&outputTotal, out.SKAValue)
 				if coinType == 0 {
 					coinType = uint8(out.CoinType)
 				}
 			}
 		}
 
-		// Calculate actual reward: output - input (positive = to voters)
-		if coinType != 0 && outputSKA.Sign() > 0 && inputSKA.Sign() > 0 {
-			reward := new(big.Int).Sub(&outputSKA, &inputSKA)
+		// Calculate actual reward: output - input
+		if coinType != 0 {
+			reward := new(big.Int).Sub(&outputTotal, &inputTotal)
 			if reward.Sign() > 0 {
 				if totals[coinType] == nil {
 					totals[coinType] = new(big.Int)

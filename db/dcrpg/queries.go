@@ -4596,6 +4596,9 @@ func retrieveBlockSummaryRange(ctx context.Context, db *sql.DB, ind0, ind1 int64
 			bd.PoolInfo.Winners[i] = winners[i].String()
 		}
 		bd.StakeDiff = toCoin(sbits)
+		bd.Voters = uint16(voters)
+		bd.FreshStake = uint8(freshStake)
+		bd.Revocations = uint8(revokes)
 		bd.CoinStats = populateCoinStats(coinTxStatsJSON, coinAmountsJSON, voters, freshStake, revokes)
 		_ = json.Unmarshal(coinAmountsJSON, &bd.CoinAmounts)
 		_ = json.Unmarshal(coinTxStatsJSON, &bd.CoinTxStats)
@@ -4661,6 +4664,9 @@ func retrieveBlockSummaryRangeStepped(ctx context.Context, db *sql.DB, ind0, ind
 			bd.PoolInfo.Winners[i] = winners[i].String()
 		}
 		bd.StakeDiff = toCoin(sbits)
+		bd.Voters = uint16(voters)
+		bd.FreshStake = uint8(freshStake)
+		bd.Revocations = uint8(revokes)
 		bd.CoinStats = populateCoinStats(coinTxStatsJSON, coinAmountsJSON, voters, freshStake, revokes)
 		_ = json.Unmarshal(coinAmountsJSON, &bd.CoinAmounts)
 		_ = json.Unmarshal(coinTxStatsJSON, &bd.CoinTxStats)

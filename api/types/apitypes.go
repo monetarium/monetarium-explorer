@@ -749,15 +749,18 @@ type CoinTxStats = dbtypes.CoinTxStats
 
 // BlockDataBasic models primary information about a block.
 type BlockDataBasic struct {
-	Height     uint32  `json:"height"`
-	Size       uint32  `json:"size"`
-	Hash       string  `json:"hash"`
-	Difficulty float64 `json:"diff"`
-	StakeDiff  float64 `json:"sdiff"`
-	Time       TimeAPI `json:"time"`
-	NumTx      uint32  `json:"txlength"`
-	MiningFee  *int64  `json:"fees,omitempty"`
-	TotalSent  *int64  `json:"total_sent,omitempty"`
+	Height      uint32  `json:"height"`
+	Size        uint32  `json:"size"`
+	Hash        string  `json:"hash"`
+	Difficulty  float64 `json:"diff"`
+	StakeDiff   float64 `json:"sdiff"`
+	Time        TimeAPI `json:"time"`
+	NumTx       uint32  `json:"txlength"`
+	Voters      uint16  `json:"votes"`
+	FreshStake  uint8   `json:"tickets"`
+	Revocations uint8   `json:"revocations"`
+	MiningFee   *int64  `json:"fees,omitempty"`
+	TotalSent   *int64  `json:"total_sent,omitempty"`
 	// CoinAmounts holds per-coin totals (VAR key=0, SKAn key=n) as decimal atom strings.
 	CoinAmounts map[uint8]string `json:"coin_amounts,omitempty"`
 	// CoinTxStats holds per-coin tx count and size (key 0=VAR, 1-255=SKAn).
