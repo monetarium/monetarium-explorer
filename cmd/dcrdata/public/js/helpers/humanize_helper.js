@@ -61,14 +61,22 @@ const humanize = {
     let htmlString = '<div class="decimal-parts d-inline-block">'
 
     if (!isNaN(lgDecimals) && lgDecimals > 0) {
-      const lgPart = decimalVals.substring(0, lgDecimals)
+      const lgPart = decimal.substring(0, lgDecimals)
       const restPart = decimalVals.substring(lgDecimals)
+      // trailing zeros only from the portion after lgDecimals
+      const lgTrailingZeros = dropTrailingZeros
+        ? ''
+        : (() => {
+            const after = decimal.slice(lgDecimals)
+            const trimmed = after.replace(/0+$/, '')
+            return after.length > trimmed.length ? after.slice(trimmed.length) : ''
+          })()
       htmlString +=
         `<span class="int">${lgPart ? `${int}.${lgPart}` : int}</span>` +
         `<span class="decimal">${restPart}</span>`
 
       if (!dropTrailingZeros) {
-        htmlString += `<span class="decimal trailing-zeroes">${trailingZeros}</span>`
+        htmlString += `<span class="decimal trailing-zeroes">${lgTrailingZeros}</span>`
       }
     } else if (precision !== 0) {
       htmlString +=
@@ -87,32 +95,62 @@ const humanize = {
 
     return htmlString
   },
-  // formatCoinAtomsFull converts a raw atom string to a full-precision coin
-  // string with trailing zeros stripped — matching Go's formatCoinAtomsFull.
-  // coinType 0 = VAR (8 decimal places), any other value = SKA (18 decimal places).
-  formatCoinAtomsFull: function (atomStr, coinType) {
-    if (!atomStr || atomStr === '') return '0'
+  // formatAtomsAsCoinString converts a base-10 atomic amount string into a
+  // human-readable coin string without rounding.
+  // It uses fixed precision (8 decimals for VAR, 18 for SKA), trims trailing
+  // zeros in the fractional part while preserving at least `minDecimals` digits,
+  // and inserts thousands separators into the integer part.
+  // If the input is empty or invalid, it returns "—".
+  // coinType: 0 = VAR, any other value = SKA.
+  formatAtomsAsCoinString: function (atomStr, coinType, minDecimals) {
+    if (!atomStr) return '—'
+
     let atoms
     try {
       atoms = BigInt(atomStr)
     } catch {
-      return '0'
+      return '—'
     }
 
     const decimals = coinType === 0 ? 8 : 18
-    // Build divisor as BigInt without using ** operator (avoids Math.pow coercion)
-    let divisor = 1n
-    for (let i = 0; i < decimals; i++) divisor *= 10n
-    const whole = atoms / divisor
-    const remainder = atoms % divisor
+    // Avoid BigInt ** operator — Babel transpiles it to Math.pow which rejects BigInt args.
+    const divisor = coinType === 0 ? 100000000n : 1000000000000000000n
 
-    // Pad fractional part to full decimal width, then strip trailing zeros
-    const frac = remainder.toString().padStart(decimals, '0').replace(/0+$/, '')
-    const wholeStr = whole.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+    // integer + remainder (NO rounding)
+    const intPart = atoms / divisor
+    const rem = atoms % divisor
 
-    if (remainder === 0n) return wholeStr
+    // fractional part (zero-padded)
+    let fracStr = rem.toString().padStart(decimals, '0')
 
-    return `${wholeStr}.${frac}`
+    // trim trailing zeros BUT keep at least minDecimals digits
+    const trimmed = fracStr.replace(/0+$/, '')
+    if (trimmed.length < minDecimals) {
+      fracStr = fracStr.slice(0, minDecimals)
+    } else {
+      fracStr = trimmed
+    }
+
+    // format integer part with commas (faster than regex)
+    let intStr = intPart.toString()
+    let prefix = ''
+    if (intStr[0] === '-') {
+      prefix = '-'
+      intStr = intStr.slice(1)
+    }
+
+    if (intStr.length > 3) {
+      let out = ''
+      for (let i = 0; i < intStr.length; i++) {
+        if (i > 0 && (intStr.length - i) % 3 === 0) {
+          out += ','
+        }
+        out += intStr[i]
+      }
+      intStr = out
+    }
+
+    return `${prefix + intStr}.${fracStr}`
   },
   // formatCoinAtoms converts a raw atom string to a threeSigFigs-formatted coin
   // string. coinType 0 = VAR (8 decimal places), any other value = SKA (18

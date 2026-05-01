@@ -11,10 +11,10 @@ export default class extends Controller {
     const ex = blockData.extra
 
     if (ex.var_coin_supply && this.hasVarCirculatingTarget) {
-      const raw = humanize.formatCoinAtomsFull(ex.var_coin_supply.circulating, 0)
+      const raw = humanize.formatAtomsAsCoinString(ex.var_coin_supply.circulating, 0, 2)
       const clean = raw.replace(/,/g, '')
 
-      this.varCirculatingTarget.innerHTML = humanize.decimalParts(clean, true, 8, undefined, true)
+      this.varCirculatingTarget.innerHTML = humanize.decimalParts(clean, true, 8, 2, true)
     }
 
     if (ex.ska_coin_supply && this.hasSkaCoinSupplyTarget) {
@@ -37,16 +37,22 @@ export default class extends Controller {
     entries.forEach((e) => {
       const clone = document.importNode(tmpl.content, true)
 
-      const in_circulation_formatted = humanize.formatCoinAtomsFull(e.in_circulation, e.coin_type)
+      const in_circulation_formatted = humanize.formatAtomsAsCoinString(
+        e.in_circulation,
+        e.coin_type,
+        2
+      )
       clone.querySelector('.int').textContent = in_circulation_formatted
       clone.querySelector('.symbol').textContent = renderCoinType(e.coin_type)
-      clone.querySelector('.issued').textContent = humanize.formatCoinAtomsFull(
+      clone.querySelector('.issued').textContent = humanize.formatAtomsAsCoinString(
         e.total_issued,
-        e.coin_type
+        e.coin_type,
+        2
       )
-      clone.querySelector('.burned').textContent = humanize.formatCoinAtomsFull(
+      clone.querySelector('.burned').textContent = humanize.formatAtomsAsCoinString(
         e.total_burned,
-        e.coin_type
+        e.coin_type,
+        2
       )
 
       container.appendChild(clone)

@@ -1,9 +1,13 @@
 package explorer
 
 import (
+	"html/template"
+	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/monetarium/monetarium-explorer/explorer/types"
+	"github.com/monetarium/monetarium-node/chaincfg"
 )
 
 func TestBlockVoteBitsStr(t *testing.T) {
@@ -484,4 +488,306 @@ func TestComputeCoinFills(t *testing.T) {
 			t.Errorf("SKA1 should appear exactly once, got %d", count)
 		}
 	})
+}
+
+func TestFloat64Formatting(t *testing.T) {
+	tests := []struct {
+		name       string
+		value      float64
+		numPlaces  int
+		useCommas  bool
+		boldPlaces []int
+		expected   []string
+	}{
+		{
+			name:       "normal value with bold",
+			value:      332.39617174,
+			numPlaces:  8,
+			useCommas:  false,
+			boldPlaces: []int{2},
+			expected:   []string{"332", "39", "617174", ""},
+		},
+		{
+			name:       "short decimal (previously broken case)",
+			value:      3.2,
+			numPlaces:  8,
+			useCommas:  false,
+			boldPlaces: []int{2},
+			expected:   []string{"3", "20", "", "000000"},
+		},
+		{
+			name:       "no bold mode",
+			value:      3.2,
+			numPlaces:  8,
+			useCommas:  false,
+			boldPlaces: nil,
+			expected:   []string{"3", "2", "0000000"},
+		},
+		{
+			name:       "integer value",
+			value:      5.0,
+			numPlaces:  8,
+			useCommas:  false,
+			boldPlaces: []int{2},
+			expected:   []string{"5", "00", "", "000000"},
+		},
+		{
+			name:       "rounding case",
+			value:      1.999999999,
+			numPlaces:  8,
+			useCommas:  false,
+			boldPlaces: []int{2},
+			expected:   []string{"2", "00", "", "000000"},
+		},
+		{
+			name:       "with commas",
+			value:      12345.67,
+			numPlaces:  8,
+			useCommas:  true,
+			boldPlaces: []int{2},
+			expected:   []string{"12,345", "67", "", "000000"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var result []string
+
+			if tt.boldPlaces != nil {
+				result = float64Formatting(tt.value, tt.numPlaces, tt.useCommas, tt.boldPlaces...)
+			} else {
+				result = float64Formatting(tt.value, tt.numPlaces, tt.useCommas)
+			}
+
+			if !reflect.DeepEqual(result, tt.expected) {
+				t.Errorf("unexpected result\nexpected: %#v\ngot:      %#v", tt.expected, result)
+			}
+		})
+	}
+}
+
+func TestFloat64FormattingNoTrailing(t *testing.T) {
+	got := float64FormattingNoTrailing(3.2, 8, false, 2)
+
+	expected := []string{"3", "20", "", ""}
+
+	if !reflect.DeepEqual(got, expected) {
+		t.Fatalf("expected %#v, got %#v", expected, got)
+	}
+}
+func TestDecimalPartsTemplate(t *testing.T) {
+	funcMap := makeTemplateFuncMap(chaincfg.SimNetParams())
+	funcMap["asset"] = func(name string) string { return name }
+
+	tmpl, err := template.New("base").Funcs(funcMap).ParseFiles("../../views/extras.tmpl")
+	if err != nil {
+		t.Fatalf("failed to parse template: %v", err)
+	}
+
+	render := func(input []string) string {
+		var out strings.Builder
+		err := tmpl.ExecuteTemplate(&out, "decimalParts", input)
+		if err != nil {
+			t.Fatalf("failed to execute template: %v", err)
+		}
+
+		s := out.String()
+		s = strings.ReplaceAll(s, "\n", "")
+		s = strings.ReplaceAll(s, "\t", "")
+		s = strings.TrimSpace(s)
+		return s
+	}
+
+	tests := []struct {
+		name  string
+		input []string
+
+		expectContains    []string
+		expectNotContains []string
+	}{
+		{
+			name:  "non-bold trailing zero NOT dimmed",
+			input: []string{"379", "7", "0"},
+			expectContains: []string{
+				">379<",
+				">7<",
+				">0<",
+			},
+			expectNotContains: []string{
+				"trailing-zeroes",
+			},
+		},
+
+		// ✅ Bold mode: trailing zeros ARE dimmed
+		{
+			name:  "bold trailing zeros dimmed",
+			input: []string{"3", "20", "", "000000"},
+			expectContains: []string{
+				"3.20",
+				"trailing-zeroes",
+				"000000",
+			},
+		},
+
+		// ✅ Bold with rest decimals
+		{
+			name:  "bold with rest decimals",
+			input: []string{"3", "20", "1", "00000"},
+			expectContains: []string{
+				"3.20",
+				">1<",
+				"trailing-zeroes",
+			},
+		},
+
+		// ✅ No decimals at all
+		{
+			name:  "integer only",
+			input: []string{"3", "", ""},
+			expectContains: []string{
+				">3<",
+			},
+			expectNotContains: []string{
+				`class="decimal"`,
+				`class="decimal dot"`,
+				`trailing-zeroes`,
+			},
+		},
+
+		// ✅ Non-bold with decimals
+		{
+			name:  "non-bold normal decimals",
+			input: []string{"3", "2", "0000000"},
+			expectContains: []string{
+				".",
+				">2<",
+				">0000000<",
+			},
+			expectNotContains: []string{
+				"trailing-zeroes", // 🔥 important
+			},
+		},
+
+		// 🔥 Edge: only trailing zeros
+		{
+			name:  "non-bold only trailing zeros",
+			input: []string{"3", "", "00000000"},
+			expectContains: []string{
+				".",
+				">00000000<",
+			},
+			expectNotContains: []string{
+				"trailing-zeroes",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := render(tt.input)
+
+			for _, s := range tt.expectContains {
+				if !strings.Contains(got, s) {
+					t.Errorf("expected to contain %q\nGot: %s", s, got)
+				}
+			}
+
+			for _, s := range tt.expectNotContains {
+				if strings.Contains(got, s) {
+					t.Errorf("expected NOT to contain %q\nGot: %s", s, got)
+				}
+			}
+		})
+	}
+}
+func TestFormatAtomsAsCoinString(t *testing.T) {
+	tests := []struct {
+		name        string
+		atomStr     string
+		coinType    uint8
+		minDecimals int
+		expected    string
+	}{
+		// VAR
+		{
+			name:        "trim but keep 2 decimals",
+			atomStr:     "123000000",
+			coinType:    0,
+			minDecimals: 2,
+			expected:    "1.23",
+		},
+		{
+			name:        "keep trailing zeros",
+			atomStr:     "120000000",
+			coinType:    0,
+			minDecimals: 2,
+			expected:    "1.20",
+		},
+		{
+			name:        "whole number",
+			atomStr:     "500000000",
+			coinType:    0,
+			minDecimals: 2,
+			expected:    "5.00",
+		},
+		{
+			name:        "no rounding",
+			atomStr:     "123456789",
+			coinType:    0,
+			minDecimals: 2,
+			expected:    "1.23456789",
+		},
+
+		// SKA
+		{
+			name:        "ska trim",
+			atomStr:     "1234500000000000000",
+			coinType:    1,
+			minDecimals: 2,
+			expected:    "1.2345",
+		},
+		{
+			name:        "ska keep zeros",
+			atomStr:     "1200000000000000000",
+			coinType:    1,
+			minDecimals: 2,
+			expected:    "1.20",
+		},
+
+		// custom minDecimals
+		{
+			name:        "custom 4 decimals",
+			atomStr:     "123400000",
+			coinType:    0,
+			minDecimals: 4,
+			expected:    "1.2340",
+		},
+
+		// commas
+		{
+			name:        "commas",
+			atomStr:     "1234567890000000",
+			coinType:    0,
+			minDecimals: 2,
+			expected:    "12,345,678.90",
+		},
+
+		// edge
+		{
+			name:        "invalid",
+			atomStr:     "abc",
+			coinType:    0,
+			minDecimals: 2,
+			expected:    "0",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := formatAtomsAsCoinString(tt.atomStr, tt.coinType, tt.minDecimals)
+			if result != tt.expected {
+				t.Errorf("expected %s, got %s", tt.expected, result)
+			}
+		})
+	}
 }

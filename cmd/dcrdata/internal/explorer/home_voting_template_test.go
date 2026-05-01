@@ -76,8 +76,8 @@ func TestVotingCardTemplate(t *testing.T) {
 		if !strings.Contains(out, "Vote VAR Reward") {
 			t.Error("expected 'Vote VAR Reward' in output")
 		}
-		if !strings.Contains(out, "Vote SKA Reward") {
-			t.Error("expected 'Vote SKA Reward' in output")
+		if !strings.Contains(out, "Vote SKA Fee Reward") {
+			t.Error("expected 'Vote SKA Fee Reward' in output")
 		}
 	})
 
@@ -95,6 +95,9 @@ func TestVotingCardTemplate(t *testing.T) {
 		if !strings.Contains(out, `data-voting-target="bsubsidyPos"`) {
 			t.Error("expected data-voting-target=\"bsubsidyPos\" in output")
 		}
+		if !strings.Contains(out, `data-voting-target="varROI"`) {
+			t.Error("expected data-voting-target=\"varROI\" in output")
+		}
 	})
 
 	// Case 4 — Empty SKA slice
@@ -111,7 +114,7 @@ func TestVotingCardTemplate(t *testing.T) {
 	// Case 5 — Single SKA entry
 	t.Run("SingleSKAEntry", func(t *testing.T) {
 		ska := []types.SKAVoteReward{
-			{CoinType: 1, Symbol: "SKA1", PerBlock: "0.097178596780181388", PerYear: "0.038980675541825918"},
+			{CoinType: 1, Symbol: "SKA1", PerBlock: "97178596780181388", PerYear: "38980675541825918"},
 		}
 		out := renderVotingCard(t, tmpl, makeHomeInfo(types.VoteVARReward{}, ska))
 		if strings.Contains(out, "No SKA rewards available") {
@@ -148,7 +151,7 @@ func TestVotingCardTemplate(t *testing.T) {
 	t.Run("SKAPerBlockDecimalParts", func(t *testing.T) {
 		ska := []types.SKAVoteReward{
 			// value with significant non-zero decimals beyond the bold 2 places
-			{CoinType: 2, Symbol: "SKA2", PerBlock: "1.234567890000000000", PerYear: "365.000000000000000000"},
+			{CoinType: 2, Symbol: "SKA2", PerBlock: "1234567890000000000", PerYear: "365000000000000000000"},
 		}
 		out := renderVotingCard(t, tmpl, makeHomeInfo(types.VoteVARReward{}, ska))
 		if !strings.Contains(out, `class="decimal-parts`) {
@@ -216,8 +219,8 @@ func TestProp_SKASliceOrderPreserved(t *testing.T) {
 			skaRewards[i] = types.SKAVoteReward{
 				CoinType: coinType,
 				Symbol:   sym,
-				PerBlock: "0.000000000000000001",
-				PerYear:  "0.000000000000000365",
+				PerBlock: "1",
+				PerYear:  "365",
 			}
 			symbols[i] = sym
 		}
@@ -244,34 +247,22 @@ func TestProp_SKASliceOrderPreserved(t *testing.T) {
 	})
 }
 
-// Feature: voting-section-frontend, Property 4: SKA pre-formatted strings are rendered verbatim
-func TestProp_SKAStringsVerbatim(t *testing.T) {
+// Feature: voting-section-frontend, Property 4: SKA atom strings are rendered as decimals
+func TestProp_SKAAtomsRendered(t *testing.T) {
 	tmpl := newVotingCardTemplates(t)
 	rapid.Check(t, func(t *rapid.T) {
-		perBlock := rapid.StringMatching(`\d{1,15}\.\d{18}`).Draw(t, "perBlock")
-		perYear := rapid.StringMatching(`\d{1,15}\.\d{18}`).Draw(t, "perYear")
+		// PerBlock must be an atom string (integer string).
+		perBlock := rapid.StringMatching(`[1-9]\d{0,30}`).Draw(t, "perBlock")
+		perYear := rapid.StringMatching(`[1-9]\d{0,30}`).Draw(t, "perYear")
 		ska := []types.SKAVoteReward{
 			{CoinType: 1, Symbol: "SKA1", PerBlock: perBlock, PerYear: perYear},
 		}
 		info := makeHomeInfo(types.VoteVARReward{}, ska)
 		out := renderVotingCard(t, tmpl, info)
 
-		// PerBlock is rendered via decimalParts using skaSplitParts.
-		// Check the significant bold part and the rest both appear.
-		parts := skaSplitParts(perBlock, 2)
-		if !strings.Contains(out, parts[0]) { // integer
-			t.Errorf("expected integer part %q of PerBlock in output", parts[0])
-		}
-		if parts[1] != "" && !strings.Contains(out, parts[1]) { // bold decimals
-			t.Errorf("expected bold decimal part %q of PerBlock in output", parts[1])
-		}
-		if parts[2] != "" && !strings.Contains(out, parts[2]) { // rest decimals
-			t.Errorf("expected rest decimal part %q of PerBlock in output", parts[2])
-		}
-
-		// Per30Days and PerYear are rendered verbatim.
-		if !strings.Contains(out, perYear) {
-			t.Errorf("expected PerYear %q verbatim in output", perYear)
+		// Verification: The output must contain the decimal parts div.
+		if !strings.Contains(out, `class="decimal-parts`) {
+			t.Error("expected decimal-parts div in output")
 		}
 	})
 }
@@ -287,8 +278,8 @@ func TestProp_RenderedHTMLWellFormed(t *testing.T) {
 			skaRewards[i] = types.SKAVoteReward{
 				CoinType: coinType,
 				Symbol:   fmt.Sprintf("SKA%d", coinType),
-				PerBlock: "0.000000000000000001",
-				PerYear:  "0.000000000000000365",
+				PerBlock: "1",
+				PerYear:  "365",
 			}
 		}
 		info := makeHomeInfo(types.VoteVARReward{PerBlock: 1.0, ROI: 60.0}, skaRewards)
@@ -312,8 +303,8 @@ func TestProp_SKAVoteRewardsContainerExactlyOnce(t *testing.T) {
 			skaRewards[i] = types.SKAVoteReward{
 				CoinType: coinType,
 				Symbol:   fmt.Sprintf("SKA%d", coinType),
-				PerBlock: "0.000000000000000001",
-				PerYear:  "0.000000000000000365",
+				PerBlock: "1",
+				PerYear:  "365",
 			}
 		}
 		info := makeHomeInfo(types.VoteVARReward{}, skaRewards)

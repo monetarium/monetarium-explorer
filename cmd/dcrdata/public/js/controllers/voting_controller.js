@@ -1,6 +1,6 @@
 import { Controller } from '@hotwired/stimulus'
 import humanize from '../helpers/humanize_helper'
-import { splitSkaValue } from '../helpers/ska_helper'
+import { splitSkaAtoms } from '../helpers/ska_helper'
 
 export default class extends Controller {
   static get targets() {
@@ -15,8 +15,10 @@ export default class extends Controller {
       'poolValue',
       'poolSizePct',
       'targetPct',
-      'ticketReward',
+      'varROI',
       'bsubsidyPos',
+      'bsubsidy',
+      'bfee',
       'convertedStake',
       'skaVoteRewards'
     ]
@@ -24,55 +26,30 @@ export default class extends Controller {
 
   handleBlock({ detail: blockData }) {
     const ex = blockData.extra
-    this.blocksdiffTarget.innerHTML = humanize.decimalParts(ex.sdiff, false, 8, 2, true)
+    this.blocksdiffTarget.innerHTML = humanize.decimalParts(ex.sdiff, false, 8, 2)
     this.nextExpectedSdiffTarget.innerHTML = humanize.decimalParts(
       ex.next_expected_sdiff,
       false,
       2,
-      2,
-      true
+      2
     )
-    this.nextExpectedMinTarget.innerHTML = humanize.decimalParts(
-      ex.next_expected_min,
-      false,
-      2,
-      2,
-      true
-    )
-    this.nextExpectedMaxTarget.innerHTML = humanize.decimalParts(
-      ex.next_expected_max,
-      false,
-      2,
-      2,
-      true
-    )
+    this.nextExpectedMinTarget.innerHTML = humanize.decimalParts(ex.next_expected_min, false, 2, 2)
+    this.nextExpectedMaxTarget.innerHTML = humanize.decimalParts(ex.next_expected_max, false, 2, 2)
     this.windowIndexTarget.textContent = ex.window_idx
     this.posBarTarget.style.width = `${(ex.window_idx / ex.params.window_size) * 100}%`
-    this.poolSizeTarget.innerHTML = humanize.decimalParts(
-      ex.pool_info.size,
-      true,
-      0,
-      undefined,
-      true
-    )
+    this.poolSizeTarget.innerHTML = humanize.decimalParts(ex.pool_info.size, true, 0)
     this.targetPctTarget.textContent = parseFloat(ex.pool_info.percent_target - 100).toFixed(2)
-    this.poolValueTarget.innerHTML = humanize.decimalParts(
-      ex.pool_info.value,
-      true,
-      0,
-      undefined,
-      true
-    )
+    this.poolValueTarget.innerHTML = humanize.decimalParts(ex.pool_info.value, true, 0)
     this.poolSizePctTarget.textContent = parseFloat(ex.pool_info.percent).toFixed(2)
-    this.ticketRewardTarget.innerHTML = `${ex.reward.toFixed(2)}%`
-    // IMPORTANT: no lgDecimals here → split mode (matches Go)
+    this.varROITarget.textContent = ex.vote_var_reward.per_year.toFixed(2)
     this.bsubsidyPosTarget.innerHTML = humanize.decimalParts(
       ex.subsidy.pos / 500000000,
       false,
       8,
-      undefined,
-      true
+      2
     )
+    this.bsubsidyTarget.innerHTML = humanize.decimalParts(ex.subsidy.pos / 500000000, false, 8, 2)
+    this.bfeeTarget.innerHTML = humanize.decimalParts(ex.mining_fee_atoms / 500000000, false, 8, 2)
 
     if (ex.exchange_rate && this.hasConvertedStakeTarget) {
       const { value: xcRate, index } = ex.exchange_rate
@@ -93,41 +70,55 @@ export default class extends Controller {
     rewards.forEach((r) => {
       const clone = document.importNode(tmpl.content, true)
 
+      // 1. Reward per Block (main value)
       const s = r.per_block || ''
       const isDash = !s
+      const blockValueParts = splitSkaAtoms(s)
 
-      const decimalPartsEl = clone.querySelector('.decimal-parts')
-      if (decimalPartsEl && isDash) decimalPartsEl.style.display = 'none'
-
-      const { intPart, bold, rest, trailingZeros } = splitSkaValue(s)
-
-      const intEl = clone.querySelector('.int')
-      const decEl = clone.querySelector('.decimal:not(.trailing-zeroes)')
-      const trailEl = clone.querySelector('.trailing-zeroes')
-      const blockHeightEl = clone.querySelector('[data-block-height]')
-
-      if (intEl) intEl.textContent = bold ? `${intPart}.${bold}` : intPart
-      if (decEl) decEl.textContent = rest
-      if (trailEl) trailEl.textContent = trailingZeros
-
-      const height = r.block_height
-      if (blockHeightEl && height) {
-        blockHeightEl.href = `/block/${height}`
+      const blockDecimalPartsEl = clone.querySelector('[data-field="block-parts"]')
+      if (blockDecimalPartsEl) {
+        if (isDash) {
+          blockDecimalPartsEl.style.display = 'none'
+        } else {
+          this._fillDecimalParts(blockDecimalPartsEl, blockValueParts)
+        }
       }
 
+      const blockHeightEl = clone.querySelector('[data-block-height]')
+      if (blockHeightEl && r.block_height) {
+        blockHeightEl.href = `/block/${r.block_height}`
+      }
+
+      // 2. Annual Return
+      const py = r.per_year || ''
+      const pyParts = splitSkaAtoms(py)
+      const pyDecimalPartsEl = clone.querySelector('[data-field="peryear-parts"]')
+      if (pyDecimalPartsEl) {
+        this._fillDecimalParts(pyDecimalPartsEl, pyParts)
+      }
+
+      // 3. Units and other fields
       clone.querySelectorAll('[data-field]').forEach((el) => {
         const field = el.dataset.field
         if (field === 'unit') {
           el.textContent = isDash ? `— ${r.symbol}/Vote` : `${r.symbol}/Vote`
-        } else if (field === 'per30d') {
-          el.textContent = `${r.per_30_days} ${r.symbol}/VAR per 30 days`
-        } else if (field === 'peryear') {
-          el.textContent = `${r.per_year} ${r.symbol}/VAR per year`
+        } else if (field === 'peryear-unit') {
+          el.textContent = `${r.symbol}/VAR per year`
         }
         el.removeAttribute('data-field')
       })
 
       container.appendChild(clone)
     })
+  }
+
+  _fillDecimalParts(el, { intPart, bold, rest, trailingZeros }) {
+    const intEl = el.querySelector('.int')
+    const decEl = el.querySelector('.decimal:not(.trailing-zeroes)')
+    const trailEl = el.querySelector('.trailing-zeroes')
+
+    if (intEl) intEl.textContent = bold ? `${intPart}.${bold}` : intPart
+    if (decEl) decEl.textContent = rest
+    if (trailEl) trailEl.textContent = trailingZeros
   }
 }

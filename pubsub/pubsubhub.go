@@ -868,10 +868,15 @@ func (psh *PubSubHub) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgBl
 					}
 
 					if totalReward != nil {
-						blocksPerYear := float64(365 * 24 * time.Hour / psh.params.TargetTimePerBlock)
-						rewardPerTicket := new(big.Float).SetInt(totalReward)
-						rewardPerTicket.Quo(rewardPerTicket, big.NewFloat(1e18))
-						rewardPerTicket.Quo(rewardPerTicket, big.NewFloat(float64(psh.params.TicketsPerBlock)))
+						blocksPerYear := 365 * 24 * time.Hour / psh.params.TargetTimePerBlock
+						blocksPerYearBF := new(big.Float).SetPrec(256).SetInt64(int64(blocksPerYear))
+						// rewardPerTicket is the reward for a single ticket slot.
+						// We divide by TicketsPerBlock (fixed at 5) because the total reward
+						// is distributed across all possible voting slots in the block,
+						// regardless of whether every slot was filled.
+						rewardPerTicket := new(big.Float).SetPrec(256).SetInt(totalReward)
+						rewardPerTicket.Quo(rewardPerTicket, new(big.Float).SetPrec(256).SetInt64(1_000_000_000_000_000_000))
+						rewardPerTicket.Quo(rewardPerTicket, new(big.Float).SetPrec(256).SetInt64(int64(psh.params.TicketsPerBlock)))
 
 						tickets := make([]txhelpers.VoteTicket, len(voteData))
 						for i, vd := range voteData {
@@ -881,7 +886,7 @@ func (psh *PubSubHub) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgBl
 								PurchaseHeight: vd.PurchaseHeight,
 							}
 						}
-						perYear = txhelpers.CalculateAverageTicketAPY(tickets, rewardPerTicket, blocksPerYear)
+						perYear = txhelpers.CalculateAverageTicketAPY(tickets, rewardPerTicket, blocksPerYearBF)
 					}
 				}
 			}
