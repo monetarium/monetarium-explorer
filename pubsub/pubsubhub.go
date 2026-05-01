@@ -710,10 +710,31 @@ func (psh *PubSubHub) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgBl
 	if start30 < 0 {
 		start30 = 0
 	}
-	sum30 := psh.sourceBase.GetSummaryRange(ctx, start30, tip)
+	sum30Raw := psh.sourceBase.GetSummaryRange(ctx, start30, tip)
+	sum30 := make([]txhelpers.BlockSummary, len(sum30Raw))
+	for i, s := range sum30Raw {
+		sum30[i] = txhelpers.BlockSummary{
+			SSFeeTotalsByCoin: s.SSFeeTotalsByCoin,
+			Voters:            s.Voters,
+			Hash:              s.Hash,
+			Height:            int(s.Height),
+		}
+	}
 
 	// Calculate Vote VAR Reward (most recent)
-	res := txhelpers.ComputeVoteVARReward(ctx, psh.sourceBase, psh.params, int64(blockData.Header.Voters), blockData.Header.Hash)
+	voteData, err := psh.sourceBase.GetVoteTicketDataByBlock(ctx, blockData.Header.Hash)
+	var txVoteData []txhelpers.VoteTicketData
+	if err == nil {
+		txVoteData = make([]txhelpers.VoteTicketData, len(voteData))
+		for i, vd := range voteData {
+			txVoteData[i] = txhelpers.VoteTicketData{
+				TicketPrice:    vd.TicketPrice,
+				VoteHeight:     vd.VoteHeight,
+				PurchaseHeight: vd.PurchaseHeight,
+			}
+		}
+	}
+	res := txhelpers.ComputeVoteVARReward(ctx, sum30, txVoteData, psh.params, int64(blockData.Header.Voters), blockData.Header.Hash)
 
 	p.GeneralInfo.VoteVARReward = exptypes.VoteVARReward{
 		PerBlock: res.PerBlock,
@@ -764,8 +785,8 @@ func (psh *PubSubHub) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgBl
 
 			// Find the latest block specifically for this coin type
 			if totalStr, ok := blockData.ExtraInfo.SSFeeTotalsByCoin[ct]; ok && totalStr != "" {
-				if total, parsed := new(big.Int).SetString(totalStr, 10); parsed && voters > 0 {
-					perVote := new(big.Int).Div(total, big.NewInt(voters))
+				if total, parsed := new(big.Int).SetString(totalStr, 10); parsed && int64(blockData.Header.Voters) > 0 {
+					perVote := new(big.Int).Div(total, big.NewInt(int64(blockData.Header.Voters)))
 					perBlock = txhelpers.FormatSKAAtoms(perVote)
 					blockHeight = int64(blockData.Header.Height)
 					blockHash = blockData.Header.Hash
@@ -819,9 +840,9 @@ func (psh *PubSubHub) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgBl
 						rewardPerTicket.Quo(rewardPerTicket, new(big.Float).SetPrec(256).SetInt64(1_000_000_000_000_000_000))
 						rewardPerTicket.Quo(rewardPerTicket, new(big.Float).SetPrec(256).SetInt64(int64(psh.params.TicketsPerBlock)))
 
-						tickets := make([]txhelpers.VoteTicket, len(voteData))
+						tickets := make([]txhelpers.VoteTicketData, len(voteData))
 						for i, vd := range voteData {
-							tickets[i] = txhelpers.VoteTicket{
+							tickets[i] = txhelpers.VoteTicketData{
 								TicketPrice:    vd.TicketPrice,
 								VoteHeight:     vd.VoteHeight,
 								PurchaseHeight: vd.PurchaseHeight,

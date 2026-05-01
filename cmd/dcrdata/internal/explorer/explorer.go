@@ -18,7 +18,6 @@ import (
 	"os/signal"
 	"reflect"
 	"sort"
-	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -630,12 +629,33 @@ func (exp *explorerUI) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgB
 	if start30 < 0 {
 		start30 = 0
 	}
-	sum30 := exp.dataSource.GetSummaryRange(ctx, start30, tip)
+	sum30Raw := exp.dataSource.GetSummaryRange(ctx, start30, tip)
+	sum30 := make([]txhelpers.BlockSummary, len(sum30Raw))
+	for i, s := range sum30Raw {
+		sum30[i] = txhelpers.BlockSummary{
+			SSFeeTotalsByCoin: s.SSFeeTotalsByCoin,
+			Voters:            s.Voters,
+			Hash:              s.Hash,
+			Height:            int(s.Height),
+		}
+	}
 	// blocksPerYear is calculated as a float64 to preserve truncation of integer division (365*24h / targetTime)
-	blocksPerYear := float64(365 * 24 * time.Hour / exp.ChainParams.TargetTimePerBlock)
 
 	// Calculate Vote VAR Reward (most recent)
-	res := txhelpers.ComputeVoteVARReward(ctx, exp.dataSource, exp.ChainParams, int64(newBlockData.Voters), newBlockData.Hash)
+
+	voteData, err := exp.dataSource.GetVoteTicketDataByBlock(ctx, newBlockData.Hash)
+	var txVoteData []txhelpers.VoteTicketData
+	if err == nil {
+		txVoteData = make([]txhelpers.VoteTicketData, len(voteData))
+		for i, vd := range voteData {
+			txVoteData[i] = txhelpers.VoteTicketData{
+				TicketPrice:    vd.TicketPrice,
+				VoteHeight:     vd.VoteHeight,
+				PurchaseHeight: vd.PurchaseHeight,
+			}
+		}
+	}
+	res := txhelpers.ComputeVoteVARReward(ctx, sum30, txVoteData, exp.ChainParams, int64(newBlockData.Voters), newBlockData.Hash)
 
 	p.HomeInfo.VoteVARReward = types.VoteVARReward{
 		PerBlock: res.PerBlock,
@@ -657,8 +677,8 @@ func (exp *explorerUI) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgB
 	// Compute per-SKA vote rewards. PerBlock is retrieved from the latest block
 	// that contains SKA fee data.
 	// tip, blocksIn30Days, start30, sum30 are already computed above.
-	blocksPerYear := float64(365 * 24 * time.Hour / exp.ChainParams.TargetTimePerBlock)
-	blocksPerYearBF := new(big.Float).SetPrec(256).SetFloat64(blocksPerYear)
+	blocksPerYearVal := float64(365 * 24 * time.Hour / exp.ChainParams.TargetTimePerBlock)
+	blocksPerYearBF := new(big.Float).SetPrec(256).SetFloat64(blocksPerYearVal)
 
 	coinTypes := make(map[uint8]struct{})
 	for ct, totals := range blockData.ExtraInfo.SSFeeTotalsByCoin {
@@ -741,9 +761,9 @@ func (exp *explorerUI) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgB
 						rewardPerTicket.Quo(rewardPerTicket, new(big.Float).SetPrec(256).SetInt64(1_000_000_000_000_000_000))
 						rewardPerTicket.Quo(rewardPerTicket, new(big.Float).SetPrec(256).SetInt64(int64(exp.ChainParams.TicketsPerBlock)))
 
-						tickets := make([]txhelpers.VoteTicket, len(voteData))
+						tickets := make([]txhelpers.VoteTicketData, len(voteData))
 						for i, vd := range voteData {
-							tickets[i] = txhelpers.VoteTicket{
+							tickets[i] = txhelpers.VoteTicketData{
 								TicketPrice:    vd.TicketPrice,
 								VoteHeight:     vd.VoteHeight,
 								PurchaseHeight: vd.PurchaseHeight,

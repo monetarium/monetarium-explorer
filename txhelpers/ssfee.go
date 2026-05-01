@@ -13,6 +13,20 @@ import (
 	"github.com/monetarium/monetarium-node/wire"
 )
 
+// pre-computed constants to avoid repeated allocations.
+var (
+	ssfeeVarScale = new(big.Int).Exp(big.NewInt(10), big.NewInt(8), nil)  // 1e8
+	ssfeeDp       = new(big.Int).Exp(big.NewInt(10), big.NewInt(18), nil) // 1e18
+)
+
+// SSFeeSummary holds the per-block data needed to compute average SKA/VAR rates.
+type SSFeeSummary struct {
+	SSFeeTotalsByCoin map[uint8]string
+	StakeDiff         float64 // ticket price in VAR coins
+	Hash              string
+	Height            int
+}
+
 // VoteVARRewardResult holds the computed empirical rewards for VAR voting.
 type VoteVARRewardResult struct {
 	PerBlock float64
@@ -23,23 +37,11 @@ type VoteVARRewardResult struct {
 
 // ComputeVoteVARReward calculates the empirical reward per vote and ROI for a given block.
 // It uses a 30-day average for the fee to ensure UI stability.
-func ComputeVoteVARReward(ctx any, dataSource interface {
-	Height() int64
-	GetSummaryRange(ctx any, idx0, idx1 int) []BlockSummary
-	GetVoteTicketDataByBlock(ctx any, blockHash string) ([]VoteTicketData, error)
-}, params *chaincfg.Params, voters int64, blockHash string) VoteVARRewardResult {
+func ComputeVoteVARReward(ctx any, sum30 []BlockSummary, voteData []VoteTicketData, params *chaincfg.Params, voters int64, blockHash string) VoteVARRewardResult {
 	var subsidyPerVote, feePerVote float64
 	if voters > 0 {
 		const totalPoSSubsidy = 16.0
 		subsidyPerVote = totalPoSSubsidy / float64(voters)
-
-		tip := int(dataSource.Height())
-		blocksIn30Days := int(30 * 24 * time.Hour / params.TargetTimePerBlock)
-		start30 := tip - blocksIn30Days
-		if start30 < 0 {
-			start30 = 0
-		}
-		sum30 := dataSource.GetSummaryRange(ctx, start30, tip)
 
 		var totalFees30d, totalVoters30d float64
 		for _, s := range sum30 {
@@ -59,8 +61,7 @@ func ComputeVoteVARReward(ctx any, dataSource interface {
 	totalRewardPerVote := subsidyPerVote + feePerVote
 	var avgROI float64
 	if voters > 0 {
-		voteData, err := dataSource.GetVoteTicketDataByBlock(ctx, blockHash)
-		if err == nil && len(voteData) > 0 {
+		if len(voteData) > 0 {
 			var sumROI float64
 			var validTickets int
 			blocksPerYear := float64(365 * 24 * time.Hour / params.TargetTimePerBlock)
@@ -95,6 +96,8 @@ func ComputeVoteVARReward(ctx any, dataSource interface {
 type BlockSummary struct {
 	SSFeeTotalsByCoin map[uint8]string
 	Voters            uint16
+	Hash              string
+	Height            int
 }
 
 // VoteTicketData is a minimal interface for ticket voting data.
@@ -201,7 +204,7 @@ func FormatSKAPerVAR(skaAtoms *big.Int, varAtoms int64) string {
 
 // SSFeeCoinTypes returns the set of unique SKA coin types that appear in any
 // of the provided block summaries.
-func SSFeeCoinTypes(summaries []SSFeeSummary) map[uint8]struct{} {
+func SSFeeCoinTypes(summaries []BlockSummary) map[uint8]struct{} {
 	out := make(map[uint8]struct{})
 	for _, s := range summaries {
 		for ct := range s.SSFeeTotalsByCoin {
@@ -210,7 +213,6 @@ func SSFeeCoinTypes(summaries []SSFeeSummary) map[uint8]struct{} {
 	}
 	return out
 }
-
 
 // CalculateAverageTicketAPY computes the average annual percentage yield for a set of tickets.
 // It returns the average as a big.Int atom string (18dp).
