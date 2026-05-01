@@ -89,7 +89,7 @@ func TestSSFeeCoinTypes(t *testing.T) {
 	})
 
 	t.Run("single coin type", func(t *testing.T) {
-		summaries := []SSFeeSummary{
+		summaries := []BlockSummary{
 			{SSFeeTotalsByCoin: map[uint8]string{1: "100"}},
 			{SSFeeTotalsByCoin: map[uint8]string{1: "200"}},
 		}
@@ -103,7 +103,7 @@ func TestSSFeeCoinTypes(t *testing.T) {
 	})
 
 	t.Run("multiple coin types across blocks", func(t *testing.T) {
-		summaries := []SSFeeSummary{
+		summaries := []BlockSummary{
 			{SSFeeTotalsByCoin: map[uint8]string{1: "100", 2: "200"}},
 			{SSFeeTotalsByCoin: map[uint8]string{2: "300", 3: "400"}},
 		}
@@ -119,7 +119,7 @@ func TestSSFeeCoinTypes(t *testing.T) {
 	})
 
 	t.Run("summaries with no coin data", func(t *testing.T) {
-		summaries := []SSFeeSummary{
+		summaries := []BlockSummary{
 			{SSFeeTotalsByCoin: nil},
 			{SSFeeTotalsByCoin: map[uint8]string{}},
 		}
@@ -156,7 +156,7 @@ func TestCalculateAverageTicketAPY(t *testing.T) {
 	})
 
 	t.Run("all invalid tickets returns zero", func(t *testing.T) {
-		data := []VoteTicket{
+		data := []VoteTicketData{
 			{TicketPrice: "not-a-number", VoteHeight: 100, PurchaseHeight: 90},
 			{TicketPrice: "0", VoteHeight: 100, PurchaseHeight: 90},
 			{TicketPrice: "100000000", VoteHeight: 50, PurchaseHeight: 100}, // age <= 0
@@ -168,7 +168,7 @@ func TestCalculateAverageTicketAPY(t *testing.T) {
 	})
 
 	t.Run("result is a valid atom string (parseable as big.Int)", func(t *testing.T) {
-		data := []VoteTicket{
+		data := []VoteTicketData{
 			// ticket price 100 VAR in atoms, held for 144 blocks
 			{TicketPrice: "10000000000", VoteHeight: 244, PurchaseHeight: 100},
 		}
@@ -185,10 +185,10 @@ func TestCalculateAverageTicketAPY(t *testing.T) {
 
 	t.Run("decimal ticket price accepted", func(t *testing.T) {
 		// Same ticket expressed as a decimal coin string instead of atoms
-		atomData := []VoteTicket{
+		atomData := []VoteTicketData{
 			{TicketPrice: "10000000000", VoteHeight: 244, PurchaseHeight: 100},
 		}
-		decimalData := []VoteTicket{
+		decimalData := []VoteTicketData{
 			{TicketPrice: "100.00000000", VoteHeight: 244, PurchaseHeight: 100},
 		}
 		gotAtom := CalculateAverageTicketAPY(atomData, oneReward, big.NewFloat(52560))
@@ -199,23 +199,24 @@ func TestCalculateAverageTicketAPY(t *testing.T) {
 	})
 
 	t.Run("higher reward produces higher APY atoms", func(t *testing.T) {
-		data := []VoteTicket{
+		data := []VoteTicketData{
 			{TicketPrice: "10000000000", VoteHeight: 244, PurchaseHeight: 100},
 		}
 		lowReward := big.NewFloat(0.5)
 		highReward := big.NewFloat(2.0)
-
+		
 		low := mustInt(CalculateAverageTicketAPY(data, lowReward, big.NewFloat(52560)))
 		high := mustInt(CalculateAverageTicketAPY(data, highReward, big.NewFloat(52560)))
-
+		
 		if high.Cmp(low) <= 0 {
 			t.Errorf("expected high reward (%s) > low reward (%s)", high, low)
 		}
 	})
 
+
 	t.Run("reward rounds to zero atoms returns zero", func(t *testing.T) {
 		// A reward so small that avgAPY * 1e18 < 1 atom → should return "0".
-		data := []VoteTicket{
+		data := []VoteTicketData{
 			// ticket price 1e15 VAR atoms (~10 million VAR), age 1e9 blocks
 			// APY ≈ 1e-18 * 52560 / 1e9 ≈ 5e-14, * 1e18 ≈ 0.05 → still > 0
 			// Use an astronomically large age to force the product below 1 atom.
@@ -231,17 +232,18 @@ func TestCalculateAverageTicketAPY(t *testing.T) {
 	t.Run("average across multiple tickets", func(t *testing.T) {
 		// Two tickets with the same price but different ages → average APY
 		// should be between the two individual APYs.
-		data := []VoteTicket{
+		data := []VoteTicketData{
 			{TicketPrice: "10000000000", VoteHeight: 200, PurchaseHeight: 100}, // age 100
 			{TicketPrice: "10000000000", VoteHeight: 400, PurchaseHeight: 100}, // age 300
 		}
-		single100 := mustInt(CalculateAverageTicketAPY([]VoteTicket{data[0]}, oneReward, big.NewFloat(52560)))
-		single300 := mustInt(CalculateAverageTicketAPY([]VoteTicket{data[1]}, oneReward, big.NewFloat(52560)))
+		single100 := mustInt(CalculateAverageTicketAPY([]VoteTicketData{data[0]}, oneReward, big.NewFloat(52560)))
+		single300 := mustInt(CalculateAverageTicketAPY([]VoteTicketData{data[1]}, oneReward, big.NewFloat(52560)))
 		avg := mustInt(CalculateAverageTicketAPY(data, oneReward, big.NewFloat(52560)))
-
+		
 		// avg must be strictly between single300 and single100
 		if avg.Cmp(single300) <= 0 || avg.Cmp(single100) >= 0 {
 			t.Errorf("average %s not between %s (age=300) and %s (age=100)", avg, single300, single100)
 		}
 	})
+
 }
