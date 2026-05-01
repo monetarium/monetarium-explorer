@@ -12,7 +12,7 @@
       <div class="fs13 text-secondary">VAR Coin Supply</div>
       <div class="mono lh1rem fs14-decimal fs24 p03rem0 d-flex align-items-baseline">
         <span data-supply-target="varCirculating">
-          {{template "decimalParts" (float64AsDecimalParts (varAtomsToFloat64 .VARCoinSupply.Circulating) 8 true)}}
+          {{template "decimalParts" (float64AsDecimalPartsNoTrailing (varAtomsToFloat64 .VARCoinSupply.Circulating) 8 true 2)}}
         </span>
         <span class="ps-1 unit lh15rem">VAR</span>
       </div>
@@ -25,13 +25,13 @@
         {{range .SKACoinSupply}}
         <div class="mt-2">
           <div class="mono lh1rem fs14-decimal fs24 p03rem0 d-flex align-items-baseline">
-            <span class="int">{{formatCoinAtomsFull .InCirculation .CoinType}}</span>
+            <span class="int">{{formatAtomsAsCoinString .InCirculation .CoinType 2}}</span>
             <span class="ps-1 unit lh15rem">SKA{{.CoinType}}</span>
           </div>
-          <div class="fs12 lh1rem text-black-50">Issued: <span class="mono">{{formatCoinAtomsFull .TotalIssued
-              .CoinType}}</span></div>
-          <div class="fs12 lh1rem text-black-50">Burned: <span class="mono">{{formatCoinAtomsFull .TotalBurned
-              .CoinType}}</span></div>
+          <div class="fs12 lh1rem text-black-50">Issued: <span class="mono">{{formatAtomsAsCoinString .TotalIssued
+              .CoinType 2}}</span></div>
+          <div class="fs12 lh1rem text-black-50">Burned: <span class="mono">{{formatAtomsAsCoinString .TotalBurned
+              .CoinType 2}}</span></div>
         </div>
         {{end}}
       </div>
