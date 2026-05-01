@@ -28,9 +28,9 @@
             <span class="int">{{formatAtomsAsCoinString .InCirculation .CoinType 2}}</span>
             <span class="ps-1 unit lh15rem">SKA{{.CoinType}}</span>
           </div>
-          <div class="fs12 lh1rem text-black-50">Issued: <span class="mono">{{formatAtomsAsCoinString .TotalIssued
+          <div class="fs12 fs12-decimal lh1rem text-black-50">Issued: <span class="mono">{{formatAtomsAsCoinString .TotalIssued
               .CoinType 2}}</span></div>
-          <div class="fs12 lh1rem text-black-50">Burned: <span class="mono">{{formatAtomsAsCoinString .TotalBurned
+          <div class="fs12 fs12-decimal lh1rem text-black-50">Burned: <span class="mono">{{formatAtomsAsCoinString .TotalBurned
               .CoinType 2}}</span></div>
         </div>
         {{end}}
@@ -58,8 +58,8 @@
       <span class="int"></span>
       <span class="ps-1 unit lh15rem"><span class="symbol"></span></span>
     </div>
-    <div class="fs12 lh1rem text-black-50">Issued: <span class="mono issued"></span></div>
-    <div class="fs12 lh1rem text-black-50">Burned: <span class="mono burned"></span></div>
+    <div class="fs12 fs12-decimal lh1rem text-black-50">Issued: <span class="mono issued"></span></div>
+    <div class="fs12 fs12-decimal lh1rem text-black-50">Burned: <span class="mono burned"></span></div>
   </div>
 </template>
 
