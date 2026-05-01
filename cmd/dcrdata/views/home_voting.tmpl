@@ -91,7 +91,7 @@
 
                 {{/* Row 3 left: Vote VAR Reward */}}
                 <div class="col-12 mb-3 mb-sm-2 mb-md-3 mb-lg-3">
-                    <div class="fs13 text-secondary">Vote VAR Reward (most recent)</div>
+                    <div class="fs13 text-secondary">Vote VAR Reward (most&nbsp;recent)</div>
                     <div class="mono lh1rem fs14-decimal fs24 pt-1 pb-1 d-flex align-items-baseline">
                         <span data-voting-target="bsubsidyPos">
                             {{template "decimalParts" (float64AsDecimalParts $page.Info.VoteVARReward.PerBlock 8 false 2)}}
@@ -134,7 +134,7 @@
 
                 {{/* Full Width: Vote SKA Fee Reward */}}
                 <div class="col-24 mb-3 mb-sm-2 mb-md-3 mb-lg-3">
-                    <div class="fs13 text-secondary">Vote SKA Fee Reward (most recent)</div>
+                    <div class="fs13 text-secondary">Vote SKA Fee Reward (most&nbsp;recent)</div>
                     <div data-voting-target="skaVoteRewards">
                         {{if $page.Info.SKAVoteRewards}}
                             {{range $page.Info.SKAVoteRewards}}
