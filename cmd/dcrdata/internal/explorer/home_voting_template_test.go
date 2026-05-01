@@ -91,12 +91,9 @@ func TestVotingCardTemplate(t *testing.T) {
 
 	// Case 3 — data-voting-target preservation
 	t.Run("DataTargetPreservation", func(t *testing.T) {
-		out := renderVotingCard(t, tmpl, makeHomeInfo(types.VoteVARReward{PerBlock: 0.5, Per30Days: 1.23, PerYear: 15.0}, nil))
+		out := renderVotingCard(t, tmpl, makeHomeInfo(types.VoteVARReward{PerBlock: 0.5, ROI: 15.0}, nil))
 		if !strings.Contains(out, `data-voting-target="bsubsidyPos"`) {
 			t.Error("expected data-voting-target=\"bsubsidyPos\" in output")
-		}
-		if !strings.Contains(out, `data-voting-target="ticketReward"`) {
-			t.Error("expected data-voting-target=\"ticketReward\" in output")
 		}
 	})
 
@@ -189,22 +186,16 @@ func TestProp_VARPerBlockInOutput(t *testing.T) {
 func TestProp_VARPercentageFormatting(t *testing.T) {
 	tmpl := newVotingCardTemplates(t)
 	rapid.Check(t, func(t *rapid.T) {
-		per30Days := rapid.Float64Range(0, 100).Draw(t, "per30Days")
-		perYear := rapid.Float64Range(0, 100).Draw(t, "perYear")
-		info := makeHomeInfo(types.VoteVARReward{Per30Days: per30Days, PerYear: perYear}, nil)
+		roi := rapid.Float64Range(0, 100).Draw(t, "roi")
+		info := makeHomeInfo(types.VoteVARReward{ROI: roi}, nil)
 		out := renderVotingCard(t, tmpl, info)
 
-		want30 := fmt.Sprintf("%.2f", per30Days)
-		if !strings.Contains(out, want30) {
-			t.Errorf("expected Per30Days formatted as %q in output", want30)
+		wantROI := fmt.Sprintf("%.2f", roi)
+		if !strings.Contains(out, wantROI) {
+			t.Errorf("expected ROI formatted as %q in output", wantROI)
 		}
-		if !strings.Contains(out, "per 30 days") {
-			t.Error("expected 'per 30 days' label in output")
-		}
-
-		wantYear := fmt.Sprintf("%.2f", perYear)
-		if !strings.Contains(out, wantYear) {
-			t.Errorf("expected PerYear formatted as %q in output", wantYear)
+		if !strings.Contains(out, "ROI:") {
+			t.Error("expected 'ROI:' label in output")
 		}
 		if !strings.Contains(out, "per year") {
 			t.Error("expected 'per year' label in output")
@@ -300,7 +291,7 @@ func TestProp_RenderedHTMLWellFormed(t *testing.T) {
 				PerYear:  "0.000000000000000365",
 			}
 		}
-		info := makeHomeInfo(types.VoteVARReward{PerBlock: 1.0, PerYear: 60.0}, skaRewards)
+		info := makeHomeInfo(types.VoteVARReward{PerBlock: 1.0, ROI: 60.0}, skaRewards)
 		out := renderVotingCard(t, tmpl, info)
 
 		_, err := html.Parse(strings.NewReader(out))
