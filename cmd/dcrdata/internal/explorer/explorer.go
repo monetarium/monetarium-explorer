@@ -655,7 +655,7 @@ func (exp *explorerUI) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgB
 			}
 		}
 	}
-	res := txhelpers.ComputeVoteVARReward(ctx, sum30, txVoteData, exp.ChainParams, int64(newBlockData.Voters), newBlockData.Hash)
+	res := txhelpers.ComputeVoteVARReward(sum30, txVoteData, exp.ChainParams, int64(newBlockData.Voters))
 
 	p.HomeInfo.VoteVARReward = types.VoteVARReward{
 		PerBlock: res.PerBlock,

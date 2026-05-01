@@ -734,7 +734,7 @@ func (psh *PubSubHub) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgBl
 			}
 		}
 	}
-	res := txhelpers.ComputeVoteVARReward(ctx, sum30, txVoteData, psh.params, int64(blockData.Header.Voters), blockData.Header.Hash)
+	res := txhelpers.ComputeVoteVARReward(sum30, txVoteData, psh.params, int64(blockData.Header.Voters))
 
 	p.GeneralInfo.VoteVARReward = exptypes.VoteVARReward{
 		PerBlock: res.PerBlock,

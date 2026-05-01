@@ -19,14 +19,6 @@ var (
 	ssfeeDp       = new(big.Int).Exp(big.NewInt(10), big.NewInt(18), nil) // 1e18
 )
 
-// SSFeeSummary holds the per-block data needed to compute average SKA/VAR rates.
-type SSFeeSummary struct {
-	SSFeeTotalsByCoin map[uint8]string
-	StakeDiff         float64 // ticket price in VAR coins
-	Hash              string
-	Height            int
-}
-
 // VoteVARRewardResult holds the computed empirical rewards for VAR voting.
 type VoteVARRewardResult struct {
 	PerBlock float64
@@ -37,7 +29,7 @@ type VoteVARRewardResult struct {
 
 // ComputeVoteVARReward calculates the empirical reward per vote and ROI for a given block.
 // It uses a 30-day average for the fee to ensure UI stability.
-func ComputeVoteVARReward(ctx any, sum30 []BlockSummary, voteData []VoteTicketData, params *chaincfg.Params, voters int64, blockHash string) VoteVARRewardResult {
+func ComputeVoteVARReward(sum30 []BlockSummary, voteData []VoteTicketData, params *chaincfg.Params, voters int64) VoteVARRewardResult {
 	var subsidyPerVote, feePerVote float64
 	if voters > 0 {
 		const totalPoSSubsidy = 16.0
