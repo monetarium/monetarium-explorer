@@ -28,16 +28,20 @@
         </div>
         {{/* Row 2 left: PoW VAR Reward */}}
         <div class="col-12 mb-3 mb-sm-2 mb-md-3 mb-lg-3">
-            <div class="fs13 text-secondary">PoW VAR Reward</div>
+            <div class="fs13 text-secondary">PoW VAR Reward (most&nbsp;recent)</div>
             <div class="mono lh1rem p03rem0 fs14-decimal fs24 p03rem0 d-flex align-items-baseline">
                 <span data-mining-target="bsubsidyPow">{{template "decimalParts" (float64AsDecimalParts (toFloat64Amount .LBlockTotalAtoms) 8 true 2)}}</span>
                 <span class="ps-1 unit lh15rem">VAR</span>
             </div>
-            <div class="fs12 fs12-decimal lh1rem text-black-50">
-                Subsidy: <span data-mining-target="powSubsidy">{{printf "%.8f" (toFloat64Amount .NBlockSubsidy.PoW)}}</span>
-            </div>
-            <div class="fs12 fs12-decimal lh1rem text-black-50">
-                Fee: <span data-mining-target="powFee">{{printf "%.8f" (toFloat64Amount .MiningFeeAtoms)}}</span>
+            <div class="fs12 fs12-decimal lh1rem text-black-50 label-value-grid mt-1">
+                <span class="text-start">Subsidy:</span>
+                <span class="text-start">
+                    <span class="mono" data-mining-target="powSubsidy">{{template "decimalParts" (float64AsDecimalParts (toFloat64Amount .NBlockSubsidy.PoW) 8 false 2)}}</span>
+                </span>
+                <span class="text-start">Fee:</span>
+                <span class="text-start">
+                    <span class="mono" data-mining-target="powFee">{{template "decimalParts" (float64AsDecimalParts (toFloat64Amount .MiningFeeAtoms) 8 false 2)}}</span>
+                </span>
             </div>
         </div>
         {{/* Row 2 right: Next Block VAR Reward Reduction (swapped from below) */}}
@@ -76,7 +80,7 @@
             <a class="text-decoration-none"{{if .BlockHeight}} href="/block/{{.BlockHeight}}"{{end}}>
                 <div class="mono lh1rem p03rem0 fs14-decimal fs24 p03rem0 d-flex align-items-baseline">
                     <span>{{template "decimalParts" (skaDecimalParts .Amount true 2)}}</span>
-                    <span class="ps-1 unit lh15rem">{{.Symbol}} <span class="text-black-50 ms-1 fs12">per last block</span></span>
+                    <span class="ps-1 unit lh15rem">{{.Symbol}}</span>
                 </div>
             </a>
             {{end}}
@@ -97,7 +101,7 @@
                 <div class="decimal-parts d-inline-block">
                     <span class="int"></span>
                 </div>
-                <span class="ps-1 unit lh15rem"><span class="symbol"></span> <span class="text-black-50 ms-1 fs12">per last block</span></span>
+                <span class="ps-1 unit lh15rem"><span class="symbol"></span></span>
             </div>
             </a>
         </template>
