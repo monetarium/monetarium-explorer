@@ -3,25 +3,105 @@ package txhelpers
 import (
 	"fmt"
 	"math/big"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/monetarium/monetarium-node/blockchain/stake"
+	"github.com/monetarium/monetarium-node/chaincfg"
 	"github.com/monetarium/monetarium-node/cointype"
 	"github.com/monetarium/monetarium-node/wire"
 )
 
-// pre-computed constants to avoid repeated allocations.
-var (
-	ssfeeVarScale = new(big.Int).Exp(big.NewInt(10), big.NewInt(8), nil)  // 1e8
-	ssfeeDp       = new(big.Int).Exp(big.NewInt(10), big.NewInt(18), nil) // 1e18
-)
+// VoteVARRewardResult holds the computed empirical rewards for VAR voting.
+type VoteVARRewardResult struct {
+	PerBlock float64
+	Subsidy  float64
+	Fee      float64
+	ROI      float64
+}
 
-// SSFeeSummary holds the per-block data needed to compute average SKA/VAR rates.
-type SSFeeSummary struct {
+// ComputeVoteVARReward calculates the empirical reward per vote and ROI for a given block.
+// It uses a 30-day average for the fee to ensure UI stability.
+func ComputeVoteVARReward(ctx any, dataSource interface {
+	Height() int64
+	GetSummaryRange(ctx any, idx0, idx1 int) []BlockSummary
+	GetVoteTicketDataByBlock(ctx any, blockHash string) ([]VoteTicketData, error)
+}, params *chaincfg.Params, voters int64, blockHash string) VoteVARRewardResult {
+	var subsidyPerVote, feePerVote float64
+	if voters > 0 {
+		const totalPoSSubsidy = 16.0
+		subsidyPerVote = totalPoSSubsidy / float64(voters)
+
+		tip := int(dataSource.Height())
+		blocksIn30Days := int(30 * 24 * time.Hour / params.TargetTimePerBlock)
+		start30 := tip - blocksIn30Days
+		if start30 < 0 {
+			start30 = 0
+		}
+		sum30 := dataSource.GetSummaryRange(ctx, start30, tip)
+
+		var totalFees30d, totalVoters30d float64
+		for _, s := range sum30 {
+			if fStr, ok := s.SSFeeTotalsByCoin[0]; ok && fStr != "" {
+				if f, err := strconv.ParseInt(fStr, 10, 64); err == nil {
+					totalFees30d += float64(f) / 1e8
+				}
+			}
+			totalVoters30d += float64(s.Voters)
+		}
+
+		if totalVoters30d > 0 {
+			feePerVote = totalFees30d / totalVoters30d
+		}
+	}
+
+	totalRewardPerVote := subsidyPerVote + feePerVote
+	var avgROI float64
+	if voters > 0 {
+		voteData, err := dataSource.GetVoteTicketDataByBlock(ctx, blockHash)
+		if err == nil && len(voteData) > 0 {
+			var sumROI float64
+			var validTickets int
+			blocksPerYear := float64(365 * 24 * time.Hour / params.TargetTimePerBlock)
+			maturity := float64(params.CoinbaseMaturity)
+			for _, vd := range voteData {
+				price, err := strconv.ParseFloat(vd.TicketPrice, 64)
+				if err == nil && price > 0 {
+					age := float64(vd.VoteHeight-vd.PurchaseHeight) + maturity
+					if age > 0 {
+						annualReward := totalRewardPerVote * (blocksPerYear / age)
+						roi := (annualReward / price) * 100
+						sumROI += roi
+						validTickets++
+					}
+				}
+			}
+			if validTickets > 0 {
+				avgROI = sumROI / float64(validTickets)
+			}
+		}
+	}
+
+	return VoteVARRewardResult{
+		PerBlock: totalRewardPerVote,
+		Subsidy:  subsidyPerVote,
+		Fee:      feePerVote,
+		ROI:      avgROI,
+	}
+}
+
+// BlockSummary is a minimal interface for block summary data.
+type BlockSummary struct {
 	SSFeeTotalsByCoin map[uint8]string
-	StakeDiff         float64 // ticket price in VAR coins
-	Hash              string
-	Height            int
+	Voters            uint16
+}
+
+// VoteTicketData is a minimal interface for ticket voting data.
+type VoteTicketData struct {
+	TicketPrice    string
+	VoteHeight     int
+	PurchaseHeight int
 }
 
 // BlockSSFeeTotals sums TxTypeSSFee output SKAValues per coin type for a block.
@@ -131,16 +211,10 @@ func SSFeeCoinTypes(summaries []SSFeeSummary) map[uint8]struct{} {
 	return out
 }
 
-// VoteTicket holds data for a single vote and its associated ticket purchase.
-type VoteTicket struct {
-	TicketPrice    string
-	VoteHeight     int
-	PurchaseHeight int
-}
 
 // CalculateAverageTicketAPY computes the average annual percentage yield for a set of tickets.
 // It returns the average as a big.Int atom string (18dp).
-func CalculateAverageTicketAPY(voteData []VoteTicket, rewardPerTicket *big.Float, blocksPerYear *big.Float) string {
+func CalculateAverageTicketAPY(voteData []VoteTicketData, rewardPerTicket *big.Float, blocksPerYear *big.Float) string {
 	if len(voteData) == 0 {
 		return "0"
 	}

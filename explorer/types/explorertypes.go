@@ -629,7 +629,6 @@ type HomeInfo struct {
 	IdxBlockInWindow      int                  `json:"window_idx"`
 	IdxInRewardWindow     int                  `json:"reward_idx"`
 	Difficulty            float64              `json:"difficulty"`
-	TicketReward          float64              `json:"reward"`
 	RewardPeriod          string               `json:"reward_period"`
 	NBlockSubsidy         BlockSubsidy         `json:"subsidy"`
 	MiningFeeAtoms        int64                `json:"mining_fee_atoms"`

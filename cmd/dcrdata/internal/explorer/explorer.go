@@ -631,75 +631,17 @@ func (exp *explorerUI) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgB
 		start30 = 0
 	}
 	sum30 := exp.dataSource.GetSummaryRange(ctx, start30, tip)
+	// blocksPerYear is calculated as a float64 to preserve truncation of integer division (365*24h / targetTime)
+	blocksPerYear := float64(365 * 24 * time.Hour / exp.ChainParams.TargetTimePerBlock)
 
 	// Calculate Vote VAR Reward (most recent)
-	voters := int64(newBlockData.Voters)
-	var subsidyPerVote, feePerVote float64
-	if voters > 0 {
-		// Use the network standard total PoS subsidy (16 VAR) divided by actual voters
-		const totalPoSSubsidy = 16.0
-		subsidyPerVote = totalPoSSubsidy / float64(voters)
-
-		// Calculate average stake fee per vote over the last 30 days for stability
-		var totalFees30d, totalVoters30d float64
-		for _, s := range sum30 {
-			if fStr, ok := s.SSFeeTotalsByCoin[0]; ok && fStr != "" {
-				if f, err := strconv.ParseFloat(fStr, 64); err == nil {
-					totalFees30d += f / 1e8
-				}
-			}
-			totalVoters30d += float64(s.Voters)
-		}
-
-		if totalVoters30d > 0 {
-			feePerVote = totalFees30d / totalVoters30d
-		} else {
-			// Fallback to current block if no history
-			if totalFeesStr, ok := blockData.ExtraInfo.SSFeeTotalsByCoin[0]; ok && totalFeesStr != "" {
-				if totalFees, err := strconv.ParseFloat(totalFeesStr, 64); err == nil {
-					feePerVote = (totalFees / 1e8) / float64(voters)
-				}
-			}
-		}
-	}
-	totalRewardPerVote := subsidyPerVote + feePerVote
-
-	// Calculate ROI based on actual ticket ages
-	var avgROI float64
-	if voters > 0 {
-		voteData, err := exp.dataSource.GetVoteTicketDataByBlock(ctx, newBlockData.Hash)
-		if err == nil && len(voteData) > 0 {
-			var sumROI float64
-			var validTickets int
-			blocksPerYear := float64(365 * 24 * time.Hour / exp.ChainParams.TargetTimePerBlock)
-			maturity := float64(exp.ChainParams.CoinbaseMaturity)
-			log.Debugf("ROI Debug: totalRewardPerVote=%.8f, blocksPerYear=%.2f, totalTickets=%d, coinbaseMaturity=%.0f", totalRewardPerVote, blocksPerYear, len(voteData), maturity)
-			for i, vd := range voteData {
-				price, err := strconv.ParseFloat(vd.TicketPrice, 64)
-				if err == nil && price > 0 {
-					// Total lock-up time = time from purchase to vote + time until reward is spendable
-					age := float64(vd.VoteHeight-vd.PurchaseHeight) + maturity
-					if age > 0 {
-						annualReward := totalRewardPerVote * (blocksPerYear / age)
-						roi := (annualReward / price) * 100
-						sumROI += roi
-						validTickets++
-						log.Debugf("ROI Debug Ticket[%d]: price=%.8f, age=%.0f (incl. mat), annualReward=%.8f, roi=%.2f%%", i, price, age, annualReward, roi)
-					}
-				}
-			}
-			if validTickets > 0 {
-				avgROI = sumROI / float64(validTickets)
-				log.Debugf("ROI Debug Final: sumROI=%.2f, validTickets=%d, avgROI=%.2f%%", sumROI, validTickets, avgROI)
-			}
-		}
-	}
+	res := txhelpers.ComputeVoteVARReward(ctx, exp.dataSource, exp.ChainParams, int64(newBlockData.Voters), newBlockData.Hash)
 
 	p.HomeInfo.VoteVARReward = types.VoteVARReward{
-		PerBlock: totalRewardPerVote,
-		Subsidy:  subsidyPerVote,
-		Fee:      feePerVote,
-		ROI:      avgROI,
+		PerBlock: res.PerBlock,
+		Subsidy:  res.Subsidy,
+		Fee:      res.Fee,
+		ROI:      res.ROI,
 	}
 
 	// The actual reward of a ticket needs to also take into consideration the
