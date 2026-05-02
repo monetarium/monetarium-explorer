@@ -139,6 +139,9 @@ func ComputeTxFeeData(msgBlock *wire.MsgBlock) []TxFeeData {
 		txType := stake.DetermineTxType(tx)
 
 		// Include: SSGen (2), SSRtx (3), SSFee (7 - SKA stake fee distribution)
+		// TODO(monetarium-node): After fixing SSRtx detection in staketx.go,
+		// remove stake.TxTypeSSFee from this check. SSRtx transactions with
+		// "SF" marker should be correctly classified as type=3, not type=7.
 		isSSGen := txType == stake.TxTypeSSGen
 		isSSRtx := txType == stake.TxTypeSSRtx
 		isTxSSFee := txType == stake.TxTypeSSFee
@@ -175,7 +178,8 @@ func BlockSSFeeTotals(ssGenTxs []TxFeeData, sTxs []*wire.MsgTx) map[uint8]string
 	// 1. Calculate VAR fees from SSGen and SSRtx/SSFee transactions
 	// Net redistribution = Outputs - Inputs (positive = fee earned)
 	// Note: Some SSRtx transactions are misclassified as SSFee (type=7) by stake.DetermineTxType.
-	// Include both to capture all fee-generating transactions.
+	// TODO(monetarium-node): After fixing SSRtx detection in staketx.go, remove
+	// the isTxSSFee check below. Only SSRtx (type=3) should be needed.
 	var totalRedistributionNet int64
 	var ssGenFound bool
 
