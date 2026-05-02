@@ -27,14 +27,9 @@ export default class extends Controller {
   handleBlock({ detail: blockData }) {
     const ex = blockData.extra
     this.blocksdiffTarget.innerHTML = humanize.decimalParts(ex.sdiff, false, 8, 2)
-    this.nextExpectedSdiffTarget.innerHTML = humanize.decimalParts(
-      ex.next_expected_sdiff,
-      false,
-      2,
-      2
-    )
-    this.nextExpectedMinTarget.innerHTML = humanize.decimalParts(ex.next_expected_min, false, 2, 2)
-    this.nextExpectedMaxTarget.innerHTML = humanize.decimalParts(ex.next_expected_max, false, 2, 2)
+    this.nextExpectedSdiffTarget.innerHTML = humanize.decimalParts(ex.next_expected_sdiff, false, 2)
+    this.nextExpectedMinTarget.innerHTML = humanize.decimalParts(ex.next_expected_min, false, 2)
+    this.nextExpectedMaxTarget.innerHTML = humanize.decimalParts(ex.next_expected_max, false, 2)
     this.windowIndexTarget.textContent = ex.window_idx
     this.posBarTarget.style.width = `${(ex.window_idx / ex.params.window_size) * 100}%`
     this.poolSizeTarget.innerHTML = humanize.decimalParts(ex.pool_info.size, true, 0)
