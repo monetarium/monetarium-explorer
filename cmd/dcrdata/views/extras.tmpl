@@ -181,50 +181,17 @@
 {{end}}
 
 {{define "decimalParts" -}}
-<div class="decimal-parts d-inline-block">
-	<span class="int">
-		{{- $int := index . 0 -}}
-		{{- if eq (len .) 4 -}}
-			{{- $bold := index . 1 -}}
-			{{- if gt (len $bold) 0 -}}
-				{{$int}}.{{$bold}}
-			{{- else -}}
-				{{$int}}
-			{{- end -}}
-		{{- else -}}
-			{{$int}}
-		{{- end -}}
-	</span>
-
-	{{- if eq (len .) 4 -}}
-		{{- $rest := index . 2 -}}
-		{{- $trail := index . 3 -}}
-
-		{{- if gt (len $rest) 0 -}}
-			<span class="decimal">{{$rest}}</span>
-		{{- end -}}
-
-		{{- if gt (len $trail) 0 -}}
-			<span class="decimal trailing-zeroes">{{$trail}}</span>
-		{{- end -}}
-
-	{{- else -}}
-		{{- $dec := index . 1 -}}
-		{{- $trail := index . 2 -}}
-
-		{{- if or (gt (len $dec) 0) (gt (len $trail) 0) -}}
-			<span class="decimal dot">.</span>
-		{{- end -}}
-
-		{{- if gt (len $dec) 0 -}}
-			<span class="decimal">{{$dec}}</span>
-		{{- end -}}
-
-		{{- if gt (len $trail) 0 -}}
-			<span class="decimal">{{$trail}}</span> <!-- no dimming -->
-		{{- end -}}
-	{{- end -}}
-</div>
+{{- $int := index . 0 -}}
+{{- if eq (len .) 4 -}}
+{{- $bold := index . 1 -}}
+{{- $rest := index . 2 -}}
+{{- $trail := index . 3 -}}
+<div class="decimal-parts d-inline-block"><span class="int">{{- if gt (len $bold) 0 -}}{{$int}}.{{$bold}}{{- else -}}{{$int}}{{- end -}}</span><span class="decimal">{{$rest}}</span><span class="decimal trailing-zeroes">{{$trail}}</span></div>
+{{- else -}}
+{{- $dec := index . 1 -}}
+{{- $trail := index . 2 -}}
+<div class="decimal-parts d-inline-block"><span class="int">{{$int}}</span>{{- if or (gt (len $dec) 0) (gt (len $trail) 0) -}}<span class="decimal dot">.</span>{{- end -}}<span class="decimal">{{$dec}}</span><span class="decimal trailing-zeroes">{{$trail}}</span></div>
+{{- end -}}
 {{- end}}
 
 {{define "fmtPercentage"}}
