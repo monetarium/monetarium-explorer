@@ -604,9 +604,10 @@ type SKAVoteReward struct {
 // VoteVARReward holds the VAR staker reward rate expressed as VAR earned per
 // VAR staked (i.e. reward/ticketPrice) for last block, 30-day, and yearly.
 type VoteVARReward struct {
-	PerBlock  float64 `json:"per_block"`   // VAR/VAR for the last block
-	Per30Days float64 `json:"per_30_days"` // percentage per 30 days
-	PerYear   float64 `json:"per_year"`    // annualised percentage (ASR)
+	PerBlock float64 `json:"per_block"` // VAR/VAR for the last block
+	Subsidy  float64 `json:"subsidy"`   // subsidy portion per vote
+	Fee      float64 `json:"fee"`       // fee portion per vote
+	ROI      float64 `json:"roi"`       // extrapolated annual ROI %
 }
 
 // PoWSKAReward holds the PoW mining reward for a single SKA coin type.
@@ -628,9 +629,7 @@ type HomeInfo struct {
 	IdxBlockInWindow      int                  `json:"window_idx"`
 	IdxInRewardWindow     int                  `json:"reward_idx"`
 	Difficulty            float64              `json:"difficulty"`
-	TicketReward          float64              `json:"reward"`
 	RewardPeriod          string               `json:"reward_period"`
-	ASR                   float64              `json:"ASR"`
 	NBlockSubsidy         BlockSubsidy         `json:"subsidy"`
 	MiningFeeAtoms        int64                `json:"mining_fee_atoms"`
 	LBlockTotal           float64              `json:"lblock_total"`
@@ -1390,7 +1389,6 @@ type StatsInfo struct {
 	TPVOfTotalSupplyPeecentage float64
 	TicketsROI                 float64
 	RewardPeriod               string
-	ASR                        float64
 	APR                        float64
 	IdxBlockInWindow           int
 	WindowSize                 int64

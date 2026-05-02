@@ -36,15 +36,15 @@ export default class extends Controller {
     this.targetPctTarget.textContent = parseFloat(ex.pool_info.percent_target - 100).toFixed(2)
     this.poolValueTarget.innerHTML = humanize.decimalParts(ex.pool_info.value, true, 0)
     this.poolSizePctTarget.textContent = parseFloat(ex.pool_info.percent).toFixed(2)
-    this.varROITarget.textContent = ex.vote_var_reward.per_year.toFixed(2)
+    this.varROITarget.textContent = ex.vote_var_reward.roi.toFixed(2)
     this.bsubsidyPosTarget.innerHTML = humanize.decimalParts(
-      ex.subsidy.pos / 500000000,
+      ex.vote_var_reward.per_block,
       false,
       8,
       2
     )
-    this.bsubsidyTarget.innerHTML = humanize.decimalParts(ex.subsidy.pos / 500000000, false, 8, 2)
-    this.bfeeTarget.innerHTML = humanize.decimalParts(ex.mining_fee_atoms / 500000000, false, 8, 2)
+    this.bsubsidyTarget.innerHTML = humanize.decimalParts(ex.vote_var_reward.subsidy, false, 8, 2)
+    this.bfeeTarget.innerHTML = humanize.decimalParts(ex.vote_var_reward.fee, false, 8, 2)
 
     if (ex.exchange_rate && this.hasConvertedStakeTarget) {
       const { value: xcRate, index } = ex.exchange_rate

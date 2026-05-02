@@ -101,17 +101,17 @@
                     <div class="fs12 fs12-decimal lh1rem text-black-50 label-value-grid">
                         <span class="text-start">Subsidy:</span>
                         <span class="text-start">
-                            <span class="mono" data-voting-target="bsubsidy">{{template "decimalParts" (float64AsDecimalParts $page.Info.VoteVARReward.PerBlock 8 false 2)}}</span>
+                            <span class="mono" data-voting-target="bsubsidy">{{template "decimalParts" (float64AsDecimalParts $page.Info.VoteVARReward.Subsidy 8 false 2)}}</span>
                         </span>
 
                         <span class="text-start">Fee:</span>
                         <span class="text-start">
-                            <span class="mono" data-voting-target="bfee">{{template "decimalParts" (float64AsDecimalParts (divideFloat (toFloat64Amount $page.Info.MiningFeeAtoms) 5.0) 8 false 2)}}</span>
+                            <span class="mono" data-voting-target="bfee">{{template "decimalParts" (float64AsDecimalParts $page.Info.VoteVARReward.Fee 8 false 2)}}</span>
                         </span>
 
                         <span class="text-start">ROI:</span>
                         <span class="text-start">
-                            <span class="mono"><span data-voting-target="varROI">{{printf "%.2f" $page.Info.VoteVARReward.PerYear}}</span>%</span> per year
+                            <span class="mono"><span data-voting-target="varROI">{{printf "%.2f" $page.Info.VoteVARReward.ROI}}</span>%</span> per year
                         </span>
                     </div>
                 </div>

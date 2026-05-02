@@ -703,13 +703,61 @@ func (psh *PubSubHub) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgBl
 		}
 	}
 
-	posSubsPerVote := dcrutil.Amount(blockData.ExtraInfo.NextBlockSubsidy.PoS).ToCoin() /
-		float64(psh.params.TicketsPerBlock)
-	ticketRewardPct := 100 * posSubsPerVote / blockData.CurrentStakeDiff.CurrentStakeDifficulty
-	p.GeneralInfo.TicketReward = ticketRewardPct
+	// Compute 30-day history for fee and reward averages
+	tip := int(psh.sourceBase.Height())
+	blocksIn30Days := int(30 * 24 * time.Hour / psh.params.TargetTimePerBlock)
+	start30 := tip - blocksIn30Days
+	if start30 < 0 {
+		start30 = 0
+	}
+	sum30Raw := psh.sourceBase.GetSummaryRange(ctx, start30, tip)
+	sum30 := make([]txhelpers.BlockSummary, len(sum30Raw))
+	for i, s := range sum30Raw {
+		sum30[i] = txhelpers.BlockSummary{
+			SSFeeTotalsByCoin: s.SSFeeTotalsByCoin,
+			Voters:            s.Voters,
+			Hash:              s.Hash,
+			Height:            int(s.Height),
+		}
+	}
+
+	// Calculate Vote VAR Reward (most recent)
+	// Compute fresh from the current block's transactions instead of using potentially stale DB data
+	ssGenTxs := txhelpers.ComputeTxFeeData(msgBlock)
+	ssFeeTotals := txhelpers.BlockSSFeeTotals(ssGenTxs, msgBlock.STransactions)
+
+	var latestVarFee float64
+	if fStr, ok := ssFeeTotals[0]; ok && fStr != "" {
+		if f, err := strconv.ParseInt(fStr, 10, 64); err == nil {
+			latestVarFee = float64(f) / 1e8
+		}
+	}
+
+	voteData, err := psh.sourceBase.GetVoteTicketDataByBlock(ctx, blockData.Header.Hash)
+	var txVoteData []txhelpers.VoteTicketData
+	if err == nil {
+		txVoteData = make([]txhelpers.VoteTicketData, len(voteData))
+		for i, vd := range voteData {
+			txVoteData[i] = txhelpers.VoteTicketData{
+				TicketPrice:    vd.TicketPrice,
+				VoteHeight:     vd.VoteHeight,
+				PurchaseHeight: vd.PurchaseHeight,
+			}
+		}
+	}
+
+	posSubsidy := 0.0
+	if blockData.ExtraInfo.CurrentBlockSubsidy != nil {
+		posSubsidy = float64(blockData.ExtraInfo.CurrentBlockSubsidy.PoS) / 1e8
+	}
+
+	res := txhelpers.ComputeVoteVARReward(latestVarFee, txVoteData, psh.params, int64(blockData.Header.Voters), posSubsidy)
+
 	p.GeneralInfo.VoteVARReward = exptypes.VoteVARReward{
-		PerBlock: posSubsPerVote,
-		PerYear:  p.GeneralInfo.ASR, // ASR not recomputed in pubsub path; use last known value
+		PerBlock: res.PerBlock,
+		Subsidy:  res.Subsidy,
+		Fee:      res.Fee,
+		ROI:      res.ROI,
 	}
 
 	// The actual reward of a ticket needs to also take into consideration the
@@ -724,25 +772,19 @@ func (psh *PubSubHub) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgBl
 
 	// Compute per-SKA vote rewards. PerBlock is retrieved from the latest block
 	// that contains SKA fee data.
-	voters := int64(blockData.Header.Voters)
-	blocksIn30Days := int(30 * 24 * time.Hour / psh.params.TargetTimePerBlock)
-	tip := int(psh.sourceBase.Height())
-	startYear := tip - blocksIn30Days*12
-	if startYear < 0 {
-		startYear = 0
-	}
-	toSummaries := func(blocks []*apitypes.BlockDataBasic) []txhelpers.SSFeeSummary {
-		s := make([]txhelpers.SSFeeSummary, len(blocks))
-		for i, b := range blocks {
-			s[i] = txhelpers.SSFeeSummary{SSFeeTotalsByCoin: b.SSFeeTotalsByCoin, StakeDiff: b.StakeDiff, Hash: b.Hash, Height: int(b.Height)}
-		}
-		return s
-	}
-	sumYear := toSummaries(psh.sourceBase.GetSummaryRange(ctx, startYear, tip))
+	// tip, blocksIn30Days, start30, sum30 are already computed above.
+	// blocksPerYear is already computed in the Vote VAR Reward section.
 
-	coinTypes := txhelpers.SSFeeCoinTypes(sumYear)
-	for ct := range blockData.ExtraInfo.SSFeeTotalsByCoin {
-		coinTypes[ct] = struct{}{}
+	coinTypes := make(map[uint8]struct{})
+	for ct, totals := range blockData.ExtraInfo.SSFeeTotalsByCoin {
+		if totals != "" {
+			coinTypes[ct] = struct{}{}
+		}
+	}
+	for _, s := range sum30 {
+		for ct := range s.SSFeeTotalsByCoin {
+			coinTypes[ct] = struct{}{}
+		}
 	}
 
 	if len(coinTypes) > 0 {
@@ -760,8 +802,8 @@ func (psh *PubSubHub) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgBl
 
 			// Find the latest block specifically for this coin type
 			if totalStr, ok := blockData.ExtraInfo.SSFeeTotalsByCoin[ct]; ok && totalStr != "" {
-				if total, parsed := new(big.Int).SetString(totalStr, 10); parsed && voters > 0 {
-					perVote := new(big.Int).Div(total, big.NewInt(voters))
+				if total, parsed := new(big.Int).SetString(totalStr, 10); parsed && int64(blockData.Header.Voters) > 0 {
+					perVote := new(big.Int).Div(total, big.NewInt(int64(blockData.Header.Voters)))
 					perBlock = txhelpers.FormatSKAAtoms(perVote)
 					blockHeight = int64(blockData.Header.Height)
 					blockHash = blockData.Header.Hash
@@ -770,15 +812,15 @@ func (psh *PubSubHub) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgBl
 
 			if perBlock == "" {
 				// Fallback: Search backwards through historical summaries for this coin
-				for i := len(sumYear) - 1; i >= 0; i-- {
-					if totalStr, ok := sumYear[i].SSFeeTotalsByCoin[ct]; ok && totalStr != "" {
+				for i := len(sum30) - 1; i >= 0; i-- {
+					if totalStr, ok := sum30[i].SSFeeTotalsByCoin[ct]; ok && totalStr != "" {
 						if total, parsed := new(big.Int).SetString(totalStr, 10); parsed {
-							bInfo := psh.sourceBase.GetExplorerBlock(ctx, sumYear[i].Hash)
+							bInfo := psh.sourceBase.GetExplorerBlock(ctx, sum30[i].Hash)
 							if bInfo != nil && bInfo.BlockBasic.Voters > 0 {
 								perVote := new(big.Int).Div(total, big.NewInt(int64(bInfo.BlockBasic.Voters)))
 								perBlock = txhelpers.FormatSKAAtoms(perVote)
-								blockHeight = int64(sumYear[i].Height)
-								blockHash = sumYear[i].Hash
+								blockHeight = int64(sum30[i].Height)
+								blockHash = sum30[i].Hash
 								break
 							}
 						}
@@ -794,7 +836,7 @@ func (psh *PubSubHub) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgBl
 					if totalStr, ok := blockData.ExtraInfo.SSFeeTotalsByCoin[ct]; ok {
 						totalReward, _ = new(big.Int).SetString(totalStr, 10)
 					} else {
-						for _, s := range sumYear {
+						for _, s := range sum30 {
 							if int64(s.Height) == blockHeight {
 								if ts, ok := s.SSFeeTotalsByCoin[ct]; ok {
 									totalReward, _ = new(big.Int).SetString(ts, 10)
@@ -815,9 +857,9 @@ func (psh *PubSubHub) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgBl
 						rewardPerTicket.Quo(rewardPerTicket, new(big.Float).SetPrec(256).SetInt64(1_000_000_000_000_000_000))
 						rewardPerTicket.Quo(rewardPerTicket, new(big.Float).SetPrec(256).SetInt64(int64(psh.params.TicketsPerBlock)))
 
-						tickets := make([]txhelpers.VoteTicket, len(voteData))
+						tickets := make([]txhelpers.VoteTicketData, len(voteData))
 						for i, vd := range voteData {
-							tickets[i] = txhelpers.VoteTicket{
+							tickets[i] = txhelpers.VoteTicketData{
 								TicketPrice:    vd.TicketPrice,
 								VoteHeight:     vd.VoteHeight,
 								PurchaseHeight: vd.PurchaseHeight,
