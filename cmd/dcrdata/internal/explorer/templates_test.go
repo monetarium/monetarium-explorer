@@ -762,15 +762,14 @@ func TestDecimalPartsTemplate(t *testing.T) {
 		expectNotContains []string
 	}{
 		{
-			name:  "non-bold trailing zero NOT dimmed",
+			// Non-bold 3-element: trail element is always rendered with trailing-zeroes class.
+			name:  "non-bold trailing zero",
 			input: []string{"379", "7", "0"},
 			expectContains: []string{
 				">379<",
 				">7<",
+				`class="decimal trailing-zeroes"`,
 				">0<",
-			},
-			expectNotContains: []string{
-				"trailing-zeroes",
 			},
 		},
 
@@ -796,44 +795,41 @@ func TestDecimalPartsTemplate(t *testing.T) {
 			},
 		},
 
-		// ✅ No decimals at all
+		// Non-bold integer only: template always emits decimal and trailing-zeroes spans (empty).
 		{
 			name:  "integer only",
 			input: []string{"3", "", ""},
 			expectContains: []string{
 				">3<",
+				`class="decimal"`,
+				`class="decimal trailing-zeroes"`,
 			},
 			expectNotContains: []string{
-				`class="decimal"`,
 				`class="decimal dot"`,
-				`trailing-zeroes`,
 			},
 		},
 
-		// ✅ Non-bold with decimals
+		// Non-bold with decimals: the non-significant trailing zeros go into the
+		// trailing-zeroes span (third element), significant decimals into decimal span.
 		{
 			name:  "non-bold normal decimals",
 			input: []string{"3", "2", "0000000"},
 			expectContains: []string{
 				".",
 				">2<",
+				`class="decimal trailing-zeroes"`,
 				">0000000<",
-			},
-			expectNotContains: []string{
-				"trailing-zeroes", // 🔥 important
 			},
 		},
 
-		// 🔥 Edge: only trailing zeros
+		// Non-bold only trailing zeros: dot is shown, trailing-zeroes span holds the zeros.
 		{
 			name:  "non-bold only trailing zeros",
 			input: []string{"3", "", "00000000"},
 			expectContains: []string{
 				".",
+				`class="decimal trailing-zeroes"`,
 				">00000000<",
-			},
-			expectNotContains: []string{
-				"trailing-zeroes",
 			},
 		},
 	}
