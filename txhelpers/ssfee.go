@@ -138,12 +138,12 @@ func ComputeTxFeeData(msgBlock *wire.MsgBlock) []TxFeeData {
 	for _, tx := range msgBlock.STransactions {
 		txType := stake.DetermineTxType(tx)
 
-		// Include: SSGen (2), SSRtx (3), and SSFee (7 - misclassified SSRtx)
+		// Include: SSGen (2), SSRtx (3), SSFee (7 - SKA stake fee distribution)
 		isSSGen := txType == stake.TxTypeSSGen
 		isSSRtx := txType == stake.TxTypeSSRtx
-		isMisclassifiedSSRtx := txType == stake.TxTypeSSFee // type=7
+		isTxSSFee := txType == stake.TxTypeSSFee
 
-		if !isSSGen && !isSSRtx && !isMisclassifiedSSRtx {
+		if !isSSGen && !isSSRtx && !isTxSSFee {
 			continue
 		}
 
@@ -180,12 +180,12 @@ func BlockSSFeeTotals(ssGenTxs []TxFeeData, sTxs []*wire.MsgTx) map[uint8]string
 	var ssGenFound bool
 
 	for _, tx := range ssGenTxs {
-		// Include: SSGen (2), SSRtx (3), and SSFee (7 - misclassified SSRtx)
+		// Include: SSGen (2), SSRtx (3), SSFee (7 - SKA stake fee distribution)
 		isSSGen := tx.TxType == int(stake.TxTypeSSGen)
 		isSSRtx := tx.TxType == int(stake.TxTypeSSRtx)
-		isMisclassifiedSSRtx := tx.TxType == 7 // SSFee type, but actually SSRtx
+		isTxSSFee := tx.TxType == int(stake.TxTypeSSFee)
 
-		if !isSSGen && !isSSRtx && !isMisclassifiedSSRtx {
+		if !isSSGen && !isSSRtx && !isTxSSFee {
 			continue
 		}
 

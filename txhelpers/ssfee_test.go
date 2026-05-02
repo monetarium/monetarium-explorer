@@ -704,7 +704,7 @@ func TestBlockSSFeeTotals_WithType7(t *testing.T) {
 			{TotalVAROutputs: 33559617174, TotalInputs: 33559617174, IsSSGen: true, TxType: int(stake.TxTypeSSGen)},
 			{TotalVAROutputs: 34590261953, TotalInputs: 34590261953, IsSSGen: true, TxType: int(stake.TxTypeSSGen)},
 			// 1 type=7 transaction (misclassified SSRtx) with positive net
-			{TotalVAROutputs: 1387618, TotalInputs: 982990, IsSSGen: false, TxType: 7},
+			{TotalVAROutputs: 1387618, TotalInputs: 982990, IsSSGen: false, TxType: int(stake.TxTypeSSFee)},
 		}
 		sTxs := []*wire.MsgTx{}
 
@@ -774,7 +774,7 @@ func TestFullPipelineWithType7(t *testing.T) {
 		{TotalVAROutputs: 33559617174, TotalInputs: 33559617174, IsSSGen: true, TxType: int(stake.TxTypeSSGen)},
 		{TotalVAROutputs: 34590261953, TotalInputs: 34590261953, IsSSGen: true, TxType: int(stake.TxTypeSSGen)},
 		// type=7 with positive net
-		{TotalVAROutputs: 1387618, TotalInputs: 982990, IsSSGen: false, TxType: 7},
+		{TotalVAROutputs: 1387618, TotalInputs: 982990, IsSSGen: false, TxType: int(stake.TxTypeSSFee)},
 	}
 
 	sTxs := []*wire.MsgTx{}
