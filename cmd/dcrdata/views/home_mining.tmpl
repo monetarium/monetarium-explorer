@@ -71,14 +71,14 @@
                 </span>
             </div>
         </div>
-        {{/* Row 3: PoW SKA Fee Reward (moved below, grows as new SKA types are emitted) */}}
+        {{/* Row 3: PoW SKA Fee Reward (most recent) (moved below, grows as new SKA types are emitted) */}}
         <div class="col-24 mb-3 mb-sm-2 mb-md-3 mb-lg-3">
             <div class="fs13 text-secondary">PoW SKA Fee Reward (most&nbsp;recent)</div>
-            <div data-mining-target="powSkaRewards" class="d-flex flex-column" style="gap:4px">
+            <div data-mining-target="powSkaRewards" class="d-flex flex-column align-items-start" style="gap:4px">
             {{if .PoWSKARewards}}
             {{range .PoWSKARewards}}
             <a class="text-decoration-none"{{if .BlockHeight}} href="/block/{{.BlockHeight}}"{{end}}>
-                <div class="mono lh1rem p03rem0 fs14-decimal fs24 p03rem0 d-flex align-items-baseline">
+                <div class="mono lh1rem p03rem0 fs14-decimal fs24 p03rem0 d-inline-flex align-items-baseline">
                     <span>{{template "decimalParts" (skaDecimalParts .Amount true 2)}}</span>
                     <span class="ps-1 unit lh15rem">{{.Symbol}}</span>
                 </div>
@@ -92,7 +92,7 @@
         {{/* Templates for JS live-update cloning */}}
         <template id="pow-ska-reward-template">
             <a class="text-decoration-none" data-block-height>
-            <div class="mono lh1rem p03rem0 fs14-decimal fs24 p03rem0 d-flex align-items-baseline">
+            <div class="mono lh1rem p03rem0 fs14-decimal fs24 p03rem0 d-inline-flex align-items-baseline">
                 <div class="decimal-parts d-inline-block">
                     <span class="int"></span>
                 </div>
