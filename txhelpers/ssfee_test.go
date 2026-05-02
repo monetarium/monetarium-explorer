@@ -529,12 +529,12 @@ func TestComputeTxFeeData_SSGenDetection(t *testing.T) {
 		if !result[0].IsSSGen {
 			t.Error("Expected first transaction to be marked as SSGen")
 		}
-		
+
 		expectedInputs := int64(320000000) // 3.2 VAR (stakebase) + 0.8 VAR (consolidation)
 		if result[0].TotalInputs != expectedInputs {
 			t.Errorf("TotalInputs: got %d, want %d", result[0].TotalInputs, expectedInputs)
 		}
-		
+
 		expectedOutputs := int64(100000000) // 1 VAR
 		if result[0].TotalVAROutputs != expectedOutputs {
 			t.Errorf("TotalVAROutputs: got %d, want %d", result[0].TotalVAROutputs, expectedOutputs)
