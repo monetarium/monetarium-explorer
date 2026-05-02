@@ -29,8 +29,13 @@ export default class extends Controller {
       8,
       2
     )
-    this.powSubsidyTarget.textContent = (ex.subsidy.pow / 100000000).toFixed(8)
-    this.powFeeTarget.textContent = ((ex.mining_fee_atoms || 0) / 100000000).toFixed(8)
+    this.powSubsidyTarget.innerHTML = humanize.decimalParts(ex.subsidy.pow / 100000000, false, 8, 2)
+    this.powFeeTarget.innerHTML = humanize.decimalParts(
+      (ex.mining_fee_atoms || 0) / 100000000,
+      false,
+      8,
+      2
+    )
 
     this.rewardIdxTarget.textContent = ex.reward_idx
     this.powBarTarget.style.width = `${(ex.reward_idx / ex.params.reward_window_size) * 100}%`
@@ -60,20 +65,14 @@ export default class extends Controller {
 
     rewards.forEach((r) => {
       const clone = document.importNode(tmpl.content, true)
-      const { intPart, bold, rest, trailingZeros } = splitSkaAtoms(r.amount || '')
+      const parts = splitSkaAtoms(r.amount || '')
 
-      const intEl = clone.querySelector('.int')
-      const decEl = clone.querySelector('.decimal:not(.trailing-zeroes)')
-      const trailEl = clone.querySelector('.trailing-zeroes')
-      const blockHeightEl = clone.querySelector('[data-block-height]')
-      const height = r.block_height
+      const decimalPartsEl = clone.querySelector('.decimal-parts')
+      if (decimalPartsEl) this._fillDecimalParts(decimalPartsEl, parts)
 
-      if (intEl) intEl.textContent = bold ? `${intPart}.${bold}` : intPart
-      if (decEl) decEl.textContent = bold ? rest : ''
-      if (trailEl) trailEl.textContent = bold ? trailingZeros : ''
-
-      if (blockHeightEl && height) {
-        blockHeightEl.href = `/block/${height}`
+      const linkEl = clone.querySelector('[data-block-height]')
+      if (linkEl && r.block_height) {
+        linkEl.href = `/block/${r.block_height}`
       }
 
       clone.querySelectorAll('.symbol').forEach((el) => {
@@ -82,5 +81,15 @@ export default class extends Controller {
 
       container.appendChild(clone)
     })
+  }
+
+  _fillDecimalParts(el, { intPart, bold, rest, trailingZeros }) {
+    const intText = bold ? `${intPart}.${bold}` : intPart
+    let html = `<span class="int">${intText}</span>`
+    if (bold && rest) html += `<span class="decimal">${rest}</span>`
+    if (bold && trailingZeros) {
+      html += `<span class="decimal trailing-zeroes">${trailingZeros}</span>`
+    }
+    el.innerHTML = html
   }
 }

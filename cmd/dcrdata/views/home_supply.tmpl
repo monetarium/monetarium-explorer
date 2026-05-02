@@ -3,35 +3,42 @@
 {{with .Info -}}
 <div class="bg-white mb-1 p-2 px-3 mx-1 flex-grow-1">
   <div class="my-3 h4">
-    <span class="monicon-coin-supply d-inline-block pe-2 h4"></span>
+    <span class="monicon-coin-supply d-inline-block pe-2 h3"></span>
     Coin Supply
   </div>
   <div class="row mt-1">
     {{if .VARCoinSupply}}
     <div class="col-12 mb-3 mb-sm-2 mb-md-3 mb-lg-3">
-      <div class="fs13 text-secondary">VAR Coin Supply</div>
       <div class="mono lh1rem fs14-decimal fs24 p03rem0 d-flex align-items-baseline">
         <span data-supply-target="varCirculating">
           {{template "decimalParts" (float64AsDecimalPartsNoTrailing (varAtomsToFloat64 .VARCoinSupply.Circulating) 8 true 2)}}
         </span>
         <span class="ps-1 unit lh15rem">VAR</span>
       </div>
+      <div class="fs12 lh1rem text-black-50" data-supply-target="varSupplyShare">
+        {{printf "%.1f%%" (mulf (divideFloat (varAtomsToFloat64 .VARCoinSupply.Circulating) 54000000.0) 100.0)}} of ~54M
+      </div>
     </div>
     {{end}}
     {{if .SKACoinSupply}}
     <div class="col-24 mb-3 mb-sm-2 mb-md-3 mb-lg-3">
-      <div class="fs13 text-secondary">SKA Coins Supply</div>
-      <div data-supply-target="skaCoinSupply">
+      <div data-supply-target="skaCoinSupply" class="d-flex flex-column" style="gap:4px">
         {{range .SKACoinSupply}}
-        <div class="mt-2">
+        <div>
           <div class="mono lh1rem fs14-decimal fs24 p03rem0 d-flex align-items-baseline">
-            <span class="int">{{formatAtomsAsCoinString .InCirculation .CoinType 2}}</span>
+            <span class="mono decimal-parts d-inline-block">{{template "decimalParts" (skaDecimalPartsNoTrailing .InCirculation true 2)}}</span>
             <span class="ps-1 unit lh15rem">SKA{{.CoinType}}</span>
           </div>
-          <div class="fs12 lh1rem text-black-50">Issued: <span class="mono">{{formatAtomsAsCoinString .TotalIssued
-              .CoinType 2}}</span></div>
-          <div class="fs12 lh1rem text-black-50">Burned: <span class="mono">{{formatAtomsAsCoinString .TotalBurned
-              .CoinType 2}}</span></div>
+          <div class="fs12 fs12-decimal lh1rem text-black-50 label-value-grid">
+            <span class="text-start">Issued:</span>
+            <span class="text-start">
+              <span class="mono decimal-parts d-inline-block">{{template "decimalParts" (skaDecimalPartsNoTrailing .TotalIssued true 2)}}</span>
+            </span>
+            <span class="text-start">Burned:</span>
+            <span class="text-start">
+              <span class="mono decimal-parts d-inline-block">{{template "decimalParts" (skaDecimalPartsNoTrailing .TotalBurned true 2)}}</span>
+            </span>
+          </div>
         </div>
         {{end}}
       </div>
@@ -53,13 +60,17 @@
 
 {{/* Template for JS live-update cloning — one SKA supply block */}}
 <template id="ska-supply-block-template">
-  <div class="mt-2">
+  <div>
     <div class="mono lh1rem fs14-decimal fs24 p03rem0 d-flex align-items-baseline">
-      <span class="int"></span>
+      <span class="mono decimal-parts d-inline-block in-circulation"></span>
       <span class="ps-1 unit lh15rem"><span class="symbol"></span></span>
     </div>
-    <div class="fs12 lh1rem text-black-50">Issued: <span class="mono issued"></span></div>
-    <div class="fs12 lh1rem text-black-50">Burned: <span class="mono burned"></span></div>
+    <div class="fs12 fs12-decimal lh1rem text-black-50 label-value-grid">
+      <span class="text-start">Issued:</span>
+      <span class="text-start"><span class="mono decimal-parts d-inline-block issued"></span></span>
+      <span class="text-start">Burned:</span>
+      <span class="text-start"><span class="mono decimal-parts d-inline-block burned"></span></span>
+    </div>
   </div>
 </template>
 

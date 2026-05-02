@@ -1,4 +1,11 @@
 /* Typography */
+.fs12-decimal .int,
+.fs12-decimal .dot,
+.fs12-decimal .decimal,
+.fs12-decimal .unit {
+  font-size: 12px;
+}
+
 .fs14-decimal .dot,
 .fs14-decimal .decimal,
 .fs14-decimal .unit {
@@ -203,6 +210,18 @@ a.grayed {
 
   .dot {
     padding-right: 0.1em;
+  }
+}
+
+.fs12-decimal {
+  .decimal-parts {
+    .int {
+      padding-right: unset;
+    }
+
+    .dot {
+      padding-right: unset;
+    }
   }
 }
 

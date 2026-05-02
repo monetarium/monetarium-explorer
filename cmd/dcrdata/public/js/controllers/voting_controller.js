@@ -27,14 +27,9 @@ export default class extends Controller {
   handleBlock({ detail: blockData }) {
     const ex = blockData.extra
     this.blocksdiffTarget.innerHTML = humanize.decimalParts(ex.sdiff, false, 8, 2)
-    this.nextExpectedSdiffTarget.innerHTML = humanize.decimalParts(
-      ex.next_expected_sdiff,
-      false,
-      2,
-      2
-    )
-    this.nextExpectedMinTarget.innerHTML = humanize.decimalParts(ex.next_expected_min, false, 2, 2)
-    this.nextExpectedMaxTarget.innerHTML = humanize.decimalParts(ex.next_expected_max, false, 2, 2)
+    this.nextExpectedSdiffTarget.innerHTML = humanize.decimalParts(ex.next_expected_sdiff, false, 2)
+    this.nextExpectedMinTarget.innerHTML = humanize.decimalParts(ex.next_expected_min, false, 2)
+    this.nextExpectedMaxTarget.innerHTML = humanize.decimalParts(ex.next_expected_max, false, 2)
     this.windowIndexTarget.textContent = ex.window_idx
     this.posBarTarget.style.width = `${(ex.window_idx / ex.params.window_size) * 100}%`
     this.poolSizeTarget.innerHTML = humanize.decimalParts(ex.pool_info.size, true, 0)
@@ -84,9 +79,9 @@ export default class extends Controller {
         }
       }
 
-      const blockHeightEl = clone.querySelector('[data-block-height]')
-      if (blockHeightEl && r.block_height) {
-        blockHeightEl.href = `/block/${r.block_height}`
+      const linkEl = clone.querySelector('[data-block-height]')
+      if (linkEl && r.block_height) {
+        linkEl.href = `/block/${r.block_height}`
       }
 
       // 2. Annual Return
@@ -103,7 +98,7 @@ export default class extends Controller {
         if (field === 'unit') {
           el.textContent = isDash ? `— ${r.symbol}/Vote` : `${r.symbol}/Vote`
         } else if (field === 'peryear-unit') {
-          el.textContent = `${r.symbol}/VAR per year`
+          el.textContent = ` ${r.symbol}/VAR per year`
         }
         el.removeAttribute('data-field')
       })
@@ -113,12 +108,12 @@ export default class extends Controller {
   }
 
   _fillDecimalParts(el, { intPart, bold, rest, trailingZeros }) {
-    const intEl = el.querySelector('.int')
-    const decEl = el.querySelector('.decimal:not(.trailing-zeroes)')
-    const trailEl = el.querySelector('.trailing-zeroes')
-
-    if (intEl) intEl.textContent = bold ? `${intPart}.${bold}` : intPart
-    if (decEl) decEl.textContent = rest
-    if (trailEl) trailEl.textContent = trailingZeros
+    const intText = bold ? `${intPart}.${bold}` : intPart
+    let html = `<span class="int">${intText}</span>`
+    if (bold && rest) html += `<span class="decimal">${rest}</span>`
+    if (bold && trailingZeros) {
+      html += `<span class="decimal trailing-zeroes">${trailingZeros}</span>`
+    }
+    el.innerHTML = html
   }
 }

@@ -566,6 +566,95 @@ func TestFloat64Formatting(t *testing.T) {
 	}
 }
 
+func TestSkaDecimalParts(t *testing.T) {
+	tests := []struct {
+		name          string
+		atomStr       string
+		useCommas     bool
+		boldNumPlaces []int
+		expected      []string
+	}{
+		{
+			// Mirrors: value=332.39617174, numPlaces=8, bold=2 → ["332","39","617174",""]
+			// 332.39617174 * 10^18 = 332396171740000000000
+			// dec (18 digits) = "396171740000000000"
+			// bold = "39", rest = "6171740000000000"
+			// trimmedRest = "617174", trailingZeros = "0000000000"
+			name:          "normal value with bold",
+			atomStr:       "332396171740000000000",
+			useCommas:     false,
+			boldNumPlaces: []int{2},
+			expected:      []string{"332", "39", "617174", "0000000000"},
+		},
+		{
+			// Mirrors: value=3.2, numPlaces=8, bold=2 → ["3","20","","000000"]
+			// 3.2 * 10^18 = 3200000000000000000
+			// dec = "200000000000000000" (18 digits) → bold="20", rest="0000000000000000"
+			// trimmedRest="" trailingZeros="0000000000000000"
+			name:          "short decimal (previously broken case)",
+			atomStr:       "3200000000000000000",
+			useCommas:     false,
+			boldNumPlaces: []int{2},
+			expected:      []string{"3", "20", "", "0000000000000000"},
+		},
+		{
+			// Mirrors: value=3.2, numPlaces=8, no bold → ["3","2","0000000"]
+			// dec = "200000000000000000" → right="2", trailingZeros="00000000000000000"
+			name:          "no bold mode",
+			atomStr:       "3200000000000000000",
+			useCommas:     false,
+			boldNumPlaces: nil,
+			expected:      []string{"3", "2", "00000000000000000"},
+		},
+		{
+			// Mirrors: value=5.0, numPlaces=8, bold=2 → ["5","00","","000000"]
+			// 5 * 10^18 = 5000000000000000000
+			// dec = "000000000000000000" → bold="00", rest="0000000000000000"
+			// trimmedRest="" trailingZeros="0000000000000000"
+			name:          "integer value",
+			atomStr:       "5000000000000000000",
+			useCommas:     false,
+			boldNumPlaces: []int{2},
+			expected:      []string{"5", "00", "", "0000000000000000"},
+		},
+		{
+			// Mirrors the "rounding case" (1.999999999 → rounds to 2.00 in float64Formatting).
+			// skaDecimalParts is exact — no rounding. So we use an atom string that
+			// is already exactly 2.0 to test the same output shape.
+			// 2.0 * 10^18 = 2000000000000000000
+			name:          "exact integer (no rounding needed)",
+			atomStr:       "2000000000000000000",
+			useCommas:     false,
+			boldNumPlaces: []int{2},
+			expected:      []string{"2", "00", "", "0000000000000000"},
+		},
+		{
+			// Mirrors: value=12345.67, numPlaces=8, commas=true, bold=2 → ["12,345","67","","000000"]
+			// 12345.67 * 10^18 = 12345670000000000000000
+			name:          "with commas",
+			atomStr:       "12345670000000000000000",
+			useCommas:     true,
+			boldNumPlaces: []int{2},
+			expected:      []string{"12,345", "67", "", "0000000000000000"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var result []string
+			if tt.boldNumPlaces != nil {
+				result = skaDecimalParts(tt.atomStr, tt.useCommas, tt.boldNumPlaces...)
+			} else {
+				result = skaDecimalParts(tt.atomStr, tt.useCommas)
+			}
+
+			if !reflect.DeepEqual(result, tt.expected) {
+				t.Errorf("unexpected result\nexpected: %#v\ngot:      %#v", tt.expected, result)
+			}
+		})
+	}
+}
+
 func TestFloat64FormattingNoTrailing(t *testing.T) {
 	got := float64FormattingNoTrailing(3.2, 8, false, 2)
 
@@ -573,6 +662,73 @@ func TestFloat64FormattingNoTrailing(t *testing.T) {
 
 	if !reflect.DeepEqual(got, expected) {
 		t.Fatalf("expected %#v, got %#v", expected, got)
+	}
+}
+
+func TestSkaDecimalPartsNoTrailing(t *testing.T) {
+	tests := []struct {
+		name          string
+		atomStr       string
+		useCommas     bool
+		boldNumPlaces []int
+		expected      []string
+	}{
+		{
+			// Mirrors TestFloat64FormattingNoTrailing: value=3.2, bold=2 → ["3","20","",""]
+			// 3.2 * 10^18 = 3200000000000000000
+			// skaDecimalParts gives ["3","20","","0000000000000000"]
+			// NoTrailing strips parts[3] → ["3","20","",""]
+			name:          "short decimal bold (primary case)",
+			atomStr:       "3200000000000000000",
+			useCommas:     false,
+			boldNumPlaces: []int{2},
+			expected:      []string{"3", "20", "", ""},
+		},
+		{
+			// Non-bold: skaDecimalParts gives ["3","2","00000000000000000"]
+			// NoTrailing strips parts[2] → ["3","2",""]
+			name:          "short decimal no bold",
+			atomStr:       "3200000000000000000",
+			useCommas:     false,
+			boldNumPlaces: nil,
+			expected:      []string{"3", "2", ""},
+		},
+		{
+			// Integer value bold: skaDecimalParts gives ["5","00","","0000000000000000"]
+			// NoTrailing strips parts[3] → ["5","00","",""]
+			name:          "integer value bold",
+			atomStr:       "5000000000000000000",
+			useCommas:     false,
+			boldNumPlaces: []int{2},
+			expected:      []string{"5", "00", "", ""},
+		},
+		{
+			// Value with significant rest decimals: trailing zeros are stripped but
+			// the meaningful rest digits are preserved.
+			// 332.39617174 * 10^18 = 332396171740000000000
+			// skaDecimalParts gives ["332","39","617174","0000000000"]
+			// NoTrailing strips parts[3] → ["332","39","617174",""]
+			name:          "normal value with bold",
+			atomStr:       "332396171740000000000",
+			useCommas:     false,
+			boldNumPlaces: []int{2},
+			expected:      []string{"332", "39", "617174", ""},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var got []string
+			if tt.boldNumPlaces != nil {
+				got = skaDecimalPartsNoTrailing(tt.atomStr, tt.useCommas, tt.boldNumPlaces...)
+			} else {
+				got = skaDecimalPartsNoTrailing(tt.atomStr, tt.useCommas)
+			}
+
+			if !reflect.DeepEqual(got, tt.expected) {
+				t.Errorf("unexpected result\nexpected: %#v\ngot:      %#v", tt.expected, got)
+			}
+		})
 	}
 }
 func TestDecimalPartsTemplate(t *testing.T) {
@@ -606,15 +762,14 @@ func TestDecimalPartsTemplate(t *testing.T) {
 		expectNotContains []string
 	}{
 		{
-			name:  "non-bold trailing zero NOT dimmed",
+			// Non-bold 3-element: trail element is always rendered with trailing-zeroes class.
+			name:  "non-bold trailing zero",
 			input: []string{"379", "7", "0"},
 			expectContains: []string{
 				">379<",
 				">7<",
+				`class="decimal trailing-zeroes"`,
 				">0<",
-			},
-			expectNotContains: []string{
-				"trailing-zeroes",
 			},
 		},
 
@@ -640,44 +795,41 @@ func TestDecimalPartsTemplate(t *testing.T) {
 			},
 		},
 
-		// ✅ No decimals at all
+		// Non-bold integer only: template always emits decimal and trailing-zeroes spans (empty).
 		{
 			name:  "integer only",
 			input: []string{"3", "", ""},
 			expectContains: []string{
 				">3<",
+				`class="decimal"`,
+				`class="decimal trailing-zeroes"`,
 			},
 			expectNotContains: []string{
-				`class="decimal"`,
 				`class="decimal dot"`,
-				`trailing-zeroes`,
 			},
 		},
 
-		// ✅ Non-bold with decimals
+		// Non-bold with decimals: the non-significant trailing zeros go into the
+		// trailing-zeroes span (third element), significant decimals into decimal span.
 		{
 			name:  "non-bold normal decimals",
 			input: []string{"3", "2", "0000000"},
 			expectContains: []string{
 				".",
 				">2<",
+				`class="decimal trailing-zeroes"`,
 				">0000000<",
-			},
-			expectNotContains: []string{
-				"trailing-zeroes", // 🔥 important
 			},
 		},
 
-		// 🔥 Edge: only trailing zeros
+		// Non-bold only trailing zeros: dot is shown, trailing-zeroes span holds the zeros.
 		{
 			name:  "non-bold only trailing zeros",
 			input: []string{"3", "", "00000000"},
 			expectContains: []string{
 				".",
+				`class="decimal trailing-zeroes"`,
 				">00000000<",
-			},
-			expectNotContains: []string{
-				"trailing-zeroes",
 			},
 		},
 	}

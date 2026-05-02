@@ -219,11 +219,6 @@ describe('humanize.bytes', () => {
 describe('humanize.decimalParts', () => {
   // Helper: strip HTML tags so we can assert on the text content easily
   const strip = (html) => html.replace(/<[^>]+>/g, '')
-  // Helper: extract the text of a specific span class
-  const spanText = (html, cls) => {
-    const m = html.match(new RegExp(`<span class="${cls}">(.*?)</span>`))
-    return m ? m[1] : null
-  }
 
   // --- basic structure ---
   it('returns a div.decimal-parts wrapper', () => {
