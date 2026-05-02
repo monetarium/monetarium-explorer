@@ -33,7 +33,7 @@
                 <span data-mining-target="bsubsidyPow">{{template "decimalParts" (float64AsDecimalParts (toFloat64Amount .LBlockTotalAtoms) 8 true 2)}}</span>
                 <span class="ps-1 unit lh15rem">VAR</span>
             </div>
-            <div class="fs12 fs12-decimal lh1rem text-black-50 label-value-grid mt-1">
+            <div class="fs12 fs12-decimal lh1rem text-black-50 label-value-grid">
                 <span class="text-start">Subsidy:</span>
                 <span class="text-start">
                     <span class="mono" data-mining-target="powSubsidy">{{template "decimalParts" (float64AsDecimalParts (toFloat64Amount .NBlockSubsidy.PoW) 8 false 2)}}</span>
