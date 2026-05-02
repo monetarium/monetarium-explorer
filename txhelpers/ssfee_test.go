@@ -477,7 +477,7 @@ func TestFullPipelineSSGenReward(t *testing.T) {
 		t.Errorf("ComputeVoteVARReward PerBlock: got %.8f, want %.8f", result.PerBlock, expectedTotalPerVote)
 	}
 
-t.Logf("Full Pipeline Result: Subsidy=%.8f, Fee=%.8f, Total=%.8f", result.Subsidy, result.Fee, result.PerBlock)
+	t.Logf("Full Pipeline Result: Subsidy=%.8f, Fee=%.8f, Total=%.8f", result.Subsidy, result.Fee, result.PerBlock)
 }
 
 // ---------------------------------------------------------------------------
