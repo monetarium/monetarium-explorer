@@ -237,10 +237,10 @@ type explorerUI struct {
 	displaySyncStatusPage atomic.Value
 	politeiaURL           string
 
-	invsMtx  sync.RWMutex
-	invs     *types.MempoolInfo
-	premine  int64
-	manifest map[string]string
+	invsMtx           sync.RWMutex
+	invs              *types.MempoolInfo
+	premine           int64
+	assetManifestPath string
 }
 
 // AreDBsSyncing is a thread-safe way to fetch the boolean in dbsSyncing.
@@ -375,21 +375,19 @@ func New(cfg *ExplorerConfig) *explorerUI {
 
 	log.Infof("Mean Voting Blocks calculated: %d", exp.pageData.HomeInfo.Params.MeanVotingBlocks)
 
-	// Load webpack manifest for cache-busted asset URLs.
-	if cfg.AssetManifestPath != "" {
-		if manifestData, err := os.ReadFile(cfg.AssetManifestPath); err != nil {
-			log.Warnf("Could not read asset manifest: %v", err)
-		} else if err = json.Unmarshal(manifestData, &exp.manifest); err != nil {
-			log.Warnf("Could not parse asset manifest: %v", err)
-		} else {
-			log.Infof("Loaded asset manifest with %d entries", len(exp.manifest))
-		}
-	}
+	exp.assetManifestPath = cfg.AssetManifestPath
 
 	funcMap := makeTemplateFuncMap(exp.ChainParams)
 	funcMap["asset"] = func(name string) string {
-		if hashed, ok := exp.manifest[name]; ok {
-			return hashed
+		if exp.assetManifestPath != "" {
+			if manifestData, err := os.ReadFile(exp.assetManifestPath); err == nil {
+				var m map[string]string
+				if json.Unmarshal(manifestData, &m) == nil {
+					if hashed, ok := m[name]; ok {
+						return hashed
+					}
+				}
+			}
 		}
 		return "/dist/" + name
 	}
