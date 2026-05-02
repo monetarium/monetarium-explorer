@@ -7,6 +7,7 @@ import (
 
 	"github.com/monetarium/monetarium-node/chaincfg"
 	"github.com/monetarium/monetarium-node/cointype"
+	chainjson "github.com/monetarium/monetarium-node/rpc/jsonrpc/types"
 	"github.com/monetarium/monetarium-node/wire"
 
 	"github.com/monetarium/monetarium-explorer/txhelpers"
@@ -69,8 +70,8 @@ func blockCoinTxStats(msgBlock *wire.MsgBlock) map[uint8]CoinTxStats {
 }
 
 // MsgBlockToDBBlock creates a dbtypes.Block from a wire.MsgBlock
-func MsgBlockToDBBlock(msgBlock *wire.MsgBlock, chainParams *chaincfg.Params, chainWork string, winners []ChainHash) *Block {
-	// Create the dbtypes.Block structure
+func MsgBlockToDBBlock(msgBlock *wire.MsgBlock, chainParams *chaincfg.Params, chainWork string, winners []ChainHash, subsidy *chainjson.GetBlockSubsidyResult) *Block {
+	// Create the dbCtypes.Block structure
 	blockHeader := msgBlock.Header
 
 	// Assemble the block
@@ -99,7 +100,7 @@ func MsgBlockToDBBlock(msgBlock *wire.MsgBlock, chainParams *chaincfg.Params, ch
 		Winners:           winners,
 		CoinAmounts:       blockCoinAmounts(msgBlock),
 		CoinTxStats:       blockCoinTxStats(msgBlock),
-		SSFeeTotalsByCoin: txhelpers.BlockSSFeeTotals(msgBlock),
+		SSFeeTotalsByCoin: txhelpers.BlockSSFeeTotals(txhelpers.ComputeTxFeeData(msgBlock), msgBlock.STransactions),
 	}
 }
 

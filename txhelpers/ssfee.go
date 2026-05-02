@@ -28,31 +28,18 @@ type VoteVARRewardResult struct {
 }
 
 // ComputeVoteVARReward calculates the empirical reward per vote and ROI for a given block.
-// It uses the provided latest block's VAR fee and the number of winners to exclude returned ticket values.
-func ComputeVoteVARReward(latestVarFee float64, numWinners int, voteData []VoteTicketData, params *chaincfg.Params, voters int64) VoteVARRewardResult {
-	var subsidyPerVote, feePerVote float64
+// It uses the provided latest block's VAR fee (already excluding subsidy and ticket prices).
+func ComputeVoteVARReward(latestVarFee float64, voteData []VoteTicketData, params *chaincfg.Params, voters int64, subsidy float64) VoteVARRewardResult {
+	var subsidyPerVote, feePerVote, actualTotalFees float64
 	if voters > 0 {
-		const totalPoSSubsidy = 16.0
-		subsidyPerVote = totalPoSSubsidy / float64(voters)
+		subsidyPerVote = subsidy / float64(voters)
 
-		var totalTicketPrice float64
-		for _, vd := range voteData {
-			price, err := strconv.ParseFloat(vd.TicketPrice, 64)
-			if err == nil {
-				totalTicketPrice += price
-			}
-		}
-
-		avgTicketPrice := 0.0
-		if len(voteData) > 0 {
-			avgTicketPrice = totalTicketPrice / float64(len(voteData))
-		}
-
-		// latestVarFee is TotalSSGenVAR - Subsidy.
-		// It includes (numWinners * TicketPrice) + TotalFees.
-		actualTotalFees := latestVarFee - (float64(numWinners) * avgTicketPrice)
+		// latestVarFee is the net redistribution (Inputs - Outputs) from BlockSSFeeTotals.
+		// Positive = net fee earned, Negative = net consolidation cost.
+		// Show absolute value to represent economic activity magnitude rather than capping at 0.
+		actualTotalFees = latestVarFee
 		if actualTotalFees < 0 {
-			actualTotalFees = 0
+			actualTotalFees = -actualTotalFees
 		}
 		feePerVote = actualTotalFees / float64(voters)
 	}
@@ -101,41 +88,104 @@ type BlockSummary struct {
 
 // VoteTicketData is a minimal interface for ticket voting data.
 type VoteTicketData struct {
+	TicketHash     string
 	TicketPrice    string
 	VoteHeight     int
 	PurchaseHeight int
 }
 
-// BlockSSFeeTotals sums TxTypeSSFee output SKAValues per coin type for a block.
-// Returns nil if no SSFee transactions are present.
-func BlockSSFeeTotals(msgBlock *wire.MsgBlock) map[uint8]string {
-	totals := make(map[uint8]*big.Int)
+// SumWinningTicketPrices calculates the total VAR value of tickets that won a block.
+func SumWinningTicketPrices(allTickets []VoteTicketData, winners []string) float64 {
+	if len(winners) == 0 {
+		return 0
+	}
 
-	// 1. Calculate VAR fees from SSGen transactions
-	// Total PoS Reward = Sum of all SSGen reward outputs.
-	// Total VAR Fee = Total PoS Reward - 16 VAR subsidy.
-	var totalVARReward int64
-	var ssGenFound bool
-	for _, tx := range msgBlock.STransactions {
-		if stake.DetermineTxType(tx) == stake.TxTypeSSGen {
-			ssGenFound = true
-			for _, out := range tx.TxOut {
-				if out.CoinType == cointype.CoinTypeVAR {
-					totalVARReward += out.Value
+	winnerMap := make(map[string]struct{}, len(winners))
+	for _, w := range winners {
+		winnerMap[strings.ToLower(w)] = struct{}{}
+	}
+
+	var total float64
+	summedTickets := make(map[string]struct{}, len(allTickets))
+	for _, td := range allTickets {
+		hash := strings.ToLower(td.TicketHash)
+		if _, isWinner := winnerMap[hash]; isWinner {
+			if _, alreadySummed := summedTickets[hash]; !alreadySummed {
+				price, err := strconv.ParseFloat(td.TicketPrice, 64)
+				if err == nil {
+					total += price
 				}
+				summedTickets[hash] = struct{}{}
 			}
 		}
 	}
-	if ssGenFound {
-		const totalPoSSubsidy = 16 * 1e8
-		feeVAR := totalVARReward - totalPoSSubsidy
-		if feeVAR > 0 {
-			totals[uint8(cointype.CoinTypeVAR)] = big.NewInt(feeVAR)
+	return total
+}
+
+// TxFeeData holds pre-computed totals for a transaction to calculate its fee.
+type TxFeeData struct {
+	TotalVAROutputs int64
+	TotalInputs     int64
+	IsSSGen         bool
+}
+
+// ComputeTxFeeData computes a list of TxFeeData for all transactions in a block.
+func ComputeTxFeeData(msgBlock *wire.MsgBlock) []TxFeeData {
+	var ssGenTxs []TxFeeData
+	allTxs := append(msgBlock.Transactions, msgBlock.STransactions...)
+	for _, tx := range allTxs {
+		isSSGen := false
+		var varOut, varIn int64
+		for _, out := range tx.TxOut {
+			if out.CoinType == cointype.CoinTypeVAR {
+				varOut += out.Value
+				if len(out.PkScript) > 0 && out.PkScript[0] == 0xbb {
+					isSSGen = true
+				}
+			}
+		}
+		for _, vin := range tx.TxIn {
+			varIn += vin.ValueIn
+		}
+		if isSSGen {
+			ssGenTxs = append(ssGenTxs, TxFeeData{
+				TotalVAROutputs: varOut,
+				TotalInputs:     varIn,
+				IsSSGen:         true,
+			})
+		}
+	}
+	return ssGenTxs
+}
+
+// BlockSSFeeTotals sums TxTypeSSFee output SKAValues per coin type for a block.
+// For VAR, it uses the provided TxFeeData to compute the sum of (Out - In) for SSGen transactions.
+// Returns nil if no SSFee transactions are present.
+func BlockSSFeeTotals(ssGenTxs []TxFeeData, sTxs []*wire.MsgTx) map[uint8]string {
+	totals := make(map[uint8]*big.Int)
+
+	// 1. Calculate VAR fees from SSGen transactions
+	// Using per-transaction net redistribution to preserve sign information
+	var totalRedistributionNet int64
+	var ssGenFound bool
+
+	for _, tx := range ssGenTxs {
+		if tx.IsSSGen {
+			ssGenFound = true
+			// Net redistribution = Inputs - Outputs
+			// Positive = net fee earned, Negative = net consolidation cost
+			redistributionNet := tx.TotalInputs - tx.TotalVAROutputs
+			totalRedistributionNet += redistributionNet
 		}
 	}
 
+	if ssGenFound {
+		feeVAR := totalRedistributionNet
+		totals[uint8(cointype.CoinTypeVAR)] = big.NewInt(feeVAR)
+	}
+
 	// 2. Calculate SKA fees from TxTypeSSFee transactions
-	for _, tx := range msgBlock.STransactions {
+	for _, tx := range sTxs {
 		if stake.DetermineTxType(tx) != stake.TxTypeSSFee {
 			continue
 		}

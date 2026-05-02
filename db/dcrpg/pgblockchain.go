@@ -3500,7 +3500,11 @@ func (pgb *ChainDB) StoreBlock(msgBlock *wire.MsgBlock, isValid, isMainchain,
 	}
 
 	// Convert the wire.MsgBlock to a dbtypes.Block.
-	dbBlock := dbtypes.MsgBlockToDBBlock(msgBlock, pgb.chainParams, chainWork, winningTickets)
+	subsidy, err := pgb.Client.GetBlockSubsidy(pgb.ctx, int64(msgBlock.Header.Height), 5)
+	if err != nil {
+		log.Errorf("GetBlockSubsidy failed for height %d: %v", msgBlock.Header.Height, err)
+	}
+	dbBlock := dbtypes.MsgBlockToDBBlock(msgBlock, pgb.chainParams, chainWork, winningTickets, subsidy)
 
 	// Get the previous winners (stake DB pool info cache has this info). If the
 	// previous block is side chain, stakedb will not have the

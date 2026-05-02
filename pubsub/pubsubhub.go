@@ -16,9 +16,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/monetarium/monetarium-node/blockchain/stake"
 	"github.com/monetarium/monetarium-node/chaincfg"
-	"github.com/monetarium/monetarium-node/cointype"
 	"github.com/monetarium/monetarium-node/dcrutil"
 	chainjson "github.com/monetarium/monetarium-node/rpc/jsonrpc/types"
 	"github.com/monetarium/monetarium-node/txscript/stdscript"
@@ -724,22 +722,14 @@ func (psh *PubSubHub) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgBl
 	}
 
 	// Calculate Vote VAR Reward (most recent)
+	// Compute fresh from the current block's transactions instead of using potentially stale DB data
+	ssGenTxs := txhelpers.ComputeTxFeeData(msgBlock)
+	ssFeeTotals := txhelpers.BlockSSFeeTotals(ssGenTxs, msgBlock.STransactions)
+
 	var latestVarFee float64
-	var numWinners int
-	if fStr, ok := blockData.ExtraInfo.SSFeeTotalsByCoin[0]; ok && fStr != "" {
+	if fStr, ok := ssFeeTotals[0]; ok && fStr != "" {
 		if f, err := strconv.ParseInt(fStr, 10, 64); err == nil {
 			latestVarFee = float64(f) / 1e8
-		}
-	}
-
-	for _, tx := range msgBlock.STransactions {
-		if stake.DetermineTxType(tx) == stake.TxTypeSSGen {
-			for _, out := range tx.TxOut {
-				if out.CoinType == cointype.CoinTypeVAR {
-					numWinners++
-				}
-			}
-			break
 		}
 	}
 
@@ -755,7 +745,15 @@ func (psh *PubSubHub) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgBl
 			}
 		}
 	}
-	res := txhelpers.ComputeVoteVARReward(latestVarFee, numWinners, txVoteData, psh.params, int64(blockData.Header.Voters))
+
+	winningTicketPricesSum := txhelpers.SumWinningTicketPrices(txVoteData, blockData.WinningTickets)
+	_ = winningTicketPricesSum
+	posSubsidy := 0.0
+	if blockData.ExtraInfo.CurrentBlockSubsidy != nil {
+		posSubsidy = float64(blockData.ExtraInfo.CurrentBlockSubsidy.PoS) / 1e8
+	}
+
+	res := txhelpers.ComputeVoteVARReward(latestVarFee, txVoteData, psh.params, int64(blockData.Header.Voters), posSubsidy)
 
 	p.GeneralInfo.VoteVARReward = exptypes.VoteVARReward{
 		PerBlock: res.PerBlock,

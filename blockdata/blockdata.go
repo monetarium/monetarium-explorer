@@ -196,6 +196,12 @@ func (t *Collector) CollectBlockInfo(hash *chainhash.Hash) (*apitypes.BlockDataB
 	height := header.Height
 	txLen := len(msgBlock.Transactions) + len(msgBlock.STransactions)
 
+	// Current block subsidy.
+	curSubsidy, err := t.dcrdChainSvr.GetBlockSubsidy(ctx, int64(height), 5)
+	if err != nil {
+		log.Errorf("GetBlockSubsidy for %d failed: %v", height, err)
+	}
+
 	// Coin supply and block subsidy. If either RPC fails, do not immediately
 	// return. Attempt acquisition of other data for this block.
 	coinSupply, err := t.dcrdChainSvr.GetCoinSupply(ctx)
@@ -257,10 +263,11 @@ func (t *Collector) CollectBlockInfo(hash *chainhash.Hash) (*apitypes.BlockDataB
 		PoolInfo:   ticketPoolInfo,
 	}
 	extrainfo := &apitypes.BlockExplorerExtraInfo{
-		TxLen:            txLen,
-		CoinSupply:       int64(coinSupply),
-		NextBlockSubsidy: nbSubsidy,
-		MiningFeeAtoms:   miningFee,
+		TxLen:               txLen,
+		CoinSupply:          int64(coinSupply),
+		CurrentBlockSubsidy: curSubsidy,
+		NextBlockSubsidy:    nbSubsidy,
+		MiningFeeAtoms:      miningFee,
 	}
 
 	// Accumulate per-coin output totals from all transactions in the block.
@@ -278,7 +285,8 @@ func (t *Collector) CollectBlockInfo(hash *chainhash.Hash) (*apitypes.BlockDataB
 	}
 
 	// Accumulate per-coin SSFee totals for SKA vote reward calculation.
-	if ssfee := txhelpers.BlockSSFeeTotals(msgBlock); len(ssfee) > 0 {
+	ssGenTxs := txhelpers.ComputeTxFeeData(msgBlock)
+	if ssfee := txhelpers.BlockSSFeeTotals(ssGenTxs, msgBlock.STransactions); len(ssfee) > 0 {
 		extrainfo.SSFeeTotalsByCoin = ssfee
 	}
 
