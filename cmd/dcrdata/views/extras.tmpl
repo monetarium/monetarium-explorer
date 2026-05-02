@@ -40,7 +40,7 @@
 
 	<link href="{{asset "app.css"}}" rel="stylesheet">
 
-	<script src="/js/vendor/turbolinks.min.js?v=65DCG"></script>
+	<script src="/js/vendor/turbolinks.min.js?v=65DCG" defer></script>
 </head>
 {{end}}
 
@@ -162,11 +162,13 @@
 		src="{{asset "js/4.bundle.js"}}"
 		data-turbolinks-eval="false"
 		data-turbolinks-suppress-warning
+		defer
 	></script>
 	<script
 		src="{{asset "app.js"}}"
 		data-turbolinks-eval="false"
 		data-turbolinks-suppress-warning
+		defer
 	></script>
 </footer>
 {{end}}
