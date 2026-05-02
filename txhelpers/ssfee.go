@@ -127,15 +127,26 @@ type TxFeeData struct {
 	TotalVAROutputs int64
 	TotalInputs     int64
 	IsSSGen         bool
+	TxType          int
 }
 
-// ComputeTxFeeData computes a list of TxFeeData for all SSGen transactions in a block.
+// ComputeTxFeeData computes a list of TxFeeData for all SSGen and SSRtx transactions in a block.
+// SSGen (type=2): Vote transactions
+// SSRtx (type=7): Ticket return transactions (when ticket misses vote)
 func ComputeTxFeeData(msgBlock *wire.MsgBlock) []TxFeeData {
 	var result []TxFeeData
 	for _, tx := range msgBlock.STransactions {
-		if stake.DetermineTxType(tx) != stake.TxTypeSSGen {
+		txType := stake.DetermineTxType(tx)
+
+		// Include: SSGen (2), SSRtx (3), and SSFee (7 - misclassified SSRtx)
+		isSSGen := txType == stake.TxTypeSSGen
+		isSSRtx := txType == stake.TxTypeSSRtx
+		isMisclassifiedSSRtx := txType == stake.TxTypeSSFee // type=7
+
+		if !isSSGen && !isSSRtx && !isMisclassifiedSSRtx {
 			continue
 		}
+
 		var varOut, varIn int64
 		for _, out := range tx.TxOut {
 			if out.CoinType == cointype.CoinTypeVAR {
@@ -148,31 +159,40 @@ func ComputeTxFeeData(msgBlock *wire.MsgBlock) []TxFeeData {
 		result = append(result, TxFeeData{
 			TotalVAROutputs: varOut,
 			TotalInputs:     varIn,
-			IsSSGen:         true,
+			IsSSGen:         isSSGen,
+			TxType:          int(txType),
 		})
 	}
 	return result
 }
 
 // BlockSSFeeTotals sums TxTypeSSFee output SKAValues per coin type for a block.
-// For VAR, it uses the provided TxFeeData to compute the sum of (Out - In) for SSGen transactions.
-// Returns nil if no SSFee transactions are present.
+// For VAR, it computes the net redistribution (Outputs - Inputs) for both SSGen and SSRtx transactions.
+// Returns nil if no SSGen or SSRtx transactions are present.
 func BlockSSFeeTotals(ssGenTxs []TxFeeData, sTxs []*wire.MsgTx) map[uint8]string {
 	totals := make(map[uint8]*big.Int)
 
-	// 1. Calculate VAR fees from SSGen transactions
-	// Using per-transaction net redistribution to preserve sign information
+	// 1. Calculate VAR fees from SSGen and SSRtx/SSFee transactions
+	// Net redistribution = Outputs - Inputs (positive = fee earned)
+	// Note: Some SSRtx transactions are misclassified as SSFee (type=7) by stake.DetermineTxType.
+	// Include both to capture all fee-generating transactions.
 	var totalRedistributionNet int64
 	var ssGenFound bool
 
 	for _, tx := range ssGenTxs {
-		if tx.IsSSGen {
-			ssGenFound = true
-			// Net redistribution = Inputs - Outputs
-			// Positive = net fee earned, Negative = net consolidation cost
-			redistributionNet := tx.TotalInputs - tx.TotalVAROutputs
-			totalRedistributionNet += redistributionNet
+		// Include: SSGen (2), SSRtx (3), and SSFee (7 - misclassified SSRtx)
+		isSSGen := tx.TxType == int(stake.TxTypeSSGen)
+		isSSRtx := tx.TxType == int(stake.TxTypeSSRtx)
+		isMisclassifiedSSRtx := tx.TxType == 7 // SSFee type, but actually SSRtx
+
+		if !isSSGen && !isSSRtx && !isMisclassifiedSSRtx {
+			continue
 		}
+
+		ssGenFound = true
+		// Net = Outputs - Inputs (positive when output > input = fee earned)
+		redistributionNet := tx.TotalVAROutputs - tx.TotalInputs
+		totalRedistributionNet += redistributionNet
 	}
 
 	if ssGenFound {

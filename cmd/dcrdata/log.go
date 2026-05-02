@@ -29,6 +29,7 @@ import (
 	"github.com/monetarium/monetarium-explorer/pubsub"
 	"github.com/monetarium/monetarium-explorer/rpcutils"
 	"github.com/monetarium/monetarium-explorer/stakedb"
+	"github.com/monetarium/monetarium-explorer/txhelpers"
 )
 
 // logWriter implements an io.Writer that outputs to both standard output and
@@ -84,6 +85,7 @@ func init() {
 	rpcutils.UseLogger(clientLog)
 	mempool.UseLogger(mempoolLog)
 	explorer.UseLogger(expLog)
+	txhelpers.UseLogger(expLog)
 	api.UseLogger(apiLog)
 	insight.UseLogger(iapiLog)
 	middleware.UseLogger(apiLog)

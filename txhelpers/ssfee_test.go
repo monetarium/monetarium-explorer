@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/monetarium/monetarium-node/blockchain/stake"
 	"github.com/monetarium/monetarium-node/chaincfg"
 	"github.com/monetarium/monetarium-node/cointype"
 	"github.com/monetarium/monetarium-node/wire"
@@ -309,6 +310,7 @@ func TestBlockSSFeeTotals(t *testing.T) {
 				TotalVAROutputs: 1602300000,
 				TotalInputs:     1600000000,
 				IsSSGen:         true,
+				TxType:          int(stake.TxTypeSSGen),
 			},
 		}
 		sTxs := []*wire.MsgTx{} // No SSTX for this case
@@ -323,7 +325,7 @@ func TestBlockSSFeeTotals(t *testing.T) {
 			t.Fatal("expected VAR fee to be present")
 		}
 
-		want := "-2300000"
+		want := "2300000"
 		if varFee != want {
 			t.Errorf("got %q, want %q", varFee, want)
 		}
@@ -355,6 +357,7 @@ func TestBlockSSFeeTotals(t *testing.T) {
 				TotalVAROutputs: data.totalVAROutputs,
 				TotalInputs:     data.totalInputs,
 				IsSSGen:         true,
+				TxType:          int(stake.TxTypeSSGen),
 			})
 		}
 
@@ -381,13 +384,13 @@ func TestBlockSSFeeTotals(t *testing.T) {
 			t.Fatal("expected VAR fee to be present")
 		}
 
-		// Calculation:
+		// Calculation with new formula (Outputs - Inputs):
 		// Tx1-5: 0
-		// Tx6: 34564004176 - 34243875060 = 320129116
-		// Tx7: 6128216 - 6773796 = -645580
-		// Total = 320129116 - 645580 = 319483536
+		// Tx6: 34243875060 - 34564004176 = -320129116 (consolidation cost)
+		// Tx7: 6773796 - 6128216 = 645580 (fee earned)
+		// Total = -320129116 + 645580 = -319483536
 
-		want := "319483536"
+		want := "-319483536"
 		if varFee != want {
 			t.Errorf("got %q, want %q", varFee, want)
 		}
@@ -421,15 +424,15 @@ func TestFullPipelineSSGenReward(t *testing.T) {
 	// Using real atom values from Block 36354
 	ssGenTxs := []TxFeeData{
 		// Tx1-5: Inputs == Outputs (pure reward, no net fee)
-		{TotalVAROutputs: 32343931486, TotalInputs: 32343931486, IsSSGen: true}, // 323.43931486 VAR
-		{TotalVAROutputs: 33432143993, TotalInputs: 33432143993, IsSSGen: true}, // 334.32143993 VAR
-		{TotalVAROutputs: 34347582202, TotalInputs: 34347582202, IsSSGen: true}, // 343.47582202 VAR
-		{TotalVAROutputs: 34347582202, TotalInputs: 34347582202, IsSSGen: true}, // 343.47582202 VAR
-		{TotalVAROutputs: 34432652413, TotalInputs: 34432652413, IsSSGen: true}, // 344.32652413 VAR
+		{TotalVAROutputs: 32343931486, TotalInputs: 32343931486, IsSSGen: true, TxType: int(stake.TxTypeSSGen)}, // 323.43931486 VAR
+		{TotalVAROutputs: 33432143993, TotalInputs: 33432143993, IsSSGen: true, TxType: int(stake.TxTypeSSGen)}, // 334.32143993 VAR
+		{TotalVAROutputs: 34347582202, TotalInputs: 34347582202, IsSSGen: true, TxType: int(stake.TxTypeSSGen)}, // 343.47582202 VAR
+		{TotalVAROutputs: 34347582202, TotalInputs: 34347582202, IsSSGen: true, TxType: int(stake.TxTypeSSGen)}, // 343.47582202 VAR
+		{TotalVAROutputs: 34432652413, TotalInputs: 34432652413, IsSSGen: true, TxType: int(stake.TxTypeSSGen)}, // 344.32652413 VAR
 		// Tx6: Inputs > Outputs (consolidation, negative contribution)
-		{TotalVAROutputs: 34243875060, TotalInputs: 34564004176, IsSSGen: true}, // In: 345.64004176, Out: 342.43875060
+		{TotalVAROutputs: 34243875060, TotalInputs: 34564004176, IsSSGen: true, TxType: int(stake.TxTypeSSGen)}, // In: 345.64004176, Out: 342.43875060
 		// Tx7: Inputs < Outputs (fee generation, positive contribution)
-		{TotalVAROutputs: 6773796, TotalInputs: 6128216, IsSSGen: true}, // In: 0.06128216, Out: 0.06773796
+		{TotalVAROutputs: 6773796, TotalInputs: 6128216, IsSSGen: true, TxType: int(stake.TxTypeSSGen)}, // In: 0.06128216, Out: 0.06773796
 	}
 
 	// Run BlockSSFeeTotals
@@ -450,9 +453,10 @@ func TestFullPipelineSSGenReward(t *testing.T) {
 		t.Fatalf("failed to parse VAR fee: %v", err)
 	}
 
-	// Expected: 319483536 atoms (from our earlier calculation)
-	// Formula: Total Inputs - Total Outputs
-	expectedFee := int64(319483536)
+	// Expected: -319483536 atoms (new formula: Outputs - Inputs)
+	// Block 36354 had more consolidation cost than fee, so net is negative
+	// Negative fees get capped to 0 in ComputeVoteVARReward
+	expectedFee := int64(-319483536)
 	if varFee != expectedFee {
 		t.Errorf("BlockSSFeeTotals: got %d, want %d", varFee, expectedFee)
 	}
@@ -465,14 +469,14 @@ func TestFullPipelineSSGenReward(t *testing.T) {
 	voteData := []VoteTicketData{}
 	result := ComputeVoteVARReward(latestVarFee, voteData, params, voters, subsidy)
 
-	// Expected fee per vote: 319483536 / 5 / 1e8 = 0.638967072 VAR
-	expectedFeePerVote := 0.638967072
+	// Negative fee gets capped to 0
+	expectedFeePerVote := 0.0
 	if math.Abs(result.Fee-expectedFeePerVote) > 0.0001 {
 		t.Errorf("ComputeVoteVARReward Fee: got %.8f, want %.8f", result.Fee, expectedFeePerVote)
 	}
 
-	// Expected total reward per vote: Subsidy + Fee = 3.2 + 0.638967072 = 3.838967072
-	expectedTotalPerVote := 3.838967072
+	// Expected total reward per vote: Subsidy + Fee = 3.2 + 0 = 3.2 (fee is capped to 0)
+	expectedTotalPerVote := 3.2
 	if math.Abs(result.PerBlock-expectedTotalPerVote) > 0.0001 {
 		t.Errorf("ComputeVoteVARReward PerBlock: got %.8f, want %.8f", result.PerBlock, expectedTotalPerVote)
 	}
@@ -506,4 +510,315 @@ func TestComputeVoteVARReward_NegativeFee(t *testing.T) {
 	if result.Fee != 0 {
 		t.Errorf("Expected Fee=0 for negative input, got %.8f", result.Fee)
 	}
+}
+
+// ---------------------------------------------------------------------------
+// SSRtx (Stake Reward Transaction) Tests
+// ---------------------------------------------------------------------------
+
+// TestBlockSSFeeTotals_WithSSRtx verifies that SSRtx transactions are included
+// in the fee calculation. SSRtx (type=7) is the return of ticket principal
+// when a ticket misses its vote, and can generate positive net fees.
+func TestBlockSSFeeTotals_WithSSRtx(t *testing.T) {
+	t.Run("SSRtx block with positive net", func(t *testing.T) {
+		// Block 36588 SSRtx: Input=0, Output=0.00942284 VAR
+		// Net = Outputs - Inputs = 942284 - 0 = +942284 atoms
+		ssGenTxs := []TxFeeData{
+			{
+				TotalVAROutputs: 942284,
+				TotalInputs:     0,
+				IsSSGen:         false,
+				TxType:          int(stake.TxTypeSSRtx), // 3
+			},
+		}
+		sTxs := []*wire.MsgTx{}
+
+		got := BlockSSFeeTotals(ssGenTxs, sTxs)
+		if got == nil {
+			t.Fatal("expected non-nil result")
+		}
+
+		varFee, ok := got[uint8(cointype.CoinTypeVAR)]
+		if !ok {
+			t.Fatal("expected VAR fee to be present")
+		}
+
+		// Net = Outputs - Inputs = 942284 - 0 = 942284
+		want := "942284"
+		if varFee != want {
+			t.Errorf("got %q, want %q", varFee, want)
+		}
+	})
+
+	t.Run("SSGen and SSRtx combined", func(t *testing.T) {
+		// Block 515d6948... scenario:
+		// - 5 SSGen transactions all with net = 0
+		// - 1 SSRtx with net = +407785 atoms (0.00407785 VAR)
+		ssGenTxs := []TxFeeData{
+			// SSGen transactions (all net = 0)
+			{TotalVAROutputs: 33128317493, TotalInputs: 33128317493, IsSSGen: true, TxType: int(stake.TxTypeSSGen)},
+			{TotalVAROutputs: 33432143993, TotalInputs: 33432143993, IsSSGen: true, TxType: int(stake.TxTypeSSGen)},
+			{TotalVAROutputs: 34262720389, TotalInputs: 34262720389, IsSSGen: true, TxType: int(stake.TxTypeSSGen)},
+			{TotalVAROutputs: 34563875060, TotalInputs: 34563875060, IsSSGen: true, TxType: int(stake.TxTypeSSGen)},
+			{TotalVAROutputs: 34563875060, TotalInputs: 34563875060, IsSSGen: true, TxType: int(stake.TxTypeSSGen)},
+			// SSRtx (positive net)
+			{TotalVAROutputs: 2705062, TotalInputs: 2297277, IsSSGen: false, TxType: int(stake.TxTypeSSRtx)},
+		}
+		sTxs := []*wire.MsgTx{}
+
+		got := BlockSSFeeTotals(ssGenTxs, sTxs)
+		if got == nil {
+			t.Fatal("expected non-nil result")
+		}
+
+		varFee, ok := got[uint8(cointype.CoinTypeVAR)]
+		if !ok {
+			t.Fatal("expected VAR fee to be present")
+		}
+
+		// Total net = SSGen (0) + SSRtx (2705062 - 2297277) = 407785
+		want := "407785"
+		if varFee != want {
+			t.Errorf("got %q, want %q", varFee, want)
+		}
+	})
+
+	t.Run("SSRtx negative net (ticket price returned)", func(t *testing.T) {
+		// If SSRtx input > output (e.g., ticket revoked), net is negative
+		// Net = Outputs - Inputs = 0 - 100000000 = -100000000
+		ssGenTxs := []TxFeeData{
+			{
+				TotalVAROutputs: 0,
+				TotalInputs:     100000000,
+				IsSSGen:         false,
+				TxType:          int(stake.TxTypeSSRtx), // 3
+			},
+		}
+		sTxs := []*wire.MsgTx{}
+
+		got := BlockSSFeeTotals(ssGenTxs, sTxs)
+		if got == nil {
+			t.Fatal("expected non-nil result")
+		}
+
+		varFee, ok := got[uint8(cointype.CoinTypeVAR)]
+		if !ok {
+			t.Fatal("expected VAR fee to be present")
+		}
+
+		// Net = Outputs - Inputs = 0 - 100000000 = -100000000
+		want := "-100000000"
+		if varFee != want {
+			t.Errorf("got %q, want %q", varFee, want)
+		}
+	})
+}
+
+// TestFullPipelineWithSSRtx tests the complete pipeline with both SSGen and SSRtx.
+func TestFullPipelineWithSSRtx(t *testing.T) {
+	params := &chaincfg.Params{
+		TargetTimePerBlock: 15 * 60 * 1e9,
+		CoinbaseMaturity:   100,
+	}
+
+	// Block 36588 scenario:
+	// - 5 SSGen transactions (all net = 0)
+	// - 1 SSRtx with net = +942284 atoms (0.00942284 VAR)
+	// Total fee = 942284 atoms = 0.00942284 VAR
+	// Fee per vote = 0.00942284 / 5 = 0.001884568 VAR
+	ssGenTxs := []TxFeeData{
+		// 5 SSGen transactions with net = 0
+		{TotalVAROutputs: 33159868797, TotalInputs: 33159868797, IsSSGen: true, TxType: int(stake.TxTypeSSGen)},
+		{TotalVAROutputs: 34028720786, TotalInputs: 34028720786, IsSSGen: true, TxType: int(stake.TxTypeSSGen)},
+		{TotalVAROutputs: 34262720389, TotalInputs: 34262720389, IsSSGen: true, TxType: int(stake.TxTypeSSGen)},
+		{TotalVAROutputs: 34432652413, TotalInputs: 34432652413, IsSSGen: true, TxType: int(stake.TxTypeSSGen)},
+		{TotalVAROutputs: 34563875060, TotalInputs: 34563875060, IsSSGen: true, TxType: int(stake.TxTypeSSGen)},
+		// 1 SSRtx with positive net
+		{TotalVAROutputs: 942284, TotalInputs: 0, IsSSGen: false, TxType: int(stake.TxTypeSSRtx)},
+	}
+
+	sTxs := []*wire.MsgTx{}
+	ssFeeTotals := BlockSSFeeTotals(ssGenTxs, sTxs)
+
+	if ssFeeTotals == nil {
+		t.Fatal("BlockSSFeeTotals returned nil")
+	}
+
+	varFeeStr, ok := ssFeeTotals[uint8(cointype.CoinTypeVAR)]
+	if !ok {
+		t.Fatal("VAR fee not found in SSFeeTotals")
+	}
+
+	varFee, err := strconv.ParseInt(varFeeStr, 10, 64)
+	if err != nil {
+		t.Fatalf("failed to parse VAR fee: %v", err)
+	}
+
+	// Expected: 942284 atoms (from SSRtx net)
+	expectedFee := int64(942284)
+	if varFee != expectedFee {
+		t.Errorf("BlockSSFeeTotals: got %d, want %d", varFee, expectedFee)
+	}
+
+	// Now test ComputeVoteVARReward
+	latestVarFee := float64(varFee) / 1e8
+	voters := int64(5)
+	subsidy := 16.0
+
+	voteData := []VoteTicketData{}
+	result := ComputeVoteVARReward(latestVarFee, voteData, params, voters, subsidy)
+
+	// Expected fee per vote: 942284 / 5 / 1e8 = 0.001884568 VAR
+	expectedFeePerVote := 0.001884568
+	if math.Abs(result.Fee-expectedFeePerVote) > 0.0001 {
+		t.Errorf("ComputeVoteVARReward Fee: got %.8f, want %.8f", result.Fee, expectedFeePerVote)
+	}
+
+	// Expected total per vote: Subsidy + Fee = 3.2 + 0.001884568 = 3.201884568
+	expectedTotalPerVote := 3.201884568
+	if math.Abs(result.PerBlock-expectedTotalPerVote) > 0.0001 {
+		t.Errorf("ComputeVoteVARReward PerBlock: got %.8f, want %.8f", result.PerBlock, expectedTotalPerVote)
+	}
+
+	t.Logf("Full Pipeline with SSRtx Result: Subsidy=%.8f, Fee=%.8f, Total=%.8f", result.Subsidy, result.Fee, result.PerBlock)
+}
+
+// ---------------------------------------------------------------------------
+// Type=7 (Misclassified SSRtx / SSFee) Tests
+// ---------------------------------------------------------------------------
+
+// TestBlockSSFeeTotals_WithType7 verifies that type=7 (misclassified SSRtx)
+// transactions are included in the fee calculation.
+// These are ticket return transactions that stake.DetermineTxType classifies as SSFee (type=7).
+func TestBlockSSFeeTotals_WithType7(t *testing.T) {
+	t.Run("Block 36600 type=7 transaction", func(t *testing.T) {
+		// Block 36600 transaction 231f35c3dc31...:
+		// Input: 0.0098299 VAR (982990 atoms)
+		// Output: 0.01387618 VAR (1387618 atoms)
+		// Net = Outputs - Inputs = 1387618 - 982990 = 404628 atoms (positive!)
+		ssGenTxs := []TxFeeData{
+			// 5 SSGen transactions (all net = 0)
+			{TotalVAROutputs: 33470355201, TotalInputs: 33470355201, IsSSGen: true, TxType: int(stake.TxTypeSSGen)},
+			{TotalVAROutputs: 33470355201, TotalInputs: 33470355201, IsSSGen: true, TxType: int(stake.TxTypeSSGen)},
+			{TotalVAROutputs: 33559617174, TotalInputs: 33559617174, IsSSGen: true, TxType: int(stake.TxTypeSSGen)},
+			{TotalVAROutputs: 33559617174, TotalInputs: 33559617174, IsSSGen: true, TxType: int(stake.TxTypeSSGen)},
+			{TotalVAROutputs: 34590261953, TotalInputs: 34590261953, IsSSGen: true, TxType: int(stake.TxTypeSSGen)},
+			// 1 type=7 transaction (misclassified SSRtx) with positive net
+			{TotalVAROutputs: 1387618, TotalInputs: 982990, IsSSGen: false, TxType: 7},
+		}
+		sTxs := []*wire.MsgTx{}
+
+		got := BlockSSFeeTotals(ssGenTxs, sTxs)
+		if got == nil {
+			t.Fatal("expected non-nil result")
+		}
+
+		varFee, ok := got[uint8(cointype.CoinTypeVAR)]
+		if !ok {
+			t.Fatal("expected VAR fee to be present")
+		}
+
+		// Total net = 5 × 0 + 404628 = 404628
+		want := "404628"
+		if varFee != want {
+			t.Errorf("got %q, want %q", varFee, want)
+		}
+	})
+
+	t.Run("type=7 with negative net", func(t *testing.T) {
+		// If type=7 input > output, net is negative
+		ssGenTxs := []TxFeeData{
+			{
+				TotalVAROutputs: 50000000,
+				TotalInputs:     100000000,
+				IsSSGen:         false,
+				TxType:          7, // type=7 (SSFee/misclassified SSRtx)
+			},
+		}
+		sTxs := []*wire.MsgTx{}
+
+		got := BlockSSFeeTotals(ssGenTxs, sTxs)
+		if got == nil {
+			t.Fatal("expected non-nil result")
+		}
+
+		varFee, ok := got[uint8(cointype.CoinTypeVAR)]
+		if !ok {
+			t.Fatal("expected VAR fee to be present")
+		}
+
+		// Net = Outputs - Inputs = 50000000 - 100000000 = -50000000
+		want := "-50000000"
+		if varFee != want {
+			t.Errorf("got %q, want %q", varFee, want)
+		}
+	})
+}
+
+// TestFullPipelineWithType7 tests the complete pipeline with type=7 transactions.
+func TestFullPipelineWithType7(t *testing.T) {
+	params := &chaincfg.Params{
+		TargetTimePerBlock: 15 * 60 * 1e9,
+		CoinbaseMaturity:   100,
+	}
+
+	// Block 36600 scenario:
+	// - 5 SSGen transactions (all net = 0)
+	// - 1 type=7 transaction with net = +404628 atoms (0.00404628 VAR)
+	// Total fee = 404628 atoms = 0.00404628 VAR
+	// Fee per vote = 0.00404628 / 5 = 0.000809256 VAR
+	ssGenTxs := []TxFeeData{
+		{TotalVAROutputs: 33470355201, TotalInputs: 33470355201, IsSSGen: true, TxType: int(stake.TxTypeSSGen)},
+		{TotalVAROutputs: 33470355201, TotalInputs: 33470355201, IsSSGen: true, TxType: int(stake.TxTypeSSGen)},
+		{TotalVAROutputs: 33559617174, TotalInputs: 33559617174, IsSSGen: true, TxType: int(stake.TxTypeSSGen)},
+		{TotalVAROutputs: 33559617174, TotalInputs: 33559617174, IsSSGen: true, TxType: int(stake.TxTypeSSGen)},
+		{TotalVAROutputs: 34590261953, TotalInputs: 34590261953, IsSSGen: true, TxType: int(stake.TxTypeSSGen)},
+		// type=7 with positive net
+		{TotalVAROutputs: 1387618, TotalInputs: 982990, IsSSGen: false, TxType: 7},
+	}
+
+	sTxs := []*wire.MsgTx{}
+	ssFeeTotals := BlockSSFeeTotals(ssGenTxs, sTxs)
+
+	if ssFeeTotals == nil {
+		t.Fatal("BlockSSFeeTotals returned nil")
+	}
+
+	varFeeStr, ok := ssFeeTotals[uint8(cointype.CoinTypeVAR)]
+	if !ok {
+		t.Fatal("VAR fee not found in SSFeeTotals")
+	}
+
+	varFee, err := strconv.ParseInt(varFeeStr, 10, 64)
+	if err != nil {
+		t.Fatalf("failed to parse VAR fee: %v", err)
+	}
+
+	// Expected: 404628 atoms (from type=7 net)
+	expectedFee := int64(404628)
+	if varFee != expectedFee {
+		t.Errorf("BlockSSFeeTotals: got %d, want %d", varFee, expectedFee)
+	}
+
+	// Now test ComputeVoteVARReward
+	latestVarFee := float64(varFee) / 1e8
+	voters := int64(5)
+	subsidy := 16.0
+
+	voteData := []VoteTicketData{}
+	result := ComputeVoteVARReward(latestVarFee, voteData, params, voters, subsidy)
+
+	// Expected fee per vote: 404628 / 5 / 1e8 = 0.000809256 VAR
+	expectedFeePerVote := 0.000809256
+	if math.Abs(result.Fee-expectedFeePerVote) > 0.0001 {
+		t.Errorf("ComputeVoteVARReward Fee: got %.8f, want %.8f", result.Fee, expectedFeePerVote)
+	}
+
+	// Expected total per vote: Subsidy + Fee = 3.2 + 0.000809256 = 3.200809256
+	expectedTotalPerVote := 3.200809256
+	if math.Abs(result.PerBlock-expectedTotalPerVote) > 0.0001 {
+		t.Errorf("ComputeVoteVARReward PerBlock: got %.8f, want %.8f", result.PerBlock, expectedTotalPerVote)
+	}
+
+	t.Logf("Full Pipeline with Type7 Result: Subsidy=%.8f, Fee=%.8f, Total=%.8f", result.Subsidy, result.Fee, result.PerBlock)
 }
