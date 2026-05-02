@@ -22,9 +22,9 @@
     {{end}}
     {{if .SKACoinSupply}}
     <div class="col-24 mb-3 mb-sm-2 mb-md-3 mb-lg-3">
-      <div data-supply-target="skaCoinSupply">
+      <div data-supply-target="skaCoinSupply" class="d-flex flex-column" style="gap:4px">
         {{range .SKACoinSupply}}
-        <div class="mt-2">
+        <div>
           <div class="mono lh1rem fs14-decimal fs24 p03rem0 d-flex align-items-baseline">
             <span class="mono decimal-parts d-inline-block">{{template "decimalParts" (skaDecimalPartsNoTrailing .InCirculation true 2)}}</span>
             <span class="ps-1 unit lh15rem">SKA{{.CoinType}}</span>
@@ -60,7 +60,7 @@
 
 {{/* Template for JS live-update cloning — one SKA supply block */}}
 <template id="ska-supply-block-template">
-  <div class="mt-2">
+  <div>
     <div class="mono lh1rem fs14-decimal fs24 p03rem0 d-flex align-items-baseline">
       <span class="mono decimal-parts d-inline-block in-circulation"></span>
       <span class="ps-1 unit lh15rem"><span class="symbol"></span></span>
