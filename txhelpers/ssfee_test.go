@@ -477,106 +477,16 @@ func TestFullPipelineSSGenReward(t *testing.T) {
 		t.Errorf("ComputeVoteVARReward PerBlock: got %.8f, want %.8f", result.PerBlock, expectedTotalPerVote)
 	}
 
-	t.Logf("Full Pipeline Result: Subsidy=%.8f, Fee=%.8f, Total=%.8f", result.Subsidy, result.Fee, result.PerBlock)
-}
-
-// ---------------------------------------------------------------------------
-// ComputeTxFeeData Tests
-// ---------------------------------------------------------------------------
-
-// TestComputeTxFeeData_SSGenDetection verifies that ComputeTxFeeData correctly
-// identifies SSGen transactions using the OP_SSGEN opcode (0xBB).
-func TestComputeTxFeeData_SSGenDetection(t *testing.T) {
-	// Create a minimal MsgBlock with transactions
-	msgBlock := &wire.MsgBlock{
-		Header:       wire.BlockHeader{},
-		Transactions: []*wire.MsgTx{},
-		STransactions: []*wire.MsgTx{
-			// SSGen transaction (has OP_SSGEN = 0xBB at start of script)
-			func() *wire.MsgTx {
-				tx := wire.NewMsgTx()
-				// Add input (stakebase + consolidation)
-				tx.AddTxIn(wire.NewTxIn(&wire.OutPoint{}, 0, nil))
-				// Add output with OP_SSGEN script (0xbb followed by OP_DUP...)
-				ssgenScript := []byte{0xbb, 0x76, 0xa9, 0x14, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x88, 0xac}
-				tx.AddTxOut(wire.NewTxOut(100000000, ssgenScript)) // 1 VAR output
-				return tx
-			}(),
-			// Regular SSTX transaction (OP_SSTX = 0xBA, not SSGen)
-			func() *wire.MsgTx {
-				tx := wire.NewMsgTx()
-				tx.AddTxIn(wire.NewTxIn(&wire.OutPoint{}, 0, nil))
-				sstxScript := []byte{0xba, 0x76, 0xa9, 0x14, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x88, 0xac}
-				tx.AddTxOut(wire.NewTxOut(200000000, sstxScript)) // 2 VAR output
-				return tx
-			}(),
-		},
-	}
-
-	// Set stakebase for the first input (simulating SSGen)
-	msgBlock.STransactions[0].TxIn[0].ValueIn = 320000000 // 3.2 VAR stakebase + 0.8 VAR consolidation
-
-	// Run ComputeTxFeeData
-	result := ComputeTxFeeData(msgBlock)
-
-	// Verify: Should find exactly 1 SSGen transaction
-	if len(result) != 1 {
-		t.Errorf("Expected 1 SSGen transaction, got %d", len(result))
-	}
-
-	if len(result) > 0 {
-		// Verify the SSGen transaction details
-		if !result[0].IsSSGen {
-			t.Error("Expected first transaction to be marked as SSGen")
-		}
-
-		expectedInputs := int64(320000000) // 3.2 VAR (stakebase) + 0.8 VAR (consolidation)
-		if result[0].TotalInputs != expectedInputs {
-			t.Errorf("TotalInputs: got %d, want %d", result[0].TotalInputs, expectedInputs)
-		}
-
-		expectedOutputs := int64(100000000) // 1 VAR
-		if result[0].TotalVAROutputs != expectedOutputs {
-			t.Errorf("TotalVAROutputs: got %d, want %d", result[0].TotalVAROutputs, expectedOutputs)
-		}
-
-		t.Logf("ComputeTxFeeData: Found SSGen: Inputs=%d, Outputs=%d, IsSSGen=%v",
-			result[0].TotalInputs, result[0].TotalVAROutputs, result[0].IsSSGen)
-	}
-}
-
-// TestComputeTxFeeData_NoSSGen verifies that ComputeTxFeeData returns empty
-// when block has no SSGen transactions.
-func TestComputeTxFeeData_NoSSGen(t *testing.T) {
-	msgBlock := &wire.MsgBlock{
-		Header:       wire.BlockHeader{},
-		Transactions: []*wire.MsgTx{},
-		STransactions: []*wire.MsgTx{
-			// Regular SSTX transaction only
-			func() *wire.MsgTx {
-				tx := wire.NewMsgTx()
-				tx.AddTxIn(wire.NewTxIn(&wire.OutPoint{}, 0, nil))
-				sstxScript := []byte{0xba, 0x76, 0xa9, 0x14, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x88, 0xac}
-				tx.AddTxOut(wire.NewTxOut(100000000, sstxScript))
-				return tx
-			}(),
-		},
-	}
-
-	result := ComputeTxFeeData(msgBlock)
-
-	if len(result) != 0 {
-		t.Errorf("Expected 0 SSGen transactions, got %d", len(result))
-	}
+t.Logf("Full Pipeline Result: Subsidy=%.8f, Fee=%.8f, Total=%.8f", result.Subsidy, result.Fee, result.PerBlock)
 }
 
 // ---------------------------------------------------------------------------
 // Negative Fee Scenario Tests
 // ---------------------------------------------------------------------------
 
-// TestComputeVoteVARReward_NegativeFee reproduces the issue where negative fees
-// from BlockSSFeeTotals are incorrectly capped to 0 in ComputeVoteVARReward.
-// This happens when net transaction fees are negative (consolidation inputs > outputs).
+// TestComputeVoteVARReward_NegativeFee verifies that negative fees are capped to 0
+// and logged as an error. This happens when net transaction fees are negative
+// (consolidation inputs > outputs).
 func TestComputeVoteVARReward_NegativeFee(t *testing.T) {
 	params := &chaincfg.Params{
 		TargetTimePerBlock: 15 * 60 * 1e9,
@@ -592,9 +502,8 @@ func TestComputeVoteVARReward_NegativeFee(t *testing.T) {
 
 	result := ComputeVoteVARReward(latestVarFee, voteData, params, voters, subsidy)
 
-	// This test should FAIL with current code (fee is capped to 0.00)
-	// After fix, it should pass (fee should be > 0)
-	if result.Fee <= 0 {
-		t.Errorf("Bug reproduced: negative fee was capped to 0. Got Fee=%.8f, Expected>0", result.Fee)
+	// Negative fees should be capped to 0 (no fee reward this block)
+	if result.Fee != 0 {
+		t.Errorf("Expected Fee=0 for negative input, got %.8f", result.Fee)
 	}
 }

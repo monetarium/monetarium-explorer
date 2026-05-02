@@ -71,7 +71,7 @@ func blockCoinTxStats(msgBlock *wire.MsgBlock) map[uint8]CoinTxStats {
 
 // MsgBlockToDBBlock creates a dbtypes.Block from a wire.MsgBlock
 func MsgBlockToDBBlock(msgBlock *wire.MsgBlock, chainParams *chaincfg.Params, chainWork string, winners []ChainHash, subsidy *chainjson.GetBlockSubsidyResult) *Block {
-	// Create the dbCtypes.Block structure
+	// Create the dbtypes.Block structure
 	blockHeader := msgBlock.Header
 
 	// Assemble the block

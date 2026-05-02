@@ -746,8 +746,6 @@ func (psh *PubSubHub) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgBl
 		}
 	}
 
-	winningTicketPricesSum := txhelpers.SumWinningTicketPrices(txVoteData, blockData.WinningTickets)
-	_ = winningTicketPricesSum
 	posSubsidy := 0.0
 	if blockData.ExtraInfo.CurrentBlockSubsidy != nil {
 		posSubsidy = float64(blockData.ExtraInfo.CurrentBlockSubsidy.PoS) / 1e8

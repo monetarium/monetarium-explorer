@@ -35,11 +35,11 @@ func ComputeVoteVARReward(latestVarFee float64, voteData []VoteTicketData, param
 		subsidyPerVote = subsidy / float64(voters)
 
 		// latestVarFee is the net redistribution (Inputs - Outputs) from BlockSSFeeTotals.
-		// Positive = net fee earned, Negative = net consolidation cost.
-		// Show absolute value to represent economic activity magnitude rather than capping at 0.
+		// Positive = net fee earned, Negative = net consolidation cost (cap to 0).
 		actualTotalFees = latestVarFee
 		if actualTotalFees < 0 {
-			actualTotalFees = -actualTotalFees
+			log.Errorf("ComputeVoteVARReward: negative fee detected (%.8f), capping to 0", latestVarFee)
+			actualTotalFees = 0
 		}
 		feePerVote = actualTotalFees / float64(voters)
 	}
@@ -129,33 +129,29 @@ type TxFeeData struct {
 	IsSSGen         bool
 }
 
-// ComputeTxFeeData computes a list of TxFeeData for all transactions in a block.
+// ComputeTxFeeData computes a list of TxFeeData for all SSGen transactions in a block.
 func ComputeTxFeeData(msgBlock *wire.MsgBlock) []TxFeeData {
-	var ssGenTxs []TxFeeData
-	allTxs := append(msgBlock.Transactions, msgBlock.STransactions...)
-	for _, tx := range allTxs {
-		isSSGen := false
+	var result []TxFeeData
+	for _, tx := range msgBlock.STransactions {
+		if stake.DetermineTxType(tx) != stake.TxTypeSSGen {
+			continue
+		}
 		var varOut, varIn int64
 		for _, out := range tx.TxOut {
 			if out.CoinType == cointype.CoinTypeVAR {
 				varOut += out.Value
-				if len(out.PkScript) > 0 && out.PkScript[0] == 0xbb {
-					isSSGen = true
-				}
 			}
 		}
 		for _, vin := range tx.TxIn {
 			varIn += vin.ValueIn
 		}
-		if isSSGen {
-			ssGenTxs = append(ssGenTxs, TxFeeData{
-				TotalVAROutputs: varOut,
-				TotalInputs:     varIn,
-				IsSSGen:         true,
-			})
-		}
+		result = append(result, TxFeeData{
+			TotalVAROutputs: varOut,
+			TotalInputs:     varIn,
+			IsSSGen:         true,
+		})
 	}
-	return ssGenTxs
+	return result
 }
 
 // BlockSSFeeTotals sums TxTypeSSFee output SKAValues per coin type for a block.
