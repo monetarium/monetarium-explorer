@@ -594,26 +594,28 @@ type Conversion struct {
 
 // SKAVoteReward holds per-SKA-type staker reward rates expressed as SKA atoms per VAR atom.
 type SKAVoteReward struct {
-	CoinType  uint8  `json:"coin_type"`
-	Symbol    string `json:"symbol"`
-	PerBlock  string `json:"per_block"`   // SKA/VAR ratio for last block, 18dp decimal string
-	Per30Days string `json:"per_30_days"` // 30-day average
-	PerYear   string `json:"per_year"`    // annualised average
+	CoinType    uint8  `json:"coin_type"`
+	Symbol      string `json:"symbol"`
+	PerBlock    string `json:"per_block"` // SKA/VAR ratio for last block, big.Int atom string (18dp)
+	PerYear     string `json:"per_year"`  // annualised average, big.Int atom string (18dp)
+	BlockHeight int64  `json:"block_height,omitempty"`
 }
 
 // VoteVARReward holds the VAR staker reward rate expressed as VAR earned per
 // VAR staked (i.e. reward/ticketPrice) for last block, 30-day, and yearly.
 type VoteVARReward struct {
-	PerBlock  float64 `json:"per_block"`   // VAR/VAR for the last block
-	Per30Days float64 `json:"per_30_days"` // percentage per 30 days
-	PerYear   float64 `json:"per_year"`    // annualised percentage (ASR)
+	PerBlock float64 `json:"per_block"` // VAR/VAR for the last block
+	Subsidy  float64 `json:"subsidy"`   // subsidy portion per vote
+	Fee      float64 `json:"fee"`       // fee portion per vote
+	ROI      float64 `json:"roi"`       // extrapolated annual ROI %
 }
 
 // PoWSKAReward holds the PoW mining reward for a single SKA coin type.
 type PoWSKAReward struct {
-	CoinType uint8  `json:"coin_type"`
-	Symbol   string `json:"symbol"`
-	Amount   string `json:"amount"` // SKA atoms as decimal string (18 decimals)
+	CoinType    uint8  `json:"coin_type"`
+	Symbol      string `json:"symbol"`
+	Amount      string `json:"amount"`
+	BlockHeight int64  `json:"block_height,omitempty"`
 }
 
 // HomeInfo represents data used for the home page
@@ -627,10 +629,11 @@ type HomeInfo struct {
 	IdxBlockInWindow      int                  `json:"window_idx"`
 	IdxInRewardWindow     int                  `json:"reward_idx"`
 	Difficulty            float64              `json:"difficulty"`
-	TicketReward          float64              `json:"reward"`
 	RewardPeriod          string               `json:"reward_period"`
-	ASR                   float64              `json:"ASR"`
 	NBlockSubsidy         BlockSubsidy         `json:"subsidy"`
+	MiningFeeAtoms        int64                `json:"mining_fee_atoms"`
+	LBlockTotal           float64              `json:"lblock_total"`
+	LBlockTotalAtoms      int64                `json:"lblock_total_atoms"`
 	Params                ChainParams          `json:"params"`
 	PoolInfo              TicketPoolInfo       `json:"pool_info"`
 	TotalLockedVAR        float64              `json:"total_locked_var"`
@@ -1386,7 +1389,6 @@ type StatsInfo struct {
 	TPVOfTotalSupplyPeecentage float64
 	TicketsROI                 float64
 	RewardPeriod               string
-	ASR                        float64
 	APR                        float64
 	IdxBlockInWindow           int
 	WindowSize                 int64

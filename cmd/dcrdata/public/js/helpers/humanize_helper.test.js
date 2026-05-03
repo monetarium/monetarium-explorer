@@ -128,47 +128,61 @@ describe('humanize.skaCoinValue + threeSigFigs', () => {
     expect(humanize.threeSigFigs(humanize.skaCoinValue('1000000000000000'))).toBe('0.00100'))
 })
 
-describe('humanize.formatCoinAtomsFull', () => {
-  // VAR: coinType 0, 8 decimal places, trailing zeros stripped
-  it('returns "0" for empty string', () => expect(humanize.formatCoinAtomsFull('', 0)).toBe('0'))
-  it('returns "0" for invalid input', () =>
-    expect(humanize.formatCoinAtomsFull('notanumber', 0)).toBe('0'))
-  it('formats whole VAR amount — no decimal point', () =>
-    expect(humanize.formatCoinAtomsFull('100000000', 0)).toBe('1'))
-  it('formats VAR with decimal, trailing zeros stripped', () =>
-    expect(humanize.formatCoinAtomsFull('150000000', 0)).toBe('1.5'))
-  it('formats VAR with full 8 decimal precision', () =>
-    expect(humanize.formatCoinAtomsFull('100000001', 0)).toBe('1.00000001'))
-  it('formats VAR zero atoms as "0"', () => expect(humanize.formatCoinAtomsFull('0', 0)).toBe('0'))
-  it('formats large VAR circulating supply (151399680000000 atoms)', () =>
-    expect(humanize.formatCoinAtomsFull('151399680000000', 0)).toBe('1,513,996.8'))
+describe('humanize.formatAtomsAsCoinString', () => {
+  it('returns dash for empty or invalid input', () => {
+    expect(humanize.formatAtomsAsCoinString('', 0, 2)).toBe('—')
+    expect(humanize.formatAtomsAsCoinString(null, 0, 2)).toBe('—')
+    expect(humanize.formatAtomsAsCoinString(undefined, 0, 2)).toBe('—')
+    expect(humanize.formatAtomsAsCoinString('abc', 0, 2)).toBe('—')
+  })
 
-  // SKA: coinType != 0, 18 decimal places, trailing zeros stripped
-  it('returns "0" for empty SKA string', () =>
-    expect(humanize.formatCoinAtomsFull('', 1)).toBe('0'))
-  it('formats whole SKA amount — no decimal point', () =>
-    expect(humanize.formatCoinAtomsFull('1000000000000000000', 1)).toBe('1'))
-  it('formats SKA with trailing-zero stripping', () =>
-    expect(humanize.formatCoinAtomsFull('1500000000000000000', 1)).toBe('1.5'))
-  it('formats SKA with two significant decimals', () =>
-    expect(humanize.formatCoinAtomsFull('1840000000000000000', 1)).toBe('1.84'))
-  it('formats SKA zero atoms as "0"', () => expect(humanize.formatCoinAtomsFull('0', 1)).toBe('0'))
-  it('formats exact WS payload in_circulation value', () =>
-    expect(humanize.formatCoinAtomsFull('899999999991999840000000000000000', 1)).toBe(
-      '899,999,999,991,999.84'
-    ))
-  it('formats exact WS payload total_issued value (whole number)', () =>
-    expect(humanize.formatCoinAtomsFull('900000000000000000000000000000000', 1)).toBe(
-      '900,000,000,000,000'
-    ))
-  it('formats exact WS payload total_burned value', () =>
-    expect(humanize.formatCoinAtomsFull('8000160000000000000000', 1)).toBe('8,000.16'))
-  it('handles a single atom (10^-18)', () =>
-    expect(humanize.formatCoinAtomsFull('1', 1)).toBe('0.000000000000000001'))
-  it('strips all 18 trailing decimal zeros for whole coin', () =>
-    expect(humanize.formatCoinAtomsFull('5000000000000000000', 1)).toBe('5'))
-  it('coinType 2 uses same 18-decimal SKA rules', () =>
-    expect(humanize.formatCoinAtomsFull('1230000000000000000', 2)).toBe('1.23'))
+  // VAR (8 decimals)
+  it('formats VAR and trims trailing zeros', () => {
+    expect(humanize.formatAtomsAsCoinString('123000000', 0, 2)).toBe('1.23')
+  })
+
+  it('keeps minimum trailing zeros', () => {
+    expect(humanize.formatAtomsAsCoinString('120000000', 0, 2)).toBe('1.20')
+    expect(humanize.formatAtomsAsCoinString('500000000', 0, 2)).toBe('5.00')
+  })
+
+  it('does not round (full precision preserved)', () => {
+    expect(humanize.formatAtomsAsCoinString('123456789', 0, 2)).toBe('1.23456789')
+  })
+
+  it('trims only unnecessary zeros', () => {
+    expect(humanize.formatAtomsAsCoinString('123450000', 0, 2)).toBe('1.2345')
+  })
+
+  it('respects custom minDecimals', () => {
+    expect(humanize.formatAtomsAsCoinString('123400000', 0, 4)).toBe('1.2340')
+  })
+
+  // SKA (18 decimals)
+  it('formats SKA correctly', () => {
+    expect(humanize.formatAtomsAsCoinString('1234500000000000000', 1, 2)).toBe('1.2345')
+  })
+
+  it('keeps minimum decimals for SKA', () => {
+    expect(humanize.formatAtomsAsCoinString('1200000000000000000', 1, 2)).toBe('1.20')
+    expect(humanize.formatAtomsAsCoinString('1000000000000000000', 1, 2)).toBe('1.00')
+  })
+
+  it('handles full precision SKA values', () => {
+    expect(humanize.formatAtomsAsCoinString('123456789123456789', 1, 2)).toBe(
+      '0.123456789123456789'
+    )
+  })
+
+  // commas
+  it('adds thousands separators', () => {
+    expect(humanize.formatAtomsAsCoinString('1234567890000000', 0, 2)).toBe('12,345,678.90')
+  })
+
+  // edge cases
+  it('handles zero correctly', () => {
+    expect(humanize.formatAtomsAsCoinString('0', 0, 2)).toBe('0.00')
+  })
 })
 
 describe('humanize.bytes', () => {
@@ -200,4 +214,147 @@ describe('humanize.bytes', () => {
   // GB range
   it('formats 1000000000 as "1.0 GB"', () => expect(humanize.bytes(1000000000)).toBe('1.0 GB'))
   it('formats 10000000000 as "10 GB"', () => expect(humanize.bytes(10000000000)).toBe('10 GB'))
+})
+
+describe('humanize.decimalParts', () => {
+  // Helper: strip HTML tags so we can assert on the text content easily
+  const strip = (html) => html.replace(/<[^>]+>/g, '')
+
+  // --- basic structure ---
+  it('returns a div.decimal-parts wrapper', () => {
+    const html = humanize.decimalParts(1.5, false, 2)
+    expect(html).toContain('class="decimal-parts d-inline-block"')
+  })
+
+  // --- precision clamping ---
+  it('clamps precision > 8 to 8', () => {
+    const html = humanize.decimalParts(1.123456789, false, 10)
+    // 8 decimal places rendered
+    expect(strip(html)).toContain('1')
+    expect(html).toContain('12345679') // toFixed(8) rounds
+  })
+
+  it('treats NaN precision as 8', () => {
+    const html = humanize.decimalParts(1.5, false, NaN)
+    expect(html).toContain('decimal-parts')
+  })
+
+  // --- precision === 0: integer-only branch ---
+  it('renders only int span when precision is 0', () => {
+    // toFixed(0) rounds 42.9 → "43"
+    const html = humanize.decimalParts(42.9, false, 0)
+    expect(html).toContain('<span class="int">43</span>')
+    expect(html).not.toContain('class="decimal dot"')
+    expect(html).not.toContain('class="decimal"')
+  })
+
+  // --- standard decimal branch (no lgDecimals) ---
+  it('renders int, dot, and decimal spans for a simple value', () => {
+    const html = humanize.decimalParts(1.5, false, 2)
+    expect(html).toContain('<span class="int">1</span>')
+    expect(html).toContain('<span class="decimal dot">.</span>')
+    expect(html).toContain('<span class="decimal">5</span>')
+  })
+
+  it('includes trailing-zeroes span when value has trailing zeros', () => {
+    // 1.50 → decimalVals = "5", trailingZeros = "0"
+    const html = humanize.decimalParts(1.5, false, 2)
+    expect(html).toContain('<span class="decimal trailing-zeroes">0</span>')
+  })
+
+  it('omits trailing-zeroes span when there are no trailing zeros', () => {
+    // 1.23 → no trailing zeros
+    const html = humanize.decimalParts(1.23, false, 2)
+    expect(html).toContain('<span class="decimal trailing-zeroes"></span>')
+  })
+
+  it('drops trailing-zeroes span entirely when dropTrailingZeros=true', () => {
+    const html = humanize.decimalParts(1.5, false, 2, undefined, true)
+    expect(html).not.toContain('trailing-zeroes')
+  })
+
+  it('drops trailing zeros from decimal value when dropTrailingZeros=true', () => {
+    // 1.50 with dropTrailingZeros → decimal span should show "5" not "50"
+    const html = humanize.decimalParts(1.5, false, 2, undefined, true)
+    expect(html).toContain('<span class="decimal">5</span>')
+  })
+
+  // --- comma formatting ---
+  it('formats integer part with commas when useCommas=true', () => {
+    const html = humanize.decimalParts(1234567.89, true, 2)
+    expect(html).toContain('<span class="int">1,234,567</span>')
+  })
+
+  it('does not add commas when useCommas=false', () => {
+    const html = humanize.decimalParts(1234567.89, false, 2)
+    expect(html).toContain('<span class="int">1234567</span>')
+  })
+
+  // --- lgDecimals branch ---
+  it('merges int and first lgDecimals digits into the int span', () => {
+    // v=1.23456, precision=5, lgDecimals=2
+    // decimal="23456", lgPart=decimal.substring(0,2)="23"
+    // decimalVals="23456" (no trailing zeros), restPart=decimalVals.substring(2)="456"
+    const html = humanize.decimalParts(1.23456, false, 5, 2)
+    expect(html).toContain('<span class="int">1.23</span>')
+    expect(html).toContain('<span class="decimal">456</span>')
+  })
+
+  it('preserves zeros within lgDecimals even when they are trailing zeros (original bug)', () => {
+    // 3.2 with precision=8, lgDecimals=2 → decimal="20000000"
+    // lgPart should be "20" (from full decimal), not "2" (from trimmed decimalVals)
+    // trailing zeros: "20000000" has 7 trailing zeros → trailingZeros="0000000"
+    const html = humanize.decimalParts(3.2, false, 8, 2)
+    expect(html).toContain('<span class="int">3.20</span>')
+    expect(html).toContain('<span class="decimal trailing-zeroes">000000</span>')
+  })
+
+  it('int span includes zeros up to lgDecimals even when they are trailing zeros', () => {
+    // v=1.00, precision=2, lgDecimals=2 → decimal="00" → lgPart="00" (from full decimal, not trimmed)
+    const html = humanize.decimalParts(1.0, false, 2, 2, true)
+    expect(html).toContain('<span class="int">1.00</span>')
+  })
+
+  it('includes trailing-zeroes span in lgDecimals branch when dropTrailingZeros=false', () => {
+    // v=1.2, precision=4, lgDecimals=1 → decimalVals="2", restPart="", trailingZeros="000"
+    const html = humanize.decimalParts(1.2, false, 4, 1)
+    expect(html).toContain('trailing-zeroes')
+    expect(html).toContain('000')
+  })
+
+  it('omits trailing-zeroes span in lgDecimals branch when dropTrailingZeros=true', () => {
+    const html = humanize.decimalParts(1.2, false, 4, 1, true)
+    expect(html).not.toContain('trailing-zeroes')
+  })
+
+  // --- edge cases ---
+  it('handles v=0 correctly', () => {
+    const html = humanize.decimalParts(0, false, 2)
+    expect(html).toContain('<span class="int">0</span>')
+    expect(html).toContain('<span class="decimal trailing-zeroes">00</span>')
+  })
+
+  it('handles negative values', () => {
+    const html = humanize.decimalParts(-1.5, false, 2)
+    expect(html).toContain('<span class="int">-1</span>')
+    expect(html).toContain('<span class="decimal">5</span>')
+  })
+
+  it('handles string input that parses as a float', () => {
+    const html = humanize.decimalParts('3.14', false, 2)
+    expect(html).toContain('<span class="int">3</span>')
+    expect(html).toContain('<span class="decimal">14</span>')
+  })
+
+  it('handles precision=1', () => {
+    const html = humanize.decimalParts(9.87, false, 1)
+    expect(html).toContain('<span class="int">9</span>')
+    expect(html).toContain('<span class="decimal">9</span>')
+  })
+
+  it('handles full 8-decimal precision with no trailing zeros', () => {
+    const html = humanize.decimalParts(1.23456789, false, 8)
+    expect(html).toContain('<span class="decimal">23456789</span>')
+    expect(html).toContain('<span class="decimal trailing-zeroes"></span>')
+  })
 })

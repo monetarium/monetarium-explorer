@@ -54,10 +54,12 @@ The SKA fees collected in a block are distributed among the PoS voters. Miners a
 - **VAR Reward Reduction**: A progress bar showing the current block's position within the subsidy reduction window (`IdxInRewardWindow` / `RewardWindowSize`).
 
 ### Voting Section
-- **Vote VAR Reward**:
-    - **Per Block**: The absolute VAR reward per vote for the next block (`NextBlockSubsidy.PoS / TicketsPerBlock`).
-    - **Per 30 Days**: A linear projection of the current per-vote reward expressed as a profitability percentage.
-    - **Per Year (ASR)**: The Annual Staking Rate computed via `simulateASR`, which runs a simulation of buying and reinvesting tickets over 365 days (accounting for `TicketMaturity` and `CoinbaseMaturity` delays).
+- **Vote VAR Reward (most recent)**: Displays the total reward per vote for the most recent block, broken down by Subsidy and Fee.
+    - **Per Block**: The total amount of VAR earned per vote.
+    - **Subsidy**: The PoS subsidy portion per vote.
+    - **Fee**: The stake fee portion per vote.
+    - **ROI**: The extrapolated annual return percentage, calculated by averaging the individual ROI of all tickets that voted in the most recent block.
+
 - **Vote SKA Reward**:
     - **Per Block**: Based on **Actuals**. The total SKA fees in the *last* block divided by the *actual* number of voters in that block, displayed as `SKA-n / Vote`.
     - **Per 30 Days / Per Year**: Based on **Theoretical Maximums**. The average SKA coins distributed per staked VAR over the period, computed by `txhelpers.AvgSSFeeRate` using `TicketsPerBlock` as the divisor.
@@ -100,7 +102,9 @@ Verified using `dlv` breakpoints in `txhelpers.RewardsAtBlock` and `explorer.go`
 - Confirmed that `work` (PoW) and `stake * votes` (PoS) follow the 50/50 split logic defined by the network parameters.
 - Verified that `HomeInfo.VoteVARReward.PerBlock` correctly stores the absolute value `posSubsPerVote` rather than the profitability ratio.
 
-### 3. ASR Simulation Verification
-Verified the `simulateASR` function by stepping through the simulation loop:
-- Confirmed that the simulation correctly accounts for `TicketMaturity` and `CoinbaseMaturity` delays before rewards are added to the balance.
-- Verified that the final `ASR` is derived from the simulated total return over 365 days.
+### 3. Vote VAR Reward ROI Calculation
+Verified the ROI calculation logic for the most recent block:
+- For each ticket that voted in the block, ROI is calculated as:
+  `ROI = (RewardPerVote / TicketPrice) * (BlocksPerYear / (VoteHeight - PurchaseHeight + CoinbaseMaturity)) * 100`
+- The final displayed ROI is the average of these individual ROIs across all voters in the block.
+

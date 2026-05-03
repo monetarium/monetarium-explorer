@@ -12,28 +12,38 @@ export default class extends Controller {
       'powConverted',
       'powBar',
       'rewardIdx',
-      'powSkaRewards'
+      'powSkaRewards',
+      'powSubsidy',
+      'powFee'
     ]
   }
 
   handleBlock({ detail: blockData }) {
     const ex = blockData.extra
     this.difficultyTarget.innerHTML = humanize.threeSigFigs(ex.difficulty)
-    this.hashrateTarget.innerHTML = humanize.decimalParts(String(ex.hash_rate), false, 8, 2, true)
+    this.hashrateTarget.innerHTML = humanize.decimalParts(String(ex.hash_rate), false, 8, 2)
     this.hashrateDeltaTarget.innerHTML = humanize.fmtPercentage(ex.hash_rate_change_month)
     this.bsubsidyPowTarget.innerHTML = humanize.decimalParts(
-      String(ex.subsidy.pow / 100000000),
+      String((ex.lblock_total_atoms || ex.subsidy.pow) / 100000000),
       false,
       8,
-      2,
-      true
+      2
     )
+    this.powSubsidyTarget.innerHTML = humanize.decimalParts(ex.subsidy.pow / 100000000, false, 8, 2)
+    this.powFeeTarget.innerHTML = humanize.decimalParts(
+      (ex.mining_fee_atoms || 0) / 100000000,
+      false,
+      8,
+      2
+    )
+
     this.rewardIdxTarget.textContent = ex.reward_idx
     this.powBarTarget.style.width = `${(ex.reward_idx / ex.params.reward_window_size) * 100}%`
 
     if (ex.exchange_rate && this.hasPowConvertedTarget) {
       const { value: xcRate, index } = ex.exchange_rate
-      this.powConvertedTarget.textContent = `${humanize.twoDecimals((ex.subsidy.pow / 1e8) * xcRate)} ${index}`
+      const total = (ex.lblock_total_atoms || ex.subsidy.pow) / 100000000
+      this.powConvertedTarget.textContent = `${humanize.twoDecimals(total * xcRate)} ${index}`
     }
 
     this._renderPoWSkaRewards(ex.pow_ska_rewards)
@@ -55,15 +65,15 @@ export default class extends Controller {
 
     rewards.forEach((r) => {
       const clone = document.importNode(tmpl.content, true)
-      const { intPart, bold, rest, trailingZeros } = splitSkaAtoms(r.amount || '')
+      const parts = splitSkaAtoms(r.amount || '')
 
-      const intEl = clone.querySelector('.int')
-      const decEl = clone.querySelector('.decimal:not(.trailing-zeroes)')
-      const trailEl = clone.querySelector('.trailing-zeroes')
+      const decimalPartsEl = clone.querySelector('.decimal-parts')
+      if (decimalPartsEl) this._fillDecimalParts(decimalPartsEl, parts)
 
-      if (intEl) intEl.textContent = bold ? `${intPart}.${bold}` : intPart
-      if (decEl) decEl.textContent = bold ? rest : ''
-      if (trailEl) trailEl.textContent = bold ? trailingZeros : ''
+      const linkEl = clone.querySelector('[data-block-height]')
+      if (linkEl && r.block_height) {
+        linkEl.href = `/block/${r.block_height}`
+      }
 
       clone.querySelectorAll('.symbol').forEach((el) => {
         el.textContent = r.symbol
@@ -71,5 +81,15 @@ export default class extends Controller {
 
       container.appendChild(clone)
     })
+  }
+
+  _fillDecimalParts(el, { intPart, bold, rest, trailingZeros }) {
+    const intText = bold ? `${intPart}.${bold}` : intPart
+    let html = `<span class="int">${intText}</span>`
+    if (bold && rest) html += `<span class="decimal">${rest}</span>`
+    if (bold && trailingZeros) {
+      html += `<span class="decimal trailing-zeroes">${trailingZeros}</span>`
+    }
+    el.innerHTML = html
   }
 }
