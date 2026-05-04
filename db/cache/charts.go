@@ -1710,8 +1710,8 @@ func (charts *ChartData) skaSupplyChart(chartID string, bin binLevel, axis axisT
 			}, seed)
 		default:
 			return encode(lengtherMap{
-				timeKey:        charts.Blocks.Time,
-				supplyKey:      ChartUintsFromStrings(data.Values),
+				timeKey:         charts.Blocks.Time,
+				supplyKey:       ChartUintsFromStrings(data.Values),
 				anonymitySetKey: ChartUints{},
 			}, seed)
 		}
@@ -1727,8 +1727,8 @@ func (charts *ChartData) skaSupplyChart(chartID string, bin binLevel, axis axisT
 		default:
 			times, _ := aggregateSKASupply(data.Heights, nil)
 			return encode(lengtherMap{
-				timeKey:        ChartUintsFromInt64(times),
-				supplyKey:      ChartUintsFromStrings(values),
+				timeKey:         ChartUintsFromInt64(times),
+				supplyKey:       ChartUintsFromStrings(values),
 				anonymitySetKey: ChartUints{},
 			}, seed)
 		}
