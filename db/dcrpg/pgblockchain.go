@@ -997,7 +997,9 @@ func (pgb *ChainDB) RegisterCharts(charts *cache.ChartData) {
 	})
 
 	// Load SKA coin supply data into charts.SKASupply
-	pgb.skaSupplyUpdater(charts)
+	if err := pgb.skaSupplyUpdater(charts); err != nil {
+		log.Errorf("failed to load SKA supply data into charts: %v", err)
+	}
 }
 
 func (pgb *ChainDB) skaSupplyUpdater(charts *cache.ChartData) error {
