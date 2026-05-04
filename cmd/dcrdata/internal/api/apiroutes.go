@@ -1888,15 +1888,18 @@ func (c *appContext) getTreasuryIO(w http.ResponseWriter, r *http.Request) {
 func (c *appContext) ChartTypeData(w http.ResponseWriter, r *http.Request) {
 	chartType := m.GetChartTypeCtx(r)
 	bin := r.URL.Query().Get("bin")
-	// Support the deprecated URL parameter "zoom".
 	if bin == "" {
 		bin = r.URL.Query().Get("zoom")
 	}
 	axis := r.URL.Query().Get("axis")
 	chartData, err := c.charts.Chart(chartType, bin, axis)
 	if err != nil {
-		http.NotFound(w, r)
 		log.Warnf(`Error fetching chart %q at bin level '%s': %v`, chartType, bin, err)
+		if strings.Contains(err.Error(), "not initialized") || strings.Contains(err.Error(), "no SKA supply data found") {
+			http.Error(w, "chart data not available", http.StatusServiceUnavailable)
+			return
+		}
+		http.NotFound(w, r)
 		return
 	}
 	writeJSONBytes(w, chartData)

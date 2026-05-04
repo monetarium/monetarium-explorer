@@ -1679,6 +1679,10 @@ func (charts *ChartData) skaSupplyChart(chartID string, bin binLevel, axis axisT
 
 	// SKA supply data should already be pre-loaded in SKASupply map
 	charts.mtx.RLock()
+	if charts.SKASupply == nil {
+		charts.mtx.RUnlock()
+		return nil, fmt.Errorf("SKA supply data not initialized for coin type %d", coinType)
+	}
 	data, ok := charts.SKASupply[coinType]
 	charts.mtx.RUnlock()
 	if !ok || len(data.Heights) == 0 {
