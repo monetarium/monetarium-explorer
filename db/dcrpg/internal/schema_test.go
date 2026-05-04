@@ -1,7 +1,6 @@
 package internal
 
 import (
-	"os"
 	"regexp"
 	"strings"
 	"testing"
