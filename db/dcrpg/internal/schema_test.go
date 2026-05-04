@@ -140,3 +140,24 @@ func TestNumericCastOnTicketPrice(t *testing.T) {
 		}
 	}
 }
+
+func TestSKACoinSupplyQueryExists(t *testing.T) {
+	if SelectSKACoinSupply == "" {
+		t.Fatal("SelectSKACoinSupply must be defined")
+	}
+	if !strings.Contains(SelectSKACoinSupply, "coin_type > 0") {
+		t.Error("SelectSKACoinSupply must filter coin_type > 0 (SKA only, not VAR)")
+	}
+	if !strings.Contains(SelectSKACoinSupply, "ska_value") {
+		t.Error("SelectSKACoinSupply must use ska_value for precision")
+	}
+}
+
+func TestSKACoinSupplyHasBlockHeight(t *testing.T) {
+	if SelectSKACoinSupply == "" {
+		t.Skip("SelectSKACoinSupply not defined")
+	}
+	if !strings.Contains(SelectSKACoinSupply, "block_height") && !strings.Contains(SelectSKACoinSupply, "block_index") {
+		t.Error("SelectSKACoinSupply should include block height for chart time axis")
+	}
+}

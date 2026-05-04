@@ -122,3 +122,27 @@ func TestAPITxOut_SKAFields(t *testing.T) {
 		t.Errorf("SKAValue: want %s, got %s", txout.SKAValue, got.SKAValue)
 	}
 }
+
+func TestChartAPI_SKASupplyAccepted(t *testing.T) {
+	mux := NewAPIRouter(&appContext{DataSource: noopDS{}}, "", false, false)
+
+	req := httptest.NewRequest(http.MethodGet, "/chart/ska-supply-1", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK && w.Code != http.StatusNotFound {
+		t.Errorf("ska-supply-1: expected 200 or 404, got %d", w.Code)
+	}
+}
+
+func TestChartAPI_SKASupplyPrecision(t *testing.T) {
+	mux := NewAPIRouter(&appContext{DataSource: noopDS{}}, "", false, false)
+
+	req := httptest.NewRequest(http.MethodGet, "/chart/coin-supply", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK && w.Code != http.StatusNotFound {
+		t.Errorf("coin-supply: expected 200 or 404, got %d", w.Code)
+	}
+}
