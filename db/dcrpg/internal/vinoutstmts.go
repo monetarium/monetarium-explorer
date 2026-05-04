@@ -268,16 +268,6 @@ const (
 		GROUP BY transactions.block_time, transactions.block_height
 		ORDER BY transactions.block_height;`
 
-	// SelectVARCoinSupplyPerBlock fetches the cumulative VAR supply per block.
-	// VAR (coin_type = 0) uses value column (atoms, 8 decimals). Multiply by 10^10 to get 18 decimal places.
-	SelectVARCoinSupplyPerBlock = `SELECT transactions.block_height, COALESCE(sum(vouts.value::numeric * 10000000000), 0)::text AS total
-		FROM vouts JOIN transactions ON vouts.tx_hash = transactions.tx_hash
-		WHERE vouts.spend_tx_row_id IS NULL AND vouts.coin_type = 0
-		AND transactions.is_mainchain AND transactions.is_valid
-		AND transactions.block_height > $1
-		GROUP BY transactions.block_height
-		ORDER BY transactions.block_height;`
-
 	// TEST ONLY REMOVE
 	RetrieveVoutValue  = `SELECT value FROM vouts WHERE tx_hash=$1 and tx_index=$2;`
 	RetrieveVoutValues = `SELECT value, tx_index, tx_tree, coin_type FROM vouts WHERE tx_hash=$1;`
