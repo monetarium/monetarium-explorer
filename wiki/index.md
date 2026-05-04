@@ -15,8 +15,12 @@ _Human-curated rules, architecture, and constraints. Read these to understand th
 
 _Requirements and guidelines for specific features and pages._
 
-- homepage-metrics: specs/homepage-metrics.md — mempool, latest blocks, and supply component rules
-- blocks-list: specs/blocks-list.md — rules for rendering list of blocks (block table on block list page)
+- homepage-metrics: specs/homepage-metrics/spec.md — mempool, latest blocks, and supply component rules
+- homepage-edits: specs/homepage-metrics/edits-spec.md — what should be edited and how on the homepage
+- block-details: specs/block-details/spec.md — rendering rules for block details page
+- blocks-list: specs/blocks-list/spec.md — rules for rendering list of blocks (block table on block list page)
+- chart-ska-coin-supply: specs/chart-ska-coin-supply/spec.md — rendering and logic rules for SKA coin supply charts
+- mempool-page: specs/mempool/spec.md — full multi-coin mempool page layout and logic
 
 ## 🤖 Code Traces
 
@@ -62,3 +66,17 @@ _Aggregation and grouping of blocks over specific time intervals (days, weeks, m
 
 - flow (compact): code-analysis/time-based-blocks/flow.compact.md — high-level summary of how blocks are grouped by time periods
 - flow (full): code-analysis/time-based-blocks/flow.full.md — detailed, step-by-step function trace for deep debugging of time aggregations
+
+### Mempool
+
+_Multi-token aggregation, websocket data preparation, and template rendering for unconfirmed transactions._
+
+- flow (compact): code-analysis/mempool/flow.compact.md — high-level summary of mempool state aggregation
+- flow (full): code-analysis/mempool/flow.full.md — detailed, step-by-step function trace for deep debugging of mempool data tracking
+
+### Charts
+
+_Historical data fetching, cache aggregation, and payload serialization for UI charts._
+
+- flow (compact): code-analysis/charts/flow.compact.md — high-level summary of the chart data pipeline
+- flow (full): code-analysis/charts/flow.full.md — detailed, step-by-step function trace for debugging chart API and rendering

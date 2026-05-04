@@ -82,8 +82,8 @@ var (
 	defaultDisabledExchanges = ""
 	defaultRateCertFile      = filepath.Join(defaultHomeDir, "rpc.cert")
 
-	defaultMainnetLink  = "https://explorer.monetarium.io/"
-	defaultTestnetLink  = "https://testnet.monetarium.io/"
+	defaultMainnetLink  = "https://monetarium.online/"
+	defaultTestnetLink  = "https://testnet.monetarium.online/"
 	defaultOnionAddress = ""
 
 	maxSyncStatusLimit = 5000

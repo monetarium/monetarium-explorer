@@ -10,7 +10,7 @@
     <div class="row mt-1">
         <div class="col-12 mb-3 mb-sm-2 mb-md-3 mb-lg-3">
             <div class="fs13 text-secondary">
-                <a class="no-underline" href="/charts?chart=pow-difficulty">Difficulty</a>
+                <a href="/charts?chart=pow-difficulty">Difficulty</a>
             </div>
             <div class="mono lh1rem p03rem0 fs14-decimal fs24 p03rem0 d-flex align-items-baseline">
                 <span data-mining-target="difficulty">{{threeSigFigs .Difficulty}}</span>
@@ -28,20 +28,25 @@
         </div>
         {{/* Row 2 left: PoW VAR Reward */}}
         <div class="col-12 mb-3 mb-sm-2 mb-md-3 mb-lg-3">
-            <div class="fs13 text-secondary">PoW VAR Reward</div>
+            <div class="fs13 text-secondary">PoW VAR Reward (most&nbsp;recent)</div>
             <div class="mono lh1rem p03rem0 fs14-decimal fs24 p03rem0 d-flex align-items-baseline">
-                <span data-mining-target="bsubsidyPow">{{template "decimalParts" (float64AsDecimalParts (toFloat64Amount .NBlockSubsidy.PoW) 8 true 2)}}</span>
+                <span data-mining-target="bsubsidyPow">{{template "decimalParts" (float64AsDecimalParts (toFloat64Amount .LBlockTotalAtoms) 8 true 2)}}</span>
                 <span class="ps-1 unit lh15rem">VAR</span>
             </div>
-            {{if $conv -}}
-            <div class="fs12 lh1rem text-black-50">
-                <span data-mining-target="powConverted">{{$conv.PowSplit.TwoDecimals}} {{$conv.PowSplit.Index}}</span>
+            <div class="fs12 fs12-decimal lh1rem text-black-50 label-value-grid">
+                <span class="text-start">Subsidy:</span>
+                <span class="text-start">
+                    <span class="mono" data-mining-target="powSubsidy">{{template "decimalParts" (float64AsDecimalParts (toFloat64Amount .NBlockSubsidy.PoW) 8 false 2)}}</span>
+                </span>
+                <span class="text-start">Fee:</span>
+                <span class="text-start">
+                    <span class="mono" data-mining-target="powFee">{{template "decimalParts" (float64AsDecimalParts (toFloat64Amount .MiningFeeAtoms) 8 false 2)}}</span>
+                </span>
             </div>
-            {{- end}}
         </div>
-        {{/* Row 2 right: Next Block VAR Reward Reduction (swapped from below) */}}
+        {{/* Row 2 right: Next Block VAR Subsidy Reduction (swapped from below) */}}
         <div class="col-12 mb-3 mb-sm-2 mb-md-3 mb-lg-3">
-            <div class="fs13 text-secondary lh1rem">Next Block VAR Reward Reduction</div>
+            <div class="fs13 text-secondary lh1rem">Next Block VAR Subsidy Reduction</div>
             <div class="progress mt-1 mb-1">
                 <div
                     class="progress-bar rounded"
@@ -66,35 +71,34 @@
                 </span>
             </div>
         </div>
-        {{/* Row 3: PoW SKA Reward (moved below, grows as new SKA types are emitted) */}}
-        {{if .PoWSKARewards}}
+        {{/* Row 3: PoW SKA Fee Reward (most recent) (moved below, grows as new SKA types are emitted) */}}
         <div class="col-24 mb-3 mb-sm-2 mb-md-3 mb-lg-3">
-            <div class="fs13 text-secondary">PoW SKA Reward</div>
-            <div data-mining-target="powSkaRewards">
+            <div class="fs13 text-secondary">PoW SKA Fee Reward (most&nbsp;recent)</div>
+            <div data-mining-target="powSkaRewards" class="d-flex flex-column align-items-start" style="gap:4px">
+            {{if .PoWSKARewards}}
             {{range .PoWSKARewards}}
-            <div class="mono lh1rem p03rem0 fs14-decimal fs24 p03rem0 d-flex align-items-baseline">
-                <span>{{template "decimalParts" (skaDecimalParts .Amount true 2)}}</span>
-                <span class="ps-1 unit lh15rem">{{.Symbol}} <span class="text-black-50 ms-1 fs12">per last block</span></span>
-            </div>
+            <a class="text-decoration-none"{{if .BlockHeight}} href="/block/{{.BlockHeight}}"{{end}}>
+                <div class="mono lh1rem p03rem0 fs14-decimal fs24 p03rem0 d-inline-flex align-items-baseline">
+                    <span>{{template "decimalParts" (skaDecimalParts .Amount true 2)}}</span>
+                    <span class="ps-1 unit lh15rem">{{.Symbol}}</span>
+                </div>
+            </a>
+            {{end}}
+            {{else}}
+                <div class="fs12 lh1rem text-black-50">No SKA rewards available</div>
             {{end}}
             </div>
         </div>
-        {{else}}
-        <div class="col-24 mb-3 mb-sm-2 mb-md-3 mb-lg-3">
-            <div class="fs13 text-secondary">PoW SKA Reward</div>
-            <div data-mining-target="powSkaRewards">
-                <div class="fs12 lh1rem text-black-50">No SKA rewards available</div>
-            </div>
-        </div>
-        {{end}}
         {{/* Templates for JS live-update cloning */}}
         <template id="pow-ska-reward-template">
-            <div class="mono lh1rem p03rem0 fs14-decimal fs24 p03rem0 d-flex align-items-baseline">
+            <a class="text-decoration-none" data-block-height>
+            <div class="mono lh1rem p03rem0 fs14-decimal fs24 p03rem0 d-inline-flex align-items-baseline">
                 <div class="decimal-parts d-inline-block">
-                    <span class="int"></span><span class="decimal"></span><span class="decimal trailing-zeroes"></span>
+                    <span class="int"></span>
                 </div>
-                <span class="ps-1 unit lh15rem"><span class="symbol"></span> <span class="text-black-50 ms-1 fs12">per last block</span></span>
+                <span class="ps-1 unit lh15rem"><span class="symbol"></span></span>
             </div>
+            </a>
         </template>
         <template id="pow-ska-empty-template">
             <div class="fs12 lh1rem text-black-50">No SKA rewards available</div>

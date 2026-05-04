@@ -10,7 +10,7 @@
     <div class="row mx-2 my-2">
         <div class="col-24 bg-white p-3 p-sm-4 position-relative">
           <div class="card-pointer pointer-bottom"></div>
-          <div class="pb-1 ps-1 position-relative">
+          <div class="d-flex align-items-center pb-1 ps-1 position-relative h5">
             {{if or .IsTicket .IsRevocation}}
               <span class="fs22 monicon-ticket"></span>
             {{else if .IsVote}}
@@ -22,7 +22,7 @@
             {{else}}
               <span class="fs22 monicon-coin-negative"></span>
             {{end}}
-            <span class="h5 d-inline-block ps-1">{{.Type}}</span>
+            <span class="d-inline-block ps-1">{{.Type}}</span>
               <div class="d-inline-block confirmations-box{{if $.IsConfirmedMainchain}} confirmed{{end}} mx-2 fs14"
                 data-controller="newblock"
                 data-newblock-target="confirmations"
@@ -57,7 +57,7 @@
                 <span class="text-secondary fs13">Total Sent</span>
                 <br>
                  <span class="lh1rem d-inline-block pt-1"
-                  ><span class="fs18 fs14-decimal fw-bold">{{if eq .CoinType 0}}{{template "decimalParts" (float64AsDecimalParts .Total 8 true 2)}}{{else}}{{template "decimalParts" (skaDecimalParts .TotalRaw true 2)}}{{end}}</span><span class="text-secondary fs14">{{coinSymbol .CoinType}}</span>
+                  ><span class="fs18 fs14-decimal fw-bold">{{if eq .CoinType 0}}{{template "decimalParts" (float64AsDecimalParts .Total 8 true 2)}}{{else}}{{template "decimalParts" (skaDecimalParts .TotalRaw true 2)}}{{end}}</span>&nbsp;<span class="text-secondary fs14">{{coinSymbol .CoinType}}</span>
                 </span>
                 {{if $conv.Total}}
                 <br>
@@ -98,7 +98,7 @@
                 <span class="text-secondary fs13">Fee</span>
                 <br>
                  <span class="lh1rem d-inline-block pt-1"
-                  ><span class="fs18 fs14-decimal fw-bold">{{if eq .CoinType 0}}{{template "decimalParts" (float64AsDecimalParts .Fee.ToCoin 8 true 2)}}{{else}}{{template "decimalParts" (skaDecimalParts .FeeRaw true 2)}}{{end}}</span><span class="text-secondary fs14">{{coinSymbol .CoinType}}</span>
+                  ><span class="fs18 fs14-decimal fw-bold">{{if eq .CoinType 0}}{{template "decimalParts" (float64AsDecimalParts .Fee.ToCoin 8 true 2)}}{{else}}{{template "decimalParts" (skaDecimalParts .FeeRaw true 2)}}{{end}}</span>&nbsp;<span class="text-secondary fs14">{{coinSymbol .CoinType}}</span>
                 </span>
                 {{if $conv.Fees}}
                 <br>

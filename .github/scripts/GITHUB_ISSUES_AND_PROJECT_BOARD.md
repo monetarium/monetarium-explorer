@@ -323,7 +323,7 @@ Your `tasks.json` must declare an array of task objects. Each task requires a un
       "type": "parent",
       "issue_type": "Feature",
       "title": "Blocks List Page",
-      "description": "Display a paginated list of blocks with VAR and SKAN metrics.",
+      "description": "Display a paginated list of blocks with VAR and SKA{n} metrics.",
       "assignee": "yanchenko-igor",
       "labels": ["enhancement"]
     },
@@ -333,7 +333,7 @@ Your `tasks.json` must declare an array of task objects. Each task requires a un
       "parent": "feature-blocks-list",
       "issue_type": "Task",
       "title": "[DATA] Aggregate block data for list page",
-      "description": "Prepare structured block data including VAR and SKAN values.",
+      "description": "Prepare structured block data including VAR and SKA{n} values.",
       "assignee": "yanchenko-igor",
       "labels": ["enhancement"]
     },

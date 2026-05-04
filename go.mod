@@ -28,7 +28,7 @@ require (
 	github.com/decred/dcrd/crypto/blake256 v1.1.0 // indirect
 	github.com/decred/go-socks v1.1.0 // indirect
 	github.com/dgraph-io/ristretto v0.0.2 // indirect
-	github.com/dustin/go-humanize v1.0.1-0.20210705192016-249ff6c91207 // indirect
+	github.com/dustin/go-humanize v1.0.1-0.20210705192016-249ff6c91207
 	github.com/golang/protobuf v1.4.3 // indirect
 	github.com/golang/snappy v0.0.4 // indirect
 	github.com/google/go-cmp v0.5.4 // indirect

@@ -650,7 +650,7 @@ var msgNewBlock312592 = &pstypes.WebSocketMessage{
 			"dev_address": "Dcur2mcGjmENx4DhNqDctW5wJCVyT3Qeqkx",
 			"reward": 1.0210069984493713,
 			"reward_period": "29.07 days",
-			"ASR": 0,
+			"ROI": 0,
 			"subsidy": {
 				"total": 1896827353,
 				"pow": 1138096413,

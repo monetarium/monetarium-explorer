@@ -196,6 +196,12 @@ func (t *Collector) CollectBlockInfo(hash *chainhash.Hash) (*apitypes.BlockDataB
 	height := header.Height
 	txLen := len(msgBlock.Transactions) + len(msgBlock.STransactions)
 
+	// Current block subsidy.
+	curSubsidy, err := t.dcrdChainSvr.GetBlockSubsidy(ctx, int64(height), 5)
+	if err != nil {
+		log.Errorf("GetBlockSubsidy for %d failed: %v", height, err)
+	}
+
 	// Coin supply and block subsidy. If either RPC fails, do not immediately
 	// return. Attempt acquisition of other data for this block.
 	coinSupply, err := t.dcrdChainSvr.GetCoinSupply(ctx)
@@ -239,6 +245,10 @@ func (t *Collector) CollectBlockInfo(hash *chainhash.Hash) (*apitypes.BlockDataB
 	if feeInfoBlock == nil {
 		log.Error("FeeInfoBlock failed")
 	}
+	var miningFee int64
+	if curSubsidy != nil {
+		miningFee = computeMiningFee(msgBlock, curSubsidy.PoW)
+	}
 
 	// Work/Stake difficulty
 	diff := txhelpers.GetDifficultyRatio(header.Bits, t.netParams)
@@ -255,9 +265,11 @@ func (t *Collector) CollectBlockInfo(hash *chainhash.Hash) (*apitypes.BlockDataB
 		PoolInfo:   ticketPoolInfo,
 	}
 	extrainfo := &apitypes.BlockExplorerExtraInfo{
-		TxLen:            txLen,
-		CoinSupply:       int64(coinSupply),
-		NextBlockSubsidy: nbSubsidy,
+		TxLen:               txLen,
+		CoinSupply:          int64(coinSupply),
+		CurrentBlockSubsidy: curSubsidy,
+		NextBlockSubsidy:    nbSubsidy,
+		MiningFeeAtoms:      miningFee,
 	}
 
 	// Accumulate per-coin output totals from all transactions in the block.
@@ -275,7 +287,8 @@ func (t *Collector) CollectBlockInfo(hash *chainhash.Hash) (*apitypes.BlockDataB
 	}
 
 	// Accumulate per-coin SSFee totals for SKA vote reward calculation.
-	if ssfee := txhelpers.BlockSSFeeTotals(msgBlock); len(ssfee) > 0 {
+	ssGenTxs := txhelpers.ComputeTxFeeData(msgBlock)
+	if ssfee := txhelpers.BlockSSFeeTotals(ssGenTxs, msgBlock.STransactions); len(ssfee) > 0 {
 		extrainfo.SSFeeTotalsByCoin = ssfee
 	}
 
@@ -584,4 +597,19 @@ func BlockSKAFees(msgBlock *wire.MsgBlock) map[uint8]string {
 		out[k] = v.String()
 	}
 	return out
+}
+
+// computeMiningFee calculates total mining fees from a block.
+// Formula: Mining Fee = Coinbase Output - PoW Subsidy
+// This is equivalent to summing (Inputs - Outputs) for all non-coinbase transactions,
+// but more efficient and accurate.
+func computeMiningFee(msgBlock *wire.MsgBlock, powSubsidy int64) int64 {
+	// Get coinbase output (first transaction, first output)
+	coinbaseOutput := int64(0)
+	for _, txOut := range msgBlock.Transactions[0].TxOut {
+		coinbaseOutput += txOut.Value
+	}
+	miningFee := coinbaseOutput - powSubsidy
+
+	return miningFee
 }

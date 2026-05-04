@@ -526,9 +526,13 @@ type CoinFillData struct {
 
 // MempoolCoinStats holds per-coin mempool transaction count, size, and amount.
 type MempoolCoinStats struct {
-	TxCount int    `json:"tx_count"`
-	Size    int32  `json:"size"`
-	Amount  string `json:"amount"` // VAR: int64 atom string; SKA: big.Int atom string
+	TxCount      int    `json:"tx_count"`
+	Size         int32  `json:"size"`
+	Amount       string `json:"amount"` // VAR: int64 atom string; SKA: big.Int atom string
+	RegularCount int    `json:"regular_count"`
+	TicketCount  int    `json:"ticket_count"`
+	VoteCount    int    `json:"vote_count"`
+	RevokeCount  int    `json:"revoke_count"`
 }
 
 // TrimmedBlockInfo models data needed to display block info on the new home page
@@ -590,26 +594,28 @@ type Conversion struct {
 
 // SKAVoteReward holds per-SKA-type staker reward rates expressed as SKA atoms per VAR atom.
 type SKAVoteReward struct {
-	CoinType  uint8  `json:"coin_type"`
-	Symbol    string `json:"symbol"`
-	PerBlock  string `json:"per_block"`   // SKA/VAR ratio for last block, 18dp decimal string
-	Per30Days string `json:"per_30_days"` // 30-day average
-	PerYear   string `json:"per_year"`    // annualised average
+	CoinType    uint8  `json:"coin_type"`
+	Symbol      string `json:"symbol"`
+	PerBlock    string `json:"per_block"` // SKA/VAR ratio for last block, big.Int atom string (18dp)
+	PerYear     string `json:"per_year"`  // annualised average, big.Int atom string (18dp)
+	BlockHeight int64  `json:"block_height,omitempty"`
 }
 
 // VoteVARReward holds the VAR staker reward rate expressed as VAR earned per
 // VAR staked (i.e. reward/ticketPrice) for last block, 30-day, and yearly.
 type VoteVARReward struct {
-	PerBlock  float64 `json:"per_block"`   // VAR/VAR for the last block
-	Per30Days float64 `json:"per_30_days"` // percentage per 30 days
-	PerYear   float64 `json:"per_year"`    // annualised percentage (ASR)
+	PerBlock float64 `json:"per_block"` // VAR/VAR for the last block
+	Subsidy  float64 `json:"subsidy"`   // subsidy portion per vote
+	Fee      float64 `json:"fee"`       // fee portion per vote
+	ROI      float64 `json:"roi"`       // extrapolated annual ROI %
 }
 
 // PoWSKAReward holds the PoW mining reward for a single SKA coin type.
 type PoWSKAReward struct {
-	CoinType uint8  `json:"coin_type"`
-	Symbol   string `json:"symbol"`
-	Amount   string `json:"amount"` // SKA atoms as decimal string (18 decimals)
+	CoinType    uint8  `json:"coin_type"`
+	Symbol      string `json:"symbol"`
+	Amount      string `json:"amount"`
+	BlockHeight int64  `json:"block_height,omitempty"`
 }
 
 // HomeInfo represents data used for the home page
@@ -623,10 +629,11 @@ type HomeInfo struct {
 	IdxBlockInWindow      int                  `json:"window_idx"`
 	IdxInRewardWindow     int                  `json:"reward_idx"`
 	Difficulty            float64              `json:"difficulty"`
-	TicketReward          float64              `json:"reward"`
 	RewardPeriod          string               `json:"reward_period"`
-	ASR                   float64              `json:"ASR"`
 	NBlockSubsidy         BlockSubsidy         `json:"subsidy"`
+	MiningFeeAtoms        int64                `json:"mining_fee_atoms"`
+	LBlockTotal           float64              `json:"lblock_total"`
+	LBlockTotalAtoms      int64                `json:"lblock_total_atoms"`
 	Params                ChainParams          `json:"params"`
 	PoolInfo              TicketPoolInfo       `json:"pool_info"`
 	TotalLockedVAR        float64              `json:"total_locked_var"`
@@ -661,9 +668,10 @@ type TrimmedMempoolInfo struct {
 	Total          float64
 	Time           int64
 	Fees           float64
-	CoinFills      []CoinFillData `json:"coin_fills,omitempty"`
-	TotalFillRatio float64        `json:"total_fill_ratio"`
-	ActiveSKACount int            `json:"active_ska_count"`
+	CoinFills      []CoinFillData             `json:"coin_fills,omitempty"`
+	TotalFillRatio float64                    `json:"total_fill_ratio"`
+	ActiveSKACount int                        `json:"active_ska_count"`
+	CoinStats      map[uint8]MempoolCoinStats `json:"coin_stats,omitempty"`
 }
 
 // MempoolInfo models data to update mempool info on the home page.
@@ -724,6 +732,7 @@ func (mpi *MempoolInfo) Trim() *TrimmedMempoolInfo {
 		CoinFills:      mpi.MempoolShort.CoinFills,
 		TotalFillRatio: mpi.MempoolShort.TotalFillRatio,
 		ActiveSKACount: mpi.MempoolShort.ActiveSKACount,
+		CoinStats:      mpi.MempoolShort.CoinStats,
 	}
 
 	mpi.RUnlock()
@@ -856,13 +865,25 @@ func TrimMempoolTxs(txs []MempoolTx) []*TrimmedTxInfo {
 	return trimmedTxs
 }
 
-// TrimMempoolTx converts the input []MempoolTx to a []*TrimmedTxInfo.
+// primaryCoinType extracts the coin type from a mempool transaction's SKATotals map.
+// INVARIANT: A mempool transaction contains outputs of exactly one coin type
+// (either VAR with no SKATotals, or exactly one SKA coin type). This function
+// returns the coin type found, or 0 for VAR (empty SKATotals map).
+func primaryCoinType(tx *MempoolTx) uint8 {
+	for ct := range tx.SKATotals {
+		return ct
+	}
+	return 0
+}
+
+// TrimMempoolTx converts the input MempoolTx to a TrimmedTxInfo for display.
 func TrimMempoolTx(tx *MempoolTx) (trimmedTx *TrimmedTxInfo) {
 	fee, _ := dcrutil.NewAmount(tx.Fees) // non-nil error returns 0 fee
 	var feeRate dcrutil.Amount
 	if tx.Size > 0 {
 		feeRate = fee / dcrutil.Amount(int64(tx.Size))
 	}
+	coinType := primaryCoinType(tx)
 	txBasic := &TxBasic{
 		TxID:          tx.TxID,
 		Type:          tx.Type,
@@ -872,14 +893,14 @@ func TrimMempoolTx(tx *MempoolTx) (trimmedTx *TrimmedTxInfo) {
 		Fee:           fee,
 		FeeRate:       feeRate,
 		VoteInfo:      tx.VoteInfo,
+		CoinType:      coinType,
+		SKASent:       tx.SKATotals,
 		// TreasuryBase and Coinbase are not in mempool
 	}
-
 	var voteValid bool
 	if tx.VoteInfo != nil {
 		voteValid = tx.VoteInfo.Validation.Validity
 	}
-
 	return &TrimmedTxInfo{
 		TxBasic:   txBasic,
 		Fees:      tx.Fees,
@@ -1368,7 +1389,6 @@ type StatsInfo struct {
 	TPVOfTotalSupplyPeecentage float64
 	TicketsROI                 float64
 	RewardPeriod               string
-	ASR                        float64
 	APR                        float64
 	IdxBlockInWindow           int
 	WindowSize                 int64

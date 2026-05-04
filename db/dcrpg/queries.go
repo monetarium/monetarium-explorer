@@ -100,6 +100,25 @@ func closeRows(rows *sql.Rows) {
 	}
 }
 
+// retrieveVoteTicketDataByBlock fetches vote and ticket purchase data for all votes in a block.
+func retrieveVoteTicketDataByBlock(ctx context.Context, db *sql.DB, blockHash dbtypes.ChainHash) ([]dbtypes.VoteTicketData, error) {
+	rows, err := db.QueryContext(ctx, internal.SelectVoteTicketDataByBlock, blockHash)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var results []dbtypes.VoteTicketData
+	for rows.Next() {
+		var v dbtypes.VoteTicketData
+		if err := rows.Scan(&v.TicketPrice, &v.VoteHeight, &v.PurchaseHeight); err != nil {
+			return nil, err
+		}
+		results = append(results, v)
+	}
+	return results, rows.Err()
+}
+
 // SqlExecutor is implemented by both sql.DB and sql.Tx.
 type SqlExecutor interface {
 	Exec(query string, args ...interface{}) (sql.Result, error)
@@ -4577,6 +4596,9 @@ func retrieveBlockSummaryRange(ctx context.Context, db *sql.DB, ind0, ind1 int64
 			bd.PoolInfo.Winners[i] = winners[i].String()
 		}
 		bd.StakeDiff = toCoin(sbits)
+		bd.Voters = uint16(voters)
+		bd.FreshStake = uint8(freshStake)
+		bd.Revocations = uint8(revokes)
 		bd.CoinStats = populateCoinStats(coinTxStatsJSON, coinAmountsJSON, voters, freshStake, revokes)
 		_ = json.Unmarshal(coinAmountsJSON, &bd.CoinAmounts)
 		_ = json.Unmarshal(coinTxStatsJSON, &bd.CoinTxStats)
@@ -4642,6 +4664,9 @@ func retrieveBlockSummaryRangeStepped(ctx context.Context, db *sql.DB, ind0, ind
 			bd.PoolInfo.Winners[i] = winners[i].String()
 		}
 		bd.StakeDiff = toCoin(sbits)
+		bd.Voters = uint16(voters)
+		bd.FreshStake = uint8(freshStake)
+		bd.Revocations = uint8(revokes)
 		bd.CoinStats = populateCoinStats(coinTxStatsJSON, coinAmountsJSON, voters, freshStake, revokes)
 		_ = json.Unmarshal(coinAmountsJSON, &bd.CoinAmounts)
 		_ = json.Unmarshal(coinTxStatsJSON, &bd.CoinTxStats)

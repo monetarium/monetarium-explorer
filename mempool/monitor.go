@@ -365,6 +365,16 @@ func (p *MempoolMonitor) TxHandler(rawTx *chainjson.TxRawResult) error {
 		s.TxCount++
 		s.Size += tx.Size
 		s.Amount = addAtomStrings(s.Amount, fmt.Sprintf("%d", int64(tx.TotalOut*1e8)), false)
+		switch tx.Type {
+		case "Regular":
+			s.RegularCount++
+		case "Ticket":
+			s.TicketCount++
+		case "Vote":
+			s.VoteCount++
+		case "Revocation":
+			s.RevokeCount++
+		}
 		p.inventory.CoinStats[0] = s
 	} else {
 		for ct, amtStr := range tx.SKATotals {
@@ -372,6 +382,16 @@ func (p *MempoolMonitor) TxHandler(rawTx *chainjson.TxRawResult) error {
 			s.TxCount++
 			s.Size += tx.Size
 			s.Amount = addAtomStrings(s.Amount, amtStr, true)
+			switch tx.Type {
+			case "Regular":
+				s.RegularCount++
+			case "Ticket":
+				s.TicketCount++
+			case "Vote":
+				s.VoteCount++
+			case "Revocation":
+				s.RevokeCount++
+			}
 			p.inventory.CoinStats[ct] = s
 		}
 	}

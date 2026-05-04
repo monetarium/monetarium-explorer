@@ -252,3 +252,11 @@ body.darkBG [data-tooltip]:hover::after {
 .clipboard:hover .clickable {
   display: inline;
 }
+
+// Reusable two-column label/value grid used in mining and voting cards.
+// Left column sizes to its content; right column takes the remaining space.
+.label-value-grid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0 0.5rem;
+}

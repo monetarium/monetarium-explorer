@@ -27,29 +27,20 @@
 	{{ end }}
 
 	<!-- Favicon -->
-	<link rel="icon" href="/images/favicon/favicon.ico?v=20260415" sizes="48x48">
-	<link rel="icon" type="image/png" href="/images/favicon/favicon-96x96.png?v=20260415" sizes="96x96">
-	<link rel="icon" type="image/svg+xml" href="/images/favicon/favicon.svg?v=20260415">
-	<link rel="apple-touch-icon" sizes="180x180" href="/images/favicon/apple-touch-icon.png?v=20260415">
+	<link rel="icon" href="/images/favicon/favicon.ico?v=20260428" sizes="48x48">
+	<link rel="icon" type="image/png" href="/images/favicon/favicon-96x96.png?v=20260428" sizes="96x96">
+	<link rel="icon" type="image/svg+xml" href="/images/favicon/favicon.svg?v=20260428">
+	<link rel="apple-touch-icon" sizes="180x180" href="/images/favicon/apple-touch-icon.png?v=20260428">
 	<meta name="theme-color" content="{{ if .Data.Cookies.DarkMode }}#292929{{ else if eq theme "theme-testnet" }}#1d331a{{ else if eq theme "theme-simnet" }}#076191{{ else }}#ffffff{{ end }}">
-	<link rel="manifest" href="/images/favicon/site.webmanifest?v=20260415">
+	<link rel="manifest" href="/images/favicon/site.webmanifest?v=20260428">
   <!-- End favicon -->
 
 	<meta name="turbolinks-cache-control" content="no-cache">
 	<title>{{.Title}}</title>
 
-	<link rel="preload" href="/fonts/icomoon.ttf?g003m6" as="font" type="font/ttf" crossorigin="anonymous" />
-	<link rel="preload" href="/fonts/inconsolata-v15-latin-regular.woff?x=65tv3" as="font" type="font/woff" crossorigin="anonymous" />
-	<link rel="preload" href="/fonts/source-sans-pro-v9-latin-regular.woff?x=65tv3" as="font" type="font/woff" crossorigin="anonymous" />
-	<link rel="preload" href="/fonts/source-sans-pro-semibold.woff?x=65tv3" as="font" type="font/woff" crossorigin="anonymous" />
-	<link rel="preload" href="/images/connecting.svg?x=65tv3" as="image" type="image/svg+xml" />
-	<link rel="preload" href="/images/themes/light/logo.svg?x=65tv3" as="image" type="image/svg+xml" />
-	<link rel="preload" href="/images/connected.svg?x=65tv3" as="image" type="image/svg+xml" />
-	<link rel="preload" href="/images/disconnected.svg?x=65tv3" as="image" type="image/svg+xml" />
-
 	<link href="{{asset "app.css"}}" rel="stylesheet">
 
-	<script src="/js/vendor/turbolinks.min.js?v=65DCG"></script>
+	<script src="/js/vendor/turbolinks.min.js?v=65DCG" defer></script>
 </head>
 {{end}}
 
@@ -171,39 +162,29 @@
 		src="{{asset "js/4.bundle.js"}}"
 		data-turbolinks-eval="false"
 		data-turbolinks-suppress-warning
+		defer
 	></script>
 	<script
 		src="{{asset "app.js"}}"
 		data-turbolinks-eval="false"
 		data-turbolinks-suppress-warning
+		defer
 	></script>
 </footer>
 {{end}}
 
 {{define "decimalParts" -}}
-<div class="decimal-parts d-inline-block">
-	{{- if eq (len .) 4 -}}
-		<span class="int">
-		{{- if gt (len (index . 1)) 0 -}}
-			{{ index . 0 }}.{{index . 1 }}
-		{{- else -}}
-			{{index . 0 }}
-		{{- end -}}
-	    </span>
-		{{- if gt (len (index . 2)) 0 -}}
-		<span class="decimal">{{ index . 2 }}</span>
-		{{- /* trailing zeros  */ -}}
-		<span class="decimal trailing-zeroes">{{ index . 3 }}</span>
-		{{- end}}
-	{{- else -}}
-		<span class="int">{{index . 0}}</span>
-		{{- if or (gt (len (index . 1)) 0) (gt (len (index . 2)) 0) -}}
-		<span class="decimal dot">.</span><span class="decimal">{{index . 1 }}</span>
-		{{- /* trailing zeros  */ -}}
-		<span class="decimal trailing-zeroes">{{index . 2}}</span>
-		{{- end}}
-	{{- end -}}
-	</div>
+{{- $int := index . 0 -}}
+{{- if eq (len .) 4 -}}
+{{- $bold := index . 1 -}}
+{{- $rest := index . 2 -}}
+{{- $trail := index . 3 -}}
+<div class="decimal-parts d-inline-block"><span class="int">{{- if gt (len $bold) 0 -}}{{$int}}.{{$bold}}{{- else -}}{{$int}}{{- end -}}</span><span class="decimal">{{$rest}}</span><span class="decimal trailing-zeroes">{{$trail}}</span></div>
+{{- else -}}
+{{- $dec := index . 1 -}}
+{{- $trail := index . 2 -}}
+<div class="decimal-parts d-inline-block"><span class="int">{{$int}}</span>{{- if or (gt (len $dec) 0) (gt (len $trail) 0) -}}<span class="decimal dot">.</span>{{- end -}}<span class="decimal">{{$dec}}</span><span class="decimal trailing-zeroes">{{$trail}}</span></div>
+{{- end -}}
 {{- end}}
 
 {{define "fmtPercentage"}}

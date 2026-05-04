@@ -1308,6 +1308,19 @@ func (pgb *ChainDB) Transaction(ctx context.Context, txHash string) ([]*dbtypes.
 	return dbTxs, pgb.replaceCancelError(err)
 }
 
+// GetVoteTicketDataByBlock retrieves vote and ticket purchase data for all votes in the
+// specified block, and an error value.
+func (pgb *ChainDB) GetVoteTicketDataByBlock(ctx context.Context, blockHash string) ([]dbtypes.VoteTicketData, error) {
+	ch, err := chainHashFromStr(blockHash)
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := context.WithTimeout(ctx, pgb.queryTimeout)
+	defer cancel()
+	data, err := retrieveVoteTicketDataByBlock(ctx, pgb.db, ch)
+	return data, pgb.replaceCancelError(err)
+}
+
 // BlockMissedVotes retrieves the ticket IDs for all missed votes in the
 // specified block, and an error value.
 func (pgb *ChainDB) BlockMissedVotes(ctx context.Context, blockHash string) ([]string, error) {
@@ -3487,7 +3500,11 @@ func (pgb *ChainDB) StoreBlock(msgBlock *wire.MsgBlock, isValid, isMainchain,
 	}
 
 	// Convert the wire.MsgBlock to a dbtypes.Block.
-	dbBlock := dbtypes.MsgBlockToDBBlock(msgBlock, pgb.chainParams, chainWork, winningTickets)
+	subsidy, err := pgb.Client.GetBlockSubsidy(pgb.ctx, int64(msgBlock.Header.Height), 5)
+	if err != nil {
+		log.Errorf("GetBlockSubsidy failed for height %d: %v", msgBlock.Header.Height, err)
+	}
+	dbBlock := dbtypes.MsgBlockToDBBlock(msgBlock, pgb.chainParams, chainWork, winningTickets, subsidy)
 
 	// Get the previous winners (stake DB pool info cache has this info). If the
 	// previous block is side chain, stakedb will not have the
@@ -6407,7 +6424,7 @@ func (pgb *ChainDB) GetExplorerBlocks(ctx context.Context, start int, end int) [
 		return nil
 	}
 	// Fetch the full issued SKA list once for the whole range so every block
-	// row shows zero-activity SKAN coins rather than omitting them.
+	// row shows zero-activity SKA{n} coins rather than omitting them.
 	issuedSKA := pgb.issuedSKACoinTypes(ctx)
 	summaries := make([]*exptypes.BlockBasic, 0, start-end)
 	for i := start; i > end; i-- {
@@ -7167,9 +7184,6 @@ func coinRowsFromAmounts(amounts map[uint8]string, issuedSKA []uint8) []exptypes
 	return rows
 }
 
-// coinRowsFromSummary builds []CoinRowData from a block summary, merging
-// CoinAmounts with CoinTxStats so each row carries amount, tx count, and size.
-// issuedSKA ensures all ever-emitted SKA types appear even with zero activity.
 func coinRowsFromSummary(summary *apitypes.BlockDataBasic, issuedSKA []uint8) []exptypes.CoinRowData {
 	rows := coinRowsFromAmounts(summary.CoinAmounts, issuedSKA)
 	for i := range rows {
