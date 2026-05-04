@@ -59,8 +59,8 @@ const (
 	workKey         = "work"
 	rateKey         = "rate"
 
-	// SKA coin supply chart prefix (ska-supply-N where N is coin type)
-	SKASupplyPrefix = "ska-supply-"
+	// SKA coin supply chart prefix (supply-skaN where N is coin type)
+	SKASupplyPrefix = "supply-ska"
 )
 
 // binLevel specifies the granularity of data.
@@ -88,7 +88,7 @@ func isWindowBin(chart string) bool {
 	return false
 }
 
-// isSKASupplyChart checks if the chart ID is an SKA supply chart (ska-supply-N).
+// isSKASupplyChart checks if the chart ID is an SKA supply chart (supply-skaN).
 func isSKASupplyChart(chartID string) bool {
 	return len(chartID) > len(SKASupplyPrefix) && chartID[:len(SKASupplyPrefix)] == SKASupplyPrefix
 }
