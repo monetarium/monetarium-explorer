@@ -1922,7 +1922,7 @@ func (exp *explorerUI) Charts(w http.ResponseWriter, r *http.Request) {
 
 	str, err := exp.templates.exec("charts", struct {
 		*CommonPageData
-		Premine         int64
+		Premine        int64
 		TargetPoolSize uint32
 		ActiveSKATypes []uint8
 	}{

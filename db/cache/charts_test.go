@@ -380,7 +380,7 @@ func TestSKASupplyData_ExactPrecision(t *testing.T) {
 func TestSKACoinType_Extraction(t *testing.T) {
 	tests := []struct {
 		chartID string
-		want   uint8
+		want    uint8
 	}{
 		{"ska-supply-1", 1},
 		{"ska-supply-2", 2},

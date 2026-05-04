@@ -1046,6 +1046,7 @@ func (pgb *ChainDB) skaSupplyUpdater(charts *cache.ChartData) error {
 
 	return nil
 }
+
 // appears, along with the index of the transaction in each of the blocks. The
 // next and previous block hashes are NOT SET in each BlockStatus.
 func (pgb *ChainDB) TransactionBlocks(ctx context.Context, txHash string) ([]*dbtypes.BlockStatus, []uint32, error) {

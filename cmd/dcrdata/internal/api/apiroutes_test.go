@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -170,5 +171,58 @@ func TestSKASupplyChart_ResponseFormat(t *testing.T) {
 		t.Error("ska-supply-1 returns 500 - should handle gracefully")
 	default:
 		t.Logf("ska-supply-1 returns %d", w.Code)
+	}
+}
+
+func TestSKASupplyChart_ReturnsHeight(t *testing.T) {
+	// Test the live server endpoint directly
+	resp, err := http.Get("http://127.0.0.1:7777/api/chart/ska-supply-1?axis=height")
+	if err != nil {
+		t.Skipf("Server not available: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Skipf("SKA chart not available: %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+
+	var data map[string]interface{}
+	if err := json.Unmarshal(body, &data); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	heights, hasHeight := data["h"].([]interface{})
+	if !hasHeight {
+		t.Error("SKA chart should return height (h) field")
+		return
+	}
+	if len(heights) == 0 {
+		t.Error("SKA chart height field should not be empty")
+		return
+	}
+
+	hasNonZero := false
+	for _, h := range heights {
+		if h == nil {
+			continue
+		}
+		switch v := h.(type) {
+		case float64:
+			if v > 0 {
+				hasNonZero = true
+			}
+		case int64:
+			if v > 0 {
+				hasNonZero = true
+			}
+		}
+	}
+	if !hasNonZero {
+		t.Error("SKA chart height field should have non-zero values")
 	}
 }

@@ -1702,12 +1702,12 @@ func (charts *ChartData) skaSupplyChart(chartID string, bin binLevel, axis axisT
 		switch axis {
 		case HeightAxis:
 			return encode(lengtherMap{
-				heightKey:  ChartUintsFromInt64(data.Heights),
+				heightKey: ChartUintsFromInt64(data.Heights),
 				supplyKey: ChartUintsFromStrings(data.Values),
 			}, seed)
 		default:
 			return encode(lengtherMap{
-				timeKey:    charts.Blocks.Time,
+				timeKey:   charts.Blocks.Time,
 				supplyKey: ChartUintsFromStrings(data.Values),
 			}, seed)
 		}
@@ -1722,7 +1722,7 @@ func (charts *ChartData) skaSupplyChart(chartID string, bin binLevel, axis axisT
 		default:
 			times, _ := aggregateSKASupply(data.Heights, nil)
 			return encode(lengtherMap{
-				timeKey:    ChartUintsFromInt64(times),
+				timeKey:   ChartUintsFromInt64(times),
 				supplyKey: ChartUintsFromStrings(values),
 			}, seed)
 		}
@@ -1766,7 +1766,7 @@ func aggregateSKASupply(heights []int64, values []string) ([]int64, []string) {
 
 	type dailyAgg struct {
 		height int64
-		value *big.Int
+		value  *big.Int
 	}
 	dailyMap := make(map[int64]*big.Int)
 
