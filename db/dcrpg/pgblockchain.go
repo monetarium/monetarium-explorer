@@ -1011,11 +1011,14 @@ func (pgb *ChainDB) skaSupplyUpdater(charts *cache.ChartData) error {
 
 	for _, entry := range skaSupply {
 		coinType := entry.CoinType
-		if coinType == 0 {
-			continue
-		}
 
-		rows, err := pgb.db.QueryContext(ctx, internal.SelectSKACoinSupplyPerBlock, charts.NewAtomsTip(), coinType)
+		var rows *sql.Rows
+		var err error
+		if coinType == 0 {
+			rows, err = pgb.db.QueryContext(ctx, internal.SelectVARCoinSupplyPerBlock, charts.NewAtomsTip())
+		} else {
+			rows, err = pgb.db.QueryContext(ctx, internal.SelectSKACoinSupplyPerBlock, charts.NewAtomsTip(), coinType)
+		}
 		if err != nil {
 			log.Warnf("SKA%d supply query failed: %v", coinType, err)
 			continue

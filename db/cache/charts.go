@@ -1677,8 +1677,8 @@ func stakedCoinsChart(charts *ChartData, bin binLevel, axis axisType) ([]byte, e
 // Values are returned as exact-precision strings to preserve 18 decimal places.
 func (charts *ChartData) skaSupplyChart(chartID string, bin binLevel, axis axisType) ([]byte, error) {
 	coinType := skaCoinType(chartID)
-	if coinType == 0 {
-		return nil, fmt.Errorf("invalid SKA coin type from chart ID: %s", chartID)
+	if !isSKASupplyChart(chartID) {
+		return nil, fmt.Errorf("invalid SKA supply chart: %s", chartID)
 	}
 
 	// SKA supply data should already be pre-loaded in SKASupply map
