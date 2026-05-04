@@ -1034,6 +1034,11 @@ func (pgb *ChainDB) skaSupplyUpdater(charts *cache.ChartData) error {
 			heights = append(heights, h)
 			values = append(values, v)
 		}
+		if err := rows.Err(); err != nil {
+			log.Warnf("SKA%d iteration error: %v", coinType, err)
+			rows.Close()
+			continue
+		}
 		rows.Close()
 
 		if len(heights) > 0 {
