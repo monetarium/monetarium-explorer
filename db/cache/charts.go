@@ -1702,13 +1702,15 @@ func (charts *ChartData) skaSupplyChart(chartID string, bin binLevel, axis axisT
 		switch axis {
 		case HeightAxis:
 			return encode(lengtherMap{
-				heightKey: ChartUintsFromInt64(data.Heights),
-				supplyKey: ChartUintsFromStrings(data.Values),
+				heightKey:       ChartUintsFromInt64(data.Heights),
+				supplyKey:       ChartUintsFromStrings(data.Values),
+				anonymitySetKey: ChartUints{},
 			}, seed)
 		default:
 			return encode(lengtherMap{
-				timeKey:   charts.Blocks.Time,
-				supplyKey: ChartUintsFromStrings(data.Values),
+				timeKey:        charts.Blocks.Time,
+				supplyKey:      ChartUintsFromStrings(data.Values),
+				anonymitySetKey: ChartUints{},
 			}, seed)
 		}
 	case DayBin:
@@ -1716,14 +1718,16 @@ func (charts *ChartData) skaSupplyChart(chartID string, bin binLevel, axis axisT
 		switch axis {
 		case HeightAxis:
 			return encode(lengtherMap{
-				heightKey: ChartUintsFromInt64(heights),
-				supplyKey: ChartUintsFromStrings(values),
+				heightKey:       ChartUintsFromInt64(heights),
+				supplyKey:       ChartUintsFromStrings(values),
+				anonymitySetKey: ChartUints{},
 			}, seed)
 		default:
 			times, _ := aggregateSKASupply(data.Heights, nil)
 			return encode(lengtherMap{
-				timeKey:   ChartUintsFromInt64(times),
-				supplyKey: ChartUintsFromStrings(values),
+				timeKey:        ChartUintsFromInt64(times),
+				supplyKey:      ChartUintsFromStrings(values),
+				anonymitySetKey: ChartUints{},
 			}, seed)
 		}
 	}
