@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"os"
 	"regexp"
 	"strings"
 	"testing"
@@ -165,5 +166,16 @@ func TestSKACoinSupplyPerBlock(t *testing.T) {
 	}
 	if !strings.Contains(SelectSKACoinSupplyPerBlock, "ska_value") {
 		t.Error("SelectSKACoinSupplyPerBlock must use ska_value for precision")
+	}
+}
+
+func TestMixedCoinsControlRemoved(t *testing.T) {
+	content, err := os.ReadFile("../../../cmd/dcrdata/views/charts.tmpl")
+	if err != nil {
+		t.Skip("template not accessible")
+	}
+
+	if strings.Contains(string(content), `data-charts="coin-supply">Mixed Coins`) {
+		t.Error("VISIBILITY Mixed Coins control should be removed from charts.tmpl")
 	}
 }

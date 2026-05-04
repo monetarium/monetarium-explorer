@@ -2,10 +2,12 @@ package cache
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -340,4 +342,91 @@ func TestChartReorg(t *testing.T) {
 	// All but one block.
 	resetCharts()
 	testReorg(2, 2, 1, 1, 2)
+}
+
+func TestSKASupplyData_ExactPrecision(t *testing.T) {
+	data := SKASupplyData{
+		1: skaSupplyChartData{
+			Heights: []int64{100, 200},
+			Values: []string{
+				"123456789012345678.123456789012345678",
+				"999999999999999999.999999999999999999",
+			},
+		},
+	}
+
+	b, err := json.Marshal(data)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+
+	var result SKASupplyData
+	if err := json.Unmarshal(b, &result); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	if len(result) != 1 {
+		t.Fatalf("expected 1 coin type, got %d", len(result))
+	}
+
+	if result[1].Values[0] != "123456789012345678.123456789012345678" {
+		t.Errorf("precision lost: got %s, want 123456789012345678.123456789012345678", result[1].Values[0])
+	}
+	if result[1].Values[1] != "999999999999999999.999999999999999999" {
+		t.Errorf("precision lost: got %s, want 999999999999999999.999999999999999999", result[1].Values[1])
+	}
+}
+
+func TestSKACoinType_Extraction(t *testing.T) {
+	tests := []struct {
+		chartID string
+		want   uint8
+	}{
+		{"ska-supply-1", 1},
+		{"ska-supply-2", 2},
+		{"ska-supply-255", 255},
+		{"ska-supply-10", 10},
+		{"ska-supply-0", 0},
+		{"coin-supply", 0},
+		{"invalid", 0},
+		{"", 0},
+	}
+	for _, tc := range tests {
+		t.Run(tc.chartID, func(t *testing.T) {
+			got := skaCoinType(tc.chartID)
+			if got != tc.want {
+				t.Errorf("skaCoinType(%q): want %d, got %d", tc.chartID, tc.want, got)
+			}
+		})
+	}
+}
+
+func TestAggregateSKASupply_DailyBins(t *testing.T) {
+	heights := []int64{100, 101, 102, 143, 144, 145, 288, 289, 430}
+	values := []string{
+		"1000000000000000000",
+		"2000000000000000000",
+		"3000000000000000000",
+		"4000000000000000000",
+		"5000000000000000000",
+		"6000000000000000000",
+		"7000000000000000000",
+		"8000000000000000000",
+		"9000000000000000000",
+	}
+
+	days, dayValues := aggregateSKASupply(heights, values)
+
+	if len(days) < 2 {
+		t.Fatalf("expected at least 2 days, got %d", len(days))
+	}
+
+	for i, v := range dayValues {
+		if v == "" {
+			t.Errorf("day %d: empty value", i)
+		}
+		if strings.Contains(v, "e") {
+			t.Errorf("day %d: scientific notation (float): %s", i, v)
+		}
+	}
 }

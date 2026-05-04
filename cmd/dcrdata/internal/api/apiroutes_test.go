@@ -146,3 +146,19 @@ func TestChartAPI_SKASupplyPrecision(t *testing.T) {
 		t.Errorf("coin-supply: expected 200 or 404, got %d", w.Code)
 	}
 }
+
+func TestSKASupplyChart_ResponseFormat(t *testing.T) {
+	mux := NewAPIRouter(&appContext{DataSource: noopDS{}}, "", false, false)
+
+	req := httptest.NewRequest(http.MethodGet, "/chart/ska-supply-1", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code == http.StatusOK {
+		t.Log("ska-supply-1 returns 200 - data loaded successfully")
+	} else if w.Code == http.StatusNotFound || w.Code == http.StatusBadRequest {
+		t.Logf("ska-supply-1 returns %d - data not loaded yet (gap exposed)", w.Code)
+	} else {
+		t.Errorf("ska-supply-1 should return 200/404/400, got %d", w.Code)
+	}
+}
