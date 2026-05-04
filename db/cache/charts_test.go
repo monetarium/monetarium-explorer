@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -347,7 +346,7 @@ func TestChartReorg(t *testing.T) {
 func TestSKASupplyData_ExactPrecision(t *testing.T) {
 	data := SKASupplyData{
 		1: SKASupplyChartData{
-			Heights: []int64{100, 200},
+			Timestamps: []int64{100, 200},
 			Values: []string{
 				"123456789012345678.123456789012345678",
 				"999999999999999999.999999999999999999",
@@ -402,31 +401,40 @@ func TestSKACoinType_Extraction(t *testing.T) {
 }
 
 func TestAggregateSKASupply_DailyBins(t *testing.T) {
-	heights := []int64{100, 101, 102, 143, 144, 145, 288, 289, 430}
+	// Use timestamps instead of heights
+	// Day 1: 0 to 86399
+	// Day 2: 86400 to 172799
+	timestamps := []int64{100, 200, 86300, 86400, 90000, 172700, 172800, 180000, 259100}
 	values := []string{
-		"1000000000000000000",
-		"2000000000000000000",
-		"3000000000000000000",
-		"4000000000000000000",
-		"5000000000000000000",
-		"6000000000000000000",
-		"7000000000000000000",
-		"8000000000000000000",
-		"9000000000000000000",
+		"100",
+		"200",
+		"300",
+		"400",
+		"500",
+		"600",
+		"700",
+		"800",
+		"900",
 	}
 
-	days, dayValues := aggregateSKASupply(heights, values)
+	days, dayValues := aggregateSKASupply(timestamps, values)
 
-	if len(days) < 2 {
-		t.Fatalf("expected at least 2 days, got %d", len(days))
+	if len(days) != 3 {
+		t.Fatalf("expected 3 days, got %d", len(days))
 	}
 
-	for i, v := range dayValues {
-		if v == "" {
-			t.Errorf("day %d: empty value", i)
+	// Verify sorting
+	for i := 0; i < len(days)-1; i++ {
+		if days[i] >= days[i+1] {
+			t.Errorf("days not sorted: %d >= %d", days[i], days[i+1])
 		}
-		if strings.Contains(v, "e") {
-			t.Errorf("day %d: scientific notation (float): %s", i, v)
+	}
+
+	// Verify last-value aggregation
+	expected := []string{"300", "600", "900"}
+	for i, v := range dayValues {
+		if v != expected[i] {
+			t.Errorf("day %d: want %s, got %s", i, expected[i], v)
 		}
 	}
 }

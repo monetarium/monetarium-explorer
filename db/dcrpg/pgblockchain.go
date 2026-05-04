@@ -1026,17 +1026,17 @@ func (pgb *ChainDB) skaSupplyUpdater(charts *cache.ChartData) error {
 			continue
 		}
 
-		var heights []int64
+		var timestamps []int64
 		var values []string
 		for rows.Next() {
-			var h int64
+			var t int64
 			var v string
-			if err := rows.Scan(&h, &v); err != nil {
+			if err := rows.Scan(&t, &v); err != nil {
 				log.Warnf("SKA%d scan failed: %v", coinType, err)
 				rows.Close()
 				continue
 			}
-			heights = append(heights, h)
+			timestamps = append(timestamps, t)
 			values = append(values, v)
 		}
 		if err := rows.Err(); err != nil {
@@ -1046,10 +1046,10 @@ func (pgb *ChainDB) skaSupplyUpdater(charts *cache.ChartData) error {
 		}
 		rows.Close()
 
-		if len(heights) > 0 {
+		if len(timestamps) > 0 {
 			charts.SKASupply[coinType] = cache.SKASupplyChartData{
-				Heights: heights,
-				Values:  values,
+				Timestamps: timestamps,
+				Values:      values,
 			}
 		}
 	}
