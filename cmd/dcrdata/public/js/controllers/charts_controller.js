@@ -869,7 +869,7 @@ export default class extends Controller {
         dateWindow: [this.lastZoom.start, this.lastZoom.end]
       })
     }
-    if (selected !== this.settings.zoom && this.lastZoom) {
+    if (selected !== this.settings.zoom) {
       this._zoomCallback(this.lastZoom.start, this.lastZoom.end)
     }
     await animationFrame()
