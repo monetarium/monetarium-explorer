@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	apitypes "github.com/monetarium/monetarium-explorer/api/types"
@@ -154,20 +155,20 @@ func TestSKASupplyChart_ResponseFormat(t *testing.T) {
 	w := httptest.NewRecorder()
 	mux.ServeHTTP(w, req)
 
+	if strings.Contains(w.Body.String(), "nil pointer") {
+		t.Error("ska-supply-1 panics due to nil ChartData - test environment issue")
+	}
+
 	switch w.Code {
 	case http.StatusOK:
 		t.Log("ska-supply-1 returns 200 - data loaded successfully")
 	case http.StatusServiceUnavailable:
-		t.Log("ska-supply-1 returns 503 - SKA data not available (expected when SKASupply not loaded)")
+		t.Log("ska-supply-1 returns 503 - SKA data not available (expected in test)")
 	case http.StatusNotFound:
 		t.Log("ska-supply-1 returns 404 - chart type unknown")
 	case http.StatusInternalServerError:
-		if strings.Contains(w.Body.String(), "nil pointer") {
-			t.Error("ska-supply-1 panics due to nil ChartData - need data loading implementation")
-		} else {
-			t.Logf("ska-supply-1 returns 500: %s", w.Body.String())
-		}
+		t.Error("ska-supply-1 returns 500 - should handle gracefully")
 	default:
-		t.Logf("ska-supply-1 returns %d: %s", w.Code, w.Body.String())
+		t.Logf("ska-supply-1 returns %d", w.Code)
 	}
 }
