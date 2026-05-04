@@ -300,7 +300,7 @@ type zoomSet struct {
 
 type SKASupplyChartData struct {
 	Timestamps []int64
-	Values      []string
+	Values     []string
 }
 
 // SKASupplyData stores per-coin-type cumulative supply data (strings for precision).

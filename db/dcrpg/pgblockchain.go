@@ -1049,7 +1049,7 @@ func (pgb *ChainDB) skaSupplyUpdater(charts *cache.ChartData) error {
 		if len(timestamps) > 0 {
 			charts.SKASupply[coinType] = cache.SKASupplyChartData{
 				Timestamps: timestamps,
-				Values:      values,
+				Values:     values,
 			}
 		}
 	}
