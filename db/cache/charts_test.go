@@ -346,7 +346,7 @@ func TestChartReorg(t *testing.T) {
 
 func TestSKASupplyData_ExactPrecision(t *testing.T) {
 	data := SKASupplyData{
-		1: skaSupplyChartData{
+		1: SKASupplyChartData{
 			Heights: []int64{100, 200},
 			Values: []string{
 				"123456789012345678.123456789012345678",

@@ -297,11 +297,13 @@ type zoomSet struct {
 	AnonymitySet ChartUints
 }
 
-// SKASupplyData stores per-coin-type cumulative supply data (strings for precision).
-type SKASupplyData map[uint8]struct {
-	Heights  []int64
-	Values   []string
+type SKASupplyChartData struct {
+	Heights []int64
+	Values  []string
 }
+
+// SKASupplyData stores per-coin-type cumulative supply data (strings for precision).
+type SKASupplyData map[uint8]SKASupplyChartData
 
 // Snip truncates the zoomSet to a provided length.
 func (set *zoomSet) Snip(length int) {
