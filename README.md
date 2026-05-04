@@ -10,6 +10,7 @@ Monetarium Explorer is a block explorer for the [Monetarium](https://monetarium.
 - [Overview](#overview)
 - [Requirements](#requirements)
 - [Building](#building)
+- [Development Workflow](#development-workflow)
 - [Contributing](#contributing)
 - [Local Testing on Testnet](#local-testing-on-testnet)
 - [Getting Started (Production)](#getting-started-production)
@@ -100,6 +101,39 @@ Mount your `monetarium-node` configuration directory (containing `rpc.cert`) to 
 ```sh
 docker run -p 7777:7777 -v ~/.monetarium:/home/explorer/.monetarium monetarium-explorer
 ```
+
+---
+
+## Development Workflow
+
+### Live reloading of CSS, JS, and HTML templates
+
+During development you can get instant feedback on frontend changes without restarting the Go server.
+
+**1. Start the webpack watcher** (from `cmd/dcrdata`):
+
+```sh
+npm run watch
+```
+
+This watches all JS and SCSS files imported from `public/index.js` and rebuilds on every save. The output hashes in `public/dist/manifest.json` are updated automatically, and the server reads that file on every request — so a hard reload in the browser is all you need to pick up CSS or JS changes.
+
+**2. Start the explorer with HTML template reloading** (from `cmd/dcrdata`):
+
+```sh
+./monetarium-explorer --reload-html
+```
+
+With `--reload-html` enabled, Go HTML templates in the `views/` folder are re-parsed on every request, so you can edit `.tmpl` files and see changes with a hard reload in the browser — no server restart required.
+
+**Summary of what requires a restart vs. what doesn't:**
+
+| Change                           | Requires restart?         |
+| -------------------------------- | ------------------------- |
+| SCSS / CSS (`npm run watch`)     | No — hard reload          |
+| JavaScript (`npm run watch`)     | No — hard reload          |
+| HTML templates (`--reload-html`) | No — hard reload          |
+| Go source code                   | Yes — rebuild and restart |
 
 ---
 
