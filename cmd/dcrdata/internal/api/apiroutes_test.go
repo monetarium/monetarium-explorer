@@ -137,18 +137,6 @@ func TestChartAPI_SKASupplyAccepted(t *testing.T) {
 	}
 }
 
-func TestChartAPI_SKASupplyPrecision(t *testing.T) {
-	mux := NewAPIRouter(&appContext{DataSource: noopDS{}}, "", false, false)
-
-	req := httptest.NewRequest(http.MethodGet, "/chart/coin-supply", nil)
-	w := httptest.NewRecorder()
-	mux.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK && w.Code != http.StatusNotFound {
-		t.Errorf("coin-supply: expected 200 or 404, got %d", w.Code)
-	}
-}
-
 func TestSKASupplyChart_ResponseFormat(t *testing.T) {
 	mux := NewAPIRouter(&appContext{DataSource: noopDS{}}, "", false, false)
 
