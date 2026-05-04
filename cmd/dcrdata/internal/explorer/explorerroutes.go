@@ -1912,16 +1912,24 @@ func (exp *explorerUI) DecodeTxPage(w http.ResponseWriter, r *http.Request) {
 func (exp *explorerUI) Charts(w http.ResponseWriter, r *http.Request) {
 	exp.pageData.RLock()
 	tpSize := exp.pageData.HomeInfo.PoolInfo.Target
+	skaSupply := exp.pageData.HomeInfo.SKACoinSupply
 	exp.pageData.RUnlock()
+
+	activeSKATypes := make([]uint8, len(skaSupply))
+	for i, entry := range skaSupply {
+		activeSKATypes[i] = entry.CoinType
+	}
 
 	str, err := exp.templates.exec("charts", struct {
 		*CommonPageData
-		Premine        int64
+		Premine         int64
 		TargetPoolSize uint32
+		ActiveSKATypes []uint8
 	}{
 		CommonPageData: exp.commonData(r),
 		Premine:        exp.premine,
 		TargetPoolSize: tpSize,
+		ActiveSKATypes: activeSKATypes,
 	})
 	if err != nil {
 		log.Errorf("Template execute failure: %v", err)

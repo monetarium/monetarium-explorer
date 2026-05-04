@@ -38,6 +38,9 @@
                             <option value="tx-count">Transaction Count</option>
                             <option value="pow-difficulty">PoW Difficulty</option>
                             <option value="coin-supply">Circulation</option>
+                            {{range .ActiveSKATypes}}
+                            <option value="ska-supply-{{.}}">Circulation (SKA{{.}})</option>
+                            {{end}}
                             <option value="fees">Fees</option>
                             <option value="privacy-participation">Privacy Participation</option>
                             <option value="duration-btw-blocks">Duration Between Blocks</option>

@@ -153,11 +153,17 @@ func TestSKACoinSupplyQueryExists(t *testing.T) {
 	}
 }
 
-func TestSKACoinSupplyHasBlockHeight(t *testing.T) {
-	if SelectSKACoinSupply == "" {
-		t.Skip("SelectSKACoinSupply not defined")
+func TestSKACoinSupplyPerBlock(t *testing.T) {
+	if SelectSKACoinSupplyPerBlock == "" {
+		t.Fatal("SelectSKACoinSupplyPerBlock must be defined for chart timeline")
 	}
-	if !strings.Contains(SelectSKACoinSupply, "block_height") && !strings.Contains(SelectSKACoinSupply, "block_index") {
-		t.Error("SelectSKACoinSupply should include block height for chart time axis")
+	if !strings.Contains(SelectSKACoinSupplyPerBlock, "coin_type = $2") {
+		t.Error("SelectSKACoinSupplyPerBlock must filter by coin_type parameter ($2)")
+	}
+	if !strings.Contains(SelectSKACoinSupplyPerBlock, "block_height") {
+		t.Error("SelectSKACoinSupplyPerBlock must include block_height for time axis")
+	}
+	if !strings.Contains(SelectSKACoinSupplyPerBlock, "ska_value") {
+		t.Error("SelectSKACoinSupplyPerBlock must use ska_value for precision")
 	}
 }
