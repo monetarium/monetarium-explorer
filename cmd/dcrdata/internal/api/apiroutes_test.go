@@ -128,12 +128,12 @@ func TestAPITxOut_SKAFields(t *testing.T) {
 func TestChartAPI_SKASupplyAccepted(t *testing.T) {
 	mux := NewAPIRouter(&appContext{DataSource: noopDS{}}, "", false, false)
 
-	req := httptest.NewRequest(http.MethodGet, "/chart/supply-ska1", nil)
+	req := httptest.NewRequest(http.MethodGet, "/chart/coin-supply/1", nil)
 	w := httptest.NewRecorder()
 	mux.ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK && w.Code != http.StatusNotFound {
-		t.Errorf("supply-ska1: expected 200 or 404, got %d", w.Code)
+		t.Errorf("coin-supply/1: expected 200 or 404, got %d", w.Code)
 	}
 }
 
@@ -152,31 +152,31 @@ func TestChartAPI_SKASupplyPrecision(t *testing.T) {
 func TestSKASupplyChart_ResponseFormat(t *testing.T) {
 	mux := NewAPIRouter(&appContext{DataSource: noopDS{}}, "", false, false)
 
-	req := httptest.NewRequest(http.MethodGet, "/chart/supply-ska1", nil)
+	req := httptest.NewRequest(http.MethodGet, "/chart/coin-supply/1", nil)
 	w := httptest.NewRecorder()
 	mux.ServeHTTP(w, req)
 
 	if strings.Contains(w.Body.String(), "nil pointer") {
-		t.Error("supply-ska1 panics due to nil ChartData - test environment issue")
+		t.Error("coin-supply/1 panics due to nil ChartData - test environment issue")
 	}
 
 	switch w.Code {
 	case http.StatusOK:
-		t.Log("supply-ska1 returns 200 - data loaded successfully")
+		t.Log("coin-supply/1 returns 200 - data loaded successfully")
 	case http.StatusServiceUnavailable:
-		t.Log("supply-ska1 returns 503 - SKA data not available (expected in test)")
+		t.Log("coin-supply/1 returns 503 - SKA data not available (expected in test)")
 	case http.StatusNotFound:
-		t.Log("supply-ska1 returns 404 - chart type unknown")
+		t.Log("coin-supply/1 returns 404 - chart type unknown")
 	case http.StatusInternalServerError:
-		t.Error("supply-ska1 returns 500 - should handle gracefully")
+		t.Error("coin-supply/1 returns 500 - should handle gracefully")
 	default:
-		t.Logf("supply-ska1 returns %d", w.Code)
+		t.Logf("coin-supply/1 returns %d", w.Code)
 	}
 }
 
 func TestSKASupplyChart_ReturnsHeight(t *testing.T) {
 	// Test the live server endpoint directly
-	resp, err := http.Get("http://127.0.0.1:7777/api/chart/supply-ska1?axis=height")
+	resp, err := http.Get("http://127.0.0.1:7777/api/chart/coin-supply/1?axis=height")
 	if err != nil {
 		t.Skipf("Server not available: %v", err)
 	}

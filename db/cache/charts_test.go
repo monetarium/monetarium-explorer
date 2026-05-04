@@ -382,11 +382,11 @@ func TestSKACoinType_Extraction(t *testing.T) {
 		chartID string
 		want    uint8
 	}{
-		{"supply-ska1", 1},
-		{"supply-ska2", 2},
-		{"supply-ska255", 255},
-		{"supply-ska10", 10},
-		{"supply-ska0", 0},
+		{"coin-supply/1", 1},
+		{"coin-supply/2", 2},
+		{"coin-supply/255", 255},
+		{"coin-supply/10", 10},
+		{"coin-supply/0", 0},
 		{"coin-supply", 0},
 		{"invalid", 0},
 		{"", 0},
