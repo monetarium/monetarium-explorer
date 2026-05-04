@@ -61,8 +61,6 @@ const (
 	rateKey         = "rate"
 
 	// SKA coin supply chart prefix (coin-supply/N where N is coin type)
-	// Deprecated: supply-ska0 and supply-ska* formats are deprecated.
-	//   Use /api/chart/coin-supply/N instead (e.g., /api/chart/coin-supply/0 for VAR).
 	SKASupplyPrefix = "coin-supply/"
 )
 
