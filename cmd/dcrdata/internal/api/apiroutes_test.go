@@ -131,8 +131,9 @@ func TestChartAPI_SKASupplyAccepted(t *testing.T) {
 	w := httptest.NewRecorder()
 	mux.ServeHTTP(w, req)
 
-	if w.Code != http.StatusOK && w.Code != http.StatusNotFound {
-		t.Errorf("coin-supply/1: expected 200 or 404, got %d", w.Code)
+	// Accept 200 (data available), 404 (unknown chart), or 503 (no data available)
+	if w.Code != http.StatusOK && w.Code != http.StatusNotFound && w.Code != http.StatusServiceUnavailable {
+		t.Errorf("coin-supply/1: expected 200, 404, or 503, got %d", w.Code)
 	}
 }
 

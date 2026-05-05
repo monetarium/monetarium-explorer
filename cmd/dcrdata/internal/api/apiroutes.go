@@ -1895,13 +1895,18 @@ func (c *appContext) ChartTypeData(w http.ResponseWriter, r *http.Request) {
 	axis := r.URL.Query().Get("axis")
 
 	// Check if this is an SKA supply chart and if data needs to be loaded
-	if cache.IsSKASupplyChart(chartType) {
+	if c.charts != nil && cache.IsSKASupplyChart(chartType) {
 		coinType := cache.SkaCoinType(chartType)
 		if coinType > 0 && !c.charts.SKASupplyExists(coinType) {
 			if err := c.DataSource.LoadSKASupplyForCoin(r.Context(), c.charts, coinType); err != nil {
 				log.Warnf("ChartTypeData: failed to load SKA supply for coin type %d: %v", coinType, err)
 			}
 		}
+	}
+
+	if c.charts == nil {
+		http.Error(w, "chart data not available", http.StatusServiceUnavailable)
+		return
 	}
 
 	chartData, err := c.charts.Chart(chartType, bin, axis)

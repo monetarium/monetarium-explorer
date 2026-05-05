@@ -865,6 +865,9 @@ func (charts *ChartData) TicketPriceTip() int32 {
 
 // SKASupplyExists checks if SKA supply data exists for the given coin type.
 func (charts *ChartData) SKASupplyExists(coinType uint8) bool {
+	if charts == nil {
+		return false
+	}
 	charts.mtx.RLock()
 	defer charts.mtx.RUnlock()
 	if charts.SKASupply == nil {

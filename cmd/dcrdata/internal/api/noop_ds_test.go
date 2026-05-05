@@ -4,6 +4,7 @@ import (
 	"context"
 
 	apitypes "github.com/monetarium/monetarium-explorer/api/types"
+	"github.com/monetarium/monetarium-explorer/db/cache"
 	"github.com/monetarium/monetarium-explorer/db/dbtypes"
 	"github.com/monetarium/monetarium-node/chaincfg/chainhash"
 	chainjson "github.com/monetarium/monetarium-node/rpc/jsonrpc/types"
@@ -127,3 +128,6 @@ func (noopDS) GetAddressTransactionsRawWithSkip(_ context.Context, _ string, _, 
 	return nil
 }
 func (noopDS) GetMempoolPriceCountTime() *apitypes.PriceCountTime { return nil }
+func (noopDS) LoadSKASupplyForCoin(_ context.Context, _ *cache.ChartData, _ uint8) error {
+	return nil
+}
