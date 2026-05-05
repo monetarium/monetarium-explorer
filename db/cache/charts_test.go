@@ -392,7 +392,7 @@ func TestSKACoinType_Extraction(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.chartID, func(t *testing.T) {
-			got := skaCoinType(tc.chartID)
+			got := SkaCoinType(tc.chartID)
 			if got != tc.want {
 				t.Errorf("skaCoinType(%q): want %d, got %d", tc.chartID, tc.want, got)
 			}
