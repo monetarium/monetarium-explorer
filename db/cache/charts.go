@@ -299,6 +299,7 @@ type zoomSet struct {
 }
 
 type SKASupplyChartData struct {
+	Heights    []int64
 	Timestamps []int64
 	Values     []string
 }
@@ -1724,16 +1725,11 @@ func (charts *ChartData) skaSupplyChart(chartID string, bin binLevel, axis axisT
 			}{
 				Bin:    string(bin),
 				Axis:   string(axis),
-				H:      data.Timestamps,
+				H:      data.Heights,
 				Supply: data.Values,
 			}
 			return json.Marshal(resp)
 		default:
-			// Convert ChartUints ([]uint64) to []int64
-			timeSlice := make([]int64, len(charts.Blocks.Time))
-			for i, t := range charts.Blocks.Time {
-				timeSlice[i] = int64(t)
-			}
 			resp := struct {
 				Bin    string   `json:"bin"`
 				Axis   string   `json:"axis"`
@@ -1742,13 +1738,13 @@ func (charts *ChartData) skaSupplyChart(chartID string, bin binLevel, axis axisT
 			}{
 				Bin:    string(bin),
 				Axis:   string(axis),
-				T:      timeSlice,
+				T:      data.Timestamps,
 				Supply: data.Values,
 			}
 			return json.Marshal(resp)
 		}
 	case DayBin:
-		timestamps, values := aggregateSKASupply(data.Timestamps, data.Values)
+		timestamps, heights, values := aggregateSKASupply(data.Timestamps, data.Heights, data.Values)
 		switch axis {
 		case HeightAxis:
 			resp := struct {
@@ -1759,7 +1755,7 @@ func (charts *ChartData) skaSupplyChart(chartID string, bin binLevel, axis axisT
 			}{
 				Bin:    string(bin),
 				Axis:   string(axis),
-				H:      timestamps,
+				H:      heights,
 				Supply: values,
 			}
 			return json.Marshal(resp)
@@ -1810,19 +1806,28 @@ func ChartUintsFromStrings(data []string) ChartUints {
 }
 
 // aggregateSKASupply aggregates block-level SKA supply data to daily bins.
-// Returns timestamps (Unix time seconds) and values for each day.
-func aggregateSKASupply(timestamps []int64, values []string) ([]int64, []string) {
+// Returns timestamps (Unix time seconds), block heights, and values for each day.
+func aggregateSKASupply(timestamps []int64, heights []int64, values []string) ([]int64, []int64, []string) {
 	if len(timestamps) == 0 {
-		return nil, nil
+		return nil, nil, nil
 	}
 
-	dailyMap := make(map[int64]*big.Int)
+	type dailyData struct {
+		timestamp int64
+		height    int64
+		value     *big.Int
+	}
+	dailyMap := make(map[int64]dailyData)
 
 	for i, t := range timestamps {
 		dayKey := t / 86400
-		if i < len(values) {
+		if i < len(values) && i < len(heights) {
 			if v, ok := new(big.Int).SetString(values[i], 10); ok {
-				dailyMap[dayKey] = v
+				dailyMap[dayKey] = dailyData{
+					timestamp: t,
+					height:    heights[i],
+					value:     v,
+				}
 			}
 		}
 	}
@@ -1834,11 +1839,14 @@ func aggregateSKASupply(timestamps []int64, values []string) ([]int64, []string)
 	sort.Slice(dayKeys, func(i, j int) bool { return dayKeys[i] < dayKeys[j] })
 
 	dayTimestamps := make([]int64, 0, len(dailyMap))
+	dayHeights := make([]int64, 0, len(dailyMap))
 	dayValues := make([]string, 0, len(dailyMap))
 	for _, day := range dayKeys {
+		d := dailyMap[day]
 		dayTimestamps = append(dayTimestamps, day*86400)
-		dayValues = append(dayValues, dailyMap[day].String())
+		dayHeights = append(dayHeights, d.height)
+		dayValues = append(dayValues, d.value.String())
 	}
 
-	return dayTimestamps, dayValues
+	return dayTimestamps, dayHeights, dayValues
 }

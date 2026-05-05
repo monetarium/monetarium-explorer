@@ -1029,18 +1029,21 @@ func (pgb *ChainDB) skaSupplyUpdater(charts *cache.ChartData) error {
 			continue
 		}
 
+		var blockHeights []int64
 		var timestamps []int64
-		var values []string
+		var blockValues []string
 		for rows.Next() {
+			var h int64
 			var t time.Time
 			var v string
-			if err := rows.Scan(&t, &v); err != nil {
+			if err := rows.Scan(&h, &t, &v); err != nil {
 				log.Warnf("SKA%d scan failed: %v", coinType, err)
 				rows.Close()
 				continue
 			}
+			blockHeights = append(blockHeights, h)
 			timestamps = append(timestamps, t.Unix())
-			values = append(values, v)
+			blockValues = append(blockValues, v)
 		}
 		if err := rows.Err(); err != nil {
 			log.Warnf("SKA%d iteration error: %v", coinType, err)
@@ -1049,10 +1052,22 @@ func (pgb *ChainDB) skaSupplyUpdater(charts *cache.ChartData) error {
 		}
 		rows.Close()
 
-		if len(timestamps) > 0 {
+		if len(blockValues) > 0 {
+			// Compute cumulative supply
+			var cumulativeValues []string
+			runningTotal := new(big.Int)
+			for _, v := range blockValues {
+				blockValue := new(big.Int)
+				if _, ok := blockValue.SetString(v, 10); ok {
+					runningTotal.Add(runningTotal, blockValue)
+				}
+				cumulativeValues = append(cumulativeValues, runningTotal.String())
+			}
+
 			charts.SKASupply[coinType] = cache.SKASupplyChartData{
+				Heights:    blockHeights,
 				Timestamps: timestamps,
-				Values:     values,
+				Values:     cumulativeValues,
 			}
 		}
 	}
@@ -1079,27 +1094,42 @@ func (pgb *ChainDB) LoadSKASupplyForCoin(ctx context.Context, charts *cache.Char
 	}
 	defer rows.Close()
 
+	var blockHeights []int64
 	var timestamps []int64
-	var values []string
+	var blockValues []string
 	for rows.Next() {
+		var h int64
 		var t time.Time
 		var v string
-		if err := rows.Scan(&t, &v); err != nil {
+		if err := rows.Scan(&h, &t, &v); err != nil {
 			log.Warnf("LoadSKASupplyForCoin: scan failed for coin type %d: %v", coinType, err)
 			continue
 		}
+		blockHeights = append(blockHeights, h)
 		timestamps = append(timestamps, t.Unix())
-		values = append(values, v)
+		blockValues = append(blockValues, v)
 	}
 	if err := rows.Err(); err != nil {
 		log.Warnf("LoadSKASupplyForCoin: iteration error for coin type %d: %v", coinType, err)
 		return err
 	}
 
-	if len(timestamps) > 0 {
+	if len(blockValues) > 0 {
+		// Compute cumulative supply
+		var cumulativeValues []string
+		runningTotal := new(big.Int)
+		for _, v := range blockValues {
+			blockValue := new(big.Int)
+			if _, ok := blockValue.SetString(v, 10); ok {
+				runningTotal.Add(runningTotal, blockValue)
+			}
+			cumulativeValues = append(cumulativeValues, runningTotal.String())
+		}
+
 		charts.SKASupply[coinType] = cache.SKASupplyChartData{
+			Heights:    blockHeights,
 			Timestamps: timestamps,
-			Values:     values,
+			Values:     cumulativeValues,
 		}
 		return nil
 	}

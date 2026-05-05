@@ -416,8 +416,9 @@ func TestAggregateSKASupply_DailyBins(t *testing.T) {
 		"800",
 		"900",
 	}
+	heights := []int64{10, 20, 30, 40, 50, 60, 70, 80, 90}
 
-	days, dayValues := aggregateSKASupply(timestamps, values)
+	days, dayHeights, dayValues := aggregateSKASupply(timestamps, heights, values)
 
 	if len(days) != 3 {
 		t.Fatalf("expected 3 days, got %d", len(days))
@@ -436,5 +437,10 @@ func TestAggregateSKASupply_DailyBins(t *testing.T) {
 		if v != expected[i] {
 			t.Errorf("day %d: want %s, got %s", i, expected[i], v)
 		}
+	}
+
+	// Verify heights are also returned
+	if len(dayHeights) != 3 {
+		t.Fatalf("expected 3 heights, got %d", len(dayHeights))
 	}
 }

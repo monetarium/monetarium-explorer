@@ -249,13 +249,13 @@ const (
 		GROUP BY vouts.coin_type;`
 
 	// SelectSKACoinSupplyPerBlock fetches the cumulative SKA supply per block for a specific coin type.
-	// Uses block_time for time axis (ORDER BY) and accumulates output values.
-	SelectSKACoinSupplyPerBlock = `SELECT transactions.block_time, COALESCE(sum(vouts.ska_value::numeric), 0)::text AS total
+	// Returns: block_height, block_time, total (sum of unspent outputs at that block).
+	SelectSKACoinSupplyPerBlock = `SELECT transactions.block_height, transactions.block_time, COALESCE(sum(vouts.ska_value::numeric), 0)::text AS total
 		FROM vouts JOIN transactions ON vouts.tx_hash = transactions.tx_hash
 		WHERE vouts.spend_tx_row_id IS NULL AND vouts.coin_type = $2
 		AND transactions.is_mainchain AND transactions.is_valid
 		AND transactions.block_height > $1
-		GROUP BY transactions.block_time, transactions.block_height
+		GROUP BY transactions.block_height, transactions.block_time
 		ORDER BY transactions.block_height;`
 
 	// SelectVARCoinSupplyPerBlock fetches the cumulative VAR supply per block.
