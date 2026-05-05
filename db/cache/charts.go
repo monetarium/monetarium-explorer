@@ -1733,11 +1733,13 @@ func (charts *ChartData) skaSupplyChart(chartID string, bin binLevel, axis axisT
 			resp := struct {
 				Bin    string   `json:"bin"`
 				Axis   string   `json:"axis"`
+				H      []int64  `json:"h"`
 				T      []int64  `json:"t"`
 				Supply []string `json:"supply"`
 			}{
 				Bin:    string(bin),
 				Axis:   string(axis),
+				H:      data.Heights,
 				T:      data.Timestamps,
 				Supply: data.Values,
 			}
@@ -1763,11 +1765,13 @@ func (charts *ChartData) skaSupplyChart(chartID string, bin binLevel, axis axisT
 			resp := struct {
 				Bin    string   `json:"bin"`
 				Axis   string   `json:"axis"`
+				H      []int64  `json:"h"`
 				T      []int64  `json:"t"`
 				Supply []string `json:"supply"`
 			}{
 				Bin:    string(bin),
 				Axis:   string(axis),
+				H:      heights,
 				T:      timestamps,
 				Supply: values,
 			}
