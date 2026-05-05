@@ -89,15 +89,15 @@ func isWindowBin(chart string) bool {
 	return false
 }
 
-// isSKASupplyChart checks if the chart ID is an SKA supply chart (coin-supply/N).
-func isSKASupplyChart(chartID string) bool {
+// IsSKASupplyChart checks if the chart ID is an SKA supply chart (coin-supply/N).
+func IsSKASupplyChart(chartID string) bool {
 	return len(chartID) > len(SKASupplyPrefix) && chartID[:len(SKASupplyPrefix)] == SKASupplyPrefix
 }
 
-// skaCoinType extracts the coin type number from an SKA supply chart ID.
+// SkaCoinType extracts the coin type number from an SKA supply chart ID.
 // Returns 0 if the chart ID is invalid.
-func skaCoinType(chartID string) uint8 {
-	if !isSKASupplyChart(chartID) {
+func SkaCoinType(chartID string) uint8 {
+	if !IsSKASupplyChart(chartID) {
 		return 0
 	}
 	var coinType uint8
@@ -863,6 +863,17 @@ func (charts *ChartData) TicketPriceTip() int32 {
 	return int32(len(charts.Windows.TicketPrice))*charts.DiffInterval - 1
 }
 
+// SKASupplyExists checks if SKA supply data exists for the given coin type.
+func (charts *ChartData) SKASupplyExists(coinType uint8) bool {
+	charts.mtx.RLock()
+	defer charts.mtx.RUnlock()
+	if charts.SKASupply == nil {
+		return false
+	}
+	data, ok := charts.SKASupply[coinType]
+	return ok && len(data.Timestamps) > 0
+}
+
 // PoolSizeTip is the height of the PoolSize data.
 func (charts *ChartData) PoolSizeTip() int32 {
 	charts.mtx.RLock()
@@ -1045,7 +1056,7 @@ func (charts *ChartData) Chart(chartID, binString, axisString string) ([]byte, e
 	maker, hasMaker := chartMakers[chartID]
 	if !hasMaker {
 		// Check if it's an SKA supply chart
-		if isSKASupplyChart(chartID) {
+		if IsSKASupplyChart(chartID) {
 			return charts.skaSupplyChart(chartID, bin, axis)
 		}
 		return nil, UnknownChartErr
@@ -1675,9 +1686,14 @@ func stakedCoinsChart(charts *ChartData, bin binLevel, axis axisType) ([]byte, e
 // The data is fetched per-request via the registered chartSource SKASupplyChart.
 // Values are returned as exact-precision strings to preserve 18 decimal places.
 func (charts *ChartData) skaSupplyChart(chartID string, bin binLevel, axis axisType) ([]byte, error) {
-	coinType := skaCoinType(chartID)
-	if !isSKASupplyChart(chartID) {
+	coinType := SkaCoinType(chartID)
+	if !IsSKASupplyChart(chartID) {
 		return nil, fmt.Errorf("invalid SKA supply chart: %s", chartID)
+	}
+
+	// coinType 0 uses the existing VAR coin supply chart
+	if coinType == 0 {
+		return coinSupplyChart(charts, bin, axis)
 	}
 
 	// SKA supply data should already be pre-loaded in SKASupply map
@@ -1692,44 +1708,71 @@ func (charts *ChartData) skaSupplyChart(chartID string, bin binLevel, axis axisT
 		return nil, fmt.Errorf("no SKA supply data found for coin type %d", coinType)
 	}
 
-	// Build response with exact-precision strings
-	seed := chartResponse{
-		binKey:  string(bin),
-		axisKey: string(axis),
-	}
-
+	// Return exact-precision strings directly
 	switch bin {
 	case BlockBin:
 		switch axis {
 		case HeightAxis:
-			return encode(lengtherMap{
-				heightKey:       ChartUintsFromInt64(data.Timestamps),
-				supplyKey:       ChartUintsFromStrings(data.Values),
-				anonymitySetKey: ChartUints{},
-			}, seed)
+			resp := struct {
+				Bin    string   `json:"bin"`
+				Axis   string   `json:"axis"`
+				H      []int64  `json:"h"`
+				Supply []string `json:"supply"`
+			}{
+				Bin:    string(bin),
+				Axis:   string(axis),
+				H:      data.Timestamps,
+				Supply: data.Values,
+			}
+			return json.Marshal(resp)
 		default:
-			return encode(lengtherMap{
-				timeKey:         charts.Blocks.Time,
-				supplyKey:       ChartUintsFromStrings(data.Values),
-				anonymitySetKey: ChartUints{},
-			}, seed)
+			// Convert ChartUints ([]uint64) to []int64
+			timeSlice := make([]int64, len(charts.Blocks.Time))
+			for i, t := range charts.Blocks.Time {
+				timeSlice[i] = int64(t)
+			}
+			resp := struct {
+				Bin    string   `json:"bin"`
+				Axis   string   `json:"axis"`
+				T      []int64  `json:"t"`
+				Supply []string `json:"supply"`
+			}{
+				Bin:    string(bin),
+				Axis:   string(axis),
+				T:      timeSlice,
+				Supply: data.Values,
+			}
+			return json.Marshal(resp)
 		}
 	case DayBin:
 		timestamps, values := aggregateSKASupply(data.Timestamps, data.Values)
 		switch axis {
 		case HeightAxis:
-			return encode(lengtherMap{
-				heightKey:       ChartUintsFromInt64(timestamps),
-				supplyKey:       ChartUintsFromStrings(values),
-				anonymitySetKey: ChartUints{},
-			}, seed)
+			resp := struct {
+				Bin    string   `json:"bin"`
+				Axis   string   `json:"axis"`
+				H      []int64  `json:"h"`
+				Supply []string `json:"supply"`
+			}{
+				Bin:    string(bin),
+				Axis:   string(axis),
+				H:      timestamps,
+				Supply: values,
+			}
+			return json.Marshal(resp)
 		default:
-			times, _ := aggregateSKASupply(data.Timestamps, nil)
-			return encode(lengtherMap{
-				timeKey:         ChartUintsFromInt64(times),
-				supplyKey:       ChartUintsFromStrings(values),
-				anonymitySetKey: ChartUints{},
-			}, seed)
+			resp := struct {
+				Bin    string   `json:"bin"`
+				Axis   string   `json:"axis"`
+				T      []int64  `json:"t"`
+				Supply []string `json:"supply"`
+			}{
+				Bin:    string(bin),
+				Axis:   string(axis),
+				T:      timestamps,
+				Supply: values,
+			}
+			return json.Marshal(resp)
 		}
 	}
 
@@ -1764,38 +1807,35 @@ func ChartUintsFromStrings(data []string) ChartUints {
 }
 
 // aggregateSKASupply aggregates block-level SKA supply data to daily bins.
+// Returns timestamps (Unix time seconds) and values for each day.
 func aggregateSKASupply(timestamps []int64, values []string) ([]int64, []string) {
 	if len(timestamps) == 0 {
 		return nil, nil
 	}
 
-	type dailyAgg struct {
-		timestamp int64
-		value     *big.Int
-	}
 	dailyMap := make(map[int64]*big.Int)
 
 	for i, t := range timestamps {
-		// Group by actual day (86400 seconds per day)
 		dayKey := t / 86400
 		if i < len(values) {
 			if v, ok := new(big.Int).SetString(values[i], 10); ok {
-				// Use last-value aggregation for cumulative supply
 				dailyMap[dayKey] = v
 			}
 		}
 	}
 
-	days := make([]int64, 0, len(dailyMap))
-	dayValues := make([]string, 0, len(dailyMap))
+	dayKeys := make([]int64, 0, len(dailyMap))
 	for day := range dailyMap {
-		days = append(days, day)
+		dayKeys = append(dayKeys, day)
 	}
-	sort.Slice(days, func(i, j int) bool { return days[i] < days[j] })
+	sort.Slice(dayKeys, func(i, j int) bool { return dayKeys[i] < dayKeys[j] })
 
-	for _, day := range days {
+	dayTimestamps := make([]int64, 0, len(dailyMap))
+	dayValues := make([]string, 0, len(dailyMap))
+	for _, day := range dayKeys {
+		dayTimestamps = append(dayTimestamps, day*86400)
 		dayValues = append(dayValues, dailyMap[day].String())
 	}
 
-	return days, dayValues
+	return dayTimestamps, dayValues
 }

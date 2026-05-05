@@ -803,6 +803,17 @@ func ChartTypeCtx(next http.Handler) http.Handler {
 	})
 }
 
+// CoinSupplyChartTypeCtx returns a http.HandlerFunc that embeds "coin-supply/" + {charttype}
+// into the request context for handling coin-supply/N requests.
+func CoinSupplyChartTypeCtx(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		charttype := chi.URLParam(r, "charttype")
+		ctx := context.WithValue(r.Context(), ctxChartType,
+			"coin-supply/"+charttype)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
 // ChartGroupingCtx returns a http.HandlerFunc that embeds the value art the url
 // part {chartgrouping} into the request context.
 func ChartGroupingCtx(next http.Handler) http.Handler {

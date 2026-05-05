@@ -1011,15 +1011,18 @@ func (pgb *ChainDB) skaSupplyUpdater(charts *cache.ChartData) error {
 		return fmt.Errorf("skaSupplyUpdater: %w", err)
 	}
 
+	// Use 0 as start height to load all available data
+	startHeight := int32(0)
+
 	for _, entry := range skaSupply {
 		coinType := entry.CoinType
 
 		var rows *sql.Rows
 		var err error
 		if coinType == 0 {
-			rows, err = pgb.db.QueryContext(ctx, internal.SelectVARCoinSupplyPerBlock, charts.NewAtomsTip())
+			rows, err = pgb.db.QueryContext(ctx, internal.SelectVARCoinSupplyPerBlock, startHeight)
 		} else {
-			rows, err = pgb.db.QueryContext(ctx, internal.SelectSKACoinSupplyPerBlock, charts.NewAtomsTip(), coinType)
+			rows, err = pgb.db.QueryContext(ctx, internal.SelectSKACoinSupplyPerBlock, startHeight, coinType)
 		}
 		if err != nil {
 			log.Warnf("SKA%d supply query failed: %v", coinType, err)
@@ -1029,14 +1032,14 @@ func (pgb *ChainDB) skaSupplyUpdater(charts *cache.ChartData) error {
 		var timestamps []int64
 		var values []string
 		for rows.Next() {
-			var t int64
+			var t time.Time
 			var v string
 			if err := rows.Scan(&t, &v); err != nil {
 				log.Warnf("SKA%d scan failed: %v", coinType, err)
 				rows.Close()
 				continue
 			}
-			timestamps = append(timestamps, t)
+			timestamps = append(timestamps, t.Unix())
 			values = append(values, v)
 		}
 		if err := rows.Err(); err != nil {
@@ -1055,6 +1058,53 @@ func (pgb *ChainDB) skaSupplyUpdater(charts *cache.ChartData) error {
 	}
 
 	return nil
+}
+
+// LoadSKASupplyForCoin loads SKA supply data for a specific coin type into the charts SKASupply map.
+// This is called on-demand when a chart request is made for a coin type that hasn't been pre-loaded.
+func (pgb *ChainDB) LoadSKASupplyForCoin(ctx context.Context, charts *cache.ChartData, coinType uint8) error {
+	// Use 0 as start height to get all available data
+	startHeight := int32(0)
+
+	var rows *sql.Rows
+	var err error
+	if coinType == 0 {
+		rows, err = pgb.db.QueryContext(ctx, internal.SelectVARCoinSupplyPerBlock, startHeight)
+	} else {
+		rows, err = pgb.db.QueryContext(ctx, internal.SelectSKACoinSupplyPerBlock, startHeight, coinType)
+	}
+	if err != nil {
+		log.Warnf("LoadSKASupplyForCoin: query failed for coin type %d: %v", coinType, err)
+		return err
+	}
+	defer rows.Close()
+
+	var timestamps []int64
+	var values []string
+	for rows.Next() {
+		var t time.Time
+		var v string
+		if err := rows.Scan(&t, &v); err != nil {
+			log.Warnf("LoadSKASupplyForCoin: scan failed for coin type %d: %v", coinType, err)
+			continue
+		}
+		timestamps = append(timestamps, t.Unix())
+		values = append(values, v)
+	}
+	if err := rows.Err(); err != nil {
+		log.Warnf("LoadSKASupplyForCoin: iteration error for coin type %d: %v", coinType, err)
+		return err
+	}
+
+	if len(timestamps) > 0 {
+		charts.SKASupply[coinType] = cache.SKASupplyChartData{
+			Timestamps: timestamps,
+			Values:     values,
+		}
+		return nil
+	}
+
+	return fmt.Errorf("no data found for coin type %d", coinType)
 }
 
 // appears, along with the index of the transaction in each of the blocks. The

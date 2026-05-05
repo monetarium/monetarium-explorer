@@ -112,6 +112,7 @@ type DataSource interface {
 	GetMempoolSSTxDetails(N int) *apitypes.MempoolTicketDetails
 	GetAddressTransactionsRawWithSkip(ctx context.Context, addr string, count, skip int) []*apitypes.AddressTxRaw
 	GetMempoolPriceCountTime() *apitypes.PriceCountTime
+	LoadSKASupplyForCoin(ctx context.Context, charts *cache.ChartData, coinType uint8) error
 }
 
 // dcrdata application context used by all route handlers
@@ -1892,6 +1893,17 @@ func (c *appContext) ChartTypeData(w http.ResponseWriter, r *http.Request) {
 		bin = r.URL.Query().Get("zoom")
 	}
 	axis := r.URL.Query().Get("axis")
+
+	// Check if this is an SKA supply chart and if data needs to be loaded
+	if cache.IsSKASupplyChart(chartType) {
+		coinType := cache.SkaCoinType(chartType)
+		if coinType > 0 && !c.charts.SKASupplyExists(coinType) {
+			if err := c.DataSource.LoadSKASupplyForCoin(r.Context(), c.charts, coinType); err != nil {
+				log.Warnf("ChartTypeData: failed to load SKA supply for coin type %d: %v", coinType, err)
+			}
+		}
+	}
+
 	chartData, err := c.charts.Chart(chartType, bin, axis)
 	if err != nil {
 		log.Warnf(`Error fetching chart %q at bin level '%s': %v`, chartType, bin, err)
