@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -170,6 +171,133 @@ func (b *BlockBasic) FlattenCoinRows() {
 	}
 }
 
+// CoinTypeSymbol returns the display symbol for a coin type.
+func CoinTypeSymbol(coinType uint8) string {
+	if coinType == 0 {
+		return "VAR"
+	}
+	return fmt.Sprintf("SKA%d", coinType)
+}
+
+// CoinTypeFromSymbol converts a display symbol back to coin type.
+// Returns (0, false) for invalid symbols.
+func CoinTypeFromSymbol(symbol string) (uint8, bool) {
+	if symbol == "VAR" {
+		return 0, true
+	}
+	if len(symbol) > 3 && symbol[:3] == "SKA" {
+		var n int
+		if _, err := fmt.Sscanf(symbol[3:], "%d", &n); err == nil {
+			if n >= 1 && n <= 255 {
+				return uint8(n), true
+			}
+		}
+	}
+	return 0, false
+}
+
+// TotalSentByCoinFromMap converts a coin amount map to an ordered slice.
+// VAR (0) is first, then SKA types in ascending order, zero-value SKA omitted.
+func TotalSentByCoinFromMap(coinAmounts map[uint8]string, issuedSKA []uint8) []CoinAmount {
+	if len(coinAmounts) == 0 {
+		return nil
+	}
+
+	var result []CoinAmount
+
+	// Add VAR first if present
+	if amt, ok := coinAmounts[0]; ok {
+		result = append(result, CoinAmount{CoinType: "VAR", Amount: amt})
+	}
+
+	// Collect and sort SKA types
+	var skaTypes []uint8
+	if len(issuedSKA) > 0 {
+		skaTypes = make([]uint8, len(issuedSKA))
+		copy(skaTypes, issuedSKA)
+	} else {
+		// If no issuedSKA provided, derive from map keys
+		for ct := range coinAmounts {
+			if ct != 0 {
+				skaTypes = append(skaTypes, ct)
+			}
+		}
+	}
+	sort.Slice(skaTypes, func(i, j int) bool { return skaTypes[i] < skaTypes[j] })
+
+	// Add SKA types in sorted order, omitting zero values
+	for _, ct := range skaTypes {
+		if amt, ok := coinAmounts[ct]; ok && amt != "0" && amt != "" {
+			result = append(result, CoinAmount{CoinType: CoinTypeSymbol(ct), Amount: amt})
+		}
+	}
+
+	return result
+}
+
+// RegularCoinCountsFromCoinRows computes regular transaction counts per coin type.
+// Regular = Total TxCount - Votes - Tickets - Revocations
+func RegularCoinCountsFromCoinRows(rows []CoinRowData, voters uint16, freshStake uint8, revocations uint32) []CoinCount {
+	if len(rows) == 0 {
+		return nil
+	}
+
+	// Build map for quick lookup
+	rowMap := make(map[uint8]CoinRowData)
+	for _, r := range rows {
+		rowMap[r.CoinType] = r
+	}
+
+	// Get sorted coin types present in rows
+	var coinTypes []uint8
+	for ct := range rowMap {
+		coinTypes = append(coinTypes, ct)
+	}
+	sort.Slice(coinTypes, func(i, j int) bool { return coinTypes[i] < coinTypes[j] })
+
+	var result []CoinAmount
+
+	for _, ct := range coinTypes {
+		row := rowMap[ct]
+		var regular int
+		if ct == 0 {
+			// VAR regular txs = total - votes - tickets - revocations
+			regular = row.TxCount - int(voters) - int(freshStake) - int(revocations)
+			if regular < 0 {
+				regular = 0
+			}
+		} else {
+			// SKA txs are not reduced by votes/tickets/revocations
+			regular = row.TxCount
+		}
+		// Skip zero-count SKA entries
+		if ct != 0 && regular == 0 {
+			continue
+		}
+		result = append(result, CoinAmount{CoinType: CoinTypeSymbol(ct), Amount: fmt.Sprintf("%d", regular)})
+	}
+
+	// Convert []CoinAmount to []CoinCount
+	countResult := make([]CoinCount, len(result))
+	for i, ca := range result {
+		var cnt int
+		fmt.Sscanf(ca.Amount, "%d", &cnt)
+		countResult[i] = CoinCount{CoinType: ca.CoinType, Count: cnt}
+	}
+
+	return countResult
+}
+
+// FeesByCoinFromMiningFee creates a fees slice from the VAR mining fee.
+// For now, only VAR fees are supported; SKA fees may be added later.
+func FeesByCoinFromMiningFee(miningFee float64) []CoinAmount {
+	// Convert DCR float to atoms (8 decimal places)
+	atoms := int64(miningFee * 1e8)
+	return []CoinAmount{
+		{CoinType: "VAR", Amount: fmt.Sprintf("%d", atoms)},
+	}
+}
+
 // WebBasicBlock is used for quick DB data without rpc calls
 type WebBasicBlock struct {
 	Height      uint32   `json:"height"`
@@ -210,10 +338,12 @@ type TxBasic struct {
 // TrimmedTxInfo for use with /visualblocks
 type TrimmedTxInfo struct {
 	*TxBasic
-	Fees      float64
-	VinCount  int
-	VoutCount int
-	VoteValid bool
+	Fees         float64
+	VinCount     int
+	VoutCount    int
+	VoteValid    bool
+	CoinType     uint8  // 0=VAR, 1-255=SKAn for stake fees; for revocations, set when processing
+	TicketStatus string // Pool status for revocations: "voted", "missed", "expired"
 }
 
 // TxInfo models data needed for display on the tx page
@@ -584,6 +714,28 @@ type BlockInfo struct {
 	SKAPoWRewards         []PoWSKAReward `json:"pow_ska_rewards,omitempty"`
 	// CoinAmounts holds per-coin totals (VAR key=0, SKAn key=n) as decimal atom strings.
 	CoinAmounts map[uint8]string `json:"coin_amounts,omitempty"`
+	// TotalSentByCoin is an ordered slice of total sent amounts per coin type,
+	// for template rendering. VAR (0) first, then SKA types in ascending order,
+	// with zero-value SKA entries omitted.
+	TotalSentByCoin []CoinAmount `json:"-"`
+	// RegularCoinCounts is an ordered slice of regular transaction counts per coin type,
+	// for template rendering. Same ordering as TotalSentByCoin.
+	RegularCoinCounts []CoinCount `json:"-"`
+	// FeesByCoin is an ordered slice of fees per coin type, for template rendering.
+	// Same ordering as TotalSentByCoin.
+	FeesByCoin []CoinAmount `json:"-"`
+}
+
+// CoinAmount represents an amount for a specific coin type.
+type CoinAmount struct {
+	CoinType string `json:"coin_type"` // "VAR", "SKA1", etc.
+	Amount   string `json:"amount"`    // big.Int atom string (18 decimal places for SKA)
+}
+
+// CoinCount represents a transaction count for a specific coin type.
+type CoinCount struct {
+	CoinType string `json:"coin_type"`
+	Count    int    `json:"count"`
 }
 
 // Conversion is a representation of some amount of DCR in another index.

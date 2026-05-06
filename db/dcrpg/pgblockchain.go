@@ -6413,6 +6413,12 @@ func (pgb *ChainDB) GetExplorerBlock(ctx context.Context, hash string) *exptypes
 		// Include all ever-emitted SKA types so zero-activity coins still appear.
 		issuedSKA := pgb.issuedSKACoinTypes(ctx)
 		block.BlockBasic.CoinRows = coinRowsFromSummary(summary, issuedSKA)
+
+		// Populate template-facing ordered slices for multi-coin display.
+		block.TotalSentByCoin = exptypes.TotalSentByCoinFromMap(block.CoinAmounts, issuedSKA)
+		block.RegularCoinCounts = exptypes.RegularCoinCountsFromCoinRows(
+			block.BlockBasic.CoinRows, b.Voters, b.FreshStake, b.Revocations)
+		block.FeesByCoin = exptypes.FeesByCoinFromMiningFee(block.MiningFee)
 	}
 
 	if data.PoWHash != "" {

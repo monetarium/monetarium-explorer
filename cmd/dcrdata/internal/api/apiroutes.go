@@ -582,7 +582,38 @@ func (c *appContext) getBlockVerbose(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, blockVerbose, m.GetIndentCtx(r))
+	// Get summary for multi-coin data
+	summary := c.DataSource.GetSummaryByHash(ctx, hash, false)
+
+	// Build extended response with total_sent and fees maps
+	response := make(map[string]interface{})
+
+	// Marshal the verbose result into a map
+	if b, err := json.Marshal(blockVerbose); err == nil {
+		json.Unmarshal(b, &response)
+	}
+
+	// Add total_sent map (coin type key -> amount string)
+	if summary != nil && summary.CoinAmounts != nil {
+		totalSent := make(map[string]string)
+		for ct, amt := range summary.CoinAmounts {
+			if amt != "0" && amt != "" {
+				totalSent[fmt.Sprintf("%d", ct)] = amt
+			}
+		}
+		if len(totalSent) > 0 {
+			response["total_sent"] = totalSent
+		}
+
+		// Add fees map (coin type key -> fee string)
+		if summary.MiningFee != nil && *summary.MiningFee != 0 {
+			fees := make(map[string]string)
+			fees["0"] = fmt.Sprintf("%d", *summary.MiningFee)
+			response["fees"] = fees
+		}
+	}
+
+	writeJSON(w, response, m.GetIndentCtx(r))
 }
 
 func (c *appContext) getVoteInfo(w http.ResponseWriter, r *http.Request) {
