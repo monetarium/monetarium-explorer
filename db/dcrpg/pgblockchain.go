@@ -6479,6 +6479,18 @@ func (pgb *ChainDB) GetExplorerBlock(ctx context.Context, hash string) *exptypes
 		case stake.TxTypeSStx:
 			tickets = append(tickets, stx)
 		case stake.TxTypeSSRtx:
+			// Populate TicketStatus from the ticket that was revoked
+			// Get ticket hash from the first input's previous outpoint
+			if len(msgTx.TxIn) > 0 {
+				prevOut := msgTx.TxIn[0].PreviousOutPoint
+				if prevOut.Hash != zeroHash {
+					ticketHash := dbtypes.ChainHash(prevOut.Hash)
+					_, _, poolStatus, err := retrieveTicketStatusByHash(ctx, pgb.db, ticketHash)
+					if err == nil {
+						stx.TicketStatus = poolStatus.String()
+					}
+				}
+			}
 			revocations = append(revocations, stx)
 		case stake.TxTypeTAdd, stake.TxTypeTSpend, stake.TxTypeTreasuryBase:
 			treasury = append(treasury, stx)
