@@ -995,9 +995,148 @@ func (pgb *ChainDB) RegisterCharts(charts *cache.ChartData) {
 		Fetcher:  pgb.poolStats,
 		Appender: appendPoolStats,
 	})
+
+	// Load SKA coin supply data into charts.SKASupply
+	if err := pgb.skaSupplyUpdater(charts); err != nil {
+		log.Errorf("failed to load SKA supply data into charts: %v", err)
+	}
 }
 
-// TransactionBlocks retrieves the blocks in which the specified transaction
+func (pgb *ChainDB) skaSupplyUpdater(charts *cache.ChartData) error {
+	ctx, cancel := context.WithTimeout(context.Background(), pgb.queryTimeout)
+	defer cancel()
+
+	skaSupply, err := pgb.SKACoinSupply(ctx)
+	if err != nil {
+		return fmt.Errorf("skaSupplyUpdater: %w", err)
+	}
+
+	// Use 0 as start height to load all available data
+	startHeight := int32(0)
+
+	for _, entry := range skaSupply {
+		coinType := entry.CoinType
+
+		var rows *sql.Rows
+		var err error
+		if coinType == 0 {
+			rows, err = pgb.db.QueryContext(ctx, internal.SelectVARCoinSupplyPerBlock, startHeight)
+		} else {
+			rows, err = pgb.db.QueryContext(ctx, internal.SelectSKACoinSupplyPerBlock, startHeight, coinType)
+		}
+		if err != nil {
+			log.Warnf("SKA%d supply query failed: %v", coinType, err)
+			continue
+		}
+
+		var blockHeights []int64
+		var timestamps []int64
+		var blockValues []string
+		for rows.Next() {
+			var h int64
+			var t time.Time
+			var v string
+			if err := rows.Scan(&h, &t, &v); err != nil {
+				log.Warnf("SKA%d scan failed: %v", coinType, err)
+				rows.Close()
+				continue
+			}
+			blockHeights = append(blockHeights, h)
+			timestamps = append(timestamps, t.Unix())
+			blockValues = append(blockValues, v)
+		}
+		if err := rows.Err(); err != nil {
+			log.Warnf("SKA%d iteration error: %v", coinType, err)
+			rows.Close()
+			continue
+		}
+		rows.Close()
+
+		if len(blockValues) > 0 {
+			// Compute cumulative supply
+			var cumulativeValues []string
+			runningTotal := new(big.Int)
+			for _, v := range blockValues {
+				blockValue := new(big.Int)
+				if _, ok := blockValue.SetString(v, 10); ok {
+					runningTotal.Add(runningTotal, blockValue)
+				}
+				cumulativeValues = append(cumulativeValues, runningTotal.String())
+			}
+
+			charts.SKASupply[coinType] = cache.SKASupplyChartData{
+				Heights:    blockHeights,
+				Timestamps: timestamps,
+				Values:     cumulativeValues,
+			}
+		}
+	}
+
+	return nil
+}
+
+// LoadSKASupplyForCoin loads SKA supply data for a specific coin type into the charts SKASupply map.
+// This is called on-demand when a chart request is made for a coin type that hasn't been pre-loaded.
+func (pgb *ChainDB) LoadSKASupplyForCoin(ctx context.Context, charts *cache.ChartData, coinType uint8) error {
+	// Use 0 as start height to get all available data
+	startHeight := int32(0)
+
+	var rows *sql.Rows
+	var err error
+	if coinType == 0 {
+		rows, err = pgb.db.QueryContext(ctx, internal.SelectVARCoinSupplyPerBlock, startHeight)
+	} else {
+		rows, err = pgb.db.QueryContext(ctx, internal.SelectSKACoinSupplyPerBlock, startHeight, coinType)
+	}
+	if err != nil {
+		log.Warnf("LoadSKASupplyForCoin: query failed for coin type %d: %v", coinType, err)
+		return err
+	}
+	defer rows.Close()
+
+	var blockHeights []int64
+	var timestamps []int64
+	var blockValues []string
+	for rows.Next() {
+		var h int64
+		var t time.Time
+		var v string
+		if err := rows.Scan(&h, &t, &v); err != nil {
+			log.Warnf("LoadSKASupplyForCoin: scan failed for coin type %d: %v", coinType, err)
+			continue
+		}
+		blockHeights = append(blockHeights, h)
+		timestamps = append(timestamps, t.Unix())
+		blockValues = append(blockValues, v)
+	}
+	if err := rows.Err(); err != nil {
+		log.Warnf("LoadSKASupplyForCoin: iteration error for coin type %d: %v", coinType, err)
+		return err
+	}
+
+	if len(blockValues) > 0 {
+		// Compute cumulative supply
+		var cumulativeValues []string
+		runningTotal := new(big.Int)
+		for _, v := range blockValues {
+			blockValue := new(big.Int)
+			if _, ok := blockValue.SetString(v, 10); ok {
+				runningTotal.Add(runningTotal, blockValue)
+			}
+			cumulativeValues = append(cumulativeValues, runningTotal.String())
+		}
+
+		charts.SKASupply[coinType] = cache.SKASupplyChartData{
+			Heights:    blockHeights,
+			Timestamps: timestamps,
+			Values:     cumulativeValues,
+		}
+		return nil
+	}
+
+	return fmt.Errorf("no data found for coin type %d", coinType)
+}
+
 // appears, along with the index of the transaction in each of the blocks. The
 // next and previous block hashes are NOT SET in each BlockStatus.
 func (pgb *ChainDB) TransactionBlocks(ctx context.Context, txHash string) ([]*dbtypes.BlockStatus, []uint32, error) {

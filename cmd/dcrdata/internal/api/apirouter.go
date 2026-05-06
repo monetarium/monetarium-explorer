@@ -237,6 +237,9 @@ func NewAPIRouter(app *appContext, JSONIndent string, useRealIP, compressLarge b
 			rd.With(m.StickWidthContext).Get("/candlestick/{bin}", app.getCandlestickChart)
 			rd.Get("/depth", app.getDepthChart)
 		})
+		// Handle coin-supply/N pattern (SKA coin types)
+		r.With(m.CoinSupplyChartTypeCtx).Get("/coin-supply/{charttype}", app.ChartTypeData)
+		// Handle standard single-segment chart types
 		r.With(m.ChartTypeCtx).Get("/{charttype}", app.ChartTypeData)
 	})
 

@@ -112,6 +112,7 @@ type DataSource interface {
 	GetMempoolSSTxDetails(N int) *apitypes.MempoolTicketDetails
 	GetAddressTransactionsRawWithSkip(ctx context.Context, addr string, count, skip int) []*apitypes.AddressTxRaw
 	GetMempoolPriceCountTime() *apitypes.PriceCountTime
+	LoadSKASupplyForCoin(ctx context.Context, charts *cache.ChartData, coinType uint8) error
 }
 
 // dcrdata application context used by all route handlers
@@ -1888,15 +1889,34 @@ func (c *appContext) getTreasuryIO(w http.ResponseWriter, r *http.Request) {
 func (c *appContext) ChartTypeData(w http.ResponseWriter, r *http.Request) {
 	chartType := m.GetChartTypeCtx(r)
 	bin := r.URL.Query().Get("bin")
-	// Support the deprecated URL parameter "zoom".
 	if bin == "" {
 		bin = r.URL.Query().Get("zoom")
 	}
 	axis := r.URL.Query().Get("axis")
+
+	// Check if this is an SKA supply chart and if data needs to be loaded
+	if c.charts != nil && cache.IsSKASupplyChart(chartType) {
+		coinType := cache.SkaCoinType(chartType)
+		if coinType > 0 && !c.charts.SKASupplyExists(coinType) {
+			if err := c.DataSource.LoadSKASupplyForCoin(r.Context(), c.charts, coinType); err != nil {
+				log.Warnf("ChartTypeData: failed to load SKA supply for coin type %d: %v", coinType, err)
+			}
+		}
+	}
+
+	if c.charts == nil {
+		http.Error(w, "chart data not available", http.StatusServiceUnavailable)
+		return
+	}
+
 	chartData, err := c.charts.Chart(chartType, bin, axis)
 	if err != nil {
-		http.NotFound(w, r)
 		log.Warnf(`Error fetching chart %q at bin level '%s': %v`, chartType, bin, err)
+		if strings.Contains(err.Error(), "not initialized") || strings.Contains(err.Error(), "no SKA supply data found") {
+			http.Error(w, "chart data not available", http.StatusServiceUnavailable)
+			return
+		}
+		http.NotFound(w, r)
 		return
 	}
 	writeJSONBytes(w, chartData)

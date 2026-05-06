@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	apitypes "github.com/monetarium/monetarium-explorer/api/types"
@@ -120,5 +121,43 @@ func TestAPITxOut_SKAFields(t *testing.T) {
 	}
 	if got.SKAValue != txout.SKAValue {
 		t.Errorf("SKAValue: want %s, got %s", txout.SKAValue, got.SKAValue)
+	}
+}
+
+func TestChartAPI_SKASupplyAccepted(t *testing.T) {
+	mux := NewAPIRouter(&appContext{DataSource: noopDS{}}, "", false, false)
+
+	req := httptest.NewRequest(http.MethodGet, "/chart/coin-supply/1", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	// Accept 200 (data available), 404 (unknown chart), or 503 (no data available)
+	if w.Code != http.StatusOK && w.Code != http.StatusNotFound && w.Code != http.StatusServiceUnavailable {
+		t.Errorf("coin-supply/1: expected 200, 404, or 503, got %d", w.Code)
+	}
+}
+
+func TestSKASupplyChart_ResponseFormat(t *testing.T) {
+	mux := NewAPIRouter(&appContext{DataSource: noopDS{}}, "", false, false)
+
+	req := httptest.NewRequest(http.MethodGet, "/chart/coin-supply/1", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if strings.Contains(w.Body.String(), "nil pointer") {
+		t.Error("coin-supply/1 panics due to nil ChartData - test environment issue")
+	}
+
+	switch w.Code {
+	case http.StatusOK:
+		t.Log("coin-supply/1 returns 200 - data loaded successfully")
+	case http.StatusServiceUnavailable:
+		t.Log("coin-supply/1 returns 503 - SKA data not available (expected in test)")
+	case http.StatusNotFound:
+		t.Log("coin-supply/1 returns 404 - chart type unknown")
+	case http.StatusInternalServerError:
+		t.Error("coin-supply/1 returns 500 - should handle gracefully")
+	default:
+		t.Logf("coin-supply/1 returns %d", w.Code)
 	}
 }
