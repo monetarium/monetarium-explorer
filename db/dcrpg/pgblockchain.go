@@ -1522,7 +1522,7 @@ func (pgb *ChainDB) PoolStatusForTicket(ctx context.Context, txid string) (dbtyp
 	}
 	ctx, cancel := context.WithTimeout(ctx, pgb.queryTimeout)
 	defer cancel()
-	_, spendType, poolStatus, err := retrieveTicketStatusByHash(ctx, pgb.db, ch)
+	spendType, poolStatus, err := retrieveTicketStatusByHash(ctx, pgb.db, ch)
 	return spendType, poolStatus, pgb.replaceCancelError(err)
 }
 
@@ -6485,7 +6485,7 @@ func (pgb *ChainDB) GetExplorerBlock(ctx context.Context, hash string) *exptypes
 				prevOut := msgTx.TxIn[0].PreviousOutPoint
 				if prevOut.Hash != zeroHash {
 					ticketHash := dbtypes.ChainHash(prevOut.Hash)
-					_, _, poolStatus, err := retrieveTicketStatusByHash(ctx, pgb.db, ticketHash)
+					_, poolStatus, err := retrieveTicketStatusByHash(ctx, pgb.db, ticketHash)
 					if err == nil {
 						stx.TicketStatus = poolStatus.String()
 					}
