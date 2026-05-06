@@ -606,9 +606,25 @@ func (c *appContext) getBlockVerbose(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Add fees map (coin type key -> fee string)
+		response.Fees = make(map[string]string)
+
+		// VAR fees from MiningFee
 		if summary.MiningFee != nil && *summary.MiningFee != 0 {
-			response.Fees = make(map[string]string)
 			response.Fees["0"] = fmt.Sprintf("%d", *summary.MiningFee)
+		}
+
+		// SKA fees from SSFeeTotalsByCoin (stake fee distribution)
+		if summary.SSFeeTotalsByCoin != nil {
+			for ct, fee := range summary.SSFeeTotalsByCoin {
+				if fee != "0" && fee != "" {
+					response.Fees[fmt.Sprintf("%d", ct)] = fee
+				}
+			}
+		}
+
+		// Remove empty fees map
+		if len(response.Fees) == 0 {
+			response.Fees = nil
 		}
 	}
 

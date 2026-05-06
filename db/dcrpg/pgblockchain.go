@@ -6418,14 +6418,6 @@ func (pgb *ChainDB) GetExplorerBlock(ctx context.Context, hash string) *exptypes
 		block.TotalSentByCoin = exptypes.TotalSentByCoinFromMap(block.CoinAmounts, issuedSKA)
 		block.RegularCoinCounts = exptypes.RegularCoinCountsFromCoinRows(
 			block.BlockBasic.CoinRows, b.Voters, b.FreshStake, b.Revocations)
-
-		// Build fees map from MiningFee (VAR only for now; SKA fees from stake txs would need separate aggregation)
-		feesMap := make(map[uint8]string)
-		miningFeeAtoms := int64(block.MiningFee * 1e8)
-		if miningFeeAtoms > 0 {
-			feesMap[0] = strconv.FormatInt(miningFeeAtoms, 10)
-		}
-		block.FeesByCoin = exptypes.FeesByCoinFromAmounts(feesMap)
 	}
 
 	if data.PoWHash != "" {
@@ -6577,6 +6569,27 @@ func (pgb *ChainDB) GetExplorerBlock(ctx context.Context, hash string) *exptypes
 		getTotalSent(block.Tickets) + getTotalSent(block.Votes) + getTotalSent(block.StakeFees)).ToCoin()
 	block.MiningFee = (getTotalFee(block.Tx) + getTotalFee(block.Treasury) + getTotalFee(block.Revs) +
 		getTotalFee(block.Tickets) + getTotalFee(block.Votes)).ToCoin()
+
+	// Aggregate fees per coin type (VAR from MiningFee, SKA from transactions)
+	feesMap := make(map[uint8]string)
+	// VAR fees from MiningFee
+	miningFeeAtoms := int64(block.MiningFee * 1e8)
+	if miningFeeAtoms > 0 {
+		feesMap[0] = strconv.FormatInt(miningFeeAtoms, 10)
+	}
+	// SKA fees from regular transactions (FeeRaw field)
+	for _, tx := range block.Tx {
+		if tx.CoinType != 0 && tx.FeeRaw != "" && tx.FeeRaw != "0" {
+			feesMap[tx.CoinType] = tx.FeeRaw
+		}
+	}
+	// SKA fees from stake fees (SSFee transactions)
+	for _, tx := range block.StakeFees {
+		if tx.CoinType != 0 && tx.FeeRaw != "" && tx.FeeRaw != "0" {
+			feesMap[tx.CoinType] = tx.FeeRaw
+		}
+	}
+	block.FeesByCoin = exptypes.FeesByCoinFromAmounts(feesMap)
 
 	pgb.lastExplorerBlock.Lock()
 	pgb.lastExplorerBlock.hash = hash
