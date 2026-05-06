@@ -37,8 +37,9 @@
                             <option value="blockchain-size">Blockchain Size</option>
                             <option value="tx-count">Transaction Count</option>
                             <option value="pow-difficulty">PoW Difficulty</option>
-                            <option value="coin-supply">Circulation</option>
-                            <option value="fees">Fees</option>
+                            <option value="coin-supply/0">Circulation (VAR)</option>
+                            {{range $t := .ActiveSKATypes}}<option value="coin-supply/{{$t}}">Circulation (SKA{{$t}})</option>
+                            {{end}}<option value="fees">Fees</option>
                             <option value="privacy-participation">Privacy Participation</option>
                             <option value="duration-btw-blocks">Duration Between Blocks</option>
                             <option value="chainwork">Total Work</option>
@@ -149,17 +150,6 @@
                                         data-charts-target="ticketsPurchase"
                                     >
                                     <span class="checkmark tickets-bought"></span>
-                                </label>
-                            </li>
-                            <li class="nav-item">
-                                <label class="customcheck mx-2 d-inline-flex"
-                                    data-charts-target="vSelectorItem" data-charts="coin-supply">Mixed Coins
-                                    <input
-                                        type="checkbox"
-                                        data-action="click->charts#setVisibility"
-                                        data-charts-target="anonymitySet"
-                                    >
-                                    <span class="checkmark total-mixed"></span>
                                 </label>
                             </li>
                         </ul>
