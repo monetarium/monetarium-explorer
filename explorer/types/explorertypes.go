@@ -213,8 +213,8 @@ func TotalSentByCoinFromMap(coinAmounts map[uint8]string, issuedSKA []uint8) []C
 	// Collect and sort SKA types
 	var skaTypes []uint8
 	if len(issuedSKA) > 0 {
-		skaTypes = make([]uint8, len(issuedSKA))
-		copy(skaTypes, issuedSKA)
+		skaTypes = make([]uint8, 0, len(issuedSKA))
+		skaTypes = append(skaTypes, issuedSKA...)
 	} else {
 		// If no issuedSKA provided, derive from map keys
 		for ct := range coinAmounts {
