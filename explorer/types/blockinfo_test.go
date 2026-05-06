@@ -17,7 +17,7 @@ func TestTotalSentByCoinFromMap(t *testing.T) {
 			coinAmounts: map[uint8]string{0: "100000000"},
 			issuedSKA:   []uint8{1, 2},
 			want: []CoinAmount{
-				{CoinType: "VAR", Amount: "100000000"},
+				{CoinType: 0, Symbol: "VAR", Amount: "100000000"},
 			},
 		},
 		{
@@ -25,8 +25,8 @@ func TestTotalSentByCoinFromMap(t *testing.T) {
 			coinAmounts: map[uint8]string{0: "100000000", 1: "1000000000000000000"},
 			issuedSKA:   []uint8{1},
 			want: []CoinAmount{
-				{CoinType: "VAR", Amount: "100000000"},
-				{CoinType: "SKA1", Amount: "1000000000000000000"},
+				{CoinType: 0, Symbol: "VAR", Amount: "100000000"},
+				{CoinType: 1, Symbol: "SKA1", Amount: "1000000000000000000"},
 			},
 		},
 		{
@@ -34,9 +34,9 @@ func TestTotalSentByCoinFromMap(t *testing.T) {
 			coinAmounts: map[uint8]string{0: "100000000", 1: "1000000000000000000", 2: "2000000000000000000"},
 			issuedSKA:   []uint8{1, 2},
 			want: []CoinAmount{
-				{CoinType: "VAR", Amount: "100000000"},
-				{CoinType: "SKA1", Amount: "1000000000000000000"},
-				{CoinType: "SKA2", Amount: "2000000000000000000"},
+				{CoinType: 0, Symbol: "VAR", Amount: "100000000"},
+				{CoinType: 1, Symbol: "SKA1", Amount: "1000000000000000000"},
+				{CoinType: 2, Symbol: "SKA2", Amount: "2000000000000000000"},
 			},
 		},
 		{
@@ -44,8 +44,8 @@ func TestTotalSentByCoinFromMap(t *testing.T) {
 			coinAmounts: map[uint8]string{0: "100000000", 1: "1000000000000000000", 2: "0"},
 			issuedSKA:   []uint8{1, 2},
 			want: []CoinAmount{
-				{CoinType: "VAR", Amount: "100000000"},
-				{CoinType: "SKA1", Amount: "1000000000000000000"},
+				{CoinType: 0, Symbol: "VAR", Amount: "100000000"},
+				{CoinType: 1, Symbol: "SKA1", Amount: "1000000000000000000"},
 			},
 		},
 		{
@@ -65,7 +65,10 @@ func TestTotalSentByCoinFromMap(t *testing.T) {
 			}
 			for i := range got {
 				if got[i].CoinType != tt.want[i].CoinType {
-					t.Errorf("[%d] CoinType = %s, want %s", i, got[i].CoinType, tt.want[i].CoinType)
+					t.Errorf("[%d] CoinType = %d, want %d", i, got[i].CoinType, tt.want[i].CoinType)
+				}
+				if got[i].Symbol != tt.want[i].Symbol {
+					t.Errorf("[%d] Symbol = %s, want %s", i, got[i].Symbol, tt.want[i].Symbol)
 				}
 				if got[i].Amount != tt.want[i].Amount {
 					t.Errorf("[%d] Amount = %s, want %s", i, got[i].Amount, tt.want[i].Amount)
@@ -87,13 +90,13 @@ func TestRegularCoinCountsFromCoinRows(t *testing.T) {
 		{
 			name: "VAR only regular count",
 			coinRows: []CoinRowData{
-				{CoinType: 0, TxCount: 10}, // 10 total - 5 votes - 2 tickets - 1 rev = 2 regular
+				{CoinType: 0, TxCount: 10},
 			},
 			voters:      5,
 			freshStake:  2,
 			revocations: 1,
 			want: []CoinCount{
-				{CoinType: "VAR", Count: 2},
+				{CoinType: 0, Symbol: "VAR", Count: 2},
 			},
 		},
 		{
@@ -107,9 +110,9 @@ func TestRegularCoinCountsFromCoinRows(t *testing.T) {
 			freshStake:  2,
 			revocations: 1,
 			want: []CoinCount{
-				{CoinType: "VAR", Count: 2},
-				{CoinType: "SKA1", Count: 3},
-				{CoinType: "SKA2", Count: 2},
+				{CoinType: 0, Symbol: "VAR", Count: 2},
+				{CoinType: 1, Symbol: "SKA1", Count: 3},
+				{CoinType: 2, Symbol: "SKA2", Count: 2},
 			},
 		},
 		{
@@ -123,20 +126,20 @@ func TestRegularCoinCountsFromCoinRows(t *testing.T) {
 			freshStake:  2,
 			revocations: 1,
 			want: []CoinCount{
-				{CoinType: "VAR", Count: 2},
-				{CoinType: "SKA1", Count: 3},
+				{CoinType: 0, Symbol: "VAR", Count: 2},
+				{CoinType: 1, Symbol: "SKA1", Count: 3},
 			},
 		},
 		{
 			name: "negative regular count clamped to zero",
 			coinRows: []CoinRowData{
-				{CoinType: 0, TxCount: 3}, // 3 - 5 votes = -2, clamped to 0
+				{CoinType: 0, TxCount: 3},
 			},
 			voters:      5,
 			freshStake:  0,
 			revocations: 0,
 			want: []CoinCount{
-				{CoinType: "VAR", Count: 0},
+				{CoinType: 0, Symbol: "VAR", Count: 0},
 			},
 		},
 	}
@@ -150,7 +153,10 @@ func TestRegularCoinCountsFromCoinRows(t *testing.T) {
 			}
 			for i := range got {
 				if got[i].CoinType != tt.want[i].CoinType {
-					t.Errorf("[%d] CoinType = %s, want %s", i, got[i].CoinType, tt.want[i].CoinType)
+					t.Errorf("[%d] CoinType = %d, want %d", i, got[i].CoinType, tt.want[i].CoinType)
+				}
+				if got[i].Symbol != tt.want[i].Symbol {
+					t.Errorf("[%d] Symbol = %s, want %s", i, got[i].Symbol, tt.want[i].Symbol)
 				}
 				if got[i].Count != tt.want[i].Count {
 					t.Errorf("[%d] Count = %d, want %d", i, got[i].Count, tt.want[i].Count)
@@ -160,45 +166,51 @@ func TestRegularCoinCountsFromCoinRows(t *testing.T) {
 	}
 }
 
-func TestFeesByCoinFromMiningFee(t *testing.T) {
+func TestFeesByCoinFromAmounts(t *testing.T) {
 	tests := []struct {
-		name      string
-		miningFee float64
-		want      []CoinAmount
+		name       string
+		feeAmounts map[uint8]string
+		want       []CoinAmount
 	}{
 		{
-			name:      "positive fee",
-			miningFee: 0.12345678,
+			name:       "VAR fee only",
+			feeAmounts: map[uint8]string{0: "12345678"},
 			want: []CoinAmount{
-				{CoinType: "VAR", Amount: "12345678"}, // DCR atoms (8 decimals)
+				{CoinType: 0, Symbol: "VAR", Amount: "12345678"},
 			},
 		},
 		{
-			name:      "zero fee",
-			miningFee: 0,
+			name:       "VAR and SKA fees",
+			feeAmounts: map[uint8]string{0: "12345678", 1: "1000000000"},
 			want: []CoinAmount{
-				{CoinType: "VAR", Amount: "0"},
+				{CoinType: 0, Symbol: "VAR", Amount: "12345678"},
+				{CoinType: 1, Symbol: "SKA1", Amount: "1000000000"},
 			},
 		},
 		{
-			name:      "large fee",
-			miningFee: 100.12345678,
+			name:       "zero fee omitted",
+			feeAmounts: map[uint8]string{0: "12345678", 1: "0"},
 			want: []CoinAmount{
-				{CoinType: "VAR", Amount: "10012345678"},
+				{CoinType: 0, Symbol: "VAR", Amount: "12345678"},
 			},
+		},
+		{
+			name:       "empty map returns nil",
+			feeAmounts: map[uint8]string{},
+			want:       nil,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := FeesByCoinFromMiningFee(tt.miningFee)
+			got := FeesByCoinFromAmounts(tt.feeAmounts)
 			if len(got) != len(tt.want) {
 				t.Errorf("len = %d, want %d", len(got), len(tt.want))
 				return
 			}
 			for i := range got {
 				if got[i].CoinType != tt.want[i].CoinType {
-					t.Errorf("[%d] CoinType = %s, want %s", i, got[i].CoinType, tt.want[i].CoinType)
+					t.Errorf("[%d] CoinType = %d, want %d", i, got[i].CoinType, tt.want[i].CoinType)
 				}
 				if got[i].Amount != tt.want[i].Amount {
 					t.Errorf("[%d] Amount = %s, want %s", i, got[i].Amount, tt.want[i].Amount)
@@ -239,7 +251,7 @@ func TestCoinTypeFromSymbol(t *testing.T) {
 		{"SKA2", 2, true},
 		{"SKA255", 255, true},
 		{"INVALID", 0, false},
-		{"SKA0", 0, false}, // SKA0 is not valid
+		{"SKA0", 0, false},
 		{"VARX", 0, false},
 	}
 
@@ -257,7 +269,6 @@ func TestCoinTypeFromSymbol(t *testing.T) {
 }
 
 func TestCoinTypesSorted(t *testing.T) {
-	// Ensure SKA coin types are sorted in ascending order
 	types := []uint8{0, 2, 1, 255, 10}
 	sorted := make([]uint8, len(types))
 	copy(sorted, types)

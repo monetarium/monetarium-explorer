@@ -6418,7 +6418,14 @@ func (pgb *ChainDB) GetExplorerBlock(ctx context.Context, hash string) *exptypes
 		block.TotalSentByCoin = exptypes.TotalSentByCoinFromMap(block.CoinAmounts, issuedSKA)
 		block.RegularCoinCounts = exptypes.RegularCoinCountsFromCoinRows(
 			block.BlockBasic.CoinRows, b.Voters, b.FreshStake, b.Revocations)
-		block.FeesByCoin = exptypes.FeesByCoinFromMiningFee(block.MiningFee)
+
+		// Build fees map from MiningFee (VAR only for now; SKA fees from stake txs would need separate aggregation)
+		feesMap := make(map[uint8]string)
+		miningFeeAtoms := int64(block.MiningFee * 1e8)
+		if miningFeeAtoms > 0 {
+			feesMap[0] = strconv.FormatInt(miningFeeAtoms, 10)
+		}
+		block.FeesByCoin = exptypes.FeesByCoinFromAmounts(feesMap)
 	}
 
 	if data.PoWHash != "" {
@@ -6476,11 +6483,13 @@ func (pgb *ChainDB) GetExplorerBlock(ctx context.Context, hash string) *exptypes
 		case stake.TxTypeTAdd, stake.TxTypeTSpend, stake.TxTypeTreasuryBase:
 			treasury = append(treasury, stx)
 		case stake.TxTypeSSFee:
+			// Set CoinType from first output
+			if len(msgTx.TxOut) > 0 {
+				stx.CoinType = uint8(msgTx.TxOut[0].CoinType)
+			}
 			stakeFees = append(stakeFees, stx)
 		}
 	}
-
-	var totalMixed int64
 
 	txs := make([]*exptypes.TrimmedTxInfo, 0, block.Transactions)
 	for i := range data.RawTx {
@@ -6492,13 +6501,18 @@ func (pgb *ChainDB) GetExplorerBlock(ctx context.Context, hash string) *exptypes
 		}
 
 		exptx, _ := trimmedTxInfoFromMsgTx(tx, ticketPrice, msgTx, pgb.chainParams) // maybe pass tree
+
+		// Set CoinType from first output (already extracted in makeExplorerTxBasic)
+		if len(msgTx.TxOut) > 0 {
+			exptx.CoinType = uint8(msgTx.TxOut[0].CoinType)
+		}
+
 		for i := range tx.Vin {
 			if tx.Vin[i].IsCoinBase() {
 				exptx.Fee, exptx.FeeRate, exptx.Fees = 0.0, 0.0, 0.0
 			}
 		}
 		txs = append(txs, exptx)
-		totalMixed += int64(exptx.MixCount) * exptx.MixDenom
 	}
 
 	block.Tx = txs
@@ -6507,7 +6521,6 @@ func (pgb *ChainDB) GetExplorerBlock(ctx context.Context, hash string) *exptypes
 	block.Revs = revocations
 	block.Tickets = tickets
 	block.StakeFees = stakeFees
-	block.TotalMixed = totalMixed
 
 	sortTx := func(txs []*exptypes.TrimmedTxInfo) {
 		sort.Slice(txs, func(i, j int) bool {

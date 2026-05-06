@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -186,11 +187,9 @@ func CoinTypeFromSymbol(symbol string) (uint8, bool) {
 		return 0, true
 	}
 	if len(symbol) > 3 && symbol[:3] == "SKA" {
-		var n int
-		if _, err := fmt.Sscanf(symbol[3:], "%d", &n); err == nil {
-			if n >= 1 && n <= 255 {
-				return uint8(n), true
-			}
+		n, err := strconv.Atoi(symbol[3:])
+		if err == nil && n >= 1 && n <= 255 {
+			return uint8(n), true
 		}
 	}
 	return 0, false
@@ -207,7 +206,7 @@ func TotalSentByCoinFromMap(coinAmounts map[uint8]string, issuedSKA []uint8) []C
 
 	// Add VAR first if present
 	if amt, ok := coinAmounts[0]; ok {
-		result = append(result, CoinAmount{CoinType: "VAR", Amount: amt})
+		result = append(result, CoinAmount{CoinType: 0, Symbol: "VAR", Amount: amt})
 	}
 
 	// Collect and sort SKA types
@@ -228,7 +227,7 @@ func TotalSentByCoinFromMap(coinAmounts map[uint8]string, issuedSKA []uint8) []C
 	// Add SKA types in sorted order, omitting zero values
 	for _, ct := range skaTypes {
 		if amt, ok := coinAmounts[ct]; ok && amt != "0" && amt != "" {
-			result = append(result, CoinAmount{CoinType: CoinTypeSymbol(ct), Amount: amt})
+			result = append(result, CoinAmount{CoinType: ct, Symbol: CoinTypeSymbol(ct), Amount: amt})
 		}
 	}
 
@@ -255,7 +254,7 @@ func RegularCoinCountsFromCoinRows(rows []CoinRowData, voters uint16, freshStake
 	}
 	sort.Slice(coinTypes, func(i, j int) bool { return coinTypes[i] < coinTypes[j] })
 
-	var result []CoinAmount
+	var result []CoinCount
 
 	for _, ct := range coinTypes {
 		row := rowMap[ct]
@@ -274,28 +273,45 @@ func RegularCoinCountsFromCoinRows(rows []CoinRowData, voters uint16, freshStake
 		if ct != 0 && regular == 0 {
 			continue
 		}
-		result = append(result, CoinAmount{CoinType: CoinTypeSymbol(ct), Amount: fmt.Sprintf("%d", regular)})
+		result = append(result, CoinCount{CoinType: ct, Symbol: CoinTypeSymbol(ct), Count: regular})
 	}
 
-	// Convert []CoinAmount to []CoinCount
-	countResult := make([]CoinCount, len(result))
-	for i, ca := range result {
-		var cnt int
-		fmt.Sscanf(ca.Amount, "%d", &cnt)
-		countResult[i] = CoinCount{CoinType: ca.CoinType, Count: cnt}
-	}
-
-	return countResult
+	return result
 }
 
 // FeesByCoinFromMiningFee creates a fees slice from the VAR mining fee.
 // For now, only VAR fees are supported; SKA fees may be added later.
-func FeesByCoinFromMiningFee(miningFee float64) []CoinAmount {
-	// Convert DCR float to atoms (8 decimal places)
-	atoms := int64(miningFee * 1e8)
-	return []CoinAmount{
-		{CoinType: "VAR", Amount: fmt.Sprintf("%d", atoms)},
+// FeesByCoinFromAmounts creates an ordered fee slice from a map of coin type -> fee atoms.
+// VAR (0) is first, then SKA types in ascending order, zero-value SKA omitted.
+func FeesByCoinFromAmounts(feeAmounts map[uint8]string) []CoinAmount {
+	if len(feeAmounts) == 0 {
+		return nil
 	}
+
+	var result []CoinAmount
+
+	// Add VAR first if present and non-zero
+	if amt, ok := feeAmounts[0]; ok && amt != "0" && amt != "" {
+		result = append(result, CoinAmount{CoinType: 0, Symbol: "VAR", Amount: amt})
+	}
+
+	// Collect and sort SKA types
+	var skaTypes []uint8
+	for ct := range feeAmounts {
+		if ct != 0 {
+			skaTypes = append(skaTypes, ct)
+		}
+	}
+	sort.Slice(skaTypes, func(i, j int) bool { return skaTypes[i] < skaTypes[j] })
+
+	// Add SKA types in sorted order, omitting zero values
+	for _, ct := range skaTypes {
+		if amt, ok := feeAmounts[ct]; ok && amt != "0" && amt != "" {
+			result = append(result, CoinAmount{CoinType: ct, Symbol: CoinTypeSymbol(ct), Amount: amt})
+		}
+	}
+
+	return result
 }
 
 // WebBasicBlock is used for quick DB data without rpc calls
@@ -728,13 +744,15 @@ type BlockInfo struct {
 
 // CoinAmount represents an amount for a specific coin type.
 type CoinAmount struct {
-	CoinType string `json:"coin_type"` // "VAR", "SKA1", etc.
-	Amount   string `json:"amount"`    // big.Int atom string (18 decimal places for SKA)
+	CoinType uint8  `json:"coin_type"`        // 0=VAR, 1-255=SKAn
+	Symbol   string `json:"symbol,omitempty"` // Display label: "VAR", "SKA1", etc. (optional, for templates)
+	Amount   string `json:"amount"`           // big.Int atom string (18 decimal places for SKA)
 }
 
 // CoinCount represents a transaction count for a specific coin type.
 type CoinCount struct {
-	CoinType string `json:"coin_type"`
+	CoinType uint8  `json:"coin_type"`        // 0=VAR, 1-255=SKAn
+	Symbol   string `json:"symbol,omitempty"` // Display label (optional)
 	Count    int    `json:"count"`
 }
 
