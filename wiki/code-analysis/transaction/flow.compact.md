@@ -12,3 +12,6 @@
   - [ ] Did you update `explorertypes.MempoolTx` (Unconfirmed)?
   - [ ] Are changes reflected in `homepage_controller.js` extraction?
   - [ ] Are changes reflected in `cmd/dcrdata/views/tx.tmpl` Go templates?
+
+See also:
+- /wiki/code-analysis/address/flow.compact.md (depends-on: address page tx list rendering)

@@ -17,3 +17,4 @@ When adding multi-coin charts:
 
 See also:
 - /wiki/var-ska-data/flow.compact.md (shares-pattern-with: JS Native Number Prohibition)
+- /wiki/code-analysis/address/flow.compact.md (shares-pattern-with: TurboQuery + `Zoom` validation)

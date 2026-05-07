@@ -60,4 +60,7 @@ When modifying token precision, scaling math, or display format, you MUST check 
 - **Client-Side Strings:** `cmd/dcrdata/public/js/helpers/ska_helper.js` (Line ~21-46: `splitSkaAtoms` uses `BigInt(atomStr)` and string splicing).
 - **Live Render Parity:** `cmd/dcrdata/public/js/controllers/mining_controller.js` (Line ~55-70: `<template>` selection and `splitSkaAtoms` injection).
 
+See also:
+- /wiki/code-analysis/address/flow.full.md (depends-on: precision rule violated — `address.tmpl` uses `toFloat64Amount`/`amountAsDecimalParts` which silently truncate SKA atoms)
+
 ---

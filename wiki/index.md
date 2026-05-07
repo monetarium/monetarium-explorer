@@ -44,6 +44,13 @@ _End-to-end pipeline for transaction processing, decoding, and rendering inputs/
 - patterns: code-analysis/transaction/patterns.md — recurring architectural concepts and invariants to follow when modifying transactions
 - impact: code-analysis/transaction/impact.md — downstream components and templates that break if tx data structures change
 
+### Address
+
+_Address page rendering, paginated transaction table, chart endpoints, and TurboQuery-driven URL state (chart kind, zoom, group-by, pagination)._
+
+- flow (compact): code-analysis/address/flow.compact.md — high-level summary of the address page data path and URL-state contract
+- flow (full): code-analysis/address/flow.full.md — detailed function trace for the address handler, chart API, and frontend controller (including the stale-zoom-param failure mode)
+
 ### VAR & SKA
 
 _Multi-coin architecture traces covering values, fee separation, and rendering for both token types._

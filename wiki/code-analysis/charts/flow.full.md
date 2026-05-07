@@ -41,3 +41,4 @@ When modifying [historical chart data for SKA], check:
 
 See also:
 - /wiki/var-ska-data/flow.full.md (depends-on: absolute precision safety boundary)
+- /wiki/code-analysis/address/flow.full.md (shares-pattern-with: TurboQuery URL state, `Zoom` validation; address charts are a separate API but reuse the same controller patterns)

@@ -13,3 +13,6 @@
   - [ ] Ensure formatting boundaries match string rules within `ska_helper.js` (`splitSkaAtoms`).
   - [ ] Manually verify mapping logic between standard HTML nodes & inner hidden `<template>` ids in `*.tmpl` files.
   - [ ] Update JS controller DOM bindings (`mining_controller.js` etc.) if layout shifts.
+
+See also:
+- /wiki/code-analysis/address/flow.compact.md (depends-on: precision rule — address page currently violates it)

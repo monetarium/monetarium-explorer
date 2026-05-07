@@ -8,3 +8,6 @@
 - **Mutation Checklist:**
   - Add `SKATotals` to `TrimmedTxInfo`.
   - Update `mempool.tmpl` to use `types.FormatSKAAmount`.
+
+See also:
+- /wiki/code-analysis/address/flow.compact.md (shares-pattern-with: mempool overlay into `NumUnconfirmed`)

@@ -41,3 +41,6 @@ When modifying SKA data in mempool, check:
 ### Section 8 — Evidence
 - `mempool/monitor.go:374` — `s.Amount = addAtomStrings(s.Amount, amtStr, true)`
 - `explorer/types/explorertypes.go:859` — `TrimMempoolTx` creates a `TrimmedTxInfo` without mapping `SKATotals`.
+
+See also:
+- /wiki/code-analysis/address/flow.full.md (shares-pattern-with: `pgb.mp.UnconfirmedTxnsForAddress` overlays mempool entries into address `NumUnconfirmed`)
