@@ -928,11 +928,8 @@ func (exp *explorerUI) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgB
 
 // ChartsUpdated should be called when a chart update completes.
 func (exp *explorerUI) ChartsUpdated() {
-	anonSet := exp.chartSource.AnonymitySet()
 	exp.pageData.Lock()
-	if exp.pageData.HomeInfo.CoinSupply > 0 {
-		exp.pageData.HomeInfo.MixedPercent = float64(anonSet) / float64(exp.pageData.HomeInfo.CoinSupply) * 100
-	}
+	// MixedPercent removed - was used for privacy mix tracking
 	exp.pageData.Unlock()
 }
 

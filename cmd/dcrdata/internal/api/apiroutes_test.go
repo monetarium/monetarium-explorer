@@ -261,6 +261,71 @@ func TestBlockVerbose_FeesMap(t *testing.T) {
 	}
 }
 
+// blockVerboseSKAFeeDS provides SSFeeTotalsByCoin for SKA fee testing.
+type blockVerboseSKAFeeDS struct {
+	blockVerboseDS
+}
+
+func (blockVerboseSKAFeeDS) GetSummaryByHash(_ context.Context, hash string, _ bool) *apitypes.BlockDataBasic {
+	fee := int64(12345678)
+	return &apitypes.BlockDataBasic{
+		Height: 100,
+		Hash:   hash,
+		CoinAmounts: map[uint8]string{
+			0: "100000000",
+			1: "1000000000000000000",
+		},
+		MiningFee: &fee,
+		SSFeeTotalsByCoin: map[uint8]string{
+			1: "500000000000000000", // SKA1: 0.5 SKA in atoms
+			2: "300000000000000000", // SKA2: 0.3 SKA in atoms
+		},
+	}
+}
+
+func TestBlockVerbose_SKAFeesFromSSFeeTotals(t *testing.T) {
+	app := &appContext{DataSource: blockVerboseSKAFeeDS{}}
+	mux := NewAPIRouter(app, "", false, false)
+
+	req := httptest.NewRequest(http.MethodGet, "/block/100/verbose", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var result map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	fees, ok := result["fees"].(map[string]interface{})
+	if !ok {
+		t.Fatal("fees field missing or not a map")
+	}
+
+	// VAR fees should be present
+	if fees["0"] == nil {
+		t.Error("fees missing VAR (key 0)")
+	}
+
+	// SKA fees from SSFeeTotalsByCoin should be present
+	if fees["1"] == nil {
+		t.Error("fees missing SKA1 (key 1) from SSFeeTotalsByCoin")
+	}
+	if fees["1"] != "500000000000000000" {
+		t.Errorf("fees[1] = %v, want 500000000000000000", fees["1"])
+	}
+
+	if fees["2"] == nil {
+		t.Error("fees missing SKA2 (key 2) from SSFeeTotalsByCoin")
+	}
+	if fees["2"] != "300000000000000000" {
+		t.Errorf("fees[2] = %v, want 300000000000000000", fees["2"])
+	}
+}
+
 // blockVerboseZeroSKADS provides zero-value SKA for omission test.
 type blockVerboseZeroSKADS struct {
 	blockVerboseDS

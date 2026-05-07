@@ -6406,6 +6406,7 @@ func (pgb *ChainDB) GetExplorerBlock(ctx context.Context, hash string) *exptypes
 	}
 
 	// Populate per-coin amounts from the block summary (computed at collection time).
+	var skaFeeTotals map[uint8]string
 	if summary := pgb.GetSummaryByHash(ctx, hash, false); summary != nil && summary.CoinAmounts != nil {
 		block.CoinAmounts = summary.CoinAmounts
 		// Also populate CoinRows on the embedded BlockBasic so the websocket
@@ -6418,6 +6419,9 @@ func (pgb *ChainDB) GetExplorerBlock(ctx context.Context, hash string) *exptypes
 		block.TotalSentByCoin = exptypes.TotalSentByCoinFromMap(block.CoinAmounts, issuedSKA)
 		block.RegularCoinCounts = exptypes.RegularCoinCountsFromCoinRows(
 			block.BlockBasic.CoinRows, b.Voters, b.FreshStake, b.Revocations)
+
+		// Store SKA fee totals from SSFeeTotalsByCoin (stake fee distribution)
+		skaFeeTotals = summary.SSFeeTotalsByCoin
 	}
 
 	if data.PoWHash != "" {
@@ -6570,17 +6574,21 @@ func (pgb *ChainDB) GetExplorerBlock(ctx context.Context, hash string) *exptypes
 	block.MiningFee = (getTotalFee(block.Tx) + getTotalFee(block.Treasury) + getTotalFee(block.Revs) +
 		getTotalFee(block.Tickets) + getTotalFee(block.Votes)).ToCoin()
 
-	// Aggregate fees per coin type (VAR from MiningFee, SKA from transactions)
+	// Aggregate fees per coin type (VAR from MiningFee, SKA from SSFeeTotalsByCoin)
 	feesMap := make(map[uint8]string)
 	// VAR fees from MiningFee
 	miningFeeAtoms := int64(block.MiningFee * 1e8)
 	if miningFeeAtoms > 0 {
 		feesMap[0] = strconv.FormatInt(miningFeeAtoms, 10)
 	}
-	// SKA fees from regular transactions (FeeRaw field)
-	exptypes.AggregateFeesFromTxSlice(block.Tx, feesMap)
-	// SKA fees from stake fees (SSFee transactions)
-	exptypes.AggregateFeesFromTxSlice(block.StakeFees, feesMap)
+	// SKA fees from SSFeeTotalsByCoin (stake fee distribution)
+	if skaFeeTotals != nil {
+		for ct, fee := range skaFeeTotals {
+			if fee != "" && fee != "0" {
+				feesMap[ct] = fee
+			}
+		}
+	}
 	block.FeesByCoin = exptypes.FeesByCoinFromAmounts(feesMap)
 
 	pgb.lastExplorerBlock.Lock()
