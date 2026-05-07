@@ -6578,35 +6578,9 @@ func (pgb *ChainDB) GetExplorerBlock(ctx context.Context, hash string) *exptypes
 		feesMap[0] = strconv.FormatInt(miningFeeAtoms, 10)
 	}
 	// SKA fees from regular transactions (FeeRaw field)
-	for _, tx := range block.Tx {
-		if tx.CoinType != 0 && tx.FeeRaw != "" && tx.FeeRaw != "0" {
-			fee, err := strconv.ParseInt(tx.FeeRaw, 10, 64)
-			if err != nil {
-				continue
-			}
-			if existing, ok := feesMap[tx.CoinType]; ok {
-				if existingAmt, err := strconv.ParseInt(existing, 10, 64); err == nil {
-					fee += existingAmt
-				}
-			}
-			feesMap[tx.CoinType] = strconv.FormatInt(fee, 10)
-		}
-	}
+	exptypes.AggregateFeesFromTxSlice(block.Tx, feesMap)
 	// SKA fees from stake fees (SSFee transactions)
-	for _, tx := range block.StakeFees {
-		if tx.CoinType != 0 && tx.FeeRaw != "" && tx.FeeRaw != "0" {
-			fee, err := strconv.ParseInt(tx.FeeRaw, 10, 64)
-			if err != nil {
-				continue
-			}
-			if existing, ok := feesMap[tx.CoinType]; ok {
-				if existingAmt, err := strconv.ParseInt(existing, 10, 64); err == nil {
-					fee += existingAmt
-				}
-			}
-			feesMap[tx.CoinType] = strconv.FormatInt(fee, 10)
-		}
-	}
+	exptypes.AggregateFeesFromTxSlice(block.StakeFees, feesMap)
 	block.FeesByCoin = exptypes.FeesByCoinFromAmounts(feesMap)
 
 	pgb.lastExplorerBlock.Lock()
