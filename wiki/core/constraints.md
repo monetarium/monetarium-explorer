@@ -9,8 +9,6 @@ Token limits & handling:
 - **SKA** (15 integer digits, 18 decimal places): Computed using the specialized Go `math/big` arithmetic module to prevent bounds overflow and precision loss.
   Because SKA values exceed native `float64` limits, SKA values MUST be stored, transferred, and presented across boundaries (DB schema `TEXT`, APIs, WebSockets) strictly as base-10 `string` types. Using primitive floating-point types for SKA at any tier (including JS `Number`) will inherently drop atomic precision (maxing out at ~15 digits) or trigger scientific notation. Client-side math must rely on JS `BigInt` or manual string chopping.
 
-> 📝 **Detailed Deep Dive:** For a comprehensive end-to-end trace of this data flow (RPC → DB → API → UI) and a mutation checklist, see [VAR vs SKA Data Flow](../var-ska-data/flow.full.md) and its [Compact view](../var-ska-data/flow.compact.md).
-
 ## C2: Dual Pipeline Mutation (applies to: block, tx)
 
 The system bifurcates how it determines truth for pending vs. historical states. Real-time pipelines (Mempool, Websockets) rely on internal Go-memory helpers (`txhelpers`, `blockdata.Collector`), while static pipelines (DB, API) rely heavily on node RPC JSON mapping (`dbtypes.MsgBlockToDBBlock`, `GetRawTransactionVerbose`). Any change in data fields or calculations MUST be applied symmetrically to both independent pipelines to prevent silent state divergence when items confirm.
@@ -30,3 +28,20 @@ Prioritize existing SCSS variables and Bootstrap utility classes/components. Nev
 ## C6: In-DOM Template Cloning (applies to: frontend)
 
 Javascript MUST use `document.importNode(tmpl.content, true)` to clone inert `<template id="...">` elements when rendering live data. NEVER build ad-hoc HTML strings in JS (e.g., via `innerHTML` concatenation or template literals). This prevents XSS, segregates markup from logic, and ensures live-updated elements correctly leverage the identical SCSS rules utilized by the server-rendered templates (supporting C3).
+
+## C7: Centralized Coin-Type Label Rendering (applies to: block, tx, charts, mempool, address, frontend)
+
+Coin-type labels (`VAR`, `SKA1`–`SKA255`) must be produced through the canonical helper for each environment, never inline. The mapping is `0 → "VAR"`, `1–255 → "SKA{n}"`.
+
+| Environment               | Location                                      | Function                                                                                                     |
+| ------------------------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| Go templates (SSR)        | `cmd/dcrdata/internal/explorer/templates.go`  | `coinSymbol(ct uint8) string` — registered as `coinSymbol` in the template `FuncMap`                         |
+| JS / Stimulus (real-time) | `cmd/dcrdata/public/js/helpers/ska_helper.js` | `renderCoinType(coinType: number): string` — handles `null` / `undefined` / out-of-range with `"-"` fallback |
+
+Related JS helpers in `ska_helper.js` and `humanize_helper.js` operate on coin amounts (not labels): `formatCoinAtoms(atomStr, coinType)` (three-significant-figure routing by coin type), `formatAtomsAsCoinString(atomStr, coinType)` (full precision, trimmed trailing zeros), and `splitSkaAtoms(atomStr)` (`BigInt`-safe display-part splitting; supports C1).
+
+Rules:
+
+- Never construct labels inline (`` `SKA${n}` ``, hardcoded `"VAR"`, etc.). Always call the canonical function for the environment.
+- If the label format ever changes, update both `coinSymbol` and `renderCoinType` in the same change.
+- New formatting helpers for coin amounts go in `ska_helper.js` / `humanize_helper.js`, not in a controller.

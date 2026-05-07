@@ -1,6 +1,6 @@
 ### 1. Overview
 
-Tracing the flow of block data (specifically `blockdata.BlockData` and multi-token data like `CoinAmounts`) from initial RPC ingestion through backend aggregation, database persistence, and outward to the UI templates and WebSocket consumers.
+Tracing the flow of block data (specifically `blockdata.BlockData` and multi-coin data like `CoinAmounts`) from initial RPC ingestion through backend aggregation, database persistence, and outward to the UI templates and WebSocket consumers.
 
 ### 2. End-to-End Data Flow
 
@@ -43,13 +43,13 @@ Tracing the flow of block data (specifically `blockdata.BlockData` and multi-tok
 
 ### 5. Critical Constraints
 
-- **Independent Multi-Token Re-calculation:** `Collector` and `dbtypes.MsgBlockToDBBlock` do the exact same `big.Int` extraction individually.
-- **High-Precision Numeric Handling:** At no point before hitting Javascript do SKA token amounts ever become floats or integers in the Go codebase. They are maintained identically as `*big.Int`, stored as `string`, broadcast as `string`, and parsed locally on the client.
-- **Array-based Frontend Logic:** Even though backend memory maps tokens by their numeric ID (`map[uint8]string`), the frontend logic requires an array. Both `explorer.go` and `pubsubhub.go` perform duplicate `sort.Slice` operations to guarantee array order.
+- **Independent Multi-Coin Re-calculation:** `Collector` and `dbtypes.MsgBlockToDBBlock` do the exact same `big.Int` extraction individually.
+- **High-Precision Numeric Handling:** At no point before hitting Javascript do SKA coin amounts ever become floats or integers in the Go codebase. They are maintained identically as `*big.Int`, stored as `string`, broadcast as `string`, and parsed locally on the client.
+- **Array-based Frontend Logic:** Even though backend memory maps coins by their numeric ID (`map[uint8]string`), the frontend logic requires an array. Both `explorer.go` and `pubsubhub.go` perform duplicate `sort.Slice` operations to guarantee array order.
 
 ### 6. Mutation Impact
 
-When modifying **`BlockData` (or Multi-Token Extraction logic)**, you MUST check ALL of the following:
+When modifying **`BlockData` (or Multi-Coin Extraction logic)**, you MUST check ALL of the following:
 
 - Direct Dependencies: `explorerUI.Store`, `PubSubHub.Store`.
 - Indirect Dependencies: `mining_controller.js`, `supply_controller.js` (array structure assumptions).
@@ -80,3 +80,6 @@ When modifying **`BlockData` (or Multi-Token Extraction logic)**, you MUST check
 - **Database Divergence:** `db/dbtypes/conversion.go` line 18 (`blockCoinAmounts` manually parses `msgBlock`).
 - **Postgres JSONB Integration:** `db/dcrpg/pgblockchain.go` `StoreBlock` line 3444 calls `MsgBlockToDBBlock` and ignores `BlockData`.
 - **Presentation State Duplication:** `cmd/dcrdata/internal/explorer/explorer.go` (~line 750) and `pubsub/pubsubhub.go` (~line 650) both run identical loops transforming `map[uint8]string` into sorted `[]PoWSKAReward`.
+
+See also:
+- /wiki/core/constraints.md (depends-on: C1 numeric precision & bifurcation; C2 dual pipeline mutation; C3 template + WebSocket parity; C4 perimeter flattening & array stability)

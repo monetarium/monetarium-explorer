@@ -1,6 +1,6 @@
 - **Flow:** `mempool/monitor.go` → `inventory.CoinStats` → `StoreMPData(derive CoinFills)` → `explorerroutes.go` → `mempool.tmpl`
 - **Architectural Patterns:**
-  - Multi-token Aggregation: Per-coin stats mapped by `uint8` CoinType.
+  - Multi-coin Aggregation: Per-coin stats mapped by `uint8` CoinType.
   - String-based Math: `addAtomStrings` used to preserve 18-decimal SKA precision.
 - **Constraints:** 
   - Never parse SKA string amounts into `float64`.
@@ -8,3 +8,6 @@
 - **Mutation Checklist:**
   - Add `SKATotals` to `TrimmedTxInfo`.
   - Update `mempool.tmpl` to use `types.FormatSKAAmount`.
+
+See also:
+- /wiki/code-analysis/address/flow.compact.md (shares-pattern-with: mempool overlay into `NumUnconfirmed`)
