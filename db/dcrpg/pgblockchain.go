@@ -1522,7 +1522,7 @@ func (pgb *ChainDB) PoolStatusForTicket(ctx context.Context, txid string) (dbtyp
 	}
 	ctx, cancel := context.WithTimeout(ctx, pgb.queryTimeout)
 	defer cancel()
-	_, spendType, poolStatus, err := retrieveTicketStatusByHash(ctx, pgb.db, ch)
+	spendType, poolStatus, err := retrieveTicketStatusByHash(ctx, pgb.db, ch)
 	return spendType, poolStatus, pgb.replaceCancelError(err)
 }
 
@@ -6413,6 +6413,11 @@ func (pgb *ChainDB) GetExplorerBlock(ctx context.Context, hash string) *exptypes
 		// Include all ever-emitted SKA types so zero-activity coins still appear.
 		issuedSKA := pgb.issuedSKACoinTypes(ctx)
 		block.BlockBasic.CoinRows = coinRowsFromSummary(summary, issuedSKA)
+
+		// Populate template-facing ordered slices for multi-coin display.
+		block.TotalSentByCoin = exptypes.TotalSentByCoinFromMap(block.CoinAmounts, issuedSKA)
+		block.RegularCoinCounts = exptypes.RegularCoinCountsFromCoinRows(
+			block.BlockBasic.CoinRows, b.Voters, b.FreshStake, b.Revocations)
 	}
 
 	if data.PoWHash != "" {
@@ -6466,15 +6471,29 @@ func (pgb *ChainDB) GetExplorerBlock(ctx context.Context, hash string) *exptypes
 		case stake.TxTypeSStx:
 			tickets = append(tickets, stx)
 		case stake.TxTypeSSRtx:
+			// Populate TicketStatus from the ticket that was revoked
+			// Get ticket hash from the first input's previous outpoint
+			if len(msgTx.TxIn) > 0 {
+				prevOut := msgTx.TxIn[0].PreviousOutPoint
+				if prevOut.Hash != zeroHash {
+					ticketHash := dbtypes.ChainHash(prevOut.Hash)
+					_, poolStatus, err := retrieveTicketStatusByHash(ctx, pgb.db, ticketHash)
+					if err == nil {
+						stx.TicketStatus = poolStatus.String()
+					}
+				}
+			}
 			revocations = append(revocations, stx)
 		case stake.TxTypeTAdd, stake.TxTypeTSpend, stake.TxTypeTreasuryBase:
 			treasury = append(treasury, stx)
 		case stake.TxTypeSSFee:
+			// Set CoinType from first output
+			if len(msgTx.TxOut) > 0 {
+				stx.CoinType = uint8(msgTx.TxOut[0].CoinType)
+			}
 			stakeFees = append(stakeFees, stx)
 		}
 	}
-
-	var totalMixed int64
 
 	txs := make([]*exptypes.TrimmedTxInfo, 0, block.Transactions)
 	for i := range data.RawTx {
@@ -6486,13 +6505,18 @@ func (pgb *ChainDB) GetExplorerBlock(ctx context.Context, hash string) *exptypes
 		}
 
 		exptx, _ := trimmedTxInfoFromMsgTx(tx, ticketPrice, msgTx, pgb.chainParams) // maybe pass tree
+
+		// Set CoinType from first output (already extracted in makeExplorerTxBasic)
+		if len(msgTx.TxOut) > 0 {
+			exptx.CoinType = uint8(msgTx.TxOut[0].CoinType)
+		}
+
 		for i := range tx.Vin {
 			if tx.Vin[i].IsCoinBase() {
 				exptx.Fee, exptx.FeeRate, exptx.Fees = 0.0, 0.0, 0.0
 			}
 		}
 		txs = append(txs, exptx)
-		totalMixed += int64(exptx.MixCount) * exptx.MixDenom
 	}
 
 	block.Tx = txs
@@ -6501,7 +6525,6 @@ func (pgb *ChainDB) GetExplorerBlock(ctx context.Context, hash string) *exptypes
 	block.Revs = revocations
 	block.Tickets = tickets
 	block.StakeFees = stakeFees
-	block.TotalMixed = totalMixed
 
 	sortTx := func(txs []*exptypes.TrimmedTxInfo) {
 		sort.Slice(txs, func(i, j int) bool {
@@ -6546,6 +6569,45 @@ func (pgb *ChainDB) GetExplorerBlock(ctx context.Context, hash string) *exptypes
 		getTotalSent(block.Tickets) + getTotalSent(block.Votes) + getTotalSent(block.StakeFees)).ToCoin()
 	block.MiningFee = (getTotalFee(block.Tx) + getTotalFee(block.Treasury) + getTotalFee(block.Revs) +
 		getTotalFee(block.Tickets) + getTotalFee(block.Votes)).ToCoin()
+
+	// Aggregate fees per coin type (VAR from MiningFee, SKA from transactions)
+	feesMap := make(map[uint8]string)
+	// VAR fees from MiningFee
+	miningFeeAtoms := int64(block.MiningFee * 1e8)
+	if miningFeeAtoms > 0 {
+		feesMap[0] = strconv.FormatInt(miningFeeAtoms, 10)
+	}
+	// SKA fees from regular transactions (FeeRaw field)
+	for _, tx := range block.Tx {
+		if tx.CoinType != 0 && tx.FeeRaw != "" && tx.FeeRaw != "0" {
+			fee, err := strconv.ParseInt(tx.FeeRaw, 10, 64)
+			if err != nil {
+				continue
+			}
+			if existing, ok := feesMap[tx.CoinType]; ok {
+				if existingAmt, err := strconv.ParseInt(existing, 10, 64); err == nil {
+					fee += existingAmt
+				}
+			}
+			feesMap[tx.CoinType] = strconv.FormatInt(fee, 10)
+		}
+	}
+	// SKA fees from stake fees (SSFee transactions)
+	for _, tx := range block.StakeFees {
+		if tx.CoinType != 0 && tx.FeeRaw != "" && tx.FeeRaw != "0" {
+			fee, err := strconv.ParseInt(tx.FeeRaw, 10, 64)
+			if err != nil {
+				continue
+			}
+			if existing, ok := feesMap[tx.CoinType]; ok {
+				if existingAmt, err := strconv.ParseInt(existing, 10, 64); err == nil {
+					fee += existingAmt
+				}
+			}
+			feesMap[tx.CoinType] = strconv.FormatInt(fee, 10)
+		}
+	}
+	block.FeesByCoin = exptypes.FeesByCoinFromAmounts(feesMap)
 
 	pgb.lastExplorerBlock.Lock()
 	pgb.lastExplorerBlock.hash = hash

@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	apitypes "github.com/monetarium/monetarium-explorer/api/types"
+	chainjson "github.com/monetarium/monetarium-node/rpc/jsonrpc/types"
 )
 
 // blockSummaryDS overrides GetSummaryByHash to return multi-coin data.
@@ -159,5 +160,156 @@ func TestSKASupplyChart_ResponseFormat(t *testing.T) {
 		t.Error("coin-supply/1 returns 500 - should handle gracefully")
 	default:
 		t.Logf("coin-supply/1 returns %d", w.Code)
+	}
+}
+
+// blockVerboseDS provides multi-coin data for verbose endpoint tests.
+type blockVerboseDS struct {
+	noopDS
+}
+
+func (blockVerboseDS) GetBlockVerboseByHash(_ context.Context, hash string, _ bool) *chainjson.GetBlockVerboseResult {
+	return &chainjson.GetBlockVerboseResult{
+		Hash:   hash,
+		Height: 100,
+		Tx:     []string{"tx1", "tx2"},
+	}
+}
+
+func (blockVerboseDS) GetSummaryByHash(_ context.Context, hash string, _ bool) *apitypes.BlockDataBasic {
+	fee := int64(12345678) // 0.12345678 DCR in atoms
+	return &apitypes.BlockDataBasic{
+		Height: 100,
+		Hash:   hash,
+		CoinAmounts: map[uint8]string{
+			0: "100000000",           // VAR: 1 DCR
+			1: "1000000000000000000", // SKA1: 1 SKA
+			2: "2000000000000000000", // SKA2: 2 SKA
+		},
+		MiningFee: &fee,
+	}
+}
+
+func (blockVerboseDS) GetBlockHash(_ context.Context, height int64) (string, error) {
+	return "00000000000000000000000000000000000000000000000000000000000000a0", nil
+}
+
+func TestBlockVerbose_TotalSentMap(t *testing.T) {
+	app := &appContext{DataSource: blockVerboseDS{}}
+	mux := NewAPIRouter(app, "", false, false)
+
+	req := httptest.NewRequest(http.MethodGet, "/block/100/verbose", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var result map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	totalSent, ok := result["total_sent"].(map[string]interface{})
+	if !ok {
+		t.Fatal("total_sent field missing or not a map")
+	}
+
+	// VAR (key "0") should be present
+	if totalSent["0"] == nil {
+		t.Error("total_sent missing VAR (key 0)")
+	}
+	if totalSent["0"] != "100000000" {
+		t.Errorf("total_sent[0] = %v, want 100000000", totalSent["0"])
+	}
+
+	// SKA1 (key "1") should be present
+	if totalSent["1"] == nil {
+		t.Error("total_sent missing SKA1 (key 1)")
+	}
+	if totalSent["1"] != "1000000000000000000" {
+		t.Errorf("total_sent[1] = %v, want 1000000000000000000", totalSent["1"])
+	}
+}
+
+func TestBlockVerbose_FeesMap(t *testing.T) {
+	app := &appContext{DataSource: blockVerboseDS{}}
+	mux := NewAPIRouter(app, "", false, false)
+
+	req := httptest.NewRequest(http.MethodGet, "/block/100/verbose", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var result map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	fees, ok := result["fees"].(map[string]interface{})
+	if !ok {
+		t.Fatal("fees field missing or not a map")
+	}
+
+	// VAR fees should be present
+	if fees["0"] == nil {
+		t.Error("fees missing VAR (key 0)")
+	}
+}
+
+// blockVerboseZeroSKADS provides zero-value SKA for omission test.
+type blockVerboseZeroSKADS struct {
+	blockVerboseDS
+}
+
+func (blockVerboseZeroSKADS) GetSummaryByHash(_ context.Context, hash string, _ bool) *apitypes.BlockDataBasic {
+	return &apitypes.BlockDataBasic{
+		Height: 100,
+		Hash:   hash,
+		CoinAmounts: map[uint8]string{
+			0: "100000000",          // VAR: 1 DCR
+			1: "0",                  // SKA1: zero - should be omitted
+			2: "500000000000000000", // SKA2: non-zero
+		},
+		MiningFee: new(int64),
+	}
+}
+
+func TestBlockVerbose_OmitsZeroSKA(t *testing.T) {
+	app := &appContext{DataSource: blockVerboseZeroSKADS{}}
+	mux := NewAPIRouter(app, "", false, false)
+
+	req := httptest.NewRequest(http.MethodGet, "/block/100/verbose", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var result map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	totalSent := result["total_sent"].(map[string]interface{})
+
+	// VAR should be present
+	if totalSent["0"] == nil {
+		t.Error("total_sent should contain VAR (key 0)")
+	}
+
+	// SKA1 (key "1") with zero value should be omitted
+	if totalSent["1"] != nil {
+		t.Error("total_sent should omit SKA1 (key 1) with zero value")
+	}
+
+	// SKA2 (key "2") with non-zero should be present
+	if totalSent["2"] == nil {
+		t.Error("total_sent should contain SKA2 (key 2) with non-zero value")
 	}
 }
