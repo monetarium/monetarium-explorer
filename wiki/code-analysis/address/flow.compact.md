@@ -24,4 +24,4 @@ When modifying the address page:
 See also:
 - /wiki/code-analysis/charts/flow.compact.md (shares-pattern-with: TurboQuery + Zoom validation)
 - /wiki/code-analysis/transaction/flow.compact.md (depends-on: address tx list rendering)
-- /wiki/code-analysis/var-ska-data/flow.compact.md (depends-on: float64-vs-string precision boundary)
+- /wiki/core/constraints.md#C1 (depends-on: float64-vs-string precision — **currently violated** for SKA addresses)

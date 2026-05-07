@@ -74,5 +74,5 @@ When modifying [the address page or its chart/table state], check:
 See also:
 - /wiki/code-analysis/charts/flow.full.md (shares-pattern-with: TurboQuery URL-state persistence; `Zoom` validation; chart-payload serialization)
 - /wiki/code-analysis/transaction/flow.full.md (depends-on: address transaction list rendering)
-- /wiki/code-analysis/var-ska-data/flow.full.md (depends-on: float64 vs string precision boundary — currently violated for SKA addresses)
+- /wiki/core/constraints.md#C1 (depends-on: numeric precision & bifurcation — **currently violated** on this page; `AddressInfo.Balance` flows through `toFloat64Amount` / `amountAsDecimalParts`, lossy for SKA)
 - /wiki/code-analysis/mempool/flow.full.md (depends-on: `NumUnconfirmed` overlay via `UnconfirmedTxnsForAddress`)

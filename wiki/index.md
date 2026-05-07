@@ -51,15 +51,6 @@ _Address page rendering, paginated transaction table, chart endpoints, and Turbo
 - flow (compact): code-analysis/address/flow.compact.md — high-level summary of the address page data path and URL-state contract
 - flow (full): code-analysis/address/flow.full.md — detailed function trace for the address handler, chart API, and frontend controller (including the stale-zoom-param failure mode)
 
-### VAR & SKA
-
-_Multi-coin architecture traces covering values, fee separation, and rendering for both token types._
-
-- flow (compact): code-analysis/var-ska-data/flow.compact.md — high-level summary of token splitting, balances, and fee tracking
-- flow (full): code-analysis/var-ska-data/flow.full.md — detailed, step-by-step function trace for deep debugging of multi-coin logic
-- patterns: code-analysis/var-ska-data/patterns.md — recurring architectural concepts and invariants to follow when handling token types
-- impact: code-analysis/var-ska-data/impact.md — downstream components and templates that break if token rendering logic changes
-
 ### Windows
 
 _Ticket price window intervals, calculating and displaying current and upcoming ticket prices._
@@ -76,14 +67,14 @@ _Aggregation and grouping of blocks over specific time intervals (days, weeks, m
 
 ### Mempool
 
-_Multi-token aggregation, websocket data preparation, and template rendering for unconfirmed transactions._
+_Multi-coin aggregation, websocket data preparation, and template rendering for unconfirmed transactions._
 
 - flow (compact): code-analysis/mempool/flow.compact.md — high-level summary of mempool state aggregation
 - flow (full): code-analysis/mempool/flow.full.md — detailed, step-by-step function trace for deep debugging of mempool data tracking
 
 ### Charts
 
-_Historical data fetching, cache aggregation, and payload serialization for UI charts._
+_Historical data fetching, cache aggregation, and payload serialization for UI charts. Covers the legacy VAR `coin-supply` pipeline alongside the per-coin SKA `coin-supply/{N}` pipeline (lazy load, `*big.Int` cumulation, exact-precision legend)._
 
-- flow (compact): code-analysis/charts/flow.compact.md — high-level summary of the chart data pipeline
-- flow (full): code-analysis/charts/flow.full.md — detailed, step-by-step function trace for debugging chart API and rendering
+- flow (compact): code-analysis/charts/flow.compact.md — high-level summary of both VAR and SKA chart pipelines
+- flow (full): code-analysis/charts/flow.full.md — detailed, step-by-step function trace covering RPC/SQL → cache → API → controller → Dygraphs for both pipelines

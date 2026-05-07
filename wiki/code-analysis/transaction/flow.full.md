@@ -84,4 +84,5 @@ When modifying **transaction data structures or multi-coin logic**, you MUST che
 The overriding flow concept is **aggregation vs. index-preservation**. Mempool flows squash output data immediately into maps. Confirmed flows proxy node-provided arrays verbatim. Any cross-cutting concern (like tracking a specific coin's movement) must reconcile these two formats.
 
 See also:
-- /wiki/code-analysis/address/flow.full.md (depends-on: address page lists per-tx rows via `FillAddressTransactions` and inherits the same SKA template-rendering gap)
+- /wiki/code-analysis/address/flow.full.md — the address page lists per-tx rows via `FillAddressTransactions` and inherits the same SKA template-rendering gap (address links upstream with `depends-on`).
+- /wiki/core/constraints.md (depends-on: C1 numeric precision & bifurcation; C2 dual pipeline mutation; C3 template + WebSocket parity; C4 perimeter flattening & array stability)

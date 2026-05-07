@@ -14,7 +14,7 @@ These pipelines:
 - can diverge independently
 
 Implication:
-See [system/constraints.md#C2](../system/constraints.md#C2)
+See [core/constraints.md#C2](../../core/constraints.md#C2)
 
 ---
 
@@ -51,7 +51,7 @@ All SKA values:
 No float or decimal representation is used before frontend.
 
 Implication:
-See [system/constraints.md#C1](../system/constraints.md#C1)
+See [core/constraints.md#C1](../../core/constraints.md#C1)
 
 ---
 
@@ -68,7 +68,7 @@ Two independent rendering paths:
 Both must produce identical structures.
 
 Implication:
-See [system/constraints.md#C3](../system/constraints.md#C3)
+See [core/constraints.md#C3](../../core/constraints.md#C3)
 
 ---
 

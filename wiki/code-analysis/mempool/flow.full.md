@@ -39,8 +39,9 @@ When modifying SKA data in mempool, check:
 - Not exposing `SKATotals` in `TrimmedTxInfo`, meaning the `mempool.tmpl` `range .Transactions` loop cannot render SKA transaction amounts.
 
 ### Section 8 — Evidence
-- `mempool/monitor.go:374` — `s.Amount = addAtomStrings(s.Amount, amtStr, true)`
+- `mempool/monitor.go:384` — `s.Amount = addAtomStrings(s.Amount, amtStr, true)`
 - `explorer/types/explorertypes.go:859` — `TrimMempoolTx` creates a `TrimmedTxInfo` without mapping `SKATotals`.
 
 See also:
-- /wiki/code-analysis/address/flow.full.md (shares-pattern-with: `pgb.mp.UnconfirmedTxnsForAddress` overlays mempool entries into address `NumUnconfirmed`)
+- /wiki/code-analysis/address/flow.full.md — consumes this mempool data via `pgb.mp.UnconfirmedTxnsForAddress` to populate `NumUnconfirmed` (address links upstream with `depends-on`).
+- /wiki/core/constraints.md (depends-on: C1 numeric precision & bifurcation — `addAtomStrings(..., isBig=true)`; C2 dual pipeline — mempool aggregation vs persisted recalc)
