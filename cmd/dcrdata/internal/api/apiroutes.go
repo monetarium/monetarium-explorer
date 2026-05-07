@@ -606,6 +606,7 @@ func (c *appContext) getBlockVerbose(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Add fees map (coin type key -> fee string)
+		// VAR fees from MiningFee (total VAR tx fees in block); SKA fees from SSFeeTotalsByCoin
 		response.Fees = make(map[string]string)
 
 		// VAR fees from MiningFee

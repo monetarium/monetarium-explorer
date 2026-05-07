@@ -280,6 +280,9 @@ func RegularCoinCountsFromCoinRows(rows []CoinRowData, voters uint16, freshStake
 }
 
 // FeesByCoinFromAmounts creates an ordered fee slice from a map of coin type -> fee atoms.
+// VAR (0) fees come from MiningFee (sum of all VAR tx fees in the block).
+// SKA fees come from SSFeeTotalsByCoin (total SKA atoms distributed via TxTypeSSFee per coin type,
+// i.e., fees collected from SKA outputs being spent in the block).
 // VAR (0) is first, then SKA types in ascending order, zero-value SKA omitted.
 func FeesByCoinFromAmounts(feeAmounts map[uint8]string) []CoinAmount {
 	if len(feeAmounts) == 0 {
@@ -735,6 +738,8 @@ type BlockInfo struct {
 	// for template rendering. Same ordering as TotalSentByCoin.
 	RegularCoinCounts []CoinCount `json:"-"`
 	// FeesByCoin is an ordered slice of fees per coin type, for template rendering.
+	// VAR fees are total transaction fees in the block; SKA fees are SSFee distribution amounts
+	// (total SKA atoms distributed via TxTypeSSFee per coin type, i.e., fees collected from SKA outputs).
 	// Same ordering as TotalSentByCoin.
 	FeesByCoin []CoinAmount `json:"-"`
 }
