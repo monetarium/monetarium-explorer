@@ -279,8 +279,6 @@ func RegularCoinCountsFromCoinRows(rows []CoinRowData, voters uint16, freshStake
 	return result
 }
 
-// FeesByCoinFromMiningFee creates a fees slice from the VAR mining fee.
-// For now, only VAR fees are supported; SKA fees may be added later.
 // FeesByCoinFromAmounts creates an ordered fee slice from a map of coin type -> fee atoms.
 // VAR (0) is first, then SKA types in ascending order, zero-value SKA omitted.
 func FeesByCoinFromAmounts(feeAmounts map[uint8]string) []CoinAmount {
