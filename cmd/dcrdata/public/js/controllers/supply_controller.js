@@ -47,6 +47,11 @@ export default class extends Controller {
 
       clone.querySelector('.symbol').textContent = renderCoinType(e.coin_type)
 
+      const symbolLink = clone.querySelector('.symbol-link')
+      if (symbolLink) {
+        symbolLink.setAttribute('href', `/charts?chart=coin-supply/${e.coin_type}`)
+      }
+
       const inCirculationEl = clone.querySelector('.in-circulation')
       if (inCirculationEl) {
         this._fillDecimalParts(

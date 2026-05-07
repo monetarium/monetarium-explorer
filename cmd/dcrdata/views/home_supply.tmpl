@@ -8,12 +8,12 @@
   </div>
   <div class="row mt-1">
     {{if .VARCoinSupply}}
-    <div class="col-12 mb-3 mb-sm-2 mb-md-3 mb-lg-3">
-      <div class="mono lh1rem fs14-decimal fs24 p03rem0 d-flex align-items-baseline">
+    <div class="col-24 mb-3 mb-sm-2 mb-md-3 mb-lg-3">
+      <div class="mono lh1rem fs14-decimal fs24 p03rem0 d-flex flex-wrap align-items-baseline">
         <span data-supply-target="varCirculating">
           {{template "decimalParts" (float64AsDecimalPartsNoTrailing (varAtomsToFloat64 .VARCoinSupply.Circulating) 8 true 2)}}
         </span>
-        <span class="ps-1 unit lh15rem">VAR</span>
+        <a class="ps-1 unit lh15rem" href="/charts?chart=coin-supply/0">VAR</a>
       </div>
       <div class="fs12 lh1rem text-black-50" data-supply-target="varSupplyShare">
         {{printf "%.1f%%" (mulf (divideFloat (varAtomsToFloat64 .VARCoinSupply.Circulating) 54000000.0) 100.0)}} of ~54M
@@ -25,9 +25,9 @@
       <div data-supply-target="skaCoinSupply" class="d-flex flex-column" style="gap:4px">
         {{range .SKACoinSupply}}
         <div>
-          <div class="mono lh1rem fs14-decimal fs24 p03rem0 d-flex align-items-baseline">
+          <div class="mono lh1rem fs14-decimal fs24 p03rem0 d-flex flex-wrap align-items-baseline">
             <span class="mono decimal-parts d-inline-block">{{template "decimalParts" (skaDecimalPartsNoTrailing .InCirculation true 2)}}</span>
-            <span class="ps-1 unit lh15rem">SKA{{.CoinType}}</span>
+            <a class="ps-1 unit lh15rem" href="/charts?chart=coin-supply/{{.CoinType}}">SKA{{.CoinType}}</a>
           </div>
           <div class="fs12 fs12-decimal lh1rem text-black-50 label-value-grid">
             <span class="text-start">Issued:</span>
@@ -61,9 +61,9 @@
 {{/* Template for JS live-update cloning — one SKA supply block */}}
 <template id="ska-supply-block-template">
   <div>
-    <div class="mono lh1rem fs14-decimal fs24 p03rem0 d-flex align-items-baseline">
+    <div class="mono lh1rem fs14-decimal fs24 p03rem0 d-flex flex-wrap align-items-baseline">
       <span class="mono decimal-parts d-inline-block in-circulation"></span>
-      <span class="ps-1 unit lh15rem"><span class="symbol"></span></span>
+      <a class="ps-1 unit lh15rem symbol-link"><span class="symbol"></span></a>
     </div>
     <div class="fs12 fs12-decimal lh1rem text-black-50 label-value-grid">
       <span class="text-start">Issued:</span>
