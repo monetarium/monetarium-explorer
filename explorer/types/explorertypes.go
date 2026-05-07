@@ -279,27 +279,6 @@ func RegularCoinCountsFromCoinRows(rows []CoinRowData, voters uint16, freshStake
 	return result
 }
 
-// AggregateFeesFromTxSlice aggregates SKA fees from a slice of transactions into a fee map.
-// VAR fees (coinType 0) are skipped since they're handled separately via MiningFee.
-// Non-zero, non-empty FeeRaw values are summed per coin type.
-func AggregateFeesFromTxSlice(txs []*TrimmedTxInfo, fees map[uint8]string) {
-	for _, tx := range txs {
-		if tx.CoinType == 0 || tx.FeeRaw == "" || tx.FeeRaw == "0" {
-			continue
-		}
-		fee, err := strconv.ParseInt(tx.FeeRaw, 10, 64)
-		if err != nil {
-			continue
-		}
-		if existing, ok := fees[tx.CoinType]; ok {
-			if existingAmt, err := strconv.ParseInt(existing, 10, 64); err == nil {
-				fee += existingAmt
-			}
-		}
-		fees[tx.CoinType] = strconv.FormatInt(fee, 10)
-	}
-}
-
 // FeesByCoinFromMiningFee creates a fees slice from the VAR mining fee.
 // For now, only VAR fees are supported; SKA fees may be added later.
 // FeesByCoinFromAmounts creates an ordered fee slice from a map of coin type -> fee atoms.
