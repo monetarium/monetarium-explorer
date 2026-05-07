@@ -59,6 +59,7 @@ Every sub-issue title must start with exactly one prefix in square brackets. The
 | `[UI]`    | Templates, SCSS, Stimulus controllers, frontend  |
 | `[WS]`    | WebSocket / pubsub real-time push                |
 | `[DATA]`  | Aggregation, transformation, internal Go logic   |
+| `[DOCS]`  | Wiki pages, READMEs, CLAUDE.md, in-repo guides   |
 
 Hard rules:
 
@@ -76,6 +77,7 @@ Each issue gets exactly one assignee. The team's preferred mapping:
 
 - `[DB]`, `[DATA]`, `[WS]`, `[API]` → **yanchenko-igor**
 - `[UI]` → **edshav**
+- `[DOCS]` → no fixed default; assign to whichever developer has the most context on the area being documented.
 - Feature (`parent`) assignee is the Feature Owner — typically the developer doing the bulk of the work, often the backend lead for backend-heavy features.
 
 This is a **guideline, not a hard rule**. If following it would pile every sub-issue on one person, rebalance: load balancing beats specialization. Do not invent extra sub-issues just to redistribute work, and do not split a sub-issue purely because of who would own it.
@@ -158,7 +160,7 @@ Read the dry-run output for any `❌` lines and fix the file before reporting do
 ## Common mistakes to avoid
 
 - **Putting `Part of #N` in a sub-issue description.** The script appends this automatically — duplicating it produces ugly output.
-- **Inventing prefixes** (`[BACKEND]`, `[FE]`, `[TEST]`). Only the five listed prefixes are valid.
+- **Inventing prefixes** (`[BACKEND]`, `[FE]`, `[TEST]`). Only the six listed prefixes are valid.
 - **Multi-prefix titles.** Pick the single dominant prefix — the area where the main work is performed — instead of combining. Only split into separate sub-issues when two domains carry genuinely equal weight; otherwise a one-prefix title with a brief note in the description about incidental cross-layer changes is correct.
 - **Assigning a sub-issue to multiple people** via comma or array. The field takes one login.
 - **Putting CI/dev-tooling work under `enhancement`.** Use `infrastructure`.
