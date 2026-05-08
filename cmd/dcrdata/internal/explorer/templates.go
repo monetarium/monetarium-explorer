@@ -476,6 +476,18 @@ func formatAtomsAsCoinString(atomStr string, coinType uint8, minDecimals int) st
 	return intStr + "." + fracStr
 }
 
+// coinDecimalParts dispatches between VAR (float64Formatting) and SKA
+// (skaDecimalParts) for rendering atom-string amounts via the "decimalParts"
+// template. coinType 0 = VAR (8 decimals); any other value = SKA (18 decimals,
+// big.Int-string preserved).
+func coinDecimalParts(atomStr string, coinType uint8, useCommas bool, boldNumPlaces ...int) []string {
+	if coinType == 0 {
+		v := float64(parseInt64(atomStr)) / 1e8
+		return float64Formatting(v, 8, useCommas, boldNumPlaces...)
+	}
+	return skaDecimalParts(atomStr, useCommas, boldNumPlaces...)
+}
+
 // formatCoinAtoms converts a raw atom string to a threeSigFigs-formatted coin
 // string. coinType 0 = VAR (8 decimal places), any other value = SKA (18
 // decimal places). This is the single call site for coin amount display — use
@@ -660,6 +672,9 @@ func makeTemplateFuncMap(params *chaincfg.Params) template.FuncMap {
 		},
 		"formatCoinAtoms":         formatCoinAtoms,
 		"formatAtomsAsCoinString": formatAtomsAsCoinString,
+		"coinDecimalParts": func(atomStr string, coinType uint8, useCommas bool, boldNumPlaces ...int) []string {
+			return coinDecimalParts(atomStr, coinType, useCommas, boldNumPlaces...)
+		},
 		"skaDecimalParts": func(atomStr string, useCommas bool, boldNumPlaces ...int) []string {
 			return skaDecimalParts(atomStr, useCommas, boldNumPlaces...)
 		},
