@@ -582,7 +582,54 @@ func (c *appContext) getBlockVerbose(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, blockVerbose, m.GetIndentCtx(r))
+	// Get summary for multi-coin data
+	summary := c.DataSource.GetSummaryByHash(ctx, hash, false)
+
+	// Build response struct with embedded verbose result
+	type verboseResponse struct {
+		*chainjson.GetBlockVerboseResult
+		TotalSent map[string]string `json:"total_sent,omitempty"`
+		Fees      map[string]string `json:"fees,omitempty"`
+	}
+
+	response := verboseResponse{
+		GetBlockVerboseResult: blockVerbose,
+	}
+
+	// Add total_sent map (coin type key -> amount string)
+	if summary != nil && summary.CoinAmounts != nil {
+		response.TotalSent = make(map[string]string)
+		for ct, amt := range summary.CoinAmounts {
+			if amt != "0" && amt != "" {
+				response.TotalSent[fmt.Sprintf("%d", ct)] = amt
+			}
+		}
+
+		// Add fees map (coin type key -> fee string)
+		// VAR fees from MiningFee (total VAR tx fees in block); SKA fees from SSFeeTotalsByCoin
+		response.Fees = make(map[string]string)
+
+		// VAR fees from MiningFee
+		if summary.MiningFee != nil && *summary.MiningFee != 0 {
+			response.Fees["0"] = fmt.Sprintf("%d", *summary.MiningFee)
+		}
+
+		// SKA fees from SSFeeTotalsByCoin (stake fee distribution)
+		if summary.SSFeeTotalsByCoin != nil {
+			for ct, fee := range summary.SSFeeTotalsByCoin {
+				if fee != "0" && fee != "" {
+					response.Fees[fmt.Sprintf("%d", ct)] = fee
+				}
+			}
+		}
+
+		// Remove empty fees map
+		if len(response.Fees) == 0 {
+			response.Fees = nil
+		}
+	}
+
+	writeJSON(w, response, m.GetIndentCtx(r))
 }
 
 func (c *appContext) getVoteInfo(w http.ResponseWriter, r *http.Request) {

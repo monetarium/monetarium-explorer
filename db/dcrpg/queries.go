@@ -1042,8 +1042,9 @@ func retrieveTicketIDByHashNoCancel(db *sql.DB, ticketHash dbtypes.ChainHash) (i
 
 // retrieveTicketStatusByHash gets the spend status and ticket pool status for
 // the given ticket hash.
-func retrieveTicketStatusByHash(ctx context.Context, db *sql.DB, ticketHash dbtypes.ChainHash) (id uint64,
+func retrieveTicketStatusByHash(ctx context.Context, db *sql.DB, ticketHash dbtypes.ChainHash) (
 	spendStatus dbtypes.TicketSpendType, poolStatus dbtypes.TicketPoolStatus, err error) {
+	var id uint64
 	err = db.QueryRowContext(ctx, internal.SelectTicketStatusByHash, ticketHash).
 		Scan(&id, &spendStatus, &poolStatus)
 	return
