@@ -9,6 +9,7 @@ _Human-curated rules, architecture, and constraints. Read these to understand th
 - tech-stack: core/tech-stack.md — packages, node engines
 - staking-rewards: core/staking-rewards.md — mechanics of pow and pos yields and fee splits
 - constraints: core/constraints.md — cross-domain architectural constraints
+- pages: core/pages.md — registry of all HTML pages
 - maintenance: core/maintenance.md — guide for wiki upkeep and structure
 
 ## 📋 Feature Specifications
