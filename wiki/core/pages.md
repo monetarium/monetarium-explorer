@@ -32,13 +32,22 @@ Non-page endpoints (WebSockets, JSON APIs under `/api` and `/insight/api`, `/dow
 | `/decodetx` | `DecodeTxPage` | Form that decodes a raw transaction hex string into structured input/output details without broadcasting. |
 | `/search` | `Search` | Dispatcher that inspects the query and redirects to the matching page (block hash, height, tx hash, or address). Renders an error page on no match. |
 | `/charts` | `Charts` | Historical charts (supply, hashrate, fees, block size, ticket metrics, etc.) including the per-coin SKA `coin-supply/{N}` pipeline. |
-| `/market` | `MarketPage` | Exchange / market data aggregated from the `exchanges` package (price, volume, depth where available). |
 | `/parameters` | `ParametersPage` | Static-ish chain parameters: subsidy schedule, ticket parameters, network constants, consensus rules. |
 | `/ticketpool` | `Ticketpool` | Live ticket pool view: distribution by price, age, and other dimensions. |
 | `/ticketpricewindows` | `StakeDiffWindows` | Stake-difficulty (ticket-price) windows — past windows plus the in-progress one with projected next price. |
 | `/attack-cost` | `AttackCost` | 51%-style attack-cost calculator using current hashrate, ticket price, and supply numbers. |
 | `/verify-message` | `VerifyMessagePage` (GET) / `VerifyMessageHandler` (POST) | Form that verifies an address+message+signature triple is valid. POST is rate-limited via tollbooth. |
 | `/insight` | `InsightRootPage` (static assets also mirrored under `/insight/*`) | Landing page for the Insight-compatible JSON API; documents `/insight/api/...` endpoints. |
+
+---
+
+## Should be disabled
+
+Currently active in code but slated for removal — no Monetarium adjustment work needed beyond turning them off.
+
+| URL | Handler | Description |
+|---|---|---|
+| `/market` | `MarketPage` | Exchange / market data aggregated from the `exchanges` package. Monetarium coins (VAR, SKA{n}) are not listed on any exchange, so the page can only render empty/legacy Decred data. To disable: return HTTP 410 from `main.go` (alongside `/treasury` etc.), drop the nav link, and remove the `exchanges` polling wiring. |
 
 ---
 
@@ -79,4 +88,4 @@ A page is considered adjusted when:
 
 - Branding/copy refers to Monetarium (not Decred), and `dcrdata` only appears in load-bearing identifiers per CLAUDE.md.
 - Multi-coin reality is honored: per-coin VAR + SKA{n} maps where the original carried a single value; SKA values stay as `big.Int`-derived strings end-to-end (no `float64` conversion before the template boundary).
-- Features that don't exist on Monetarium (treasury, agendas, proposals) are not surfaced via UI links.
+- Features that don't exist on Monetarium (treasury, agendas, proposals) are not surfaced via UI links. The same applies to `/market` — until any Monetarium coin is listed on an exchange, the market page and `exchanges` pipeline have no data to show.
