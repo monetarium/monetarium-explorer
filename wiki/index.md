@@ -21,6 +21,10 @@ _Requirements and guidelines for specific features and pages._
 - blocks-list: specs/blocks-list/spec.md — rules for rendering list of blocks (block table on block list page)
 - chart-ska-coin-supply: specs/chart-ska-coin-supply/spec.md — rendering and logic rules for SKA coin supply charts
 - mempool-page: specs/mempool/spec.md — full multi-coin mempool page layout and logic
+- address-overview: specs/address-overview/spec.md — cross-feature contract for `/address/{address}` (multi-coin model, `ActiveCoins`, `?coin=` URL contract, real-time scope)
+- address-summary: specs/address-summary/spec.md — left-top card: per-coin Balance / Received / Spent, Unconfirmed, Stake %, fiat removal, empty state
+- address-charts: specs/address-charts/spec.md — right-top card: chart coin selector, per-coin endpoints (`?coin=N`), Tx Type 5/2-series rule, BigInt balance accumulation
+- address-transactions: specs/address-transactions/spec.md — bottom section: Coin column, coin filter, sstxcommitment gate, multi-coin CSV schema, server↔XHR parity
 
 ## 🤖 Code Traces
 
