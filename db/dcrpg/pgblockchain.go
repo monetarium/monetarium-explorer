@@ -6520,6 +6520,38 @@ func (pgb *ChainDB) GetExplorerBlock(ctx context.Context, hash string) *exptypes
 				exptx.Fee, exptx.FeeRate, exptx.Fees = 0.0, 0.0, 0.0
 			}
 		}
+
+		// SKA fee = sum(SKAAmountIn) - sum(outputs) in the tx's coin. The node
+		// includes per-input SKA atoms in the verbose tx, so this needs no DB
+		// lookup. makeExplorerTxBasic skips this because it has no access to
+		// vin.SKAAmountIn; do it here so the block page renders the right fee
+		// in the row's own coin instead of "0 VAR".
+		if exptx.CoinType != 0 && !exptx.Coinbase {
+			totalIn := new(big.Int)
+			for vi := range tx.Vin {
+				if tx.Vin[vi].SKAAmountIn == "" {
+					continue
+				}
+				if amt, ok := new(big.Int).SetString(tx.Vin[vi].SKAAmountIn, 10); ok {
+					totalIn.Add(totalIn, amt)
+				}
+			}
+			totalOut := new(big.Int)
+			if exptx.TotalRaw != "" {
+				totalOut.SetString(exptx.TotalRaw, 10)
+			}
+			fee := new(big.Int).Sub(totalIn, totalOut)
+			if fee.Sign() < 0 {
+				fee.SetInt64(0)
+			}
+			exptx.FeeRaw = fee.String()
+			if txSize := int64(msgTx.SerializeSize()); txSize > 0 {
+				rate := new(big.Int).Mul(fee, big.NewInt(1000))
+				rate.Quo(rate, big.NewInt(txSize))
+				exptx.FeeRateRaw = rate.String()
+			}
+		}
+
 		txs = append(txs, exptx)
 	}
 

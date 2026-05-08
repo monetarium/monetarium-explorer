@@ -7,9 +7,8 @@
 {{- with .Data -}}
 {{$Invalidated := and (gt .Confirmations 1) (not .Valid) }}
 	<div class="row mx-2 my-2">
-		<div class="col-24 col-xl-12 bg-white p-3 position-relative">
-			<div class="card-pointer pointer-right d-none d-xl-block"></div>
-			<div class="card-pointer pointer-bottom d-xl-none"></div>
+		<div class="col-24 bg-white p-3 position-relative">
+			<div class="card-pointer pointer-bottom"></div>
 			<div class="pb-1 ps-1 position-relative">
 				<div class="d-flex justify-content-between flex-wrap">
 					<div class="d-inline-block text-nowrap">
@@ -74,21 +73,22 @@
 			<div class="row py-2">
 				<div class="col-10 col-sm-8 text-start">
 					<span class="text-secondary fs13">Total Sent</span>
-					<br>
-					<span class="lh1rem d-inline-block pt-1"
-						><span class="fs18 fs14-decimal fw-bold">{{template "decimalParts" (float64AsDecimalParts .TotalSent 8 true 2)}}</span><span class="text-secondary fs14"> DCR</span>
-					</span>
+					<div class="lh1rem pt-1 mono fs14">
+						<div class="d-inline-block">
+							{{- range .TotalSentByCoin}}
+							<div class="d-flex">
+								<span class="text-secondary me-2" style="min-width:3.5rem">{{.Symbol}}</span>
+								<span class="fs18 fs14-decimal fw-bold flex-grow-1 text-end">{{template "decimalParts" (coinDecimalParts .Amount .CoinType true 2)}}</span>
+							</div>
+							{{- end}}
+						</div>
+					</div>
 					{{if $.FiatConversion}}
-					<br>
-					<span class="text-secondary fs16"
+					<div class="text-secondary fs16 pt-1"
 						>{{threeSigFigs $.FiatConversion.Value}}
 						<span class="fs14">{{$.FiatConversion.Index}}</span>
-					</span>
+					</div>
 					{{end}}
-					<br>
-					<span class="lh1rem d-inline-block pt-1"
-						><span class="fs14 fs14-decimal">Mixed: {{template "decimalParts" (amountAsDecimalParts .TotalMixed true)}}</span><span class="text-secondary fs14"> DCR</span>
-					</span>
 				</div>
 				<div class="col-7 col-sm-8 text-start">
 					<span class="text-secondary fs13">Size</span>
@@ -106,25 +106,44 @@
 				</div>
 			</div>
 			<div class="d-flex justify-content-around fs15 text-center text-secondary my-2">
-				<div class="d-inline-block">Regular: {{.Transactions}}</div>
-				<div class="d-inline-block">Votes: {{.Voters}}</div>
-				<div class="d-inline-block">Tickets: {{.FreshStake}}</div>
-				<div class="d-inline-block"><span class="d-sm-none d-inline-block position-relative" data-tooltip="Revocations">Revs</span><span class="d-none d-sm-inline">Revocations</span>: {{.Revocations}}</div>
+				<div class="d-flex">
+					<span class="me-2 text-nowrap">Regular:</span>
+					<div class="mono">
+						{{- range .RegularCoinCounts}}
+						<div class="d-flex">
+							<span class="me-2" style="min-width:3rem">{{.Symbol}}</span>
+							<span>{{intComma .Count}}</span>
+						</div>
+						{{- end}}
+					</div>
+				</div>
+					<span class="me-3">Votes: {{.Voters}}</span>
+					<span class="me-3">Tickets: {{.FreshStake}}</span>
+					<span><span class="d-sm-none d-inline-block position-relative" data-tooltip="Revocations">Revs</span><span class="d-none d-sm-inline">Revocations</span>: {{.Revocations}}</span>
 			</div>
 		</div>
-		<div class="col-24 col-xl-12 secondary-card py-3 px-3 px-xl-4">
+		<div class="col-24 secondary-card py-3 px-3 px-xl-4">
 			<div class="h6 d-inline-block my-2 ps-3">Block Details</div>
 			<table class="w-100 fs14 mt-2 details">
 				<tbody>
 					<tr>
-						<td class="text-end fw-bold text-nowrap pe-2"
+						<td class="text-end fw-bold text-nowrap pe-2 align-top"
 							><span class="d-none d-sm-inline">Ticket Price</span
 							><span class="d-sm-none">Tkt Price</span>: </td>
-						<td class="text-start text-secondary">{{template "decimalParts" (float64AsDecimalParts .SBits 8 false)}}</td>
-						<td class="text-end fw-bold text-nowrap pe-2">Fees: </td>
-						<td class="text-start text-secondary">{{printf "%.8f" .MiningFee}}</td>
-						<td class="d-none d-sm-table-cell text-end fw-bold text-nowrap pe-2">Pool Size: </td>
-						<td class="d-none d-sm-table-cell text-start text-secondary">{{.PoolSize}}</td>
+						<td class="text-start text-secondary align-top">{{template "decimalParts" (float64AsDecimalParts .SBits 8 false)}}</td>
+						<td class="text-end fw-bold text-nowrap pe-2 align-top">Fees: </td>
+						<td class="text-start text-secondary mono">
+							<div class="d-inline-block">
+								{{- range .FeesByCoin}}
+								<div class="d-flex">
+									<span class="me-2" style="min-width:3.5rem">{{.Symbol}}</span>
+									<span class="flex-grow-1 text-end">{{template "decimalParts" (coinDecimalParts .Amount .CoinType false)}}</span>
+								</div>
+								{{- end}}
+							</div>
+						</td>
+						<td class="d-none d-sm-table-cell text-end fw-bold text-nowrap pe-2 align-top">Pool Size: </td>
+						<td class="d-none d-sm-table-cell text-start text-secondary align-top">{{.PoolSize}}</td>
 					</tr>
 					<tr>
 						<td class="text-end fw-bold text-nowrap pe-2"
@@ -185,7 +204,7 @@
 			<thead>
 				<tr>
 					<th>Transaction ID</th>
-					<th class="text-end">Total DCR</th>
+					<th class="text-end">Total VAR</th>
 					<th class="text-end">Size</th>
 				</tr>
 			</thead>
@@ -210,36 +229,6 @@
 		{{- end -}}
 		{{- end}}
 
-		{{if .Treasury -}}
-		<span class="d-inline-block pt-4 pb-1 h4">Treasury</span>
-		<table class="table">
-			<thead>
-				<tr>
-					<th>Transaction ID</th>
-					<th class="text-end">Type</th>
-					<th class="text-end">Total DCR</th>
-					<th class="text-end">Fee</th>
-					<th class="text-end">Size</th>
-				</tr>
-			</thead>
-			<tbody>
-			{{range .Treasury -}}
-				<tr>
-					<td class="break-word">
-						<span><a class="hash" href="/tx/{{.TxID}}">{{.TxID}}</a></span>
-					</td>
-					<td class="text-end">{{.Type}}</td>
-					<td class="mono fs15 text-end">
-						{{template "decimalParts" (float64AsDecimalParts .Total 8 false)}}
-					</td>
-					<td class="mono fs15 text-end">{{.Fee}}</td>
-					<td class="mono fs15 text-end">{{.FormattedSize}}</td>
-				</tr>
-			{{- end}}
-			</tbody>
-		</table>
-		{{- end -}}
-
 		<span class="d-inline-block pt-4 pb-1 h4">Votes</span>
 		{{if not .Votes -}}
 		<table class="table">
@@ -258,7 +247,7 @@
 					<th>Transaction ID</th>
 					<th class="text-end">Vote Version</th>
 					<th class="text-end">Last Block</th>
-					<th class="text-end">Total DCR</th>
+					<th class="text-end">Total VAR</th>
 					<th class="text-end">Size</th>
 				</tr>
 			</thead>
@@ -314,7 +303,7 @@
 			<thead>
 				<tr>
 					<th>Transaction ID</th>
-					<th class="text-end">Total DCR</th>
+					<th class="text-end">Total VAR</th>
 					<th class="text-end">Fee</th>
 					<th class="text-end">Size</th>
 				</tr>
@@ -342,7 +331,8 @@
 			<thead>
 				<tr>
 					<th>Transaction ID</th>
-					<th class="text-end">Total DCR</th>
+					<th class="text-end">Ticket Status</th>
+					<th class="text-end">Total VAR</th>
 					<th class="text-end">Fee</th>
 					<th class="text-end">Size</th>
 				</tr>
@@ -353,6 +343,7 @@
 					<td class="break-word">
 						<span><a class="hash" href="/tx/{{.TxID}}">{{.TxID}}</a></span>
 					</td>
+					<td class="text-end">{{.TicketStatus}}</td>
 					<td class="mono fs15 text-end">
 						{{template "decimalParts" (float64AsDecimalParts .Total 8 false)}}
 					</td>
@@ -382,9 +373,11 @@
 						<span><a class="hash" href="/tx/{{.TxID}}">{{.TxID}}</a></span>
 					</td>
 					<td class="mono fs15 text-end">
-						{{template "decimalParts" (float64AsDecimalParts .Total 8 false)}}
+						{{template "decimalParts" (coinDecimalParts .TotalRaw .CoinType false)}} {{coinSymbol .CoinType}}
 					</td>
-					<td class="mono fs15 text-end">{{.Fee}}</td>
+					<td class="mono fs15 text-end">
+						{{template "decimalParts" (coinDecimalParts .FeeRaw .CoinType false)}} {{coinSymbol .CoinType}}
+					</td>
 					<td class="mono fs15 text-end">{{.FormattedSize}}</td>
 				</tr>
 			{{- end}}
@@ -404,8 +397,7 @@
 			<thead>
 				<tr>
 					<th>Transaction ID</th>
-					<th class="text-end">Total DCR</th>
-					<th class="text-end">Mixed</th>
+					<th class="text-end">Total</th>
 					<th class="text-end">Fee</th>
 					<th class="text-end">Fee Rate</th>
 					<th class="text-end">Size</th>
@@ -419,16 +411,11 @@
 						<span><a class="hash" href="/tx/{{.TxID}}">{{.TxID}}</a></span>
 					</td>
 					<td class="mono fs15 text-end">
-						{{- template "decimalParts" (float64AsDecimalParts .Total 8 false) -}}
+						{{template "decimalParts" (coinDecimalParts .TotalRaw .CoinType false)}} {{coinSymbol .CoinType}}
 					</td>
 					<td class="mono fs15 text-end">
-						{{ if gt .MixCount 0 -}}
-							{{.MixCount}}x {{template "decimalParts" (amountAsDecimalParts .MixDenom false)}}
-						{{ else }}
-							-
-						{{- end}}
+						{{template "decimalParts" (coinDecimalParts .FeeRaw .CoinType false)}} {{coinSymbol .CoinType}}
 					</td>
-					<td class="mono fs15 text-end">{{.Fee}}</td>
 					<td class="mono fs15 text-end">{{dcrPerKbToAtomsPerByte .FeeRate}} atoms/B</td>
 					<td class="mono fs15 text-end">{{.FormattedSize}}</td>
 				</tr>
