@@ -2,7 +2,9 @@
 
 ## Overview
 
-Transform the address page `/address/{address}` from single-coin (VAR-only) to multi-coin (VAR + SKA{n}) model, following the contracts defined in wiki specs.
+**Backend-only plan** - Transform the address page `/address/{address}` from single-coin (VAR-only) to multi-coin (VAR + SKA{n}) model, following the contracts defined in wiki specs.
+
+Templates (`address.tmpl`, `extras.tmpl`), Stimulus controller (`address_controller.js`), and CSV download UX are **out of scope** and covered separately.
 
 **Source References:**
 - `wiki/specs/address-overview/spec.md` - Cross-feature contract
@@ -13,29 +15,38 @@ Transform the address page `/address/{address}` from single-coin (VAR-only) to m
 - `wiki/code-analysis/address/charts.impact.md` - Charts analysis
 - `wiki/code-analysis/address/transactions.impact.md` - Transactions analysis
 
+## Not in Scope
+
+The following are handled in separate plans:
+- Template changes (`address.tmpl`, `extras.tmpl`, `addresstable.tmpl`)
+- Frontend controller (`address_controller.js`)
+- CSV download UX (frontend)
+
 ## Key Principles
 
 1. **SKA precision**: All SKA values pass as strings end-to-end - no `float64` conversion
-2. **Computation in Go**: All atom arithmetic happens in Go backend (`big.Int` for SKA)
+2. **Computation in Go**: All atom arithmetic happens in Go backend (`*big.Int` for SKA)
 3. **URL contract**: `?coin=N` is the single new query param shared between charts and transactions
 4. **ActiveCoins**: Central concept - determines which coins to display per address
+5. **Precomputation in Go**: Per-coin totals (`TotalReceived`, `TotalOutputs`, `TotalInputs`) computed in Go so template never does SKA string arithmetic
 
 ## Dependencies
 
-- `db/dbtypes/types.go` - AddressInfo, AddressBalance, AddressTx, AddressRow
+- `db/dbtypes/types.go` - AddressInfo, AddressBalance, AddressTx, AddressRow, ChartsData
 - `db/dcrpg/queries.go` - retrieveAddressBalance, new queries
-- `db/dcrpg/pgblockchain.go` - AddressData, AddressHistory, TxHistoryData
+- `db/dcrpg/pgblockchain.go` - AddressData, AddressHistory, TxHistoryData, UnconfirmedTxnsForAddress
 - `db/dcrpg/internal/addrstmts.go` - SQL statements
 - `db/cache/addresscache.go` - Caching logic
-- `cmd/dcrdata/internal/api/apiroutes.go` - Chart endpoints
+- `cmd/dcrdata/internal/api/apiroutes.go` - Chart endpoints, CSV download
 - `cmd/dcrdata/internal/api/apirouter.go` - Route registration
 - `cmd/dcrdata/internal/explorer/explorerroutes.go` - Page handler
 - `cmd/dcrdata/internal/explorer/explorer_test.go` - Test mocks
 - `cmd/dcrdata/internal/api/noop_ds_test.go` - Test mocks
+- `mempool/` package - Unconfirmed transactions per address
 
 ## Implementation Order
 
-### Phase 1: Types & Mocks (Tasks 1-5)
+### Phase 1: Types & Mocks (Tasks 1-6)
 
 #### Task 1: Add ActiveCoins to AddressInfo
 **Files**: `db/dbtypes/types.go`
@@ -52,20 +63,23 @@ Add `ActiveCoins []uint8` field to `AddressInfo` struct:
 #### Task 2: Create CoinBalance struct
 **Files**: `db/dbtypes/types.go`
 
-Define new per-coin balance structure:
+Define new per-coin balance structure. Note: For VAR (CoinType=0), use `TotalSpent`/`TotalUnspent` (int64). For SKA (CoinType>0), use `TotalSpentSKA`/`TotalUnspentSKA` (string). The meaningful field depends on CoinType.
+
 ```go
 type CoinBalance struct {
     CoinType         uint8
     NumSpent         int64
     NumUnspent       int64
-    TotalSpent       int64        // VAR atoms (1e8)
-    TotalUnspent     int64        // VAR atoms (1e8)
-    TotalSpentSKA    string       // SKA atoms as string (1e18)
-    TotalUnspentSKA  string       // SKA atoms as string (1e18)
-    TotalReceived    int64        // VAR atoms
-    TotalReceivedSKA string       // SKA atoms as string
+    TotalSpent       int64        // VAR atoms (1e8) - meaningful when CoinType == 0
+    TotalUnspent     int64        // VAR atoms (1e8) - meaningful when CoinType == 0
+    TotalSpentSKA    string       // SKA atoms as string (1e18) - meaningful when CoinType > 0
+    TotalUnspentSKA  string       // SKA atoms as string (1e18) - meaningful when CoinType > 0
+    TotalReceived    int64        // VAR atoms - precomputed: TotalSpent + TotalUnspent
+    TotalReceivedSKA string      // SKA atoms - precomputed: TotalSpentSKA + TotalUnspentSKA
 }
 ```
+
+**Rationale**: TotalReceived is precomputed in Go (not template) so the template never does SKA string arithmetic. See Summary spec §3.3.
 
 **Verification**: Struct compiles, JSON marshaling produces correct SKA string format
 
@@ -76,9 +90,12 @@ type CoinBalance struct {
 
 Replace flat balance with per-coin structure:
 - Add `Coins map[uint8]*CoinBalance` to `AddressBalance`
-- Keep deprecated `TotalUnspent`, `TotalSpent` for compatibility or remove
-- Add `FromStake`, `ToStake` (VAR-only)
-- Add computed `TotalOutputs int64`, `TotalInputs int64`
+- Remove flat `TotalUnspent`, `TotalSpent` (replaced by per-coin structure)
+- Add `FromStake`, `ToStake` (computed from VAR only - see Task 21)
+- Add precomputed `TotalOutputs int64 = Σ(NumSpent + NumUnspent)` across all coins
+- Add precomputed `TotalInputs int64 = Σ(NumSpent)` across all coins
+
+**Rationale**: Precomputed totals exist so template doesn't loop over Coins map. This avoids creating a template helper for SKA string addition - the spec deliberately prevents this.
 
 **Breaking Change**: Requires handler/template updates in same PR
 
@@ -97,22 +114,45 @@ Replace flat balance with per-coin structure:
 
 ---
 
-#### Task 5: Update test mocks
+#### Task 5: Add ChartsData type extension
+**Files**: `db/dbtypes/types.go` (around line 2030-2040)
+
+Extend `ChartsData` for server-side cumulative balance (per Charts spec §5.3):
+```go
+type ChartsData struct {
+    // Existing fields...
+    // Add for per-coin:
+    Balance      []float64        // VAR running balance (float64, 8 decimals)
+    BalanceAtoms []string         // SKA running balance (string, 18 decimals)
+    ReceivedAtoms []string        // SKA received cumulative (string)
+    SentAtoms    []string         // SKA sent cumulative (string)
+    NetAtoms     []string         // SKA net cumulative (string)
+}
+```
+
+**Rationale**: Running balance computed in Go via `*big.Int.Add` inside `parseRowsSentReceived`, not in JS. See Charts spec §3.3.1.
+
+**Verification**: Type compiles, JSON marshaling correct
+
+---
+
+#### Task 6: Update test mocks
 **Files**:
 - `cmd/dcrdata/internal/explorer/explorer_test.go`
 - `cmd/dcrdata/internal/api/noop_ds_test.go`
 
-- Update `AddressHistory` return types
-- Add empty `ActiveCoins` default
+- Update `AddressHistory` return types (per Tasks 1-5)
 - Update `AddressData` mock signatures
+- Update `DevBalance` mock (implements AddressHistory, AddressData, AND DevBalance per explorer.go:84-86)
+- Add empty `ActiveCoins` default
 
 **Verification**: Test files compile
 
 ---
 
-### Phase 2: Query Layer (Tasks 6-9)
+### Phase 2: Query Layer (Tasks 7-12)
 
-#### Task 6: New coin type query
+#### Task 7: New coin type query
 **Files**: `db/dcrpg/internal/addrstmts.go`, `db/dcrpg/queries.go`
 
 Create `MakeSelectAddressCoinTypes` statement:
@@ -129,7 +169,7 @@ Add `retrieveAddressCoinTypes(ctx, db, address) ([]uint8, error)`
 
 ---
 
-#### Task 7: Fix retrieveAddressBalance
+#### Task 8: Fix retrieveAddressBalance
 **Files**: `db/dcrpg/queries.go` (around line 1453-1529)
 
 Modify to preserve coin type dimension:
@@ -142,18 +182,19 @@ Modify to preserve coin type dimension:
 
 ---
 
-#### Task 8: Fix ReduceAddressHistory
+#### Task 9: Fix ReduceAddressHistory
 **Files**: `db/dbtypes/types.go` (around line 2380+)
 
 - When `addrOut.CoinType != 0`, use SKA string fields
 - Build per-coin totals in new structure instead of flat sum
 - Don't use `dcrutil.Amount(addrOut.Value).ToCoin()` for SKA
+- Precompute `TotalReceived` and `TotalReceivedSKA` per coin
 
 **Verification**: Mixed addresses don't sum incorrectly
 
 ---
 
-#### Task 9: Update AddressHistory
+#### Task 10: Update AddressHistory
 **Files**: `db/dcrpg/pgblockchain.go` (around line 2445-2496)
 
 - Call `retrieveAddressCoinTypes`
@@ -164,9 +205,56 @@ Modify to preserve coin type dimension:
 
 ---
 
-### Phase 3: API & Handler (Tasks 10-13)
+#### Task 11: Server-side cumulative balance
+**Files**: `db/dcrpg/queries.go` (around line 4139-4163 - `parseRowsSentReceived`)
 
-#### Task 10: Add ?coin= to chart API endpoints
+Modify to compute running balance in Go via `*big.Int.Add`:
+- For VAR: compute running balance as `[]float64` (existing pattern)
+- For SKA: compute running balance as `[]string` using `*big.Int`
+- Populate `BalanceAtoms`, `ReceivedAtoms`, `SentAtoms`, `NetAtoms` in response
+
+**Rationale**: Per Charts spec §3.3.1 - JS never does BigInt arithmetic. Balance cumsum must be in Go.
+
+**Verification**: Chart endpoint returns monotonically updating balance series
+
+---
+
+#### Task 12: Fix stake metrics VAR-only
+**Files**: `db/dcrpg/queries.go` (around line 1518-1524)
+
+Compute `FromStake` and `ToStake` from VAR atoms only:
+- Current query is coin-flattened, producing meaningless ratio on mixed addresses
+- Filter to `coin_type = 0` when computing stake percentages
+
+**Verification**: Stake % reflects actual VAR stake activity
+
+---
+
+### Phase 3: Mempool (Tasks 13-14)
+
+#### Task 13: Unconfirmed transactions per-coin
+**Files**: `db/dcrpg/pgblockchain.go` (around line 2587-2592), `mempool/` package
+
+- Modify `pgb.mp.UnconfirmedTxnsForAddress` to return `map[uint8]int64` (per Summary spec §3.5, §6.4)
+- Add `NumUnconfirmedByCoin` field to `AddressInfo`
+
+**Verification**: Unconfirmed count broken down by coin type
+
+---
+
+#### Task 14: Mempool overlay coin-awareness
+**Files**: `db/dcrpg/pgblockchain.go` (around line 2632-2634, 2693-2695)
+
+- Modify mempool overlay to populate `CoinType` and `SKAValue` per row
+- Don't route everything through `dcrutil.Amount(...).ToCoin()`
+
+**Verification**: Mempool transactions include coin type
+
+---
+
+### Phase 4: API & Handler (Tasks 15-21)
+
+#### Task 15: Add ?coin= to chart API endpoints
 **Files**:
 - `cmd/dcrdata/internal/api/apirouter.go`
 - `cmd/dcrdata/internal/api/apiroutes.go`
@@ -174,51 +262,90 @@ Modify to preserve coin type dimension:
 Add coin filter to routes:
 - `/api/address/{address}/types/{chartgrouping}?coin=N`
 - `/api/address/{address}/amountflow/{chartgrouping}?coin=N`
-- Default to VAR (0) if not specified
+- **Default behavior**: Use **first member of ActiveCoins** (VAR if present, else first SKA) - not always VAR
 - Return error for invalid coin type
 
 **Verification**: `GET /api/address/{addr}/types/day?coin=1` returns SKA1 data
 
 ---
 
-#### Task 11: Update TxHistoryData for coin filtering
+#### Task 16: Update TxHistoryData for coin filtering
 **Files**: `db/dcrpg/pgblockchain.go` (around line 3112-3182)
 
 - Add coin type parameter to interface and implementation
 - Modify SQL queries to filter by `coin_type`
-- Return per-coin chart series
+- Return per-coin chart series with server-side cumsum (from Task 11)
 
-**Verification**: Different coin params return different data
+**Verification**: Different coin params return different data with correct cumsum
 
 ---
 
-#### Task 12: Update address handler
+#### Task 17: CSV download backend
+**Files**:
+- `db/dbtypes/types.go` - extend `AddressRowCompact`
+- `cmd/dcrdata/internal/api/apiroutes.go` (around line 1729-1775)
+
+- Extend `AddressRowCompact` (`db/dbtypes/types.go:1299-1309`) with `CoinType uint8` and `SKAValue string`
+- Modify CSV serializer to emit `coin_type` + single string `amount` column instead of `dcrutil.Amount(...).ToCoin()`
+- Add `?coin=` to cache key (180s cached route)
+
+**Verification**: CSV includes coin type column, SKA amounts as strings
+
+---
+
+#### Task 18: AddressTable XHR parity
+**Files**: `cmd/dcrdata/internal/explorer/explorerroutes.go`
+
+- Parse `?coin=` in `AddressTable` handler (`:1654`) - same as `AddressPage`
+- Apply coin filter to `mergedTxnCount` (`pgblockchain.go:2300-2331`)
+
+**Rationale**: Per Transactions spec §8 - XHR refresh must paginate over same row set as initial SSR
+
+**Verification**: XHR returns same filtered rows as SSR
+
+---
+
+#### Task 19: Update address handler
 **Files**: `cmd/dcrdata/internal/explorer/explorerroutes.go`
 
 - Add `?coin=` parsing in `parseAddressParams`
 - Validate coin is in `ActiveCoins` (if specified)
 - Pass coin filter to chart endpoints
-- Handle "empty = all coins" case for transactions table
+- **Table**: empty `?coin=` means "all coins" (no filter)
+- **Charts**: empty `?coin=` defaults to first ActiveCoins (per Task 15)
 
 **Verification**: URL changes reflect in responses
 
 ---
 
-#### Task 13: Remove fiat conversion
+#### Task 20: Summary ignores ?coin=
+**Files**: `cmd/dcrdata/internal/explorer/explorerroutes.go`, `db/dcrpg/pgblockchain.go`
+
+- `AddressData` populates `Coins` map for **all** `ActiveCoins` regardless of `?coin=` filter
+- Summary card always shows full per-coin breakdown
+- Only charts and transactions table respect `?coin=` filter
+
+**Rationale**: Per Overview §4 and Summary §1 - summary always displays all coins
+
+**Verification**: Summary shows all ActiveCoins even when ?coin= specified
+
+---
+
+#### Task 21: Remove fiat conversion
 **Files**: `cmd/dcrdata/internal/explorer/explorerroutes.go`
 
-Per spec: fiat conversion removed as SKA has no price model
-- Remove `FiatBalance` field from `AddressPageData`
-- Remove `xcBot.Conversion` call
-- Update template to not expect FiatBalance
+Per Summary spec §3.7: fiat removed because **no coin in the network has a real market price** - not just SKA. VAR also has no exchange price.
+- Remove `FiatBalance` field from `AddressPageData` (inline payload at `:1543`)
+- Remove `xcBot.Conversion` call at `:1617`
+- Template must not expect FiatBalance
 
 **Verification**: Page renders without fiat errors
 
 ---
 
-### Phase 4: Caching (Tasks 14-15)
+### Phase 5: Caching (Tasks 22-23)
 
-#### Task 14: Extend address cache key
+#### Task 22: Extend address cache key
 **Files**: `db/cache/addresscache.go`
 
 - Add coin type to cache key (e.g., `address + coin_type`)
@@ -228,7 +355,7 @@ Per spec: fiat conversion removed as SKA has no price model
 
 ---
 
-#### Task 15: Cache per-coin data
+#### Task 23: Cache per-coin data
 **Files**: `db/cache/addresscache.go`
 
 - Store `ActiveCoins` with address data
@@ -239,36 +366,39 @@ Per spec: fiat conversion removed as SKA has no price model
 
 ---
 
-### Phase 5: Testing (Tasks 16-18)
+### Phase 6: Testing (Tasks 24-26)
 
-#### Task 16: Unit tests for types
+#### Task 24: Unit tests for types
 **Files**: `db/dbtypes/types_test.go` (create if needed)
 
 - Test `CoinBalance` JSON marshaling (SKA as string)
 - Test `AddressBalance` per-coin map population
 - Test `ActiveCoins` sorting (ascending)
+- Test `ChartsData` extension (BalanceAtoms, etc.)
 
 **Verification**: All tests pass (in-memory)
 
 ---
 
-#### Task 17: Integration tests for queries
+#### Task 25: Integration tests for queries
 **Files**: `db/dcrpg/pgblockchain_test.go` (or existing test file)
 
 - Create test address with VAR + SKA
 - Verify `ActiveCoins` returns [0, 1] for mixed
 - Verify per-coin balances correct
+- Verify server-side cumsum produces correct BalanceAtoms
 
 **Verification**: All tests pass (in-memory with mocks)
 
 ---
 
-#### Task 18: API endpoint tests
+#### Task 26: API endpoint tests
 **Files**: `cmd/dcrdata/internal/api/apiroutes_test.go`
 
 - Add `?coin=` param tests for chart endpoints
-- Test default (no coin) behavior returns VAR
+- Test default behavior (first ActiveCoins, not always VAR)
 - Test invalid coin type error handling (404 or 400)
+- Test CSV download includes coin_type column
 
 **Verification**: All tests pass (in-memory)
 
@@ -282,6 +412,7 @@ Per spec: fiat conversion removed as SKA has no price model
 | Cache invalidation on multi-coin | Medium | Test invalidation thoroughly |
 | Performance on address with many coins | Medium | Index on (address, coin_type) already exists |
 | Template changes required | High | Coordinate with frontend team |
+| Server-side cumsum complexity | Medium | Test with large transaction histories |
 
 ---
 
@@ -295,6 +426,9 @@ From `wiki/specs/address-overview/spec.md`:
 4. **URL contract**: `?coin=` shared between charts and transactions; changing it resets `?start=0`
 5. **Coin labels**: Only through `coinSymbol()` (Go) or `renderCoinType()` (JS)
 6. **Computation in Go**: All atom arithmetic in backend, template only does formatting
+7. **Precomputation**: Per-coin totals precomputed in Go to avoid template string arithmetic
+8. **Charts defaults**: First ActiveCoins; Table defaults to all coins
+9. **Summary ignores ?coin=**: Always shows all ActiveCoins
 
 ---
 
@@ -302,18 +436,21 @@ From `wiki/specs/address-overview/spec.md`:
 
 | Phase | Tasks | Description |
 |-------|-------|-------------|
-| Types & Mocks | 1-5 | Data structure changes |
-| Query Layer | 6-9 | Database layer |
-| API/Handler | 10-13 | HTTP layer |
-| Caching | 14-15 | Performance layer |
-| Testing | 16-18 | Validation |
+| Types & Mocks | 1-6 | Data structure changes |
+| Query Layer | 7-12 | Database layer + stake metrics fix |
+| Mempool | 13-14 | Unconfirmed transactions per-coin |
+| API/Handler | 15-21 | HTTP layer + CSV + XHR parity |
+| Caching | 22-23 | Performance layer |
+| Testing | 24-26 | Validation |
 
-**Total: 18 sequential tasks**
+**Total: 26 sequential tasks**
 
 ---
 
-## Open Questions
+## Answered Questions (from specs)
 
-- [ ] Should deprecated `TotalUnspent`/`TotalSpent` be kept or removed?
-- [ ] Cache backward compatibility - invalidate all on deploy or support both keys?
-- [ ] What to do with addresses that have zero transactions (empty ActiveCoins)?
+These questions were answered in the specs - no need to revisit:
+
+1. **Deprecated fields**: `TotalUnspent`/`TotalSpent` - removed, replaced by `Coins map[uint8]*CoinBalance` (Overview §7.1)
+2. **Empty ActiveCoins**: Summary spec §3.8 specifies empty state explicitly
+3. **Cache backward compatibility**: `AddressCache` is in-memory (rebuilt per process), not persistent - not an issue
