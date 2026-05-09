@@ -366,6 +366,33 @@ func TestThreeSigFigs(t *testing.T) {
 		want string
 	}{
 		// ---- large numbers ----
+		// >= 1e17  → "%dQ"   (integer quadrillion)
+		{1e17, "100Q"},
+		{2.5e17, "250Q"},
+
+		// >= 1e16  → "%.1fQ" (one-decimal quadrillion)
+		{1e16, "10.0Q"},
+		{1.55e16, "15.5Q"},
+
+		// >= 1e15  → "%.2fQ" (two-decimal quadrillion)
+		{1e15, "1.00Q"},
+		{1.235e15, "1.24Q"},
+
+		// >= 1e14  → "%dT"   (integer trillion)
+		{1e14, "100T"},
+		{2.5e14, "250T"},
+		// Regression: ~9e14 must render as "900T", not "900000B"
+		// (magnitude of 899,999,999,986,870.46... SKA — what the user reported).
+		{8.99999999986870e14, "900T"},
+
+		// >= 1e13  → "%.1fT" (one-decimal trillion)
+		{1e13, "10.0T"},
+		{1.55e13, "15.5T"},
+
+		// >= 1e12  → "%.2fT" (two-decimal trillion)
+		{1e12, "1.00T"},
+		{1.235e12, "1.24T"},
+
 		// >= 1e11  → "%dB"   (rounds to nearest billion, no decimal)
 		{1e11, "100B"},
 		{2.5e11, "250B"},
