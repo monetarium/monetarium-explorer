@@ -334,10 +334,22 @@ func amountAsDecimalPartsTrimmed(v, numPlaces int64, useCommas bool) []string {
 }
 
 // threeSigFigs returns a representation of the float formatted to three
-// significant figures, with an appropriate magnitude prefix (k, M, B).
+// significant figures, with an appropriate magnitude prefix (k, M, B, T, Q).
 // For (k, M, G) prefixes for file/memory sizes, use humanize.Bytes.
 func threeSigFigs(v float64) string {
-	if v >= 1e11 {
+	if v >= 1e17 {
+		return fmt.Sprintf("%dQ", int(math.Round(v/1e15)))
+	} else if v >= 1e16 {
+		return fmt.Sprintf("%.1fQ", math.Round(v/1e14)/10)
+	} else if v >= 1e15 {
+		return fmt.Sprintf("%.2fQ", math.Round(v/1e13)/1e2)
+	} else if v >= 1e14 {
+		return fmt.Sprintf("%dT", int(math.Round(v/1e12)))
+	} else if v >= 1e13 {
+		return fmt.Sprintf("%.1fT", math.Round(v/1e11)/10)
+	} else if v >= 1e12 {
+		return fmt.Sprintf("%.2fT", math.Round(v/1e10)/1e2)
+	} else if v >= 1e11 {
 		return fmt.Sprintf("%dB", int(math.Round(v/1e9)))
 	} else if v >= 1e10 {
 		return fmt.Sprintf("%.1fB", math.Round(v/1e8)/10)

@@ -943,3 +943,13 @@ func TestFormatAtomsAsCoinString(t *testing.T) {
 		})
 	}
 }
+
+func TestFormatCoinAtoms_LargeSKA(t *testing.T) {
+	// 899,999,999,986,870.462979281329926376 SKA in atom units (18 decimals).
+	// Before adding T/Q tiers, threeSigFigs returned "900000B" for this value.
+	atomStr := "899999999986870462979281329926376"
+	got := formatCoinAtoms(atomStr, 1)
+	if got != "900T" {
+		t.Errorf("formatCoinAtoms(%q, SKA) = %q, want %q", atomStr, got, "900T")
+	}
+}
