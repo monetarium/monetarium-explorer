@@ -402,6 +402,13 @@ func New(cfg *ExplorerConfig) *explorerUI {
 		"windows", "timelisting", "addresstable", "proposals", "proposal",
 		"market", "insight_root", "attackcost", "treasury", "treasurytable", "verify_message"}
 
+	// Debug-only: load the dev_indicators template alongside the rest only when
+	// --reload-html is set. The corresponding route is registered in main.go
+	// under the same gate.
+	if cfg.ReloadHTML {
+		tmpls = append(tmpls, "dev_indicators")
+	}
+
 	for _, name := range tmpls {
 		if err := exp.templates.addTemplate(name); err != nil {
 			log.Errorf("Unable to create new html template: %v", err)
@@ -1159,18 +1166,31 @@ func computeCoinFills(stats map[uint8]types.MempoolCoinStats, maxBlockSize float
 		return
 	}
 
+	// withDisplay populates PctOfTC and IsOverflow from the segment ratios.
+	// PctOfTC is the cumulative fill expressed as percent of total block
+	// capacity. It is NOT clamped — if a coin's mempool transactions exceed
+	// the block's max size (e.g. 115%), the indicator must surface that, per
+	// the PO. The bar's visual width is clipped at 100% via SCSS; the textual
+	// percentage and the IsOverflow flag tell the user the true magnitude.
+	withDisplay := func(d types.CoinFillData) types.CoinFillData {
+		raw := d.GQFillRatio*d.GQPositionRatio + d.ExtraFillRatio + d.OverflowFillRatio
+		d.PctOfTC = raw * 100.0
+		d.IsOverflow = raw > 1.0
+		return d
+	}
+
 	varStatus := fillStatus(varSize, varQuota)
 	varExtra, varOverflow := extraOrOverflow(varSize, varQuota, varStatus)
 
 	fills := make([]types.CoinFillData, 0, 1+numSKA)
-	fills = append(fills, types.CoinFillData{
+	fills = append(fills, withDisplay(types.CoinFillData{
 		Symbol:            "VAR",
 		GQFillRatio:       math.Min(varSize/varQuota, 1.0),
 		ExtraFillRatio:    varExtra,
 		OverflowFillRatio: varOverflow,
 		GQPositionRatio:   0.10,
 		Status:            varStatus,
-	})
+	}))
 
 	if numSKA == 0 {
 		return fills, totalFillRatio, 0
@@ -1184,14 +1204,14 @@ func computeCoinFills(stats map[uint8]types.MempoolCoinStats, maxBlockSize float
 		size := float64(s.Size)
 		status := fillStatus(size, perSKAQuota)
 		extra, overflow := extraOrOverflow(size, perSKAQuota, status)
-		fills = append(fills, types.CoinFillData{
+		fills = append(fills, withDisplay(types.CoinFillData{
 			Symbol:            fmt.Sprintf("SKA%d", ct),
 			GQFillRatio:       math.Min(size/perSKAQuota, 1.0),
 			ExtraFillRatio:    extra,
 			OverflowFillRatio: overflow,
 			GQPositionRatio:   gqPos,
 			Status:            status,
-		})
+		}))
 	}
 	return fills, totalFillRatio, numSKA
 }

@@ -2,6 +2,7 @@ package explorer
 
 import (
 	"html/template"
+	"math"
 	"reflect"
 	"strings"
 	"testing"
@@ -486,6 +487,109 @@ func TestComputeCoinFills(t *testing.T) {
 		}
 		if count != 1 {
 			t.Errorf("SKA1 should appear exactly once, got %d", count)
+		}
+	})
+
+	// Bug regression: tester reported that with no SKA active the VAR bar's
+	// percent text and visible length should equal the TOTAL bar at every
+	// fill level. The previous implementation rendered VAR pct as
+	// gqFill*gqPos*100, which capped at 10% the moment VAR exceeded its
+	// guaranteed quota. PctOfTC is the corrected display percentage.
+	pctApproxEq := func(t *testing.T, got, want float64) {
+		t.Helper()
+		const eps = 1e-9
+		if math.Abs(got-want) > eps {
+			t.Errorf("PctOfTC: want %f, got %f", want, got)
+		}
+	}
+
+	t.Run("PctOfTC: no SKA, VAR within quota matches TOTAL", func(t *testing.T) {
+		stats := map[uint8]types.MempoolCoinStats{0: {Size: 5}}
+		fills, totalFill, _ := computeCoinFills(stats, max, nil)
+		pctApproxEq(t, fills[0].PctOfTC, totalFill*100)
+		if fills[0].IsOverflow {
+			t.Errorf("VAR within quota: IsOverflow should be false")
+		}
+	})
+
+	t.Run("PctOfTC: no SKA, VAR borrowing matches TOTAL", func(t *testing.T) {
+		stats := map[uint8]types.MempoolCoinStats{0: {Size: 15}}
+		fills, totalFill, _ := computeCoinFills(stats, max, nil)
+		pctApproxEq(t, fills[0].PctOfTC, totalFill*100)
+		if fills[0].PctOfTC <= 10.0 {
+			t.Errorf("VAR borrowing: PctOfTC should exceed 10 (was the buggy cap), got %f", fills[0].PctOfTC)
+		}
+		if fills[0].IsOverflow {
+			t.Errorf("VAR borrowing: block fits, IsOverflow should be false")
+		}
+	})
+
+	t.Run("PctOfTC: VAR full reports actual % above 100 with overflow flag", func(t *testing.T) {
+		// PO: must surface the true fraction of max block size, not clamp.
+		stats := map[uint8]types.MempoolCoinStats{0: {Size: 110}}
+		fills, _, _ := computeCoinFills(stats, max, nil)
+		pctApproxEq(t, fills[0].PctOfTC, 110.0)
+		if !fills[0].IsOverflow {
+			t.Errorf("VAR full: IsOverflow should be true")
+		}
+	})
+
+	t.Run("PctOfTC: SKA quota exceeded + can't borrow reports actual %", func(t *testing.T) {
+		// 1 SKA active, SKA1 quota=90; SKA1=110 exceeds its own quota AND
+		// total block (with VAR=5, totalUsed=115 > 100) so it can't borrow.
+		// Status=full, PctOfTC reports the true 110% magnitude.
+		stats := map[uint8]types.MempoolCoinStats{0: {Size: 5}, 1: {Size: 110}}
+		fills, _, _ := computeCoinFills(stats, max, nil)
+		var ska1 types.CoinFillData
+		for _, f := range fills {
+			if f.Symbol == "SKA1" {
+				ska1 = f
+			}
+		}
+		if ska1.Status != "full" {
+			t.Errorf("SKA1 over quota and block full: want status=full, got %s", ska1.Status)
+		}
+		pctApproxEq(t, ska1.PctOfTC, 110.0)
+		if !ska1.IsOverflow {
+			t.Errorf("SKA1 over capacity: IsOverflow should be true")
+		}
+	})
+
+	t.Run("PctOfTC: SKA borrowing reflects cumulative fill", func(t *testing.T) {
+		// 2 SKAs (45 quota each); SKA1 uses 50 (borrowing 5), SKA2 uses 0.
+		// SKA1 total contribution to block fill = 50/100 = 50%.
+		stats := map[uint8]types.MempoolCoinStats{1: {Size: 50}, 2: {Size: 0}}
+		fills, _, _ := computeCoinFills(stats, max, nil)
+		var ska1 types.CoinFillData
+		for _, f := range fills {
+			if f.Symbol == "SKA1" {
+				ska1 = f
+			}
+		}
+		pctApproxEq(t, ska1.PctOfTC, 50.0)
+	})
+
+	t.Run("PctOfTC invariant: when no overflow, sum of per-coin pct ≈ total*100", func(t *testing.T) {
+		// 1 active SKA, both within their quotas: VAR=5, SKA1=20, total=25.
+		stats := map[uint8]types.MempoolCoinStats{0: {Size: 5}, 1: {Size: 20}}
+		fills, totalFill, _ := computeCoinFills(stats, max, nil)
+		var sum float64
+		for _, f := range fills {
+			if f.IsOverflow {
+				t.Fatalf("test setup expected no overflow, got %+v", f)
+			}
+			sum += f.PctOfTC
+		}
+		pctApproxEq(t, sum, totalFill*100)
+	})
+
+	t.Run("PctOfTC: issued-but-empty SKA is zero", func(t *testing.T) {
+		stats := map[uint8]types.MempoolCoinStats{0: {Size: 5}}
+		fills, _, _ := computeCoinFills(stats, max, []uint8{5})
+		for _, f := range fills {
+			if f.Symbol == "SKA5" && f.PctOfTC != 0 {
+				t.Errorf("SKA5 zero-fill: PctOfTC want 0, got %f", f.PctOfTC)
+			}
 		}
 	})
 }

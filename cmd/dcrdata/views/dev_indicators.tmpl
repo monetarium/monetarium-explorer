@@ -1,0 +1,26 @@
+{{define "dev_indicators" -}}
+<!DOCTYPE html>
+<html lang="en">
+{{template "html-head" headData .CommonPageData "Dev — Indicator Fixtures"}}
+{{template "navbar" .}}
+<div class="container main py-3">
+    <h2 class="my-3">Mempool fill indicator — visual fixtures</h2>
+    <p class="text-muted">
+        Hand-crafted scenarios for the per-coin mempool fill indicators.
+        Each card below renders the same <code>mempoolCard</code> template that the home page uses,
+        with a synthetic <code>MempoolInfo</code> instead of live data.
+        Available only when the server is started with <code>--reload-html</code>.
+    </p>
+    {{range .Scenarios}}
+    <section class="my-4 p-3 border rounded bg-light">
+        <header class="mb-2">
+            <h4 class="mb-0">{{.Title}}</h4>
+            {{if .Description}}<small class="text-muted">{{.Description}}</small>{{end}}
+        </header>
+        {{template "mempoolCard" .}}
+    </section>
+    {{end}}
+</div>
+{{template "footer" .}}
+</html>
+{{- end}}
