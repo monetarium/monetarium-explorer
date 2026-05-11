@@ -199,9 +199,21 @@ func (p *MempoolMonitor) TxHandler(rawTx *chainjson.TxRawResult) error {
 	}
 
 	// Store the current mempool transaction, block info zeroed.
+	coinInfo := make(txhelpers.CoinInfoMap)
+	for i, txOut := range msgTx.TxOut {
+		ska := ""
+		if txOut.SKAValue != nil {
+			ska = txOut.SKAValue.String()
+		}
+		coinInfo[uint32(i)] = txhelpers.CoinOutputInfo{
+			CoinType: uint8(txOut.CoinType),
+			SKAValue: ska,
+		}
+	}
 	p.txnsStore[*msgTx.CachedTxHash()] = &txhelpers.TxWithBlockData{
-		Tx:          msgTx,
+		Tx:         msgTx,
 		MemPoolTime: rawTx.Time,
+		CoinInfo:   coinInfo,
 	}
 
 	log.Tracef("New transaction (%s: %s) added %d new and %d previous outpoints, "+
@@ -502,47 +514,41 @@ func (p *MempoolMonitor) CollectAndStore() error {
 // UnconfirmedTxnsForAddress indexes (1) outpoints in mempool that pay to the
 // given address, (2) previous outpoint being consumed that paid to the address,
 // and (3) all relevant transactions. See txhelpers.AddressOutpoints for more
-// information. The number of unconfirmed transactions is also returned. This
-// satisfies the rpcutils.MempoolAddressChecker interface for MempoolMonitor.
-func (p *MempoolMonitor) UnconfirmedTxnsForAddress(address string) (*txhelpers.AddressOutpoints, int64, error) {
+// information. The number of unconfirmed transactions per coin type is also
+// returned. This satisfies the rpcutils.MempoolAddressChecker interface for
+// MempoolMonitor.
+func (p *MempoolMonitor) UnconfirmedTxnsForAddress(address string) (*txhelpers.AddressOutpoints, map[uint8]int64, error) {
 	p.addrMap.mtx.Lock()
 	defer p.addrMap.mtx.Unlock()
 	addrStore := p.addrMap.store
 	if addrStore == nil {
-		return nil, 0, fmt.Errorf("uninitialized MempoolAddressStore")
+		return nil, nil, fmt.Errorf("uninitialized MempoolAddressStore")
 	}
 
 	// Retrieve the AddressOutpoints for this address.
 	outs := addrStore[address]
 	if outs == nil {
-		return txhelpers.NewAddressOutpoints(address), 0, nil
+		return txhelpers.NewAddressOutpoints(address), nil, nil
 	}
 
 	if outs.TxnsStore == nil {
 		outs.TxnsStore = make(txhelpers.TxnsStore)
 	}
 
-	// Fill out the TxnsStore and count unconfirmed transactions. Note that the
-	// values stored in TxnsStore are pointers, and they are already allocated
-	// and stored in MempoolMonitor.txnsStore. This code makes a similar
-	// transaction map for just the transactions related to the address.
+	// Fill out the TxnsStore and count unconfirmed transactions by coin type.
+	numByCoin := make(map[uint8]int64)
 
 	// Process the transaction hashes for the new outpoints.
-	for op := range outs.Outpoints {
-		hash := outs.Outpoints[op].Hash
-		// New transaction for this address?
-		if _, found := outs.TxnsStore[hash]; found {
-			// This is another (prev)out for an already seen transaction, so
-			// there is no need to retrieve it from MempoolMonitor.txnsStore.
+	for _, op := range outs.Outpoints {
+		if _, found := outs.TxnsStore[op.Hash]; found {
 			continue
 		}
-
-		txData := p.txnsStore[hash]
+		txData := p.txnsStore[op.Hash]
 		if txData == nil {
-			log.Warnf("Unable to locate in TxnsStore: %v", hash)
+			log.Warnf("Unable to locate in TxnsStore: %v", op.Hash)
 			continue
 		}
-		outs.TxnsStore[hash] = txData
+		outs.TxnsStore[op.Hash] = txData
 	}
 
 	// Process the transaction hashes for the consumed previous outpoints.
@@ -559,21 +565,36 @@ func (p *MempoolMonitor) UnconfirmedTxnsForAddress(address string) (*txhelpers.A
 
 		// The funding transaction for the previous outpoint.
 		hash := outs.PrevOuts[ip].PreviousOutpoint.Hash
-		// New transaction for this address?
 		if _, found := outs.TxnsStore[hash]; found {
-			// This is another (prev)out for an already seen transaction, so
-			// there is no need to retrieve it from MempoolMonitor.txnsStore.
 			continue
 		}
-
 		txData := p.txnsStore[hash]
 		if txData == nil {
 			log.Warnf("Unable to locate in TxnsStore: %v", hash)
 		}
 		outs.TxnsStore[hash] = txData
+
+		// Count spending transactions by coin type.
+		coinType := outs.PrevOuts[ip].CoinType
+		numByCoin[coinType]++
 	}
 
-	return outs, int64(len(outs.TxnsStore)), nil
+	// Also count funding outpoints by coin type.
+	for _, op := range outs.Outpoints {
+		txData := p.txnsStore[op.Hash]
+		if txData == nil {
+			continue
+		}
+		outIndex := op.Index
+		if coinInfo, ok := txData.CoinInfo[outIndex]; ok {
+			numByCoin[coinInfo.CoinType]++
+		} else if int(outIndex) < len(txData.Tx.TxOut) {
+			txOut := txData.Tx.TxOut[outIndex]
+			numByCoin[uint8(txOut.CoinType)]++
+		}
+	}
+
+	return outs, numByCoin, nil
 }
 
 // addAtomStrings adds two decimal atom strings. For SKA (isBig=true) it uses

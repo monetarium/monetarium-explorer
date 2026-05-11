@@ -77,7 +77,7 @@ const (
 
 // MempoolAddressChecker is an interface implementing UnconfirmedTxnsForAddress
 type MempoolAddressChecker interface {
-	UnconfirmedTxnsForAddress(address string) (*txhelpers.AddressOutpoints, int64, error)
+	UnconfirmedTxnsForAddress(address string) (*txhelpers.AddressOutpoints, map[uint8]int64, error)
 }
 
 // InsightApi contains the resources for the Insight HTTP API. InsightApi's

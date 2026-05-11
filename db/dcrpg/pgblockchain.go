@@ -2605,12 +2605,22 @@ func (pgb *ChainDB) AddressData(ctx context.Context, address string, limitN, off
 	}
 
 	// Check for unconfirmed transactions.
-	addressUTXOs, numUnconfirmed, err := pgb.mp.UnconfirmedTxnsForAddress(address)
+	addressUTXOs, numByCoin, err := pgb.mp.UnconfirmedTxnsForAddress(address)
 	if err != nil || addressUTXOs == nil {
 		return nil, fmt.Errorf("UnconfirmedTxnsForAddress failed for address %s: %w", address, err)
 	}
-	addrData.NumUnconfirmed = numUnconfirmed
-	addrData.NumTransactions += numUnconfirmed
+
+	// Compute total unconfirmed count from per-coin map.
+	var totalUnconfirmed int64
+	for _, count := range numByCoin {
+		totalUnconfirmed += count
+	}
+	addrData.NumUnconfirmed = totalUnconfirmed
+	addrData.NumTransactions += totalUnconfirmed
+
+	// Store per-coin unconfirmed counts.
+	addrData.NumUnconfirmedByCoin = numByCoin
+
 	if addrData.UnconfirmedTxns == nil {
 		addrData.UnconfirmedTxns = new(dbtypes.AddressTransactions)
 	}
@@ -2643,21 +2653,48 @@ FUNDING_TX_DUPLICATE_CHECK:
 			log.Errorf("An outpoint's transaction is unexpectedly confirmed.")
 			continue
 		}
+		coinType := uint8(0)
+		receivedSKA := ""
+		if fundingTx.CoinInfo != nil {
+			if info, ok := fundingTx.CoinInfo[f.Index]; ok {
+				coinType = info.CoinType
+				receivedSKA = info.SKAValue
+			}
+		}
+
 		if txnType == dbtypes.AddrTxnAll || txnType == dbtypes.AddrTxnCredit || txnType == dbtypes.AddrUnspentTxn {
+			fundingVout := fundingTx.Tx.TxOut[f.Index]
+			var receivedTotalVAR float64
+			if coinType == 0 {
+				receivedTotalVAR = dcrutil.Amount(fundingVout.Value).ToCoin()
+			}
 			addrTx := &dbtypes.AddressTx{
-				TxID:          dbtypes.ChainHash(fundingTx.Hash()),
-				TxType:        txhelpers.DetermineTxTypeString(fundingTx.Tx),
-				InOutID:       f.Index,
-				Time:          dbtypes.NewTimeDefFromUNIX(fundingTx.MemPoolTime),
-				FormattedSize: humanize.Bytes(uint64(fundingTx.Tx.SerializeSize())),
-				Total:         txhelpers.TotalOutFromMsgTx(fundingTx.Tx).ToCoin(),
-				ReceivedTotal: dcrutil.Amount(fundingTx.Tx.TxOut[f.Index].Value).ToCoin(),
-				IsFunding:     true,
+				TxID:             dbtypes.ChainHash(fundingTx.Hash()),
+				TxType:           txhelpers.DetermineTxTypeString(fundingTx.Tx),
+				InOutID:          f.Index,
+				Time:             dbtypes.NewTimeDefFromUNIX(fundingTx.MemPoolTime),
+				FormattedSize:    humanize.Bytes(uint64(fundingTx.Tx.SerializeSize())),
+				Total:            txhelpers.TotalOutFromMsgTx(fundingTx.Tx).ToCoin(),
+				ReceivedTotal:    receivedTotalVAR,
+				ReceivedTotalSKA: receivedSKA,
+				IsFunding:        true,
+				CoinType:         coinType,
+				SKAValue:         receivedSKA,
 			}
 			addrData.Transactions = append(addrData.Transactions, addrTx)
 		}
-		received += fundingTx.Tx.TxOut[f.Index].Value
-		numReceived++
+
+		if addrData.Balance.Coins[coinType] == nil {
+			addrData.Balance.Coins[coinType] = dbtypes.NewCoinBalance(coinType)
+		}
+		if coinType == 0 {
+			received += fundingTx.Tx.TxOut[f.Index].Value
+			numReceived++
+		} else {
+			addrData.Balance.Coins[coinType].NumUnspent++
+			addrData.Balance.Coins[coinType].TotalUnspentSKA = receivedSKA
+		}
+		addrData.Balance.TotalOutputs++
 	}
 
 	// Spending transactions (unconfirmed)
@@ -2705,6 +2742,14 @@ SPENDING_TX_DUPLICATE_CHECK:
 		}
 
 		if txnType == dbtypes.AddrTxnAll || txnType == dbtypes.AddrTxnDebit {
+			coinType := f.CoinType
+			var sentTotalSKA string
+			var sentTotalVAR float64
+			if coinType == 0 {
+				sentTotalVAR = dcrutil.Amount(valuein).ToCoin()
+			} else {
+				sentTotalSKA = f.SKAValue
+			}
 			prevCH := dbtypes.ChainHash(prevhash)
 			addrTx := &dbtypes.AddressTx{
 				TxID:           dbtypes.ChainHash(spendingTx.Hash()),
@@ -2713,15 +2758,30 @@ SPENDING_TX_DUPLICATE_CHECK:
 				Time:           dbtypes.NewTimeDefFromUNIX(spendingTx.MemPoolTime),
 				FormattedSize:  humanize.Bytes(uint64(spendingTx.Tx.SerializeSize())),
 				Total:          txhelpers.TotalOutFromMsgTx(spendingTx.Tx).ToCoin(),
-				SentTotal:      dcrutil.Amount(valuein).ToCoin(),
+				SentTotal:      sentTotalVAR,
+				SentTotalSKA:   sentTotalSKA,
 				MatchedTx:      &prevCH,
 				MatchedTxIndex: previndex,
+				CoinType:       coinType,
+				SKAValue:       f.SKAValue,
 			}
 			addrData.Transactions = append(addrData.Transactions, addrTx)
 		}
 
-		sent += valuein
-		numSent++
+		coinType := f.CoinType
+		if addrData.Balance.Coins[coinType] == nil {
+			addrData.Balance.Coins[coinType] = dbtypes.NewCoinBalance(coinType)
+		}
+		if coinType == 0 {
+			sent += valuein
+		}
+		addrData.Balance.Coins[coinType].NumSpent++
+		addrData.Balance.Coins[coinType].TotalSpentSKA = f.SKAValue
+		addrData.Balance.TotalInputs++
+
+		if coinType == 0 {
+			numSent++
+		}
 	} // range addressUTXOs.PrevOuts
 
 	// Totals from funding and spending transactions.

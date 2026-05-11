@@ -524,7 +524,7 @@ func GetChainWork(client BlockFetcher, hash *chainhash.Hash) (string, error) {
 // NewMempoolAddressChecker may be used to create a MempoolAddressChecker from
 // an rpcclient.Client.
 type MempoolAddressChecker interface {
-	UnconfirmedTxnsForAddress(address string) (*txhelpers.AddressOutpoints, int64, error)
+	UnconfirmedTxnsForAddress(address string) (*txhelpers.AddressOutpoints, map[uint8]int64, error)
 }
 
 type mempoolAddressChecker struct {
@@ -533,7 +533,7 @@ type mempoolAddressChecker struct {
 }
 
 // UnconfirmedTxnsForAddress implements MempoolAddressChecker.
-func (m *mempoolAddressChecker) UnconfirmedTxnsForAddress(address string) (*txhelpers.AddressOutpoints, int64, error) {
+func (m *mempoolAddressChecker) UnconfirmedTxnsForAddress(address string) (*txhelpers.AddressOutpoints, map[uint8]int64, error) {
 	return UnconfirmedTxnsForAddress(m.client, address, m.params)
 }
 
@@ -553,25 +553,26 @@ type MempoolTxGetter interface {
 
 // UnconfirmedTxnsForAddress returns the chainhash.Hash of all transactions in
 // mempool that (1) pay to the given address, or (2) spend a previous outpoint
-// that paid to the address.
+// that paid to the address. The per-coin count map is empty for the RPC path
+// since CoinInfo is not populated; callers should use the MempoolMonitor path
+// for per-coin counts.
 func UnconfirmedTxnsForAddress(client MempoolTxGetter, address string,
-	params *chaincfg.Params) (*txhelpers.AddressOutpoints, int64, error) {
+	params *chaincfg.Params) (*txhelpers.AddressOutpoints, map[uint8]int64, error) {
 	// Mempool transactions
 	mempoolTxns, err := client.GetRawMempoolVerbose(context.TODO(), chainjson.GRMAll)
 	if err != nil {
 		log.Warnf("GetRawMempool failed for address %s: %v", address, err)
-		return nil, 0, err
+		return nil, nil, err
 	}
 
 	// Check each transaction for involvement with provided address.
-	var numUnconfirmed int64
 	addressOutpoints := txhelpers.NewAddressOutpoints(address)
 	for hash, tx := range mempoolTxns {
 		// Transaction details from dcrd
 		txhash, err1 := chainhash.NewHashFromStr(hash)
 		if err1 != nil {
 			log.Errorf("Invalid transaction hash %s", hash)
-			return addressOutpoints, 0, err1
+			return addressOutpoints, nil, err1
 		}
 
 		Tx, err1 := client.GetRawTransaction(context.TODO(), txhash)
@@ -592,7 +593,6 @@ func UnconfirmedTxnsForAddress(client MempoolTxGetter, address string,
 		}
 
 		// Add present transaction to previous outpoint txn slice
-		numUnconfirmed++
 		thisTxUnconfirmed := &txhelpers.TxWithBlockData{
 			Tx:          Tx.MsgTx(),
 			MemPoolTime: tx.Time,
@@ -602,5 +602,5 @@ func UnconfirmedTxnsForAddress(client MempoolTxGetter, address string,
 		addressOutpoints.Update(prevTxns, outpoints, prevouts)
 	}
 
-	return addressOutpoints, numUnconfirmed, err
+	return addressOutpoints, nil, err
 }

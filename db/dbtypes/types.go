@@ -2331,6 +2331,8 @@ type AddressInfo struct {
 
 	// NumUnconfirmed is the number of unconfirmed txns for the address
 	NumUnconfirmed  int64
+	// NumUnconfirmedByCoin is the count of unconfirmed transactions per coin type.
+	NumUnconfirmedByCoin map[uint8]int64 `json:"num_unconfirmed_by_coin,omitempty"`
 	UnconfirmedTxns *AddressTransactions
 
 	// Transactions on the current page
