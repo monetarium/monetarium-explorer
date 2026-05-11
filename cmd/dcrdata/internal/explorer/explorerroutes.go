@@ -1542,6 +1542,7 @@ func (exp *explorerUI) AddressPage(w http.ResponseWriter, r *http.Request) {
 		Type         txhelpers.AddressType
 		CRLFDownload bool
 		Pages        []pageNumber
+		FiatBalance  interface{} // TODO: Remove once frontend is updated for multi-coin support
 	}
 
 	// Grab the URL query parameters
@@ -1629,6 +1630,7 @@ func (exp *explorerUI) AddressPage(w http.ResponseWriter, r *http.Request) {
 		Data:           addrData,
 		CRLFDownload:   UseCRLF,
 		Pages:          calcPages(int(addrData.TxnCount), int(limitN), int(offsetAddrOuts), linkTemplate),
+		FiatBalance:    nil, // TODO: Remove once frontend is updated for multi-coin support
 	}
 	str, err := exp.templates.exec("address", pageData)
 	if err != nil {

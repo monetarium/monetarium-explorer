@@ -2392,6 +2392,12 @@ type AddressBalance struct {
 	TotalInputs  int64                  `json:"total_inputs"`    // Σ(NumSpent) across all coins
 	FromStake    float64                `json:"from_stake"`      // VAR-only stake percentage
 	ToStake      float64                `json:"to_stake"`        // VAR-only stake percentage
+
+	// TODO: Remove these fields once frontend is updated for multi-coin support
+	TotalUnspent int64 `json:"total_unspent"`
+	TotalSpent   int64 `json:"total_spent"`
+	NumSpent     int64 `json:"num_spent"`
+	NumUnspent   int64 `json:"num_unspent"`
 }
 
 // NewCoinBalance creates a new CoinBalance for the given coin type.
@@ -2501,6 +2507,14 @@ func ReduceAddressHistory(addrHist []*AddressRow) (*AddressInfo, float64, float6
 		Coins:        coins,
 		TotalInputs:  0,
 		TotalOutputs: 0,
+	}
+
+	// Populate mock fields for frontend backward compatibility (using VAR)
+	if varBal, ok := coins[0]; ok {
+		balance.TotalUnspent = varBal.TotalUnspent
+		balance.TotalSpent = varBal.TotalSpent
+		balance.NumSpent = varBal.NumSpent
+		balance.NumUnspent = varBal.NumUnspent
 	}
 
 	for ct, cb := range coins {
