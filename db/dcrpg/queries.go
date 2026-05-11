@@ -1447,6 +1447,28 @@ func retrieveAddressSpent(ctx context.Context, db *sql.DB, address string) (coun
 // 	return
 // }
 
+// retrieveAddressCoinTypes gets the sorted list of coin types with activity for an address.
+func retrieveAddressCoinTypes(ctx context.Context, db *sql.DB, address string) ([]uint8, error) {
+	var coinTypes []uint8
+	rows, err := db.QueryContext(ctx, internal.SelectAddressCoinTypes, address)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	defer closeRows(rows)
+
+	for rows.Next() {
+		var ct uint8
+		if err = rows.Scan(&ct); err != nil {
+			return nil, err
+		}
+		coinTypes = append(coinTypes, ct)
+	}
+	return coinTypes, rows.Err()
+}
+
 // retrieveAddressBalance gets the numbers of spent and unspent outpoints
 // for the given address, the total amounts spent and unspent, the number of
 // distinct spending transactions, and the fraction spent to and received from
@@ -1481,7 +1503,10 @@ func retrieveAddressBalance(ctx context.Context, db *sql.DB, address string) (ba
 		return
 	}
 
-	var fromStake, toStake int64
+	balance.Coins = make(map[uint8]*dbtypes.CoinBalance)
+
+	var fromStakeVAR, toStakeVAR int64
+
 	for rows.Next() {
 		var count, totalValue int64
 		var noMatchingTx, isFunding, isRegular bool
@@ -1491,10 +1516,20 @@ func retrieveAddressBalance(ctx context.Context, db *sql.DB, address string) (ba
 			return
 		}
 
+		coinBalance, exists := balance.Coins[coinType]
+		if !exists {
+			coinBalance = dbtypes.NewCoinBalance(coinType)
+			balance.Coins[coinType] = coinBalance
+		}
+
 		// Unspent == funding with no matching transaction
 		if isFunding && noMatchingTx {
-			balance.NumUnspent += count
-			balance.TotalUnspent += totalValue
+			coinBalance.NumUnspent += count
+			if coinType == 0 {
+				coinBalance.TotalUnspent += totalValue
+			} else {
+				coinBalance.TotalUnspentSKA = incrementStringAtoms(coinBalance.TotalUnspentSKA, totalValue)
+			}
 		}
 		// Spent == spending (but ensure a matching transaction is set)
 		if !isFunding {
@@ -1503,25 +1538,39 @@ func retrieveAddressBalance(ctx context.Context, db *sql.DB, address string) (ba
 					" unset for %s!", address)
 				continue
 			}
-			balance.NumSpent += count
-			balance.TotalSpent += totalValue
-			if !isRegular {
-				toStake += totalValue
+			coinBalance.NumSpent += count
+			if coinType == 0 {
+				coinBalance.TotalSpent += totalValue
+			} else {
+				coinBalance.TotalSpentSKA = incrementStringAtoms(coinBalance.TotalSpentSKA, totalValue)
 			}
-		} else if !isRegular {
-			fromStake += totalValue
+			// Stake metrics computed from VAR only
+			if coinType == 0 && !isRegular {
+				toStakeVAR += totalValue
+			}
+		} else if coinType == 0 && !isRegular {
+			fromStakeVAR += totalValue
 		}
 	}
 	if err = rows.Err(); err != nil {
 		return
 	}
 
-	totalTransfer := balance.TotalSpent + balance.TotalUnspent
-	if totalTransfer > 0 {
-		balance.FromStake = float64(fromStake) / float64(totalTransfer)
+	// Compute stake percentages from VAR coin balance only
+	if varBalance, exists := balance.Coins[0]; exists {
+		totalTransferVAR := varBalance.TotalSpent + varBalance.TotalUnspent
+		if totalTransferVAR > 0 {
+			balance.FromStake = float64(fromStakeVAR) / float64(totalTransferVAR)
+		}
+		if varBalance.TotalSpent > 0 {
+			balance.ToStake = float64(toStakeVAR) / float64(varBalance.TotalSpent)
+		}
 	}
-	if balance.TotalSpent > 0 {
-		balance.ToStake = float64(toStake) / float64(balance.TotalSpent)
+
+	// Compute TotalOutputs and TotalInputs
+	for _, cb := range balance.Coins {
+		balance.TotalInputs += cb.NumSpent
+		balance.TotalOutputs += cb.NumSpent + cb.NumUnspent
 	}
 	closeRows(rows)
 
@@ -4140,6 +4189,7 @@ func toCoin[T int64 | uint64](amt T) float64 {
 func parseRowsSentReceived(rows *sql.Rows) (*dbtypes.ChartsData, error) {
 	defer closeRows(rows)
 	var items = new(dbtypes.ChartsData)
+	var balanceVAR int64
 	for rows.Next() {
 		var blockTime time.Time
 		var received, sent uint64
@@ -4155,7 +4205,12 @@ func parseRowsSentReceived(rows *sql.Rows) (*dbtypes.ChartsData, error) {
 		// given block. If the difference is positive then the value is unspent amount
 		// otherwise if the value is zero then all amount is spent and if the net amount
 		// is negative then for the given block more amount was sent than received.
-		items.Net = append(items.Net, toCoin(received-sent))
+		net := int64(received) - int64(sent)
+		items.Net = append(items.Net, toCoin(net))
+
+		// Compute running balance for VAR
+		balanceVAR += net
+		items.Balance = append(items.Balance, toCoin(balanceVAR))
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -4824,4 +4879,23 @@ func retrieveDiff(ctx context.Context, db *sql.DB, timestamp int64) (float64, er
 	tDef := dbtypes.NewTimeDefFromUNIX(timestamp)
 	err := db.QueryRowContext(ctx, internal.SelectDiffByTime, tDef).Scan(&diff)
 	return diff, err
+}
+
+// incrementStringAtoms adds int64 atoms to a string representation of SKA atoms.
+// The int64 value is from VAR (1e8 scale), so it needs to be scaled to SKA (1e18).
+func incrementStringAtoms(existing string, atoms int64) string {
+	if atoms == 0 {
+		return existing
+	}
+	var sum big.Int
+	if existing != "" && existing != "0" {
+		if _, ok := sum.SetString(existing, 10); !ok {
+			sum.SetInt64(0)
+		}
+	}
+	// Scale VAR atoms (1e8) to SKA atoms (1e18) by multiplying by 1e10
+	var add big.Int
+	add.Mul(big.NewInt(atoms), big.NewInt(1e10))
+	sum.Add(&sum, &add)
+	return sum.String()
 }

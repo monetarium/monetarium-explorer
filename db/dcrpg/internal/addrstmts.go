@@ -231,6 +231,11 @@ const (
 			matching_tx_hash IS NULL  -- separate spent and unspent
 		ORDER BY count, is_funding;`
 
+	SelectAddressCoinTypes = `SELECT DISTINCT coin_type
+		FROM addresses
+		WHERE address = $1
+		ORDER BY coin_type`
+
 	SelectAddressUnspentWithTxn = `SELECT
 			addresses.address,
 			addresses.tx_hash,

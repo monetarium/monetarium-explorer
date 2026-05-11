@@ -1614,7 +1614,12 @@ func (exp *explorerUI) AddressPage(w http.ResponseWriter, r *http.Request) {
 	addrData.Path = r.URL.Path
 
 	// If exchange monitoring is active, prepare a fiat balance conversion
-	conversion := exp.xcBot.Conversion(dcrutil.Amount(addrData.Balance.TotalUnspent).ToCoin())
+	// TODO(Task 21): Fiat conversion removed - no coin has market price
+	varBalanceVAR := int64(0)
+	if addrData.Balance.Coins != nil && addrData.Balance.Coins[0] != nil {
+		varBalanceVAR = addrData.Balance.Coins[0].TotalUnspent
+	}
+	conversion := exp.xcBot.Conversion(dcrutil.Amount(varBalanceVAR).ToCoin())
 
 	// For Windows clients only, link to downloads with CRLF (\r\n) line
 	// endings.

@@ -214,3 +214,77 @@ func TestReduceAddressHistory_SKA(t *testing.T) {
 		t.Errorf("AmountReceived must be 0 for SKA-only history, got %v", ai.AmountReceived)
 	}
 }
+
+func TestReduceAddressHistory_MixedCoin(t *testing.T) {
+	rows := []*AddressRow{
+		{
+			Address:        "MixedAddr",
+			TxHash:         ChainHash{1},
+			ValidMainChain: true,
+			IsFunding:      true,
+			CoinType:       0,
+			Value:          5000000000, // 50 VAR
+		},
+		{
+			Address:        "MixedAddr",
+			TxHash:         ChainHash{2},
+			ValidMainChain: true,
+			IsFunding:      true,
+			CoinType:       1,
+			Value:          0,
+			SKAValue:       "1000000000000000000", // 1 SKA
+		},
+		{
+			Address:        "MixedAddr",
+			TxHash:         ChainHash{3},
+			ValidMainChain: true,
+			IsFunding:      false,
+			CoinType:       0,
+			Value:          2000000000, // 20 VAR
+		},
+	}
+	ai, _, _ := ReduceAddressHistory(rows)
+	if ai == nil {
+		t.Fatal("expected AddressInfo")
+	}
+
+	if len(ai.ActiveCoins) != 2 {
+		t.Errorf("ActiveCoins: want [0, 1], got %v", ai.ActiveCoins)
+	}
+	if ai.ActiveCoins[0] != 0 || ai.ActiveCoins[1] != 1 {
+		t.Errorf("ActiveCoins not sorted: got %v", ai.ActiveCoins)
+	}
+
+	coins := ai.Balance.Coins
+	if len(coins) != 2 {
+		t.Errorf("Coins map: want 2 entries, got %d", len(coins))
+	}
+
+	varCoin := coins[0]
+	if varCoin.TotalSpent != 2000000000 {
+		t.Errorf("VAR TotalSpent: want 2000000000, got %d", varCoin.TotalSpent)
+	}
+	if varCoin.TotalUnspent != 3000000000 {
+		t.Errorf("VAR TotalUnspent: want 3000000000, got %d", varCoin.TotalUnspent)
+	}
+	if varCoin.TotalReceived != 5000000000 {
+		t.Errorf("VAR TotalReceived: want 5000000000, got %d", varCoin.TotalReceived)
+	}
+	if varCoin.TotalSpentSKA != "" {
+		t.Errorf("VAR TotalSpentSKA should be empty, got %q", varCoin.TotalSpentSKA)
+	}
+
+	skaCoin := coins[1]
+	if skaCoin.TotalSpent != 0 {
+		t.Errorf("SKA TotalSpent: want 0, got %d", skaCoin.TotalSpent)
+	}
+	if skaCoin.TotalUnspent != 0 {
+		t.Errorf("SKA TotalUnspent should be 0 (int64), got %d", skaCoin.TotalUnspent)
+	}
+	if skaCoin.TotalUnspentSKA != "1000000000000000000" {
+		t.Errorf("SKA TotalUnspentSKA: want 1000000000000000000, got %q", skaCoin.TotalUnspentSKA)
+	}
+	if skaCoin.TotalReceivedSKA != "1000000000000000000" {
+		t.Errorf("SKA TotalReceivedSKA: want 1000000000000000000, got %q", skaCoin.TotalReceivedSKA)
+	}
+}

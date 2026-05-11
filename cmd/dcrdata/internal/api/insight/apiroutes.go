@@ -1224,15 +1224,21 @@ func (iapi *InsightApi) getAddressInfo(w http.ResponseWriter, r *http.Request) {
 
 	command, isCmd := GetAddressCommandCtx(r)
 	if isCmd {
+		// Use VAR coin balance for Insight API (VAR-only)
+		varBalance := balance.Coins[0]
+		if varBalance == nil {
+			writeJSON(w, int64(0), m.GetIndentCtx(r))
+			return
+		}
 		switch command {
 		case "balance":
-			writeJSON(w, balance.TotalUnspent, m.GetIndentCtx(r))
+			writeJSON(w, varBalance.TotalUnspent, m.GetIndentCtx(r))
 			return
 		case "totalReceived":
-			writeJSON(w, balance.TotalSpent+balance.TotalUnspent, m.GetIndentCtx(r))
+			writeJSON(w, varBalance.TotalSpent+varBalance.TotalUnspent, m.GetIndentCtx(r))
 			return
 		case "totalSent":
-			writeJSON(w, balance.TotalSpent, m.GetIndentCtx(r))
+			writeJSON(w, varBalance.TotalSpent, m.GetIndentCtx(r))
 			return
 		}
 	}
@@ -1341,14 +1347,23 @@ func (iapi *InsightApi) getAddressInfo(w http.ResponseWriter, r *http.Request) {
 		rawTxs = rawTxs[start:end]
 	}
 
+	// Use VAR coin balance for Insight API (VAR-only)
+	varBalance := balance.Coins[0]
+	var totalReceivedVAR, totalSentVAR, balanceVAR int64
+	if varBalance != nil {
+		totalReceivedVAR = varBalance.TotalSpent + varBalance.TotalUnspent
+		totalSentVAR = varBalance.TotalSpent
+		balanceVAR = varBalance.TotalUnspent
+	}
+
 	addressInfo := apitypes.InsightAddressInfo{
 		Address:                  address,
-		TotalReceivedSat:         (balance.TotalSpent + balance.TotalUnspent),
-		TotalSentSat:             balance.TotalSpent,
-		BalanceSat:               balance.TotalUnspent,
-		TotalReceived:            dcrutil.Amount(balance.TotalSpent + balance.TotalUnspent).ToCoin(),
-		TotalSent:                dcrutil.Amount(balance.TotalSpent).ToCoin(),
-		Balance:                  dcrutil.Amount(balance.TotalUnspent).ToCoin(),
+		TotalReceivedSat:         totalReceivedVAR,
+		TotalSentSat:             totalSentVAR,
+		BalanceSat:               balanceVAR,
+		TotalReceived:            dcrutil.Amount(totalReceivedVAR).ToCoin(),
+		TotalSent:                dcrutil.Amount(totalSentVAR).ToCoin(),
+		Balance:                  dcrutil.Amount(balanceVAR).ToCoin(),
 		TxAppearances:            int64(confirmedTxCount),
 		UnconfirmedBalance:       dcrutil.Amount(unconfirmedBalanceSat).ToCoin(),
 		UnconfirmedBalanceSat:    unconfirmedBalanceSat,

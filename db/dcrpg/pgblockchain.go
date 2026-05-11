@@ -2340,11 +2340,11 @@ func (pgb *ChainDB) nonMergedTxnCount(ctx context.Context, addr string, txnView 
 	var count int64
 	switch txnView {
 	case dbtypes.AddrTxnAll:
-		count = (bal.NumSpent * 2) + bal.NumUnspent
+		count = (bal.TotalInputs * 2) + (bal.TotalOutputs - bal.TotalInputs)
 	case dbtypes.AddrTxnCredit:
-		count = bal.NumSpent + bal.NumUnspent
+		count = bal.TotalOutputs
 	case dbtypes.AddrTxnDebit:
-		count = bal.NumSpent
+		count = bal.TotalInputs
 	default:
 		return 0, fmt.Errorf("NonMergedTxnCount: requested count for merged view")
 	}
@@ -2449,12 +2449,21 @@ func (pgb *ChainDB) AddressHistory(ctx context.Context, address string, N, offse
 						len(addressRows))
 			}
 
+			// Build per-coin balance from aggregated data
+			coins := make(map[uint8]*dbtypes.CoinBalance)
+			// VAR coin
+			varCoin := dbtypes.NewCoinBalance(0)
+			varCoin.NumSpent = addrInfo.NumSpendingTxns
+			varCoin.NumUnspent = addrInfo.NumFundingTxns - addrInfo.NumSpendingTxns
+			varCoin.TotalSpent = int64(addrInfo.AmountSent)
+			varCoin.TotalUnspent = int64(addrInfo.AmountUnspent)
+			coins[0] = varCoin
+
 			balance = &dbtypes.AddressBalance{
 				Address:      address,
-				NumSpent:     addrInfo.NumSpendingTxns,
-				NumUnspent:   addrInfo.NumFundingTxns - addrInfo.NumSpendingTxns,
-				TotalSpent:   int64(addrInfo.AmountSent),
-				TotalUnspent: int64(addrInfo.AmountUnspent),
+				Coins:        coins,
+				TotalInputs:  addrInfo.NumSpendingTxns,
+				TotalOutputs: addrInfo.NumFundingTxns,
 				FromStake:    fromStake,
 				ToStake:      toStake,
 			}
@@ -2472,10 +2481,10 @@ func (pgb *ChainDB) AddressHistory(ctx context.Context, address string, N, offse
 	}
 
 	log.Infof("%s: %d spent totalling %f DCR, %d unspent totalling %f DCR",
-		address, balance.NumSpent, dcrutil.Amount(balance.TotalSpent).ToCoin(),
-		balance.NumUnspent, dcrutil.Amount(balance.TotalUnspent).ToCoin())
+		address, balance.TotalInputs, dcrutil.Amount(balance.Coins[0].TotalSpent).ToCoin(),
+		balance.TotalOutputs-balance.TotalInputs, dcrutil.Amount(balance.Coins[0].TotalUnspent).ToCoin())
 	log.Infof("Receive count for address %s: count = %d at block %d.",
-		address, balance.NumSpent+balance.NumUnspent, height)
+		address, balance.TotalOutputs, height)
 
 	return addressRows, balance, nil
 }
@@ -2483,6 +2492,7 @@ func (pgb *ChainDB) AddressHistory(ctx context.Context, address string, N, offse
 // AddressData returns comprehensive, paginated information for an address.
 func (pgb *ChainDB) AddressData(ctx context.Context, address string, limitN, offsetAddrOuts int64,
 	txnType dbtypes.AddrTxnViewType) (addrData *dbtypes.AddressInfo, err error) {
+	var activeCoins []uint8
 	_, addrType, addrErr := txhelpers.AddressValidation(address, pgb.chainParams)
 	if addrErr != nil && !errors.Is(err, txhelpers.AddressErrorNoError) {
 		return nil, err
@@ -2496,6 +2506,12 @@ func (pgb *ChainDB) AddressData(ctx context.Context, address string, limitN, off
 	addrHist, balance, err := pgb.AddressHistory(ctx, address, limitN, offsetAddrOuts, txnType)
 	if dbtypes.IsTimeoutErr(err) {
 		return nil, err
+	}
+
+	// Populate ActiveCoins from coin types present in the address
+	activeCoins, err = retrieveAddressCoinTypes(ctx, pgb.db, address)
+	if err != nil {
+		log.Errorf("Failed to get coin types for address %s: %v", address, err)
 	}
 
 	populateTemplate := func() {
@@ -2512,6 +2528,8 @@ func (pgb *ChainDB) AddressData(ctx context.Context, address string, limitN, off
 		addrData = new(dbtypes.AddressInfo)
 		populateTemplate()
 		addrData.Balance = &dbtypes.AddressBalance{}
+		// Still populate ActiveCoins even with no confirmed transactions
+		addrData.ActiveCoins = activeCoins
 		log.Tracef("AddressHistory: No confirmed transactions for address %s.", address)
 	} else if err != nil {
 		// Unexpected error
@@ -2524,7 +2542,7 @@ func (pgb *ChainDB) AddressData(ctx context.Context, address string, limitN, off
 			// Empty history is not expected for credit or all txnType with any
 			// txns. i.e. Empty history is OK for debit views (merged or not).
 			if (txnType != dbtypes.AddrTxnDebit && txnType != dbtypes.AddrMergedTxnDebit) &&
-				(balance.NumSpent+balance.NumUnspent) > 0 {
+				balance.TotalOutputs > 0 {
 				log.Debugf("empty address history (%s) for view %s: n=%d&start=%d",
 					address, txnType.String(), limitN, offsetAddrOuts)
 				return nil, fmt.Errorf("that address has no history")
@@ -2535,9 +2553,12 @@ func (pgb *ChainDB) AddressData(ctx context.Context, address string, limitN, off
 		// Balances and txn counts
 		populateTemplate()
 		addrData.Balance = balance
-		addrData.KnownTransactions = (balance.NumSpent * 2) + balance.NumUnspent
-		addrData.KnownFundingTxns = balance.NumSpent + balance.NumUnspent
-		addrData.KnownSpendingTxns = balance.NumSpent
+		addrData.KnownTransactions = (balance.TotalInputs * 2) + (balance.TotalOutputs - balance.TotalInputs)
+		addrData.KnownFundingTxns = balance.TotalOutputs
+		addrData.KnownSpendingTxns = balance.TotalInputs
+
+		// ActiveCoins already populated above
+		addrData.ActiveCoins = activeCoins
 
 		// Obtain the TxnCount, which pertains to the number of table rows.
 		addrData.IsMerged, err = txnType.IsMerged()
@@ -2704,10 +2725,18 @@ SPENDING_TX_DUPLICATE_CHECK:
 	} // range addressUTXOs.PrevOuts
 
 	// Totals from funding and spending transactions.
-	addrData.Balance.NumSpent += numSent
-	addrData.Balance.NumUnspent += (numReceived - numSent)
-	addrData.Balance.TotalSpent += sent
-	addrData.Balance.TotalUnspent += (received - sent)
+	if addrData.Balance.Coins == nil {
+		addrData.Balance.Coins = make(map[uint8]*dbtypes.CoinBalance)
+	}
+	if addrData.Balance.Coins[0] == nil {
+		addrData.Balance.Coins[0] = dbtypes.NewCoinBalance(0)
+	}
+	addrData.Balance.Coins[0].NumSpent += numSent
+	addrData.Balance.Coins[0].NumUnspent += (numReceived - numSent)
+	addrData.Balance.Coins[0].TotalSpent += sent
+	addrData.Balance.Coins[0].TotalUnspent += (received - sent)
+	addrData.Balance.TotalInputs += numSent
+	addrData.Balance.TotalOutputs += numReceived
 
 	// Sort by date and calculate block height.
 	addrData.PostProcess(uint32(pgb.Height()))
@@ -2821,14 +2850,24 @@ func (pgb *ChainDB) AddressTotals(ctx context.Context, address string) (*apitype
 
 	bestHash, bestHeight := pgb.BestBlockStr()
 
+	varBalance := ab.Coins[0]
+	var numSpent, numUnspent int64
+	var coinsSpent, coinsUnspent int64
+	if varBalance != nil {
+		numSpent = varBalance.NumSpent
+		numUnspent = varBalance.NumUnspent
+		coinsSpent = varBalance.TotalSpent
+		coinsUnspent = varBalance.TotalUnspent
+	}
+
 	return &apitypes.AddressTotals{
 		Address:      address,
 		BlockHeight:  uint64(bestHeight),
 		BlockHash:    bestHash,
-		NumSpent:     ab.NumSpent,
-		NumUnspent:   ab.NumUnspent,
-		CoinsSpent:   dcrutil.Amount(ab.TotalSpent).ToCoin(),
-		CoinsUnspent: dcrutil.Amount(ab.TotalUnspent).ToCoin(),
+		NumSpent:     numSpent,
+		NumUnspent:   numUnspent,
+		CoinsSpent:   dcrutil.Amount(coinsSpent).ToCoin(),
+		CoinsUnspent: dcrutil.Amount(coinsUnspent).ToCoin(),
 	}, nil
 }
 
@@ -2850,7 +2889,7 @@ func (pgb *ChainDB) addressInfo(ctx context.Context, addr string, count, skip in
 	addrData, _, _ := dbtypes.ReduceAddressHistory(addrHist)
 	if addrData == nil {
 		// Empty history is not expected for credit txnType with any txns.
-		if txnType != dbtypes.AddrTxnDebit && (balance.NumSpent+balance.NumUnspent) > 0 {
+		if txnType != dbtypes.AddrTxnDebit && balance.TotalOutputs > 0 {
 			return nil, nil, fmt.Errorf("empty address history (%s): n=%d&start=%d", address, count, skip)
 		}
 		// No mined transactions. Return Address with nil Transactions slice.
