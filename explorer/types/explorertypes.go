@@ -672,14 +672,21 @@ type CoinFillData struct {
 }
 
 // MempoolCoinStats holds per-coin mempool transaction count, size, and amount.
+// Per-type *Amount fields use atom-string semantics matching Amount: VAR is an
+// int64-derived decimal string, SKA is a big.Int decimal string. For SKA coins
+// only RegularAmount is ever non-zero (SKA cannot be ticket/vote/revoke).
 type MempoolCoinStats struct {
-	TxCount      int    `json:"tx_count"`
-	Size         int32  `json:"size"`
-	Amount       string `json:"amount"` // VAR: int64 atom string; SKA: big.Int atom string
-	RegularCount int    `json:"regular_count"`
-	TicketCount  int    `json:"ticket_count"`
-	VoteCount    int    `json:"vote_count"`
-	RevokeCount  int    `json:"revoke_count"`
+	TxCount       int    `json:"tx_count"`
+	Size          int32  `json:"size"`
+	Amount        string `json:"amount"` // VAR: int64 atom string; SKA: big.Int atom string
+	RegularCount  int    `json:"regular_count"`
+	RegularAmount string `json:"regular_amount"`
+	TicketCount   int    `json:"ticket_count"`
+	TicketAmount  string `json:"ticket_amount"`
+	VoteCount     int    `json:"vote_count"`
+	VoteAmount    string `json:"vote_amount"`
+	RevokeCount   int    `json:"revoke_count"`
+	RevokeAmount  string `json:"revoke_amount"`
 }
 
 // TrimmedBlockInfo models data needed to display block info on the new home page

@@ -360,41 +360,7 @@ func (p *MempoolMonitor) TxHandler(rawTx *chainjson.TxRawResult) error {
 	if p.inventory.CoinStats == nil {
 		p.inventory.CoinStats = make(map[uint8]exptypes.MempoolCoinStats)
 	}
-	if len(tx.SKATotals) == 0 {
-		s := p.inventory.CoinStats[0]
-		s.TxCount++
-		s.Size += tx.Size
-		s.Amount = addAtomStrings(s.Amount, fmt.Sprintf("%d", int64(tx.TotalOut*1e8)), false)
-		switch tx.Type {
-		case "Regular":
-			s.RegularCount++
-		case "Ticket":
-			s.TicketCount++
-		case "Vote":
-			s.VoteCount++
-		case "Revocation":
-			s.RevokeCount++
-		}
-		p.inventory.CoinStats[0] = s
-	} else {
-		for ct, amtStr := range tx.SKATotals {
-			s := p.inventory.CoinStats[ct]
-			s.TxCount++
-			s.Size += tx.Size
-			s.Amount = addAtomStrings(s.Amount, amtStr, true)
-			switch tx.Type {
-			case "Regular":
-				s.RegularCount++
-			case "Ticket":
-				s.TicketCount++
-			case "Vote":
-				s.VoteCount++
-			case "Revocation":
-				s.RevokeCount++
-			}
-			p.inventory.CoinStats[ct] = s
-		}
-	}
+	addTxToCoinStats(p.inventory.CoinStats, tx)
 
 	p.inventory.Unlock()
 	p.mtx.RUnlock()
@@ -574,6 +540,80 @@ func (p *MempoolMonitor) UnconfirmedTxnsForAddress(address string) (*txhelpers.A
 	}
 
 	return outs, int64(len(outs.TxnsStore)), nil
+}
+
+// addTxToCoinStats applies a single mempool tx's contribution to the per-coin
+// stats map in place, mirroring the batch aggregation in ParseTxns. The caller
+// owns map allocation. Per-type amount fields that never received a
+// contribution are emitted as "0" rather than the empty string.
+func addTxToCoinStats(stats map[uint8]exptypes.MempoolCoinStats, tx exptypes.MempoolTx) {
+	if len(tx.SKATotals) == 0 {
+		s := stats[0]
+		s.TxCount++
+		s.Size += tx.Size
+		atoms := fmt.Sprintf("%d", int64(tx.TotalOut*1e8))
+		s.Amount = addAtomStrings(s.Amount, atoms, false)
+		switch tx.Type {
+		case "Regular":
+			s.RegularCount++
+			s.RegularAmount = addAtomStrings(s.RegularAmount, atoms, false)
+		case "Ticket":
+			s.TicketCount++
+			s.TicketAmount = addAtomStrings(s.TicketAmount, atoms, false)
+		case "Vote":
+			s.VoteCount++
+			s.VoteAmount = addAtomStrings(s.VoteAmount, atoms, false)
+		case "Revocation":
+			s.RevokeCount++
+			s.RevokeAmount = addAtomStrings(s.RevokeAmount, atoms, false)
+		}
+		normalizeCoinStatsAmounts(&s)
+		stats[0] = s
+		return
+	}
+	for ct, amtStr := range tx.SKATotals {
+		s := stats[ct]
+		s.TxCount++
+		s.Size += tx.Size
+		s.Amount = addAtomStrings(s.Amount, amtStr, true)
+		switch tx.Type {
+		case "Regular":
+			s.RegularCount++
+			s.RegularAmount = addAtomStrings(s.RegularAmount, amtStr, true)
+		case "Ticket":
+			s.TicketCount++
+			s.TicketAmount = addAtomStrings(s.TicketAmount, amtStr, true)
+		case "Vote":
+			s.VoteCount++
+			s.VoteAmount = addAtomStrings(s.VoteAmount, amtStr, true)
+		case "Revocation":
+			s.RevokeCount++
+			s.RevokeAmount = addAtomStrings(s.RevokeAmount, amtStr, true)
+		}
+		normalizeCoinStatsAmounts(&s)
+		stats[ct] = s
+	}
+}
+
+// normalizeCoinStatsAmounts fills empty per-type amount strings with "0" so
+// the JSON contract is consistent for all tx types regardless of which types
+// have appeared in the mempool.
+func normalizeCoinStatsAmounts(s *exptypes.MempoolCoinStats) {
+	if s.Amount == "" {
+		s.Amount = "0"
+	}
+	if s.RegularAmount == "" {
+		s.RegularAmount = "0"
+	}
+	if s.TicketAmount == "" {
+		s.TicketAmount = "0"
+	}
+	if s.VoteAmount == "" {
+		s.VoteAmount = "0"
+	}
+	if s.RevokeAmount == "" {
+		s.RevokeAmount = "0"
+	}
 }
 
 // addAtomStrings adds two decimal atom strings. For SKA (isBig=true) it uses
