@@ -95,11 +95,11 @@ func TestCoinBalanceJSON(t *testing.T) {
 		{
 			"VAR balance",
 			&CoinBalance{
-				CoinType:     0,
-				NumSpent:     10,
-				NumUnspent:   20,
-				TotalSpent:   100000000,
-				TotalUnspent: 200000000,
+				CoinType:      0,
+				NumSpent:      10,
+				NumUnspent:    20,
+				TotalSpent:    100000000,
+				TotalUnspent:  200000000,
 				TotalReceived: 300000000,
 			},
 			`{"coin_type":0,"num_spent":10,"num_unspent":20,"total_spent":100000000,"total_unspent":200000000,"total_received":300000000}`,

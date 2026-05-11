@@ -211,9 +211,9 @@ func (p *MempoolMonitor) TxHandler(rawTx *chainjson.TxRawResult) error {
 		}
 	}
 	p.txnsStore[*msgTx.CachedTxHash()] = &txhelpers.TxWithBlockData{
-		Tx:         msgTx,
+		Tx:          msgTx,
 		MemPoolTime: rawTx.Time,
-		CoinInfo:   coinInfo,
+		CoinInfo:    coinInfo,
 	}
 
 	log.Tracef("New transaction (%s: %s) added %d new and %d previous outpoints, "+
