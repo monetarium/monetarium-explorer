@@ -953,3 +953,85 @@ func TestFormatCoinAtoms_LargeSKA(t *testing.T) {
 		t.Errorf("formatCoinAtoms(%q, SKA) = %q, want %q", atomStr, got, "900T")
 	}
 }
+
+// TestFormatSKAAmountCell exercises the shared rule that drives the SKA
+// aggregate cell in both the Latest Blocks and Blocks tables, covering all
+// six scenarios from the spec. The rule is:
+//
+//	subRowCount == 0   → "—"
+//	subRowCount == 1   → formatCoinAtoms(skaAmount, 1)  (zero-value renders "0")
+//	subRowCount >= 2   → "Σ N"
+func TestFormatSKAAmountCell(t *testing.T) {
+	// One SKA = 1e18 atoms.
+	oneSKA := "1000000000000000000"
+	tests := []struct {
+		name        string
+		skaAmount   string
+		subRowCount int
+		want        string
+	}{
+		{
+			name:        "scenario 1: no SKA issued",
+			skaAmount:   "",
+			subRowCount: 0,
+			want:        "—",
+		},
+		{
+			name:        "scenario 2: SKA1 issued, not in this block (zero-value row)",
+			skaAmount:   "0",
+			subRowCount: 1,
+			want:        "0",
+		},
+		{
+			name:        "scenario 3a: SKA1 present, 1 atom (~1e-18)",
+			skaAmount:   "1",
+			subRowCount: 1,
+			want:        formatCoinAtoms("1", 1),
+		},
+		{
+			name:        "scenario 3b: SKA1 present, 1.23 SKA",
+			skaAmount:   "1230000000000000000",
+			subRowCount: 1,
+			want:        "1.23",
+		},
+		{
+			name:        "scenario 3c: SKA1 present, 12,500 SKA",
+			skaAmount:   "12500000000000000000000",
+			subRowCount: 1,
+			want:        "12.5k",
+		},
+		{
+			name:        "scenario 4: SKA1 & SKA2 issued, neither in block",
+			skaAmount:   "0",
+			subRowCount: 2,
+			want:        "Σ 2",
+		},
+		{
+			name:        "scenario 5: SKA1 & SKA2 issued, one present",
+			skaAmount:   oneSKA,
+			subRowCount: 2,
+			want:        "Σ 2",
+		},
+		{
+			name:        "scenario 6: SKA1 & SKA2 issued, both present",
+			skaAmount:   oneSKA,
+			subRowCount: 2,
+			want:        "Σ 2",
+		},
+		{
+			name:        "many SKA types",
+			skaAmount:   "0",
+			subRowCount: 5,
+			want:        "Σ 5",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := formatSKAAmountCell(tt.skaAmount, tt.subRowCount)
+			if got != tt.want {
+				t.Errorf("formatSKAAmountCell(%q, %d) = %q, want %q",
+					tt.skaAmount, tt.subRowCount, got, tt.want)
+			}
+		})
+	}
+}

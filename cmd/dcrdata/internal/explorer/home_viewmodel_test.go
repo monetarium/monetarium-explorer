@@ -149,9 +149,10 @@ func TestBuildHomeBlockRows_WithCoinRows(t *testing.T) {
 	if r.SKASubRows[0].Amount != wantSKA {
 		t.Errorf("SKASubRow Amount: got %q, want %q", r.SKASubRows[0].Amount, wantSKA)
 	}
-	// Single SKA type: SKAAmount should equal the sub-row amount.
-	if r.SKAAmount != wantSKA {
-		t.Errorf("SKAAmount: got %q, want %q", r.SKAAmount, wantSKA)
+	// SKAAmount carries the raw atom string; formatSKAAmountCell renders it
+	// in the template.
+	if r.SKAAmount != "1230000000000000000" {
+		t.Errorf("SKAAmount: got %q, want raw atom %q", r.SKAAmount, "1230000000000000000")
 	}
 }
 
@@ -179,7 +180,9 @@ func TestBuildHomeBlockRows_TransactionsSumsCoinRows(t *testing.T) {
 }
 
 // TestBuildHomeBlockRows_MultipleSKATypes verifies that multiple SKA types
-// produce multiple sub-rows and a count summary in SKAAmount.
+// produce multiple sub-rows and that SKAAmount carries the first SKA row's
+// raw atom amount. The template renders the count summary via
+// formatSKAAmountCell, so the view model itself records only raw atoms.
 func TestBuildHomeBlockRows_MultipleSKATypes(t *testing.T) {
 	b := &types.BlockBasic{
 		Height: 30,
@@ -198,9 +201,9 @@ func TestBuildHomeBlockRows_MultipleSKATypes(t *testing.T) {
 	if len(r.SKASubRows) != 2 {
 		t.Fatalf("expected 2 SKASubRows, got %d", len(r.SKASubRows))
 	}
-	// Multiple SKA types: SKAAmount should be a count summary.
-	if r.SKAAmount != "2 SKA types" {
-		t.Errorf("SKAAmount: got %q, want %q", r.SKAAmount, "2 SKA types")
+	if r.SKAAmount != "50000000000000000000" {
+		t.Errorf("SKAAmount: got %q, want first SKA row's raw atoms %q",
+			r.SKAAmount, "50000000000000000000")
 	}
 }
 

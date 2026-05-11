@@ -326,6 +326,87 @@ func TestDeepCopys(t *testing.T) {
 	}
 }
 
+func TestFlattenCoinRows(t *testing.T) {
+	tests := []struct {
+		name              string
+		coinRows          []CoinRowData
+		voters            uint16
+		freshStake        uint8
+		revocations       uint32
+		wantVARAmount     string
+		wantVARTxCount    int
+		wantSKAAmount     string
+		wantSKASubRowsLen int
+	}{
+		{
+			name:              "VAR only",
+			coinRows:          []CoinRowData{{CoinType: 0, Symbol: "VAR", TxCount: 5, Amount: "100000000", Size: 200}},
+			wantVARAmount:     "100000000",
+			wantVARTxCount:    5,
+			wantSKAAmount:     "",
+			wantSKASubRowsLen: 0,
+		},
+		{
+			name: "VAR + single SKA",
+			coinRows: []CoinRowData{
+				{CoinType: 0, Symbol: "VAR", TxCount: 3, Amount: "100000000", Size: 200},
+				{CoinType: 1, Symbol: "SKA1", TxCount: 1, Amount: "1000000000000000000", Size: 100},
+			},
+			wantVARAmount:     "100000000",
+			wantVARTxCount:    3,
+			wantSKAAmount:     "1000000000000000000",
+			wantSKASubRowsLen: 1,
+		},
+		{
+			name: "VAR + two SKA — SKAAmount holds first row's atoms",
+			coinRows: []CoinRowData{
+				{CoinType: 0, Symbol: "VAR", TxCount: 2, Amount: "200000000", Size: 200},
+				{CoinType: 1, Symbol: "SKA1", TxCount: 1, Amount: "500000000000000000", Size: 100},
+				{CoinType: 2, Symbol: "SKA2", TxCount: 2, Amount: "750000000000000000", Size: 150},
+			},
+			wantVARAmount:     "200000000",
+			wantVARTxCount:    2,
+			wantSKAAmount:     "500000000000000000",
+			wantSKASubRowsLen: 2,
+		},
+		{
+			name: "three SKA, no VAR",
+			coinRows: []CoinRowData{
+				{CoinType: 1, Symbol: "SKA1", TxCount: 1, Amount: "1", Size: 1},
+				{CoinType: 2, Symbol: "SKA2", TxCount: 1, Amount: "2", Size: 1},
+				{CoinType: 3, Symbol: "SKA3", TxCount: 1, Amount: "3", Size: 1},
+			},
+			wantVARAmount:     "",
+			wantVARTxCount:    0,
+			wantSKAAmount:     "1",
+			wantSKASubRowsLen: 3,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			b := &BlockBasic{
+				CoinRows:    tt.coinRows,
+				Voters:      tt.voters,
+				FreshStake:  tt.freshStake,
+				Revocations: tt.revocations,
+			}
+			b.FlattenCoinRows()
+			if b.VARAmount != tt.wantVARAmount {
+				t.Errorf("VARAmount: got %q, want %q", b.VARAmount, tt.wantVARAmount)
+			}
+			if b.VARTxCount != tt.wantVARTxCount {
+				t.Errorf("VARTxCount: got %d, want %d", b.VARTxCount, tt.wantVARTxCount)
+			}
+			if b.SKAAmount != tt.wantSKAAmount {
+				t.Errorf("SKAAmount: got %q, want %q", b.SKAAmount, tt.wantSKAAmount)
+			}
+			if len(b.SKASubRows) != tt.wantSKASubRowsLen {
+				t.Errorf("SKASubRows length: got %d, want %d", len(b.SKASubRows), tt.wantSKASubRowsLen)
+			}
+		})
+	}
+}
+
 func TestBytesString(t *testing.T) {
 	tests := []struct {
 		s    uint64

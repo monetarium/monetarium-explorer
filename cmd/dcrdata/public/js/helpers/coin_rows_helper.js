@@ -1,10 +1,33 @@
 import humanize from './humanize_helper'
 
 /**
+ * formatSKAAmountCell renders the aggregate SKA-amount table cell shared by
+ * the Latest Blocks (home) and Blocks listing tables. The rule is:
+ *
+ *   subRows.length === 0  → '—'      (no SKA issued at all)
+ *   subRows.length === 1  → formatted amount (zero-value rows render '0')
+ *   subRows.length >= 2   → 'Σ N'    (count summary)
+ *
+ * Mirrors the Go-side helper of the same name (cmd/dcrdata/internal/explorer
+ * /templates.go). Both helpers must produce identical strings — they back the
+ * server-rendered initial page and the WebSocket live update of the same row.
+ *
+ * @param {Array<{amount: string}>} subRows - SKA sub-rows from coinRowsToSKAData
+ * @returns {string} the cell text content
+ */
+export function formatSKAAmountCell(subRows) {
+  if (subRows.length >= 2) return `Σ ${subRows.length}`
+  if (subRows.length === 1) return subRows[0].amount
+  return '—'
+}
+
+/**
  * coinRowsToSKAData extracts VAR and SKA display data from a block's
  * coin_rows array.
  *
  * Returns { totalTxCount, varTxCount, varAmount, varSize, skaAmount, subRows }
+ * where skaAmount is the rendered aggregate-cell string (see
+ * formatSKAAmountCell).
  *
  * @param {object} block - block data from the BLOCK_RECEIVED event
  * @returns {{ totalTxCount: number, varTxCount: number, varAmount: string,
@@ -19,7 +42,7 @@ export function coinRowsToSKAData(block) {
       varTxCount: block.tx,
       varAmount: humanize.threeSigFigs(block.total),
       varSize: humanize.bytes(block.size),
-      skaAmount: '',
+      skaAmount: formatSKAAmountCell([]),
       subRows: []
     }
   }
@@ -51,13 +74,7 @@ export function coinRowsToSKAData(block) {
   totalTxCount -= (block.votes || 0) + (block.tickets || 0) + (block.revocations || 0)
   if (totalTxCount < 0) totalTxCount = 0
 
-  let skaAmount = ''
-  if (subRows.length === 1) {
-    skaAmount = subRows[0].amount
-  } else if (subRows.length > 1) {
-    skaAmount = `${subRows.length} SKA types`
-  }
-
+  const skaAmount = formatSKAAmountCell(subRows)
   return { totalTxCount, varTxCount, varAmount, varSize, skaAmount, subRows }
 }
 
