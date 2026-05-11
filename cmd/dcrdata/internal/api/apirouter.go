@@ -182,8 +182,8 @@ func NewAPIRouter(app *appContext, JSONIndent string, useRealIP, compressLarge b
 				re.Use(m.AddressPathCtxN(1))
 				re.Get("/totals", app.addressTotals)
 				re.Get("/", app.getAddressTransactions)
-				re.With(m.ChartGroupingCtx).Get("/types/{chartgrouping}", app.getAddressTxTypesData)
-				re.With(m.ChartGroupingCtx).Get("/amountflow/{chartgrouping}", app.getAddressTxAmountFlowData)
+				re.With(m.ChartGroupingCtx, m.CoinCtx).Get("/types/{chartgrouping}", app.getAddressTxTypesData)
+				re.With(m.ChartGroupingCtx, m.CoinCtx).Get("/amountflow/{chartgrouping}", app.getAddressTxAmountFlowData)
 				re.With(compMiddleware).Get("/raw", app.getAddressTransactionsRaw)
 				re.Route("/count/{N}", func(ri chi.Router) {
 					ri.Use(m.NPathCtx)

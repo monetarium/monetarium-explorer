@@ -37,7 +37,7 @@ func (noopDS) AddressTotals(_ context.Context, _ string) (*apitypes.AddressTotal
 	return nil, nil
 }
 func (noopDS) VotesInBlock(_ context.Context, _ string) (int16, error) { return 0, nil }
-func (noopDS) TxHistoryData(_ context.Context, _ string, _ dbtypes.HistoryChart, _ dbtypes.TimeBasedGrouping) (*dbtypes.ChartsData, error) {
+func (noopDS) TxHistoryData(_ context.Context, _ string, _ dbtypes.HistoryChart, _ dbtypes.TimeBasedGrouping, _ uint8) (*dbtypes.ChartsData, error) {
 	return nil, nil
 }
 func (noopDS) TreasuryBalance(_ context.Context) (*dbtypes.TreasuryBalance, error) { return nil, nil }

@@ -321,27 +321,24 @@ const (
 		COUNT(CASE WHEN tx_type = 2 THEN 1 ELSE NULL END) as SSGen,
 		COUNT(CASE WHEN tx_type = 3 THEN 1 ELSE NULL END) as SSRtx
 		FROM addresses
-		WHERE address=$1 AND valid_mainchain
+		WHERE address=$1 AND coin_type=$2 AND valid_mainchain
 		GROUP BY timestamp
 		ORDER BY timestamp;`
-
 	selectAddressAmountFlowByAddress = `SELECT %s as timestamp,
 		SUM(CASE WHEN is_funding = TRUE THEN value ELSE 0 END) as received,
 		SUM(CASE WHEN is_funding = FALSE THEN value ELSE 0 END) as sent
 		FROM addresses
-		WHERE address=$1 AND valid_mainchain
+		WHERE address=$1 AND coin_type=$2 AND valid_mainchain
 		GROUP BY timestamp
 		ORDER BY timestamp;`
 
 	// UPDATEs/SETs
-
 	UpdateAllAddressesMatchingTxHashRange = `UPDATE addresses SET matching_tx_hash=transactions.tx_hash
 		FROM vouts, transactions
 		WHERE block_height >= $1 AND block_height < $2 AND (vouts.value>0 OR vouts.coin_type > 0) AND addresses.is_funding
 			AND vouts.tx_hash=addresses.tx_hash
 			AND vouts.tx_index=addresses.tx_vin_vout_index
 			AND transactions.id=vouts.spend_tx_row_id;`
-
 	UpdateAllAddressesMatchingTxHashRangeXX = `UPDATE addresses SET matching_tx_hash=vins.tx_hash
 		FROM vins, transactions
 		WHERE transactions.block_height >= $1 AND transactions.block_height < $2

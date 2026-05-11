@@ -1956,9 +1956,9 @@ func retrieveAddressIDsByOutpoint(ctx context.Context, db *sql.DB, txHash dbtype
 // The time interval is grouping records by week, month, year, day and all.
 // For all time interval, transactions are grouped by the unique
 // timestamps (blocks) available.
-func retrieveTxHistoryByType(ctx context.Context, db *sql.DB, addr, timeInterval string) (*dbtypes.ChartsData, error) {
+func retrieveTxHistoryByType(ctx context.Context, db *sql.DB, addr, timeInterval string, coinType uint8) (*dbtypes.ChartsData, error) {
 	rows, err := db.QueryContext(ctx, internal.MakeSelectAddressTxTypesByAddress(timeInterval),
-		addr)
+		addr, coinType)
 	if err != nil {
 		return nil, err
 	}
@@ -1993,8 +1993,8 @@ func retrieveTxHistoryByType(ctx context.Context, db *sql.DB, addr, timeInterval
 // the given time interval. The time interval is grouping records by week,
 // month, year, day and all. For all time interval, transactions are grouped by
 // the unique timestamps (blocks) available.
-func retrieveTxHistoryByAmountFlow(ctx context.Context, db *sql.DB, addr, timeInterval string) (*dbtypes.ChartsData, error) {
-	rows, err := db.QueryContext(ctx, internal.MakeSelectAddressAmountFlowByAddress(timeInterval), addr)
+func retrieveTxHistoryByAmountFlow(ctx context.Context, db *sql.DB, addr, timeInterval string, coinType uint8) (*dbtypes.ChartsData, error) {
+	rows, err := db.QueryContext(ctx, internal.MakeSelectAddressAmountFlowByAddress(timeInterval), addr, coinType)
 	if err != nil {
 		return nil, err
 	}

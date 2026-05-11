@@ -63,7 +63,7 @@ type DataSource interface {
 	AddressTotals(ctx context.Context, address string) (*apitypes.AddressTotals, error)
 	VotesInBlock(ctx context.Context, hash string) (int16, error)
 	TxHistoryData(ctx context.Context, address string, addrChart dbtypes.HistoryChart,
-		chartGroupings dbtypes.TimeBasedGrouping) (*dbtypes.ChartsData, error)
+		chartGroupings dbtypes.TimeBasedGrouping, coinType uint8) (*dbtypes.ChartsData, error)
 	TreasuryBalance(context.Context) (*dbtypes.TreasuryBalance, error)
 	BinnedTreasuryIO(ctx context.Context, chartGroupings dbtypes.TimeBasedGrouping) (*dbtypes.ChartsData, error)
 	TicketPoolVisualization(ctx context.Context, interval dbtypes.TimeBasedGrouping) (
@@ -1842,7 +1842,8 @@ func (c *appContext) getAddressTxTypesData(w http.ResponseWriter, r *http.Reques
 		http.Error(w, http.StatusText(http.StatusUnprocessableEntity), http.StatusUnprocessableEntity)
 		return
 	}
-	data, err := c.DataSource.TxHistoryData(ctx, address, dbtypes.TxsType, interval)
+	coinType := m.GetCoinCtx(r)
+	data, err := c.DataSource.TxHistoryData(ctx, address, dbtypes.TxsType, interval, coinType)
 	if dbtypes.IsTimeoutErr(err) {
 		apiLog.Errorf("TxHistoryData: %v", err)
 		http.Error(w, "Database timeout.", http.StatusServiceUnavailable)
@@ -1877,7 +1878,8 @@ func (c *appContext) getAddressTxAmountFlowData(w http.ResponseWriter, r *http.R
 		http.Error(w, http.StatusText(http.StatusUnprocessableEntity), http.StatusUnprocessableEntity)
 		return
 	}
-	data, err := c.DataSource.TxHistoryData(ctx, address, dbtypes.AmountFlow, interval)
+	coinType := m.GetCoinCtx(r)
+	data, err := c.DataSource.TxHistoryData(ctx, address, dbtypes.AmountFlow, interval, coinType)
 	if dbtypes.IsTimeoutErr(err) {
 		apiLog.Errorf("TxHistoryData: %v", err)
 		http.Error(w, "Database timeout.", http.StatusServiceUnavailable)

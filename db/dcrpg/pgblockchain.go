@@ -3211,7 +3211,7 @@ func (pgb *ChainDB) RewindStakeDB(ctx context.Context, toHeight int64, quiet ...
 // TxHistoryData fetches the address history chart data for specified chart
 // type and time grouping.
 func (pgb *ChainDB) TxHistoryData(ctx context.Context, address string, addrChart dbtypes.HistoryChart,
-	chartGroupings dbtypes.TimeBasedGrouping) (cd *dbtypes.ChartsData, err error) {
+	chartGroupings dbtypes.TimeBasedGrouping, coinType uint8) (cd *dbtypes.ChartsData, err error) {
 	if chartGroupings >= dbtypes.NumIntervals {
 		return nil, fmt.Errorf("invalid time grouping %d", chartGroupings)
 	}
@@ -3224,7 +3224,7 @@ func (pgb *ChainDB) TxHistoryData(ctx context.Context, address string, addrChart
 	// interval.
 	bestHash, height := pgb.BestBlock()
 	var validBlock *cache.BlockID
-	cd, validBlock = pgb.AddressCache.HistoryChart(address, addrChart, chartGroupings)
+	cd, validBlock = pgb.AddressCache.HistoryChart(address, addrChart, chartGroupings, coinType)
 	if cd != nil && validBlock != nil /* validBlock.Hash == *bestHash */ {
 		return
 	}
@@ -3246,7 +3246,7 @@ func (pgb *ChainDB) TxHistoryData(ctx context.Context, address string, addrChart
 		<-wait
 
 		// Try again, starting with the cache.
-		return pgb.TxHistoryData(ctx, address, addrChart, chartGroupings)
+		return pgb.TxHistoryData(ctx, address, addrChart, chartGroupings, coinType)
 	}
 
 	// We will run the DB query, so block others from doing the same. When query
@@ -3261,10 +3261,10 @@ func (pgb *ChainDB) TxHistoryData(ctx context.Context, address string, addrChart
 
 	switch addrChart {
 	case dbtypes.TxsType:
-		cd, err = retrieveTxHistoryByType(ctx, pgb.db, address, timeInterval)
+		cd, err = retrieveTxHistoryByType(ctx, pgb.db, address, timeInterval, coinType)
 
 	case dbtypes.AmountFlow:
-		cd, err = retrieveTxHistoryByAmountFlow(ctx, pgb.db, address, timeInterval)
+		cd, err = retrieveTxHistoryByAmountFlow(ctx, pgb.db, address, timeInterval, coinType)
 
 	default:
 		cd, err = nil, fmt.Errorf("unknown error occurred")
@@ -3276,7 +3276,7 @@ func (pgb *ChainDB) TxHistoryData(ctx context.Context, address string, addrChart
 
 	// Update cache.
 	_ = pgb.AddressCache.StoreHistoryChart(address, addrChart, chartGroupings,
-		cd, cache.NewBlockID(bestHash, height))
+		coinType, cd, cache.NewBlockID(bestHash, height))
 	return
 }
 

@@ -60,6 +60,7 @@ const (
 	ctxXcToken
 	ctxStickWidth
 	ctxIndent
+	ctxCoin
 )
 
 type DataSource interface {
@@ -822,6 +823,32 @@ func ChartGroupingCtx(next http.Handler) http.Handler {
 			chi.URLParam(r, "chartgrouping"))
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+// CoinCtx is a middleware that parses the optional ?coin= query parameter as a
+// uint8 and stores it in the request context. If not provided or invalid, the
+// value is 0 (VAR).
+func CoinCtx(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var coinType uint8
+		if coinStr := r.URL.Query().Get("coin"); coinStr != "" {
+			if parsed, err := strconv.ParseUint(coinStr, 10, 8); err == nil {
+				coinType = uint8(parsed)
+			}
+		}
+		ctx := context.WithValue(r.Context(), ctxCoin, coinType)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+// GetCoinCtx retrieves the ctxCoin data from the request context.
+// If not set, the return value is 0 (VAR).
+func GetCoinCtx(r *http.Request) uint8 {
+	coin, ok := r.Context().Value(ctxCoin).(uint8)
+	if !ok {
+		return 0
+	}
+	return coin
 }
 
 // apiDocs generates a middleware with a "docs" in the context containing a map
