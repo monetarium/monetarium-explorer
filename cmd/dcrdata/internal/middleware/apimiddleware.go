@@ -412,13 +412,16 @@ func GetAddressCtx(r *http.Request, activeNetParams *chaincfg.Params) ([]string,
 
 	// Allocate as if all addresses are unique.
 	addrStrs := make([]string, 0, len(addressStrs))
+	seen := make(map[string]bool)
 	for _, addrStr := range addressStrs {
-		_, err := stdaddr.DecodeAddress(addrStr, activeNetParams)
-		if err != nil {
+		if _, err := stdaddr.DecodeAddress(addrStr, activeNetParams); err != nil {
 			return nil, fmt.Errorf("invalid address %q for this network: %w",
 				addrStr, err)
 		}
-		addrStrs = append(addrStrs, addrStr)
+		if !seen[addrStr] {
+			seen[addrStr] = true
+			addrStrs = append(addrStrs, addrStr)
+		}
 	}
 
 	return addrStrs, nil
