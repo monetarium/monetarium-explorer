@@ -253,9 +253,9 @@ const (
 	// is_funding=true, there is no need to join vouts on tx_hash and tx_index.
 
 	SelectAddressLimitNByAddress = `SELECT ` + addrsColumnNames + ` FROM addresses
-		WHERE address=$1 AND valid_mainchain
+		WHERE address=$1 AND coin_type=$2 AND valid_mainchain
 		ORDER BY block_time DESC, tx_hash ASC
-		LIMIT $2 OFFSET $3;`
+		LIMIT $3 OFFSET $4;`
 
 	// SelectAddressLimitNByAddressSubQry was used in certain cases prior to
 	// sorting the block_time_index.

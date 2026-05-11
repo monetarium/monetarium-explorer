@@ -1797,23 +1797,23 @@ func retrieveAllAddressMergedTxns(ctx context.Context, db *sql.DB, address strin
 
 // Regular (non-merged) address transactions queries.
 
-func retrieveAddressTxns(ctx context.Context, db *sql.DB, address string, N, offset int64) ([]*dbtypes.AddressRow, error) {
+func retrieveAddressTxns(ctx context.Context, db *sql.DB, address string, N, offset int64, coinType uint8) ([]*dbtypes.AddressRow, error) {
 	return retrieveAddressTxnsStmt(ctx, db, address, N, offset,
-		internal.SelectAddressLimitNByAddress, creditDebitQuery)
+		internal.SelectAddressLimitNByAddress, creditDebitQuery, coinType)
 }
 
 // Merged address transactions queries.
 
 func retrieveAddressMergedTxns(ctx context.Context, db *sql.DB, address string, N, offset int64) ([]*dbtypes.AddressRow, error) {
 	return retrieveAddressTxnsStmt(ctx, db, address, N, offset,
-		internal.SelectAddressMergedView, mergedQuery)
+		internal.SelectAddressMergedView, mergedQuery, 0)
 }
 
 // Address transaction query helpers.
 
 func retrieveAddressTxnsStmt(ctx context.Context, db *sql.DB, address string, N, offset int64,
-	statement string, queryType int) ([]*dbtypes.AddressRow, error) {
-	rows, err := db.QueryContext(ctx, statement, address, N, offset)
+	statement string, queryType int, coinType uint8) ([]*dbtypes.AddressRow, error) {
+	rows, err := db.QueryContext(ctx, statement, address, coinType, N, offset)
 	if err != nil {
 		return nil, err
 	}

@@ -69,7 +69,7 @@ type DataSource interface {
 	TicketPoolVisualization(ctx context.Context, interval dbtypes.TimeBasedGrouping) (
 		*dbtypes.PoolTicketsData, *dbtypes.PoolTicketsData, *dbtypes.PoolTicketsData, int64, error)
 	AgendaVotes(ctx context.Context, agendaID string, chartType int) (*dbtypes.AgendaVoteChoices, error)
-	AddressRowsCompact(ctx context.Context, address string) ([]*dbtypes.AddressRowCompact, error)
+	AddressRowsCompact(ctx context.Context, address string, coinType uint8) ([]*dbtypes.AddressRowCompact, error)
 	Height() int64
 	IsDCP0010Active(height int64) bool
 	IsDCP0011Active(height int64) bool
@@ -1758,11 +1758,13 @@ func (c *appContext) addressIoCsv(crlf bool, w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	coinType := m.GetCoinCtx(r)
+
 	// TODO: Improve the DB component also to avoid retrieving all row data
 	// and/or put a hard limit on the number of rows that can be retrieved.
 	// However it is a slice of pointers, and they are are also in the address
 	// cache and thus shared across calls to the same address.
-	rows, err := c.DataSource.AddressRowsCompact(ctx, address)
+	rows, err := c.DataSource.AddressRowsCompact(ctx, address, coinType)
 	if err != nil {
 		log.Errorf("Failed to fetch AddressTxIoCsv: %v", err)
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
@@ -1778,7 +1780,7 @@ func (c *appContext) addressIoCsv(crlf bool, w http.ResponseWriter, r *http.Requ
 	writer.UseCRLF = crlf
 
 	err = writer.Write([]string{"tx_hash", "direction", "io_index",
-		"valid_mainchain", "value", "time_stamp", "tx_type", "matching_tx_hash"})
+		"valid_mainchain", "coin_type", "amount", "time_stamp", "tx_type", "matching_tx_hash"})
 	if err != nil {
 		return // too late to write an error code
 	}
@@ -1803,12 +1805,20 @@ func (c *appContext) addressIoCsv(crlf bool, w http.ResponseWriter, r *http.Requ
 			matchingTx = r.MatchingTxHash.String()
 		}
 
+		var amount string
+		if r.CoinType == 0 {
+			amount = strconv.FormatFloat(dcrutil.Amount(r.Value).ToCoin(), 'f', -1, 64)
+		} else {
+			amount = r.SKAValue
+		}
+
 		err = writer.Write([]string{
 			r.TxHash.String(),
 			strDirection,
 			strconv.FormatUint(uint64(r.TxVinVoutIndex), 10),
 			strValidMainchain,
-			strconv.FormatFloat(dcrutil.Amount(r.Value).ToCoin(), 'f', -1, 64),
+			strconv.FormatUint(uint64(r.CoinType), 10),
+			amount,
 			strconv.FormatInt(r.TxBlockTime, 10),
 			txhelpers.TxTypeToString(int(r.TxType)),
 			matchingTx,
@@ -1817,7 +1827,6 @@ func (c *appContext) addressIoCsv(crlf bool, w http.ResponseWriter, r *http.Requ
 			return // too late to write an error code
 		}
 		writer.Flush()
-		wf.Flush()
 	}
 }
 

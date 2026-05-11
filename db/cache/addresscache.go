@@ -880,14 +880,24 @@ func (ac *AddressCache) HistoryChart(addr string, addrChart dbtypes.HistoryChart
 // Rows attempts to retrieve an []*AddressRow for the given address. The BlockID
 // for the block at which the cached data is valid is also returned. In the
 // event of a cache miss, the slice and the *BlockID will be nil.
-func (ac *AddressCache) Rows(addr string) ([]*dbtypes.AddressRowCompact, *BlockID) {
+func (ac *AddressCache) Rows(addr string, coinType uint8) ([]*dbtypes.AddressRowCompact, *BlockID) {
 	aci := ac.addressCacheItem(addr)
 	if aci == nil {
 		ac.cacheMetrics.rowMiss()
 		return nil, nil
 	}
 	ac.cacheMetrics.rowHit()
-	return aci.Rows()
+	rows, _ := aci.Rows()
+	if rows == nil {
+		return nil, nil
+	}
+	var filtered []*dbtypes.AddressRowCompact
+	for _, r := range rows {
+		if r.CoinType == coinType {
+			filtered = append(filtered, r)
+		}
+	}
+	return filtered, aci.blockID()
 }
 
 // NumRows returns the number of non-merged rows. If the rows are not cached, a

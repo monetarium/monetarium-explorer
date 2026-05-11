@@ -1307,6 +1307,8 @@ type AddressRowCompact struct {
 	ValidMainChain bool
 	IsFunding      bool
 	Value          uint64
+	CoinType       uint8
+	SKAValue       string
 }
 
 // AddressRowMerged is like AddressRow for efficient in-memory storage of merged
@@ -1947,6 +1949,8 @@ func CompactRows(rows []*AddressRow) []*AddressRowCompact {
 			ValidMainChain: r.ValidMainChain,
 			IsFunding:      r.IsFunding,
 			Value:          r.Value,
+			CoinType:       r.CoinType,
+			SKAValue:       r.SKAValue,
 		})
 	}
 	return compact
@@ -1970,6 +1974,8 @@ func UncompactRows(compact []*AddressRowCompact) []*AddressRow {
 			TxHash:         r.TxHash,
 			TxVinVoutIndex: r.TxVinVoutIndex,
 			Value:          r.Value,
+			CoinType:       r.CoinType,
+			SKAValue:       r.SKAValue,
 			// VinVoutDbID unknown. Do not use.
 			TxType: r.TxType,
 		})

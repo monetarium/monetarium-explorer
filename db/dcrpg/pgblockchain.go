@@ -1747,7 +1747,7 @@ func (pgb *ChainDB) AddressTransactionsAll(ctx context.Context, address string) 
 	defer cancel()
 
 	const limit = 3000000
-	addressRows, err = retrieveAddressTxns(ctx, pgb.db, address, limit, 0)
+	addressRows, err = retrieveAddressTxns(ctx, pgb.db, address, limit, 0, 0)
 	// addressRows, err = retrieveAllMainchainAddressTxns(ctx, pgb.db, address)
 	err = pgb.replaceCancelError(err)
 	return
@@ -2224,7 +2224,7 @@ func (pgb *ChainDB) AddressRowsMerged(ctx context.Context, address string) ([]*d
 	}
 
 	// Try the address cache.
-	rowsCompact, validBlock := pgb.AddressCache.Rows(address)
+	rowsCompact, validBlock := pgb.AddressCache.Rows(address, 0)
 	cacheHit := rowsCompact != nil && validBlock != nil
 	// hash := pgb.BestBlockHash()
 	// cacheHit = validBlock != nil && validBlock.Hash == *hash
@@ -2258,19 +2258,17 @@ func (pgb *ChainDB) AddressRowsMerged(ctx context.Context, address string) ([]*d
 
 // AddressRowsCompact gets non-merged address rows either from cache or via DB
 // query.
-func (pgb *ChainDB) AddressRowsCompact(ctx context.Context, address string) ([]*dbtypes.AddressRowCompact, error) {
+func (pgb *ChainDB) AddressRowsCompact(ctx context.Context, address string, coinType uint8) ([]*dbtypes.AddressRowCompact, error) {
 	_, err := stdaddr.DecodeAddress(address, pgb.chainParams)
 	if err != nil {
 		return nil, err
 	}
 
 	// Try the address cache.
-	rowsCompact, validBlock := pgb.AddressCache.Rows(address)
+	rowsCompact, validBlock := pgb.AddressCache.Rows(address, coinType)
 	cacheHit := rowsCompact != nil && validBlock != nil
-	// hash := pgb.BestBlockHash()
-	// cacheHit = validBlock != nil && validBlock.Hash == *hash
 	if cacheHit {
-		log.Tracef("AddressRowsCompact: rows cache HIT for %s.", address)
+		log.Tracef("AddressRowsCompact: rows cache HIT for %s, coin %d.", address, coinType)
 		return rowsCompact, nil
 	}
 
@@ -2281,20 +2279,27 @@ func (pgb *ChainDB) AddressRowsCompact(ctx context.Context, address string) ([]*
 	//nolint:ineffassign
 	rowsCompact = nil
 
-	log.Tracef("AddressRowsCompact: rows cache MISS for %s.", address)
+	log.Tracef("AddressRowsCompact: rows cache MISS for %s, coin %d.", address, coinType)
 
 	// Update or wait for an update to the cached AddressRows.
 	rows, err := pgb.updateAddressRows(ctx, address)
 	if err != nil {
 		if IsRetryError(err) {
 			// Try again, starting with cache.
-			return pgb.AddressRowsCompact(ctx, address)
+			return pgb.AddressRowsCompact(ctx, address, coinType)
 		}
 		return nil, err
 	}
 
 	// We have a result.
-	return dbtypes.CompactRows(rows), err
+	compact := dbtypes.CompactRows(rows)
+	var filtered []*dbtypes.AddressRowCompact
+	for _, r := range compact {
+		if r.CoinType == coinType {
+			filtered = append(filtered, r)
+		}
+	}
+	return filtered, err
 }
 
 // retrieveMergedTxnCount queries the DB for the merged address transaction view
@@ -2321,7 +2326,7 @@ func (pgb *ChainDB) retrieveMergedTxnCount(ctx context.Context, addr string, txn
 // mergedTxnCount checks cache and falls back to retrieveMergedTxnCount.
 func (pgb *ChainDB) mergedTxnCount(ctx context.Context, addr string, txnView dbtypes.AddrTxnViewType) (int, error) {
 	// Try the cache first.
-	rows, blockID := pgb.AddressCache.Rows(addr)
+	rows, blockID := pgb.AddressCache.Rows(addr, 0)
 	if blockID == nil {
 		// Query the DB.
 		return pgb.retrieveMergedTxnCount(ctx, addr, txnView)

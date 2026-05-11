@@ -50,7 +50,7 @@ func (noopDS) TicketPoolVisualization(_ context.Context, _ dbtypes.TimeBasedGrou
 func (noopDS) AgendaVotes(_ context.Context, _ string, _ int) (*dbtypes.AgendaVoteChoices, error) {
 	return nil, nil
 }
-func (noopDS) AddressRowsCompact(_ context.Context, _ string) ([]*dbtypes.AddressRowCompact, error) {
+func (noopDS) AddressRowsCompact(_ context.Context, _ string, _ uint8) ([]*dbtypes.AddressRowCompact, error) {
 	return nil, nil
 }
 func (noopDS) Height() int64                                     { return 0 }
