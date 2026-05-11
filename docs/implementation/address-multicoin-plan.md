@@ -97,6 +97,8 @@ Replace flat balance with per-coin structure:
 
 **Rationale**: Precomputed totals exist so template doesn't loop over Coins map. This avoids creating a template helper for SKA string addition - the spec deliberately prevents this.
 
+**Note on CoinBalance dual-shape**: `TotalSpent`/`TotalUnspent` (int64) are meaningful when `CoinType==0`; `TotalSpentSKA`/`TotalUnspentSKA` (string) are meaningful when `CoinType>0`. This is an **invariant every read site must respect** - wrong-field reads are silent bugs. If stricter type safety is desired, split into `VARCoinBalance` and `SKACoinBalance`.
+
 **Breaking Change**: Requires handler/template updates in same PR
 
 **Verification**: Build fails until consumers updated (expected)
@@ -125,10 +127,12 @@ type ChartsData struct {
     Balance      []float64        // VAR running balance (float64, 8 decimals)
     BalanceAtoms []string         // SKA running balance (string, 18 decimals)
     ReceivedAtoms []string        // SKA received cumulative (string)
-    SentAtoms    []string         // SKA sent cumulative (string)
-    NetAtoms     []string         // SKA net cumulative (string)
+    SentAtoms    []string        // SKA sent cumulative (string)
+    NetAtoms     []string        // SKA net cumulative (string)
 }
 ```
+
+**Check**: Verify no existing `Balance` field is shadowed. Inspect current `ChartsData` at impl time.
 
 **Rationale**: Running balance computed in Go via `*big.Int.Add` inside `parseRowsSentReceived`, not in JS. See Charts spec §3.3.1.
 
@@ -215,6 +219,8 @@ Modify to compute running balance in Go via `*big.Int.Add`:
 
 **Rationale**: Per Charts spec §3.3.1 - JS never does BigInt arithmetic. Balance cumsum must be in Go.
 
+**Prerequisite**: Required by Task 16 (`TxHistoryData` coin filter)
+
 **Verification**: Chart endpoint returns monotonically updating balance series
 
 ---
@@ -286,6 +292,7 @@ Add coin filter to routes:
 - `cmd/dcrdata/internal/api/apiroutes.go` (around line 1729-1775)
 
 - Extend `AddressRowCompact` (`db/dbtypes/types.go:1299-1309`) with `CoinType uint8` and `SKAValue string`
+- Parse `?coin=` from request and pass to query (not shared with explorerroutes.go handlers)
 - Modify CSV serializer to emit `coin_type` + single string `amount` column instead of `dcrutil.Amount(...).ToCoin()`
 - Add `?coin=` to cache key (180s cached route)
 
@@ -411,8 +418,9 @@ Per Summary spec §3.7: fiat removed because **no coin in the network has a real
 | Breaking existing AddressInfo consumers | High | Update all callers in same PR |
 | Cache invalidation on multi-coin | Medium | Test invalidation thoroughly |
 | Performance on address with many coins | Medium | Index on (address, coin_type) already exists |
-| Template changes required | High | Coordinate with frontend team |
+| Frontend contract changes | Medium | Coordinate with frontend team on new data shapes |
 | Server-side cumsum complexity | Medium | Test with large transaction histories |
+| CoinBalance dual-shape | Medium | Document field semantics; callers must respect CoinType invariant |
 
 ---
 
