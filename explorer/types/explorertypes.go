@@ -139,6 +139,9 @@ type BlockBasic struct {
 	VARAmount  string
 	VARTxCount int
 	VARSize    string
+	// SKAAmount holds the raw atom amount of the first SKA row in CoinRows.
+	// Templates render the aggregate SKA cell via formatSKAAmountCell, which
+	// uses SKAAmount only when len(SKASubRows) == 1.
 	SKAAmount  string
 	SKASubRows []SKASubRow
 }
@@ -163,8 +166,6 @@ func (b *BlockBasic) FlattenCoinRows() {
 				Amount:    row.Amount,
 				Size:      humanize.Bytes(uint64(row.Size)),
 			})
-			// Use the first SKA row's amount as the summary; callers may
-			// override SKAAmount with an aggregate if needed.
 			if b.SKAAmount == "" {
 				b.SKAAmount = row.Amount
 			}

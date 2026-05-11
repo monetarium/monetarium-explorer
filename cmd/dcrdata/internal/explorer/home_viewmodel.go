@@ -26,8 +26,10 @@ type HomeBlockRow struct {
 	VARAmount  string
 	VARSize    string
 
-	// SKAAmount is the pre-formatted aggregate SKA amount across all SKA types.
-	// Empty when the block has no SKA transactions.
+	// SKAAmount is the raw atom string of the first SKA row in CoinRows.
+	// The template renders the aggregate cell via formatSKAAmountCell, which
+	// uses SKAAmount only when len(SKASubRows) == 1. Empty when CoinRows has
+	// no SKA entries.
 	SKAAmount string
 
 	// SKASubRows holds per-SKA-type accordion breakdown rows.
@@ -81,7 +83,9 @@ func buildHomeBlockRows(blocks []*types.BlockBasic) []HomeBlockRow {
 						varSize = "—"
 					}
 				} else {
-					// SKA row — add to sub-rows
+					// SKA row — add to sub-rows. Record the first SKA row's raw
+					// atom amount as the aggregate's source; the template
+					// resolves the displayed cell via formatSKAAmountCell.
 					txCount := fmt.Sprintf("%d", cr.TxCount)
 					size := humanize.Bytes(uint64(cr.Size))
 					subRows = append(subRows, SKASubRow{
@@ -90,14 +94,10 @@ func buildHomeBlockRows(blocks []*types.BlockBasic) []HomeBlockRow {
 						Amount:    formatCoinAtoms(cr.Amount, cr.CoinType),
 						Size:      size,
 					})
+					if skaAmount == "" {
+						skaAmount = cr.Amount
+					}
 				}
-			}
-			// Aggregate SKA amount label: use first SKA row's amount if only one,
-			// or a count summary if multiple.
-			if len(subRows) == 1 {
-				skaAmount = subRows[0].Amount
-			} else if len(subRows) > 1 {
-				skaAmount = fmt.Sprintf("%d SKA types", len(subRows))
 			}
 		} else {
 			// No CoinRows — VAR-only block, fall back to Total.

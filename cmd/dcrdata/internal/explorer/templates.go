@@ -511,6 +511,27 @@ func formatCoinAtoms(atomStr string, coinType uint8) string {
 	return threeSigFigs(skaCoinValue(atomStr))
 }
 
+// formatSKAAmountCell renders the aggregate SKA-amount table cell shared by
+// the Latest Blocks (home) and Blocks listing tables. The rule is:
+//
+//	subRowCount == 0   → "—"      (no SKA issued at all)
+//	subRowCount == 1   → formatted SKA1 amount (zero-value rows render "0")
+//	subRowCount >= 2   → "Σ N"    (count summary)
+//
+// skaAmount is the raw SKA atom string of the first SKA row and is only used
+// when subRowCount == 1. The Go (server-render) and JS (WebSocket live-update)
+// helpers must stay aligned — see public/js/helpers/coin_rows_helper.js.
+func formatSKAAmountCell(skaAmount string, subRowCount int) string {
+	switch {
+	case subRowCount >= 2:
+		return fmt.Sprintf("Σ %d", subRowCount)
+	case subRowCount == 1:
+		return formatCoinAtoms(skaAmount, 1)
+	default:
+		return "—"
+	}
+}
+
 type periodMap struct {
 	y          string
 	mo         string
@@ -683,6 +704,7 @@ func makeTemplateFuncMap(params *chaincfg.Params) template.FuncMap {
 			return float64(parseInt64(atomStr)) / 1e8
 		},
 		"formatCoinAtoms":         formatCoinAtoms,
+		"formatSKAAmountCell":     formatSKAAmountCell,
 		"formatAtomsAsCoinString": formatAtomsAsCoinString,
 		"coinDecimalParts": func(atomStr string, coinType uint8, useCommas bool, boldNumPlaces ...int) []string {
 			return coinDecimalParts(atomStr, coinType, useCommas, boldNumPlaces...)
