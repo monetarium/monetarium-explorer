@@ -196,7 +196,6 @@ func NewAPIRouter(app *appContext, JSONIndent string, useRealIP, compressLarge b
 					})
 				})
 			})
-
 		})
 	})
 
@@ -316,6 +315,7 @@ func NewFileRouter(app *appContext, useRealIP bool) fileMux {
 		rd.Use(m.CacheControl(180))
 		// The carriage return option is handled on the path to facilitate more
 		// effective caching in downstream delivery.
+		rd.Use(m.CoinCtx)
 		rd.With(m.AddressPathCtxN(1)).Get("/io/{address}", app.addressIoCsvNoCR)
 		rd.With(m.AddressPathCtxN(1)).Get("/io/{address}/win", app.addressIoCsvCR)
 	})

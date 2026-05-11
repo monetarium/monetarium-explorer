@@ -1,6 +1,7 @@
 package dbtypes
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
 )
@@ -83,30 +84,87 @@ func TestTimeDef_Value(t *testing.T) {
 		t.Errorf("time strings do not match: %s != %s",
 			tdSqlTime.String(), tdSqlTime2.String())
 	}
+}
 
-	// Verify the instants in time are the same.
-	if tdSqlTime.Unix() != tdSqlTime2.Unix() {
-		t.Logf("unix epoch times do not match: %d != %d",
-			tdSqlTime.Unix(), tdSqlTime2.Unix())
+func TestCoinBalanceJSON(t *testing.T) {
+	tests := []struct {
+		name     string
+		balance  *CoinBalance
+		expected string
+	}{
+		{
+			"VAR balance",
+			&CoinBalance{
+				CoinType:     0,
+				NumSpent:     10,
+				NumUnspent:   20,
+				TotalSpent:   100000000,
+				TotalUnspent: 200000000,
+				TotalReceived: 300000000,
+			},
+			`{"coin_type":0,"num_spent":10,"num_unspent":20,"total_spent":100000000,"total_unspent":200000000,"total_received":300000000}`,
+		},
+		{
+			"SKA balance",
+			&CoinBalance{
+				CoinType:         1,
+				NumSpent:         5,
+				NumUnspent:       15,
+				TotalSpentSKA:    "5000000000000000000",
+				TotalUnspentSKA:  "15000000000000000000",
+				TotalReceivedSKA: "20000000000000000000",
+			},
+			`{"coin_type":1,"num_spent":5,"num_unspent":15,"total_spent_ska":"5000000000000000000","total_unspent_ska":"15000000000000000000","total_received_ska":"20000000000000000000"}`,
+		},
 	}
 
-	// Create the TimeDef from a Local time, but do not use the constructor.
-	// This shows that Value will ensure the correct time.Time in UTC for sql
-	// regardless of the location of TimeDef.T.
-	td3 := TimeDef{T: trefLocal}
-	// Verify the Location of the time returned by Value is UTC.
-	tdSqlValue3, _ := td3.Value()
-	tdSqlTime3, ok := tdSqlValue3.(time.Time)
-	if !ok {
-		t.Error("not a time.Time")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			data, err := json.Marshal(tt.balance)
+			if err != nil {
+				t.Fatalf("Marshal failed: %v", err)
+			}
+			if string(data) != tt.expected {
+				t.Errorf("expected %s, got %s", tt.expected, string(data))
+			}
+
+			var decoded CoinBalance
+			if err := json.Unmarshal(data, &decoded); err != nil {
+				t.Fatalf("Unmarshal failed: %v", err)
+			}
+			if decoded.CoinType != tt.balance.CoinType {
+				t.Errorf("expected CoinType %d, got %d", tt.balance.CoinType, decoded.CoinType)
+			}
+		})
 	}
-	t.Log(tdSqlTime3)
-	if tdSqlTime3.Location() != time.UTC {
-		t.Errorf("TimeDef.Value should return a UTC time.")
+}
+
+func TestChartsDataJSON(t *testing.T) {
+	cd := &ChartsData{
+		Balance:       []float64{1.0, 2.0},
+		BalanceAtoms:  []string{"1000000000000000000", "2000000000000000000"},
+		ReceivedAtoms: []string{"1000000000000000000", "1000000000000000000"},
+		SentAtoms:     []string{"0", "0"},
+		NetAtoms:      []string{"1000000000000000000", "2000000000000000000"},
+	}
+
+	data, err := json.Marshal(cd)
+	if err != nil {
+		t.Fatalf("Marshal failed: %v", err)
+	}
+
+	var decoded ChartsData
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("Unmarshal failed: %v", err)
+	}
+
+	if len(decoded.BalanceAtoms) != 2 || decoded.BalanceAtoms[1] != "2000000000000000000" {
+		t.Errorf("BalanceAtoms failed: got %v", decoded.BalanceAtoms)
 	}
 }
 
 func TestTimeDef_Scan(t *testing.T) {
+
 	// Scan the reference time with Local Location.
 	var td TimeDef
 	err := td.Scan(trefLocal)

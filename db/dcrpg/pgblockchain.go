@@ -1699,6 +1699,11 @@ func (pgb *ChainDB) AddressMetrics(ctx context.Context, addr string) (*dbtypes.A
 }
 */
 
+// ActiveCoinsForAddress retrieves the sorted list of coin types present at the given address.
+func (pgb *ChainDB) ActiveCoinsForAddress(ctx context.Context, address string) ([]uint8, error) {
+	return retrieveAddressCoinTypes(ctx, pgb.db, address)
+}
+
 // AddressTransactions retrieves a slice of *dbtypes.AddressRow for a given
 // address and transaction type (i.e. all, credit, or debit) from the DB. Only
 // the first N transactions starting from the offset element in the set of all

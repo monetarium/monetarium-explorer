@@ -410,31 +410,17 @@ func GetAddressCtx(r *http.Request, activeNetParams *chaincfg.Params) ([]string,
 		return nil, fmt.Errorf("type assertion failed")
 	}
 
-	strInSlice := func(sl []string, s string) bool {
-		for i := range sl {
-			if sl[i] == s {
-				return true
-			}
-		}
-		return false
-	}
-
 	// Allocate as if all addresses are unique.
 	addrStrs := make([]string, 0, len(addressStrs))
-	for _, addrStr := range addressStrs {
-		if strInSlice(addrStrs, addrStr) {
-			continue
-		}
-		addrStrs = append(addrStrs, addrStr)
-	}
-
 	for _, addrStr := range addressStrs {
 		_, err := stdaddr.DecodeAddress(addrStr, activeNetParams)
 		if err != nil {
 			return nil, fmt.Errorf("invalid address %q for this network: %w",
 				addrStr, err)
 		}
+		addrStrs = append(addrStrs, addrStr)
 	}
+
 	return addrStrs, nil
 }
 

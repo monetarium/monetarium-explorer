@@ -22,6 +22,14 @@ import (
 	"sync"
 	"time"
 
+	apitypes "github.com/monetarium/monetarium-explorer/api/types"
+	m "github.com/monetarium/monetarium-explorer/cmd/dcrdata/internal/middleware"
+	"github.com/monetarium/monetarium-explorer/db/cache"
+	"github.com/monetarium/monetarium-explorer/db/dbtypes"
+	"github.com/monetarium/monetarium-explorer/exchanges"
+	"github.com/monetarium/monetarium-explorer/gov/agendas"
+	"github.com/monetarium/monetarium-explorer/gov/politeia"
+	"github.com/monetarium/monetarium-explorer/txhelpers"
 	"github.com/monetarium/monetarium-node/blockchain/standalone"
 	"github.com/monetarium/monetarium-node/chaincfg"
 	"github.com/monetarium/monetarium-node/chaincfg/chainhash"
@@ -31,15 +39,6 @@ import (
 	"github.com/monetarium/monetarium-node/txscript/stdaddr"
 	"github.com/monetarium/monetarium-node/txscript/stdscript"
 	"github.com/monetarium/monetarium-node/wire"
-
-	apitypes "github.com/monetarium/monetarium-explorer/api/types"
-	m "github.com/monetarium/monetarium-explorer/cmd/dcrdata/internal/middleware"
-	"github.com/monetarium/monetarium-explorer/db/cache"
-	"github.com/monetarium/monetarium-explorer/db/dbtypes"
-	"github.com/monetarium/monetarium-explorer/exchanges"
-	"github.com/monetarium/monetarium-explorer/gov/agendas"
-	"github.com/monetarium/monetarium-explorer/gov/politeia"
-	"github.com/monetarium/monetarium-explorer/txhelpers"
 )
 
 // maxBlockRangeCount is the maximum number of blocks that can be requested at
@@ -1759,11 +1758,6 @@ func (c *appContext) addressIoCsv(crlf bool, w http.ResponseWriter, r *http.Requ
 	}
 
 	coinType := m.GetCoinCtx(r)
-
-	// TODO: Improve the DB component also to avoid retrieving all row data
-	// and/or put a hard limit on the number of rows that can be retrieved.
-	// However it is a slice of pointers, and they are are also in the address
-	// cache and thus shared across calls to the same address.
 	rows, err := c.DataSource.AddressRowsCompact(ctx, address, coinType)
 	if err != nil {
 		log.Errorf("Failed to fetch AddressTxIoCsv: %v", err)
@@ -1882,6 +1876,7 @@ func (c *appContext) getAddressTxAmountFlowData(w http.ResponseWriter, r *http.R
 		http.Error(w, http.StatusText(http.StatusUnprocessableEntity), http.StatusUnprocessableEntity)
 		return
 	}
+
 	interval := dbtypes.TimeGroupingFromStr(chartGrouping)
 	if interval == dbtypes.UnknownGrouping {
 		http.Error(w, http.StatusText(http.StatusUnprocessableEntity), http.StatusUnprocessableEntity)
