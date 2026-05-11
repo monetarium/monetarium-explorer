@@ -696,6 +696,13 @@ func _main(ctx context.Context) error {
 	webMux.Get("/ws", explore.RootWebsocket)
 	webMux.Get("/ps", psHub.WebSocketHandler)
 
+	// Debug-only fixture page for the home-page mempool fill indicators.
+	// Only registered when --reload-html is set so the route never appears in
+	// production builds. Mirrors the gate used to load the template itself.
+	if cfg.ReloadHTML {
+		webMux.Get("/dev/indicators", explore.DevIndicators)
+	}
+
 	// Make the static assets available under a path with the given prefix.
 	mountAssetPaths := func(pathPrefix string) {
 		if !strings.HasSuffix(pathPrefix, "/") {

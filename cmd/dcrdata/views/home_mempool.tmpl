@@ -22,16 +22,17 @@
                                     role="meter"
                                     aria-valuemin="0"
                                     aria-valuemax="100"
-                                    aria-valuenow="{{printf "%.1f" (mulf (minf .Mempool.TotalFillRatio 1.0) 100.0)}}"
-                                    aria-label="Total mempool: {{printf "%.1f" (mulf (minf .Mempool.TotalFillRatio 1.0) 100.0)}}% of block capacity"
+                                    aria-valuenow="{{printf "%.0f" (mulf .Mempool.TotalFillRatio 100.0)}}"
+                                    aria-label="Total mempool: {{printf "%.1f" (mulf .Mempool.TotalFillRatio 100.0)}}% of block capacity"
                                     data-homepage-target="totalBar"
-                                    {{if gt .Mempool.TotalFillRatio 1.0}}data-overflow="true"{{end}}>
+                                    {{if gt .Mempool.TotalFillRatio 1.0}}data-overflow="true"{{end}}
+                                    {{if eq .Mempool.TotalFillRatio 0.0}}data-empty="true"{{end}}>
                                     <span class="total-bar__label">TOTAL</span>
                                     <div class="total-bar__track">
                                         <div class="total-bar__fill"
                                             style="--seg-w: {{printf "%.4f%%" (mulf (minf .Mempool.TotalFillRatio 1.0) 100.0)}}"></div>
                                     </div>
-                                    <span class="total-bar__pct">{{printf "%.1f" (mulf (minf .Mempool.TotalFillRatio 1.0) 100.0)}}%</span>
+                                    <span class="total-bar__pct">{{printf "%.1f" (mulf .Mempool.TotalFillRatio 100.0)}}%</span>
                                 </div>
 
                                 {{/* One Fill_Bar per CoinFills entry */}}
@@ -40,9 +41,10 @@
                                     role="meter"
                                     aria-valuemin="0"
                                     aria-valuemax="100"
-                                    aria-valuenow="{{printf "%.0f" (mulf (mulf .GQFillRatio .GQPositionRatio) 100.0)}}"
+                                    aria-valuenow="{{printf "%.0f" .PctOfTC}}"
                                     aria-label="{{.Symbol}} — {{.Status}}"
-                                    data-coin="{{.Symbol}}">
+                                    data-coin="{{.Symbol}}"
+                                    {{if .IsOverflow}}data-overflow="true"{{end}}>
                                     <span class="fill-bar__label">{{.Symbol}}</span>
                                     <div class="fill-bar__track"
                                         data-status="{{.Status}}"
@@ -59,7 +61,7 @@
                                         <div class="gq-marker" style="left: {{printf "%.4f" (mulf .GQPositionRatio 100.0)}}%">
                                         </div>
                                     </div>
-                                    <span class="fill-bar__pct">{{printf "%.1f" (mulf (mulf .GQFillRatio .GQPositionRatio) 100.0)}}%</span>
+                                    <span class="fill-bar__pct">{{printf "%.1f" .PctOfTC}}%</span>
                                 </div>
                                 {{end}}
 

@@ -3,6 +3,13 @@ import { Controller } from '@hotwired/stimulus'
 import { each } from 'lodash-es'
 import { fadeIn } from '../helpers/animation_helper'
 import humanize from '../helpers/humanize_helper'
+import {
+  applyFillBar,
+  applyTotalBar,
+  injectFillBar,
+  repositionSKAMarkers,
+  zeroFillEntry
+} from '../helpers/indicator_fill'
 import Mempool from '../helpers/mempool_helper'
 import { renderCoinType } from '../helpers/ska_helper'
 import globalEventBus from '../services/event_bus_service'
@@ -218,8 +225,9 @@ export default class extends Controller {
     })
   }
 
-  // _flushIndicators performs all DOM writes in a single animation frame
-  // (Requirements 5.6, 7.1, 7.3).
+  // _flushIndicators performs all DOM writes in a single animation frame.
+  // The actual DOM mutation lives in helpers/indicator_fill; this method just
+  // dispatches the payload onto the right targets.
   _flushIndicators() {
     const payload = this._pendingPayload
     this._rafPending = false
@@ -230,150 +238,34 @@ export default class extends Controller {
     const totalFillRatio = payload.total_fill_ratio
     const activeSKACount = payload.active_ska_count
 
-    // Update Fill_Bars
-    if (Array.isArray(coinFills)) {
+    if (Array.isArray(coinFills) && this.hasIndicatorListTarget) {
+      const list = this.indicatorListTarget
       const activeSymbols = new Set(coinFills.map((e) => e && e.symbol).filter(Boolean))
 
       coinFills.forEach((entry) => {
         if (!entry || typeof entry.symbol !== 'string') return
-        const el = this.hasIndicatorListTarget
-          ? this.indicatorListTarget.querySelector(`[data-coin="${entry.symbol}"]`)
-          : null
+        const el = list.querySelector(`[data-coin="${entry.symbol}"]`)
         if (el) {
-          this._applyFillBar(el, entry)
+          applyFillBar(el, entry)
         } else {
-          this._injectFillBar(entry)
+          injectFillBar(list, entry)
         }
       })
 
-      // Zero out bars for coins no longer in the payload (never remove them)
-      if (this.hasIndicatorListTarget) {
-        this.indicatorListTarget.querySelectorAll('[data-coin]').forEach((bar) => {
-          if (!activeSymbols.has(bar.dataset.coin)) {
-            this._applyFillBar(bar, {
-              symbol: bar.dataset.coin,
-              gq_fill_ratio: 0,
-              extra_fill_ratio: 0,
-              overflow_fill_ratio: 0,
-              gq_position_ratio: 0,
-              status: ''
-            })
-          }
-        })
-      }
-    }
-
-    // Update Total_Bar
-    if (this.hasTotalBarTarget && typeof totalFillRatio === 'number' && isFinite(totalFillRatio)) {
-      const clamped = Math.min(totalFillRatio, 1.0)
-      const fill = this.totalBarTarget.querySelector('.total-bar__fill')
-      if (fill) fill.style.setProperty('--seg-w', `${(clamped * 100).toFixed(4)}%`)
-      this.totalBarTarget.setAttribute('aria-valuenow', Math.round(clamped * 100))
-      const pct = this.totalBarTarget.querySelector('.total-bar__pct')
-      if (pct) pct.textContent = `${(clamped * 100).toFixed(1)}%`
-      if (totalFillRatio > 1.0) {
-        this.totalBarTarget.setAttribute('data-overflow', 'true')
-      } else {
-        this.totalBarTarget.removeAttribute('data-overflow')
-      }
-    }
-
-    // Update SKA GQ_Marker positions when Active_SKA_Count changes (Requirement 5.3)
-    if (typeof activeSKACount === 'number' && activeSKACount > 0 && this.hasIndicatorListTarget) {
-      const newGQPos = 0.9 / activeSKACount
-      const newGQPosStr = newGQPos.toFixed(6)
-      this.indicatorListTarget.querySelectorAll('[data-coin]').forEach((bar) => {
-        const coin = bar.dataset.coin
-        if (!coin || coin === 'VAR') return
-        const track = bar.querySelector('.fill-bar__track')
-        if (track) track.style.setProperty('--gq-pos', newGQPosStr)
-        const marker = bar.querySelector('.gq-marker')
-        if (marker) marker.style.left = `${(newGQPos * 100).toFixed(4)}%`
+      // Zero out bars for coins no longer in the payload (never remove them).
+      list.querySelectorAll('[data-coin]').forEach((bar) => {
+        if (!activeSymbols.has(bar.dataset.coin)) {
+          applyFillBar(bar, zeroFillEntry(bar.dataset.coin))
+        }
       })
     }
-  }
 
-  // _applyFillBar updates all visual and ARIA properties of an existing Fill_Bar
-  // (Requirements 5.2, 8.5).
-  _applyFillBar(el, entry) {
-    const track = el.querySelector('.fill-bar__track')
-    if (!track) return
-
-    const gqFill = typeof entry.gq_fill_ratio === 'number' ? entry.gq_fill_ratio : 0
-    const extraFill = typeof entry.extra_fill_ratio === 'number' ? entry.extra_fill_ratio : 0
-    const overflowFill =
-      typeof entry.overflow_fill_ratio === 'number' ? entry.overflow_fill_ratio : 0
-    const gqPos = typeof entry.gq_position_ratio === 'number' ? entry.gq_position_ratio : 0
-    const status = typeof entry.status === 'string' ? entry.status : ''
-
-    // Set transform: scaleX on each segment — no width changes, no layout reflow
-    const gqSeg = track.querySelector('.gq-segment')
-    const extraSeg = track.querySelector('.extra-segment')
-    const overflowSeg = track.querySelector('.overflow-segment')
-    const marker = track.querySelector('.gq-marker')
-
-    if (gqSeg) {
-      gqSeg.style.setProperty('--seg-w', `${(gqFill * gqPos * 100).toFixed(4)}%`)
-      gqSeg.hidden = gqFill === 0
+    if (this.hasTotalBarTarget) {
+      applyTotalBar(this.totalBarTarget, totalFillRatio)
     }
-    if (extraSeg) {
-      extraSeg.style.setProperty('--seg-w', `${(extraFill * 100).toFixed(4)}%`)
-      extraSeg.hidden = extraFill === 0
-    }
-    if (overflowSeg) {
-      overflowSeg.style.setProperty('--seg-w', `${(overflowFill * 100).toFixed(4)}%`)
-      overflowSeg.hidden = overflowFill === 0
-    }
-    if (marker) marker.style.left = `${(gqPos * 100).toFixed(4)}%`
 
-    track.style.setProperty('--gq-pos', gqPos.toFixed(6))
-    track.dataset.status = ['ok', 'borrowing', 'full'].includes(status) ? status : ''
-
-    // ARIA (Requirements 8.2, 8.3, 8.5)
-    // Percentage expressed as fraction of TC (= gqFill × gqPos), matching Total_Bar scale
-    const pctOfTC = gqFill * gqPos * 100
-    el.setAttribute('aria-valuenow', Math.round(pctOfTC))
-    el.setAttribute('aria-label', `${entry.symbol} — ${status || 'unknown'}`)
-
-    // Percentage label
-    const pct = el.querySelector('.fill-bar__pct')
-    if (pct) pct.textContent = `${pctOfTC.toFixed(1)}%`
-  }
-
-  // _injectFillBar clones the fill-bar-template and inserts it in canonical order
-  // (Requirements 5.4, 6.1–6.5).
-  _injectFillBar(entry) {
-    if (!this.hasIndicatorListTarget) return
-    const tmpl = document.getElementById('fill-bar-template')
-    if (!tmpl) return
-
-    const clone = document.importNode(tmpl.content, true)
-    const bar = clone.querySelector('.fill-bar')
-    if (!bar) return
-
-    bar.dataset.coin = entry.symbol
-    const labelEl = bar.querySelector('.fill-bar__label')
-    if (labelEl) labelEl.textContent = entry.symbol
-
-    this._applyFillBar(bar, entry)
-
-    // Bisect insertion: VAR first, then SKA types by ascending numeric index
-    const list = this.indicatorListTarget
-    const existing = Array.from(list.querySelectorAll('[data-coin]'))
-    const insertBefore = existing.find(
-      (el) => _coinSortKey(el.dataset.coin) > _coinSortKey(entry.symbol)
-    )
-    if (insertBefore) {
-      list.insertBefore(bar, insertBefore)
-    } else {
-      list.appendChild(bar)
+    if (this.hasIndicatorListTarget) {
+      repositionSKAMarkers(this.indicatorListTarget, activeSKACount)
     }
   }
-}
-
-// _coinSortKey returns a numeric sort key: VAR = 0, SKAn = n.
-function _coinSortKey(symbol) {
-  if (!symbol || symbol === 'VAR') return 0
-  const m = symbol.match(/^SKA(\d+)$/)
-  return m ? parseInt(m[1], 10) : Number.MAX_SAFE_INTEGER
 }

@@ -669,6 +669,15 @@ type CoinFillData struct {
 	OverflowFillRatio float64 `json:"overflow_fill_ratio"` // 0.0–1.0, fraction of TC that cannot fit (full only)
 	GQPositionRatio   float64 `json:"gq_position_ratio"`   // 0.0–1.0, quota boundary position as fraction of TC
 	Status            string  `json:"status"`              // "ok", "borrowing", "full"
+	// PctOfTC is the displayed percentage label for the bar, expressed as
+	// percent of the max block size. NOT clamped: a coin whose mempool
+	// transactions exceed the block size renders e.g. 115.0%. Equals
+	// (GQFillRatio*GQPositionRatio + ExtraFillRatio + OverflowFillRatio) * 100.
+	PctOfTC float64 `json:"pct_of_tc"`
+	// IsOverflow is true when the coin's actual usage exceeds total block
+	// capacity (i.e. the unclamped sum above is > 1.0). Drives the hatch
+	// overlay on the fill bar, mirroring TotalFillRatio's overflow indicator.
+	IsOverflow bool `json:"is_overflow"`
 }
 
 // MempoolCoinStats holds per-coin mempool transaction count, size, and amount.
