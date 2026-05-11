@@ -1578,19 +1578,19 @@ func retrieveAddressBalance(ctx context.Context, db *sql.DB, address string) (ba
 	return
 }
 
-func countMergedSpendingTxns(ctx context.Context, db *sql.DB, address string) (count int64, err error) {
-	return countMerged(ctx, db, address, internal.SelectAddressesMergedSpentCount)
+func countMergedSpendingTxns(ctx context.Context, db *sql.DB, address string, coinType uint8) (count int64, err error) {
+	return countMerged(ctx, db, address, coinType, internal.SelectAddressesMergedSpentCount)
 }
 
-func countMergedFundingTxns(ctx context.Context, db *sql.DB, address string) (count int64, err error) {
-	return countMerged(ctx, db, address, internal.SelectAddressesMergedFundingCount)
+func countMergedFundingTxns(ctx context.Context, db *sql.DB, address string, coinType uint8) (count int64, err error) {
+	return countMerged(ctx, db, address, coinType, internal.SelectAddressesMergedFundingCount)
 }
 
-func countMergedTxns(ctx context.Context, db *sql.DB, address string) (count int64, err error) {
-	return countMerged(ctx, db, address, internal.SelectAddressesMergedCount)
+func countMergedTxns(ctx context.Context, db *sql.DB, address string, coinType uint8) (count int64, err error) {
+	return countMerged(ctx, db, address, coinType, internal.SelectAddressesMergedCount)
 }
 
-func countMerged(ctx context.Context, db *sql.DB, address, query string) (count int64, err error) {
+func countMerged(ctx context.Context, db *sql.DB, address string, coinType uint8, query string) (count int64, err error) {
 	// Query for merged transaction count.
 	var dbtx *sql.Tx
 	dbtx, err = db.BeginTx(context.Background(), &sql.TxOptions{
@@ -1603,7 +1603,7 @@ func countMerged(ctx context.Context, db *sql.DB, address, query string) (count 
 	}
 
 	var sqlCount sql.NullInt64
-	err = dbtx.QueryRowContext(ctx, query, address).
+	err = dbtx.QueryRowContext(ctx, query, address, coinType).
 		Scan(&sqlCount)
 	if err != nil && err != sql.ErrNoRows {
 		if errRoll := dbtx.Rollback(); errRoll != nil {

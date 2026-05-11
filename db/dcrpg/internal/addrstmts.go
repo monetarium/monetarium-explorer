@@ -188,13 +188,11 @@ const (
 	*/
 
 	SelectAddressesMergedSpentCount = `SELECT COUNT( DISTINCT tx_hash ) FROM addresses
-		WHERE address = $1 AND is_funding = FALSE AND valid_mainchain;`
-
+		WHERE address = $1 AND coin_type = $2 AND is_funding = FALSE AND valid_mainchain;`
 	SelectAddressesMergedFundingCount = `SELECT COUNT( DISTINCT tx_hash ) FROM addresses
-		WHERE address = $1 AND is_funding = TRUE AND valid_mainchain;`
-
+		WHERE address = $1 AND coin_type = $2 AND is_funding = TRUE AND valid_mainchain;`
 	SelectAddressesMergedCount = `SELECT COUNT( DISTINCT tx_hash ) FROM addresses
-		WHERE address = $1 AND valid_mainchain;`
+		WHERE address = $1 AND coin_type = $2 AND valid_mainchain;`
 
 	// SelectAddressSpentUnspentCountAndValue gets the number and combined spent
 	// and unspent outpoints for the given address. The key is the "GROUP BY

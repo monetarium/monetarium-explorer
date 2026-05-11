@@ -26,6 +26,7 @@ import (
 	"github.com/monetarium/monetarium-node/txscript/stdscript"
 
 	ticketvotev1 "github.com/decred/politeia/politeiawww/api/ticketvote/v1"
+	"github.com/monetarium/monetarium-explorer/cmd/dcrdata/internal/middleware"
 	"github.com/monetarium/monetarium-explorer/db/dbtypes"
 	"github.com/monetarium/monetarium-explorer/exchanges"
 	"github.com/monetarium/monetarium-explorer/explorer/types"
@@ -1540,7 +1541,6 @@ func (exp *explorerUI) AddressPage(w http.ResponseWriter, r *http.Request) {
 		Data         *dbtypes.AddressInfo
 		Type         txhelpers.AddressType
 		CRLFDownload bool
-		FiatBalance  *exchanges.Conversion
 		Pages        []pageNumber
 	}
 
@@ -1601,7 +1601,7 @@ func (exp *explorerUI) AddressPage(w http.ResponseWriter, r *http.Request) {
 			UnconfirmedTxns: new(dbtypes.AddressTransactions),
 		}
 	} else {
-		addrData, err = exp.AddressListData(ctx, address, txnType, limitN, offsetAddrOuts)
+		addrData, err = exp.AddressListData(ctx, address, txnType, limitN, offsetAddrOuts, middleware.GetCoinCtx(r))
 		if exp.timeoutErrorPage(w, err, "TicketsPriceByHeight") {
 			return
 		} else if err != nil {
@@ -1612,14 +1612,6 @@ func (exp *explorerUI) AddressPage(w http.ResponseWriter, r *http.Request) {
 
 	// Set page parameters.
 	addrData.Path = r.URL.Path
-
-	// If exchange monitoring is active, prepare a fiat balance conversion
-	// TODO(Task 21): Fiat conversion removed - no coin has market price
-	varBalanceVAR := int64(0)
-	if addrData.Balance.Coins != nil && addrData.Balance.Coins[0] != nil {
-		varBalanceVAR = addrData.Balance.Coins[0].TotalUnspent
-	}
-	conversion := exp.xcBot.Conversion(dcrutil.Amount(varBalanceVAR).ToCoin())
 
 	// For Windows clients only, link to downloads with CRLF (\r\n) line
 	// endings.
@@ -1636,7 +1628,6 @@ func (exp *explorerUI) AddressPage(w http.ResponseWriter, r *http.Request) {
 		CommonPageData: exp.commonData(r),
 		Data:           addrData,
 		CRLFDownload:   UseCRLF,
-		FiatBalance:    conversion,
 		Pages:          calcPages(int(addrData.TxnCount), int(limitN), int(offsetAddrOuts), linkTemplate),
 	}
 	str, err := exp.templates.exec("address", pageData)
@@ -1667,7 +1658,7 @@ func (exp *explorerUI) AddressTable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	addrData, err := exp.AddressListData(ctx, address, txnType, limitN, offsetAddrOuts)
+	addrData, err := exp.AddressListData(ctx, address, txnType, limitN, offsetAddrOuts, middleware.GetCoinCtx(r))
 	if err != nil {
 		log.Errorf("AddressListData error: %v", err)
 		http.Error(w, http.StatusText(http.StatusInternalServerError),
@@ -1880,17 +1871,40 @@ func parsePaginationParams(r *http.Request) (txnType string, limitN, offset int6
 // AddressListData grabs a size-limited and type-filtered set of inputs/outputs
 // for a given address.
 func (exp *explorerUI) AddressListData(ctx context.Context, address string, txnType dbtypes.AddrTxnViewType, limitN,
-	offsetAddrOuts int64) (addrData *dbtypes.AddressInfo, err error) {
+	offsetAddrOuts int64, coinType uint8) (addrData *dbtypes.AddressInfo, err error) {
 
 	// Get addresses table rows for the address.
 	addrData, err = exp.dataSource.AddressData(ctx, address, limitN,
-		offsetAddrOuts, txnType)
+		offsetAddrOuts, txnType, coinType)
 	if dbtypes.IsTimeoutErr(err) { //exp.timeoutErrorPage(w, err, "TicketsPriceByHeight") {
 		return nil, err
 	} else if err != nil {
 		log.Errorf("AddressData error encountered: %v", err)
 		err = fmt.Errorf(defaultErrorMessage)
 		return nil, err
+	}
+
+	// Validate that the requested coin is active for this address.
+	// If not, fallback to the first active coin.
+	if len(addrData.ActiveCoins) > 0 {
+		found := false
+		for _, ac := range addrData.ActiveCoins {
+			if ac == coinType {
+				found = true
+				break
+			}
+		}
+		if !found {
+			coinType = addrData.ActiveCoins[0]
+			// Re-fetch data for the fallback coin.
+			addrData, err = exp.dataSource.AddressData(ctx, address, limitN,
+				offsetAddrOuts, txnType, coinType)
+			if err != nil {
+				log.Errorf("AddressData error encountered during fallback: %v", err)
+				err = fmt.Errorf(defaultErrorMessage)
+				return nil, err
+			}
+		}
 	}
 	return
 }

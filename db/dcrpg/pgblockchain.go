@@ -2304,7 +2304,7 @@ func (pgb *ChainDB) AddressRowsCompact(ctx context.Context, address string, coin
 
 // retrieveMergedTxnCount queries the DB for the merged address transaction view
 // row count.
-func (pgb *ChainDB) retrieveMergedTxnCount(ctx context.Context, addr string, txnView dbtypes.AddrTxnViewType) (int, error) {
+func (pgb *ChainDB) retrieveMergedTxnCount(ctx context.Context, addr string, txnView dbtypes.AddrTxnViewType, coinType uint8) (int, error) {
 	ctx, cancel := context.WithTimeout(ctx, pgb.queryTimeout)
 	defer cancel()
 
@@ -2312,11 +2312,11 @@ func (pgb *ChainDB) retrieveMergedTxnCount(ctx context.Context, addr string, txn
 	var err error
 	switch txnView {
 	case dbtypes.AddrMergedTxnDebit:
-		count, err = countMergedSpendingTxns(ctx, pgb.db, addr)
+		count, err = countMergedSpendingTxns(ctx, pgb.db, addr, coinType)
 	case dbtypes.AddrMergedTxnCredit:
-		count, err = countMergedFundingTxns(ctx, pgb.db, addr)
+		count, err = countMergedFundingTxns(ctx, pgb.db, addr, coinType)
 	case dbtypes.AddrMergedTxn:
-		count, err = countMergedTxns(ctx, pgb.db, addr)
+		count, err = countMergedTxns(ctx, pgb.db, addr, coinType)
 	default:
 		return 0, fmt.Errorf("retrieveMergedTxnCount: requested count for non-merged view")
 	}
@@ -2324,12 +2324,12 @@ func (pgb *ChainDB) retrieveMergedTxnCount(ctx context.Context, addr string, txn
 }
 
 // mergedTxnCount checks cache and falls back to retrieveMergedTxnCount.
-func (pgb *ChainDB) mergedTxnCount(ctx context.Context, addr string, txnView dbtypes.AddrTxnViewType) (int, error) {
+func (pgb *ChainDB) mergedTxnCount(ctx context.Context, addr string, txnView dbtypes.AddrTxnViewType, coinType uint8) (int, error) {
 	// Try the cache first.
-	rows, blockID := pgb.AddressCache.Rows(addr, 0)
+	rows, blockID := pgb.AddressCache.Rows(addr, coinType)
 	if blockID == nil {
 		// Query the DB.
-		return pgb.retrieveMergedTxnCount(ctx, addr, txnView)
+		return pgb.retrieveMergedTxnCount(ctx, addr, txnView, coinType)
 	}
 
 	return dbtypes.CountMergedRowsCompact(rows, txnView)
@@ -2337,19 +2337,25 @@ func (pgb *ChainDB) mergedTxnCount(ctx context.Context, addr string, txnView dbt
 
 // nonMergedTxnCount gets the non-merged address transaction view row count via
 // AddressBalance, which checks the cache and falls back to a DB query.
-func (pgb *ChainDB) nonMergedTxnCount(ctx context.Context, addr string, txnView dbtypes.AddrTxnViewType) (int, error) {
+func (pgb *ChainDB) nonMergedTxnCount(ctx context.Context, addr string, txnView dbtypes.AddrTxnViewType, coinType uint8) (int, error) {
 	bal, _, err := pgb.AddressBalance(ctx, addr)
 	if err != nil {
 		return 0, err
 	}
+
+	coinBal := bal.Coins[coinType]
+	if coinBal == nil {
+		return 0, nil
+	}
+
 	var count int64
 	switch txnView {
 	case dbtypes.AddrTxnAll:
-		count = (bal.TotalInputs * 2) + (bal.TotalOutputs - bal.TotalInputs)
+		count = (coinBal.NumSpent * 2) + coinBal.NumUnspent
 	case dbtypes.AddrTxnCredit:
-		count = bal.TotalOutputs
+		count = coinBal.NumSpent + coinBal.NumUnspent
 	case dbtypes.AddrTxnDebit:
-		count = bal.TotalInputs
+		count = coinBal.NumSpent
 	default:
 		return 0, fmt.Errorf("NonMergedTxnCount: requested count for merged view")
 	}
@@ -2358,7 +2364,7 @@ func (pgb *ChainDB) nonMergedTxnCount(ctx context.Context, addr string, txnView 
 
 // CountTransactions gets the total row count for the given address and address
 // transaction view.
-func (pgb *ChainDB) CountTransactions(ctx context.Context, addr string, txnView dbtypes.AddrTxnViewType) (int, error) {
+func (pgb *ChainDB) CountTransactions(ctx context.Context, addr string, txnView dbtypes.AddrTxnViewType, coinType uint8) (int, error) {
 	_, err := stdaddr.DecodeAddress(addr, pgb.chainParams)
 	if err != nil {
 		return 0, err
@@ -2369,12 +2375,16 @@ func (pgb *ChainDB) CountTransactions(ctx context.Context, addr string, txnView 
 		return 0, err
 	}
 
-	countFn := pgb.nonMergedTxnCount
+	countFn := func(ctx context.Context, addr string, txnView dbtypes.AddrTxnViewType, coinType uint8) (int, error) {
+		return pgb.nonMergedTxnCount(ctx, addr, txnView, coinType)
+	}
 	if merged {
-		countFn = pgb.mergedTxnCount
+		countFn = func(ctx context.Context, addr string, txnView dbtypes.AddrTxnViewType, coinType uint8) (int, error) {
+			return pgb.mergedTxnCount(ctx, addr, txnView, coinType)
+		}
 	}
 
-	count, err := countFn(ctx, addr, txnView)
+	count, err := countFn(ctx, addr, txnView, coinType)
 	if err != nil {
 		return 0, err
 	}
@@ -2496,7 +2506,7 @@ func (pgb *ChainDB) AddressHistory(ctx context.Context, address string, N, offse
 
 // AddressData returns comprehensive, paginated information for an address.
 func (pgb *ChainDB) AddressData(ctx context.Context, address string, limitN, offsetAddrOuts int64,
-	txnType dbtypes.AddrTxnViewType) (addrData *dbtypes.AddressInfo, err error) {
+	txnType dbtypes.AddrTxnViewType, coinType uint8) (addrData *dbtypes.AddressInfo, err error) {
 	var activeCoins []uint8
 	_, addrType, addrErr := txhelpers.AddressValidation(address, pgb.chainParams)
 	if addrErr != nil && !errors.Is(err, txhelpers.AddressErrorNoError) {
@@ -2557,10 +2567,28 @@ func (pgb *ChainDB) AddressData(ctx context.Context, address string, limitN, off
 
 		// Balances and txn counts
 		populateTemplate()
-		addrData.Balance = balance
-		addrData.KnownTransactions = (balance.TotalInputs * 2) + (balance.TotalOutputs - balance.TotalInputs)
-		addrData.KnownFundingTxns = balance.TotalOutputs
-		addrData.KnownSpendingTxns = balance.TotalInputs
+
+		// Filter balance for the selected coin
+		filteredBalance := &dbtypes.AddressBalance{
+			Address: address,
+			Coins:   make(map[uint8]*dbtypes.CoinBalance),
+		}
+		if balance != nil {
+			if coinBal, ok := balance.Coins[coinType]; ok {
+				filteredBalance.Coins[coinType] = coinBal
+				filteredBalance.TotalInputs = coinBal.NumSpent
+				filteredBalance.TotalOutputs = coinBal.NumSpent + coinBal.NumUnspent
+			}
+		}
+		addrData.Balance = filteredBalance
+
+		coinBal := filteredBalance.Coins[coinType]
+		if coinBal == nil {
+			coinBal = dbtypes.NewCoinBalance(coinType)
+		}
+		addrData.KnownSpendingTxns = coinBal.NumSpent
+		addrData.KnownFundingTxns = coinBal.NumSpent + coinBal.NumUnspent
+		addrData.KnownTransactions = addrData.KnownSpendingTxns + addrData.KnownFundingTxns
 
 		// ActiveCoins already populated above
 		addrData.ActiveCoins = activeCoins
@@ -2572,7 +2600,7 @@ func (pgb *ChainDB) AddressData(ctx context.Context, address string, limitN, off
 		}
 		if addrData.IsMerged {
 			// For merged views, check the cache and fall back on a DB query.
-			count, err := pgb.mergedTxnCount(ctx, address, txnType)
+			count, err := pgb.mergedTxnCount(ctx, address, txnType, coinType)
 			if err != nil {
 				return nil, err
 			}
@@ -2589,7 +2617,7 @@ func (pgb *ChainDB) AddressData(ctx context.Context, address string, limitN, off
 				addrData.TxnCount = addrData.KnownSpendingTxns
 				addrData.Transactions = addrData.TxnsSpending
 			case dbtypes.AddrUnspentTxn:
-				addrData.TxnCount = addrData.NumFundingTxns - addrData.NumSpendingTxns
+				addrData.TxnCount = coinBal.NumUnspent
 			}
 		}
 

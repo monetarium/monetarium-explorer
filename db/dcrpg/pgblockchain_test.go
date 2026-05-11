@@ -398,3 +398,34 @@ func TestUpdateChainState(t *testing.T) {
 		t.Fatalf("expected both payloads to match but the did not")
 	}
 }
+
+func TestCountTransactions(t *testing.T) {
+	ctx := context.Background()
+	address := "Dcur2mcGjmENx4DhNqDctW5wJCVyT3Qeqkx"
+
+	tests := []struct {
+		name    string
+		view    dbtypes.AddrTxnViewType
+		coin    uint8
+		wantMin int
+	}{
+		{"all_var", dbtypes.AddrTxnAll, 0, 1},
+		{"credit_var", dbtypes.AddrTxnCredit, 0, 1},
+		{"debit_var", dbtypes.AddrTxnDebit, 0, 1},
+		{"merged_var", dbtypes.AddrMergedTxn, 0, 1},
+		{"all_ska", dbtypes.AddrTxnAll, 1, 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			count, err := db.CountTransactions(ctx, address, tt.view, tt.coin)
+			if err != nil {
+				t.Fatalf("CountTransactions failed: %v", err)
+			}
+			if count < tt.wantMin {
+				t.Errorf("CountTransactions() = %d, want at least %d", count, tt.wantMin)
+			}
+			t.Logf("View %s, Coin %d: count = %d", tt.view, tt.coin, count)
+		})
+	}
+}
