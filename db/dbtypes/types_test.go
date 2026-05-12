@@ -289,8 +289,23 @@ func TestReduceAddressHistory_MixedCoin(t *testing.T) {
 			ValidMainChain: true,
 			IsFunding:      true,
 			CoinType:       1,
-			Value:          0,
-			SKAValue:       "1000000000000000000", // 1 SKA
+			SKAValue:       "1000000000000000000", // 1 SKA receive
+		},
+		{
+			Address:        "MixedAddr",
+			TxHash:         ChainHash{4},
+			ValidMainChain: true,
+			IsFunding:      true,
+			CoinType:       1,
+			SKAValue:       "2000000000000000000", // 2 SKA receive (tests sum, not overwrite)
+		},
+		{
+			Address:        "MixedAddr",
+			TxHash:         ChainHash{5},
+			ValidMainChain: true,
+			IsFunding:      false,
+			CoinType:       1,
+			SKAValue:       "500000000000000000", // 0.5 SKA spend
 		},
 		{
 			Address:        "MixedAddr",
@@ -333,16 +348,16 @@ func TestReduceAddressHistory_MixedCoin(t *testing.T) {
 	}
 
 	skaCoin := coins[1]
-	if skaCoin.TotalSpent != 0 {
-		t.Errorf("SKA TotalSpent: want 0, got %d", skaCoin.TotalSpent)
+	// TotalReceivedSKA = 1e18 + 2e18 = 3e18
+	if skaCoin.TotalReceivedSKA != "3000000000000000000" {
+		t.Errorf("SKA TotalReceivedSKA: want 3000000000000000000, got %q", skaCoin.TotalReceivedSKA)
 	}
-	if skaCoin.TotalUnspent != 0 {
-		t.Errorf("SKA TotalUnspent should be 0 (int64), got %d", skaCoin.TotalUnspent)
+	// TotalSpentSKA = 0.5e18
+	if skaCoin.TotalSpentSKA != "500000000000000000" {
+		t.Errorf("SKA TotalSpentSKA: want 500000000000000000, got %q", skaCoin.TotalSpentSKA)
 	}
-	if skaCoin.TotalUnspentSKA != "1000000000000000000" {
-		t.Errorf("SKA TotalUnspentSKA: want 1000000000000000000, got %q", skaCoin.TotalUnspentSKA)
-	}
-	if skaCoin.TotalReceivedSKA != "1000000000000000000" {
-		t.Errorf("SKA TotalReceivedSKA: want 1000000000000000000, got %q", skaCoin.TotalReceivedSKA)
+	// TotalUnspentSKA = 3e18 - 0.5e18 = 2.5e18
+	if skaCoin.TotalUnspentSKA != "2500000000000000000" {
+		t.Errorf("SKA TotalUnspentSKA: want 2500000000000000000, got %q", skaCoin.TotalUnspentSKA)
 	}
 }

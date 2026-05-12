@@ -2409,6 +2409,16 @@ func NewCoinBalance(coinType uint8) *CoinBalance {
 	return &CoinBalance{CoinType: coinType}
 }
 
+// bigAddSKA adds a decimal-string SKA atom value into a *big.Int accumulator.
+func bigAddSKA(acc *big.Int, s string) {
+	if s == "" || s == "0" {
+		return
+	}
+	if v, ok := new(big.Int).SetString(s, 10); ok {
+		acc.Add(acc, v)
+	}
+}
+
 // HasStakeOutputs checks whether any of the Address tx outputs were
 // stake-related.
 func (balance *AddressBalance) HasStakeOutputs() bool {
@@ -2440,7 +2450,8 @@ func ReduceAddressHistory(addrHist []*AddressRow) (*AddressInfo, float64, float6
 	coins := make(map[uint8]*CoinBalance)
 	receivedByCoin := make(map[uint8]int64)
 	sentByCoin := make(map[uint8]int64)
-	receivedSKAByCoin := make(map[uint8]string)
+	receivedSKAByCoin := make(map[uint8]*big.Int)
+	spentSKAByCoin := make(map[uint8]*big.Int)
 
 	for _, addrOut := range addrHist {
 		if !addrOut.ValidMainChain {
@@ -2476,7 +2487,10 @@ func ReduceAddressHistory(addrHist []*AddressRow) (*AddressInfo, float64, float6
 				}
 			} else {
 				tx.ReceivedTotalSKA = addrOut.SKAValue
-				receivedSKAByCoin[coinType] = addrOut.SKAValue
+				if receivedSKAByCoin[coinType] == nil {
+					receivedSKAByCoin[coinType] = new(big.Int)
+				}
+				bigAddSKA(receivedSKAByCoin[coinType], addrOut.SKAValue)
 			}
 			coinBalance.NumUnspent++
 			creditTxns = append(creditTxns, &tx)
@@ -2490,6 +2504,10 @@ func ReduceAddressHistory(addrHist []*AddressRow) (*AddressInfo, float64, float6
 				}
 			} else {
 				tx.SentTotalSKA = addrOut.SKAValue
+				if spentSKAByCoin[coinType] == nil {
+					spentSKAByCoin[coinType] = new(big.Int)
+				}
+				bigAddSKA(spentSKAByCoin[coinType], addrOut.SKAValue)
 			}
 			coinBalance.NumSpent++
 			debitTxns = append(debitTxns, &tx)
@@ -2526,17 +2544,24 @@ func ReduceAddressHistory(addrHist []*AddressRow) (*AddressInfo, float64, float6
 		cb.TotalUnspent = receivedByCoin[ct] - sentByCoin[ct]
 		cb.TotalReceived = receivedByCoin[ct]
 		if ct > 0 {
-			var sum big.Int
-			if skaReceived := receivedSKAByCoin[ct]; skaReceived != "" {
-				if r, ok := sum.SetString(skaReceived, 10); ok {
-					cb.TotalReceivedSKA = r.String()
-				}
-				if skaSpent := cb.TotalSpent; skaSpent > 0 {
-					var spent big.Int
-					spent.Mul(big.NewInt(skaSpent), big.NewInt(1e10))
-					sum.Add(&sum, &spent)
-				}
-				cb.TotalUnspentSKA = sum.String()
+			recv := receivedSKAByCoin[ct]
+			spent := spentSKAByCoin[ct]
+			if recv != nil {
+				cb.TotalReceivedSKA = recv.String()
+			}
+			if spent != nil {
+				cb.TotalSpentSKA = spent.String()
+			}
+			// TotalUnspentSKA = received - spent
+			var unspent big.Int
+			if recv != nil {
+				unspent.Set(recv)
+			}
+			if spent != nil {
+				unspent.Sub(&unspent, spent)
+			}
+			if unspent.Sign() != 0 {
+				cb.TotalUnspentSKA = unspent.String()
 			}
 		}
 		balance.TotalInputs += cb.NumSpent
