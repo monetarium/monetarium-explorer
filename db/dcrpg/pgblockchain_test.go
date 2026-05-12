@@ -464,6 +464,13 @@ func TestAddressMultiCoinData(t *testing.T) {
 		if len(dataVar.Balance.Coins) != 1 {
 			t.Errorf("expected only VAR balance when filtered, got %d coins", len(dataVar.Balance.Coins))
 		}
+		// FullBalance must contain all active coins regardless of filter.
+		if dataVar.FullBalance == nil {
+			t.Error("expected FullBalance to be set")
+		} else if len(dataVar.FullBalance.Coins) < len(dataVar.ActiveCoins) {
+			t.Errorf("FullBalance.Coins has %d entries, want at least %d (ActiveCoins)",
+				len(dataVar.FullBalance.Coins), len(dataVar.ActiveCoins))
+		}
 
 		// Test with a known SKA coin if present, or just check that any non-zero coin filters correctly
 		if len(dataVar.ActiveCoins) > 1 {
@@ -477,6 +484,13 @@ func TestAddressMultiCoinData(t *testing.T) {
 			}
 			if len(dataSka.Balance.Coins) != 1 {
 				t.Errorf("expected only SKA balance when filtered, got %d coins", len(dataSka.Balance.Coins))
+			}
+			// FullBalance must still contain all coins even when SKA coin is selected.
+			if dataSka.FullBalance == nil {
+				t.Error("expected FullBalance to be set for SKA filter")
+			} else if len(dataSka.FullBalance.Coins) < len(dataSka.ActiveCoins) {
+				t.Errorf("FullBalance.Coins has %d entries, want at least %d (ActiveCoins)",
+					len(dataSka.FullBalance.Coins), len(dataSka.ActiveCoins))
 			}
 		}
 	})

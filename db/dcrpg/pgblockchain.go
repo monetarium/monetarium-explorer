@@ -2548,6 +2548,7 @@ func (pgb *ChainDB) AddressData(ctx context.Context, address string, limitN, off
 		addrData = new(dbtypes.AddressInfo)
 		populateTemplate()
 		addrData.Balance = &dbtypes.AddressBalance{}
+		addrData.FullBalance = &dbtypes.AddressBalance{}
 		// Still populate ActiveCoins even with no confirmed transactions
 		addrData.ActiveCoins = activeCoins
 		log.Tracef("AddressHistory: No confirmed transactions for address %s.", address)
@@ -2586,6 +2587,7 @@ func (pgb *ChainDB) AddressData(ctx context.Context, address string, limitN, off
 			}
 		}
 		addrData.Balance = filteredBalance
+		addrData.FullBalance = balance // all coins — for summary card
 
 		coinBal := filteredBalance.Coins[coinType]
 		if coinBal == nil {

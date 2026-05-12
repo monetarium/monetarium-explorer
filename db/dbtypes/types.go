@@ -2352,8 +2352,12 @@ type AddressInfo struct {
 	AmountSent      dcrutil.Amount
 	AmountUnspent   dcrutil.Amount
 
-	// Balance summarizes spend and unspent amounts for all known transactions.
+	// Balance holds the coin-filtered balance used for pagination counts.
 	Balance *AddressBalance
+
+	// FullBalance holds per-coin balances for all ActiveCoins, used by the
+	// summary card. Always populated regardless of ?coin= filter.
+	FullBalance *AddressBalance `json:"full_balance,omitempty"`
 
 	// ActiveCoins is the sorted list of coin types present at this address.
 	// VAR (0) is always present if any VAR transactions exist. SKA types are

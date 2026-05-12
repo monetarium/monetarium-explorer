@@ -1998,7 +1998,7 @@ func retrieveTxHistoryByAmountFlow(ctx context.Context, db *sql.DB, addr, timeIn
 	if err != nil {
 		return nil, err
 	}
-	return parseRowsSentReceived(rows)
+	return parseRowsSentReceived(rows, coinType)
 }
 
 // --- vins and vouts tables ---
@@ -4179,17 +4179,18 @@ func binnedTreasuryIO(ctx context.Context, db *sql.DB, timeInterval string) (*db
 	if err != nil {
 		return nil, err
 	}
-	return parseRowsSentReceived(rows)
+	return parseRowsSentReceived(rows, 0)
 }
 
 func toCoin[T int64 | uint64](amt T) float64 {
 	return float64(amt) / 1e8
 }
 
-func parseRowsSentReceived(rows *sql.Rows) (*dbtypes.ChartsData, error) {
+func parseRowsSentReceived(rows *sql.Rows, coinType uint8) (*dbtypes.ChartsData, error) {
 	defer closeRows(rows)
 	var items = new(dbtypes.ChartsData)
 	var balanceVAR int64
+	var balanceSKA, receivedSKA, sentSKA big.Int
 	for rows.Next() {
 		var blockTime time.Time
 		var received, sent uint64
@@ -4199,18 +4200,26 @@ func parseRowsSentReceived(rows *sql.Rows) (*dbtypes.ChartsData, error) {
 		}
 
 		items.Time = append(items.Time, dbtypes.NewTimeDef(blockTime))
-		items.Received = append(items.Received, toCoin(received))
-		items.Sent = append(items.Sent, toCoin(sent))
-		// Net represents the difference between the received and sent amount for a
-		// given block. If the difference is positive then the value is unspent amount
-		// otherwise if the value is zero then all amount is spent and if the net amount
-		// is negative then for the given block more amount was sent than received.
-		net := int64(received) - int64(sent)
-		items.Net = append(items.Net, toCoin(net))
-
-		// Compute running balance for VAR
-		balanceVAR += net
-		items.Balance = append(items.Balance, toCoin(balanceVAR))
+		if coinType == 0 {
+			items.Received = append(items.Received, toCoin(received))
+			items.Sent = append(items.Sent, toCoin(sent))
+			net := int64(received) - int64(sent)
+			items.Net = append(items.Net, toCoin(net))
+			balanceVAR += net
+			items.Balance = append(items.Balance, toCoin(balanceVAR))
+		} else {
+			// SKA: DB values are raw atom counts (1e18 scale). Use big.Int throughout.
+			r := new(big.Int).SetUint64(received)
+			s := new(big.Int).SetUint64(sent)
+			receivedSKA.Add(&receivedSKA, r)
+			sentSKA.Add(&sentSKA, s)
+			net := new(big.Int).Sub(r, s)
+			balanceSKA.Add(&balanceSKA, net)
+			items.ReceivedAtoms = append(items.ReceivedAtoms, receivedSKA.String())
+			items.SentAtoms = append(items.SentAtoms, sentSKA.String())
+			items.NetAtoms = append(items.NetAtoms, net.String())
+			items.BalanceAtoms = append(items.BalanceAtoms, balanceSKA.String())
+		}
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
