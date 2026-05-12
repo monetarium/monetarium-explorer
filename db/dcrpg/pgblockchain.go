@@ -2681,6 +2681,9 @@ func (pgb *ChainDB) AddressData(ctx context.Context, address string, limitN, off
 
 	// Funding transactions (unconfirmed)
 	var received, sent, numReceived, numSent int64
+	// Per-coin SKA accumulators for the mempool overlay.
+	skaReceivedByType := make(map[uint8]*big.Int)
+	skaSpentByType := make(map[uint8]*big.Int)
 FUNDING_TX_DUPLICATE_CHECK:
 	for _, f := range addressUTXOs.Outpoints {
 		// TODO: handle merged transactions
@@ -2746,7 +2749,10 @@ FUNDING_TX_DUPLICATE_CHECK:
 			numReceived++
 		} else {
 			addrData.Balance.Coins[coinType].NumUnspent++
-			addrData.Balance.Coins[coinType].TotalUnspentSKA = receivedSKA
+			if skaReceivedByType[coinType] == nil {
+				skaReceivedByType[coinType] = new(big.Int)
+			}
+			dbtypes.BigAddSKA(skaReceivedByType[coinType], receivedSKA)
 		}
 		addrData.Balance.TotalOutputs++
 	}
@@ -2828,14 +2834,15 @@ SPENDING_TX_DUPLICATE_CHECK:
 		}
 		if coinType == 0 {
 			sent += valuein
+			numSent++
+		} else {
+			if skaSpentByType[coinType] == nil {
+				skaSpentByType[coinType] = new(big.Int)
+			}
+			dbtypes.BigAddSKA(skaSpentByType[coinType], f.SKAValue)
 		}
 		addrData.Balance.Coins[coinType].NumSpent++
-		addrData.Balance.Coins[coinType].TotalSpentSKA = f.SKAValue
 		addrData.Balance.TotalInputs++
-
-		if coinType == 0 {
-			numSent++
-		}
 	} // range addressUTXOs.PrevOuts
 
 	// Totals from funding and spending transactions.
@@ -2851,6 +2858,32 @@ SPENDING_TX_DUPLICATE_CHECK:
 	addrData.Balance.Coins[0].TotalUnspent += (received - sent)
 	addrData.Balance.TotalInputs += numSent
 	addrData.Balance.TotalOutputs += numReceived
+
+	// Write accumulated SKA values into CoinBalance.
+	for ct, acc := range skaReceivedByType {
+		if addrData.Balance.Coins[ct] == nil {
+			addrData.Balance.Coins[ct] = dbtypes.NewCoinBalance(ct)
+		}
+		cb := addrData.Balance.Coins[ct]
+		spent := skaSpentByType[ct]
+		var unspent big.Int
+		unspent.Set(acc)
+		if spent != nil {
+			cb.TotalSpentSKA = spent.String()
+			unspent.Sub(&unspent, spent)
+		}
+		cb.TotalUnspentSKA = unspent.String()
+		cb.TotalReceivedSKA = acc.String()
+	}
+	for ct, acc := range skaSpentByType {
+		if skaReceivedByType[ct] != nil {
+			continue // already handled above
+		}
+		if addrData.Balance.Coins[ct] == nil {
+			addrData.Balance.Coins[ct] = dbtypes.NewCoinBalance(ct)
+		}
+		addrData.Balance.Coins[ct].TotalSpentSKA = acc.String()
+	}
 
 	// Sort by date and calculate block height.
 	addrData.PostProcess(uint32(pgb.Height()))

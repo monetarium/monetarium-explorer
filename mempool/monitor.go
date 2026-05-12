@@ -536,19 +536,33 @@ func (p *MempoolMonitor) UnconfirmedTxnsForAddress(address string) (*txhelpers.A
 	}
 
 	// Fill out the TxnsStore and count unconfirmed transactions by coin type.
-	numByCoin := make(map[uint8]int64)
+	// Use seenTxByCoin to count distinct tx hashes per coin (not per outpoint).
+	seenTxByCoin := make(map[uint8]map[chainhash.Hash]struct{})
 
 	// Process the transaction hashes for the new outpoints.
 	for _, op := range outs.Outpoints {
-		if _, found := outs.TxnsStore[op.Hash]; found {
-			continue
+		if _, found := outs.TxnsStore[op.Hash]; !found {
+			txData := p.txnsStore[op.Hash]
+			if txData == nil {
+				log.Warnf("Unable to locate in TxnsStore: %v", op.Hash)
+				continue
+			}
+			outs.TxnsStore[op.Hash] = txData
 		}
+		// Determine coin type for this outpoint.
+		var coinType uint8
 		txData := p.txnsStore[op.Hash]
-		if txData == nil {
-			log.Warnf("Unable to locate in TxnsStore: %v", op.Hash)
-			continue
+		if txData != nil {
+			if info, ok := txData.CoinInfo[op.Index]; ok {
+				coinType = info.CoinType
+			} else if int(op.Index) < len(txData.Tx.TxOut) {
+				coinType = uint8(txData.Tx.TxOut[op.Index].CoinType)
+			}
 		}
-		outs.TxnsStore[op.Hash] = txData
+		if seenTxByCoin[coinType] == nil {
+			seenTxByCoin[coinType] = make(map[chainhash.Hash]struct{})
+		}
+		seenTxByCoin[coinType][op.Hash] = struct{}{}
 	}
 
 	// Process the transaction hashes for the consumed previous outpoints.
@@ -565,33 +579,26 @@ func (p *MempoolMonitor) UnconfirmedTxnsForAddress(address string) (*txhelpers.A
 
 		// The funding transaction for the previous outpoint.
 		hash := outs.PrevOuts[ip].PreviousOutpoint.Hash
-		if _, found := outs.TxnsStore[hash]; found {
-			continue
+		if _, found := outs.TxnsStore[hash]; !found {
+			txData := p.txnsStore[hash]
+			if txData == nil {
+				log.Warnf("Unable to locate in TxnsStore: %v", hash)
+			}
+			outs.TxnsStore[hash] = txData
 		}
-		txData := p.txnsStore[hash]
-		if txData == nil {
-			log.Warnf("Unable to locate in TxnsStore: %v", hash)
-		}
-		outs.TxnsStore[hash] = txData
 
-		// Count spending transactions by coin type.
+		// Count spending tx (distinct) by coin type.
 		coinType := outs.PrevOuts[ip].CoinType
-		numByCoin[coinType]++
+		if seenTxByCoin[coinType] == nil {
+			seenTxByCoin[coinType] = make(map[chainhash.Hash]struct{})
+		}
+		seenTxByCoin[coinType][spendingTx] = struct{}{}
 	}
 
-	// Also count funding outpoints by coin type.
-	for _, op := range outs.Outpoints {
-		txData := p.txnsStore[op.Hash]
-		if txData == nil {
-			continue
-		}
-		outIndex := op.Index
-		if coinInfo, ok := txData.CoinInfo[outIndex]; ok {
-			numByCoin[coinInfo.CoinType]++
-		} else if int(outIndex) < len(txData.Tx.TxOut) {
-			txOut := txData.Tx.TxOut[outIndex]
-			numByCoin[uint8(txOut.CoinType)]++
-		}
+	// Convert seen sets to counts.
+	numByCoin := make(map[uint8]int64, len(seenTxByCoin))
+	for ct, seen := range seenTxByCoin {
+		numByCoin[ct] = int64(len(seen))
 	}
 
 	return outs, numByCoin, nil

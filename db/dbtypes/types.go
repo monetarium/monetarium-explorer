@@ -2410,8 +2410,8 @@ func NewCoinBalance(coinType uint8) *CoinBalance {
 	return &CoinBalance{CoinType: coinType}
 }
 
-// bigAddSKA adds a decimal-string SKA atom value into a *big.Int accumulator.
-func bigAddSKA(acc *big.Int, s string) {
+// BigAddSKA adds a decimal-string SKA atom value into a *big.Int accumulator.
+func BigAddSKA(acc *big.Int, s string) {
 	if s == "" || s == "0" {
 		return
 	}
@@ -2419,6 +2419,9 @@ func bigAddSKA(acc *big.Int, s string) {
 		acc.Add(acc, v)
 	}
 }
+
+// bigAddSKA is the package-local alias.
+func bigAddSKA(acc *big.Int, s string) { BigAddSKA(acc, s) }
 
 // HasStakeOutputs checks whether any of the Address tx outputs were
 // stake-related.
