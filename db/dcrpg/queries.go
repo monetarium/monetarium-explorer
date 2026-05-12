@@ -1506,12 +1506,16 @@ func retrieveAddressBalance(ctx context.Context, db *sql.DB, address string) (ba
 	balance.Coins = make(map[uint8]*dbtypes.CoinBalance)
 
 	var fromStakeVAR, toStakeVAR int64
+	// Per-coin SKA accumulators (big.Int, keyed by coin_type).
+	skaSpent := make(map[uint8]*big.Int)
+	skaUnspent := make(map[uint8]*big.Int)
 
 	for rows.Next() {
 		var count, totalValue int64
+		var skaTotal string
 		var noMatchingTx, isFunding, isRegular bool
 		var coinType uint8
-		err = rows.Scan(&isRegular, &coinType, &count, &totalValue, &isFunding, &noMatchingTx)
+		err = rows.Scan(&isRegular, &coinType, &count, &totalValue, &skaTotal, &isFunding, &noMatchingTx)
 		if err != nil {
 			return
 		}
@@ -1528,7 +1532,10 @@ func retrieveAddressBalance(ctx context.Context, db *sql.DB, address string) (ba
 			if coinType == 0 {
 				coinBalance.TotalUnspent += totalValue
 			} else {
-				coinBalance.TotalUnspentSKA = incrementStringAtoms(coinBalance.TotalUnspentSKA, totalValue)
+				if skaUnspent[coinType] == nil {
+					skaUnspent[coinType] = new(big.Int)
+				}
+				bigAddSKA(skaUnspent[coinType], skaTotal)
 			}
 		}
 		// Spent == spending (but ensure a matching transaction is set)
@@ -1542,7 +1549,10 @@ func retrieveAddressBalance(ctx context.Context, db *sql.DB, address string) (ba
 			if coinType == 0 {
 				coinBalance.TotalSpent += totalValue
 			} else {
-				coinBalance.TotalSpentSKA = incrementStringAtoms(coinBalance.TotalSpentSKA, totalValue)
+				if skaSpent[coinType] == nil {
+					skaSpent[coinType] = new(big.Int)
+				}
+				bigAddSKA(skaSpent[coinType], skaTotal)
 			}
 			// Stake metrics computed from VAR only
 			if coinType == 0 && !isRegular {
@@ -1554,6 +1564,33 @@ func retrieveAddressBalance(ctx context.Context, db *sql.DB, address string) (ba
 	}
 	if err = rows.Err(); err != nil {
 		return
+	}
+
+	// Write accumulated SKA strings into CoinBalance and compute TotalReceived.
+	for coinType, cb := range balance.Coins {
+		if coinType > 0 {
+			spent := skaSpent[coinType]
+			unspent := skaUnspent[coinType]
+			if spent != nil {
+				cb.TotalSpentSKA = spent.String()
+			}
+			if unspent != nil {
+				cb.TotalUnspentSKA = unspent.String()
+			}
+			// TotalReceivedSKA = spent + unspent
+			var recv big.Int
+			if spent != nil {
+				recv.Add(&recv, spent)
+			}
+			if unspent != nil {
+				recv.Add(&recv, unspent)
+			}
+			if recv.Sign() > 0 {
+				cb.TotalReceivedSKA = recv.String()
+			}
+		} else {
+			cb.TotalReceived = cb.TotalSpent + cb.TotalUnspent
+		}
 	}
 
 	// Compute stake percentages from VAR coin balance only
@@ -4890,21 +4927,12 @@ func retrieveDiff(ctx context.Context, db *sql.DB, timestamp int64) (float64, er
 	return diff, err
 }
 
-// incrementStringAtoms adds int64 atoms to a string representation of SKA atoms.
-// The int64 value is from VAR (1e8 scale), so it needs to be scaled to SKA (1e18).
-func incrementStringAtoms(existing string, atoms int64) string {
-	if atoms == 0 {
-		return existing
+// bigAddSKA adds a decimal-string SKA atom value into a *big.Int accumulator.
+func bigAddSKA(acc *big.Int, s string) {
+	if s == "" || s == "0" {
+		return
 	}
-	var sum big.Int
-	if existing != "" && existing != "0" {
-		if _, ok := sum.SetString(existing, 10); !ok {
-			sum.SetInt64(0)
-		}
+	if v, ok := new(big.Int).SetString(s, 10); ok {
+		acc.Add(acc, v)
 	}
-	// Scale VAR atoms (1e8) to SKA atoms (1e18) by multiplying by 1e10
-	var add big.Int
-	add.Mul(big.NewInt(atoms), big.NewInt(1e10))
-	sum.Add(&sum, &add)
-	return sum.String()
 }

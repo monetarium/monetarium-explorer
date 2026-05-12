@@ -220,6 +220,7 @@ const (
 			coin_type,
 			COUNT(*),
 			SUM(value),
+			COALESCE(SUM(ska_value::numeric), 0)::text AS ska_total,
 			is_funding,
 			(matching_tx_hash IS NULL) AS all_empty_matching
 			-- NOT BOOL_AND(matching_tx_hash IS NULL) AS no_empty_matching
