@@ -67,8 +67,10 @@ Two independent rendering paths:
 
 Both must produce identical structures.
 
+In this domain the parity is **not** complete: REST exposes `map[uint8]string` while WebSocket emits sorted arrays — a concrete instance of dual-transport shape asymmetry.
+
 Implication:
-See [core/constraints.md#C3](../../core/constraints.md#C3)
+See [core/constraints.md#C3](../../core/constraints.md#C3) and [core/constraints.md#C8](../../core/constraints.md#C8)
 
 ---
 
