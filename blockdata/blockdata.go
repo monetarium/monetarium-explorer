@@ -599,6 +599,63 @@ func BlockSKAFees(msgBlock *wire.MsgBlock) map[uint8]string {
 	return out
 }
 
+// BlockSKAPoWRewardsFromSTx extracts PoW SKA rewards from stake transactions.
+// It finds stakegen outputs that spend from coinbase (vin txid = zero hash, vout = max)
+// and have skaamountin in vin, which indicates PoW reward (miner portion of fees).
+// Returns map of coin type to total PoW reward amount in atoms.
+func BlockSKAPoWRewardsFromSTx(msgBlock *wire.MsgBlock) map[uint8]string {
+	if msgBlock == nil || len(msgBlock.STransactions) == 0 {
+		return nil
+	}
+
+	var zeroHash chainhash.Hash
+	maxVout := ^uint32(0)
+
+	skaRewards := make(map[uint8]*big.Int)
+
+	for _, stx := range msgBlock.STransactions {
+		if len(stx.TxIn) == 0 {
+			continue
+		}
+
+		// Check if spending from coinbase (txid = zero hash, vout = max)
+		vin := stx.TxIn[0]
+		if vin.PreviousOutPoint.Hash != zeroHash || vin.PreviousOutPoint.Index != maxVout {
+			continue
+		}
+
+		// Check if vin has skaamountin - this indicates PoW reward
+		if vin.SKAValueIn == nil || vin.SKAValueIn.Sign() <= 0 {
+			continue
+		}
+
+		// Sum SKA outputs and track coin type
+		var coinType uint8
+		for _, txout := range stx.TxOut {
+			if txout.CoinType.IsSKA() && txout.SKAValue != nil && txout.SKAValue.Sign() > 0 {
+				if coinType == 0 {
+					coinType = uint8(txout.CoinType)
+				}
+				if skaRewards[coinType] == nil {
+					skaRewards[coinType] = new(big.Int).Set(txout.SKAValue)
+				} else {
+					skaRewards[coinType].Add(skaRewards[coinType], txout.SKAValue)
+				}
+			}
+		}
+	}
+
+	if len(skaRewards) == 0 {
+		return nil
+	}
+
+	out := make(map[uint8]string, len(skaRewards))
+	for k, v := range skaRewards {
+		out[k] = v.String()
+	}
+	return out
+}
+
 // computeMiningFee calculates total mining fees from a block.
 // Formula: Mining Fee = Coinbase Output - PoW Subsidy
 // This is equivalent to summing (Inputs - Outputs) for all non-coinbase transactions,
