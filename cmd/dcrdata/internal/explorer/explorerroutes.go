@@ -1885,29 +1885,6 @@ func (exp *explorerUI) AddressListData(ctx context.Context, address string, txnT
 		err = fmt.Errorf(defaultErrorMessage)
 		return nil, err
 	}
-
-	// Validate that the requested coin is active for this address.
-	// If not, fallback to the first active coin.
-	if len(addrData.ActiveCoins) > 0 {
-		found := false
-		for _, ac := range addrData.ActiveCoins {
-			if ac == coinType {
-				found = true
-				break
-			}
-		}
-		if !found {
-			coinType = addrData.ActiveCoins[0]
-			// Re-fetch data for the fallback coin.
-			addrData, err = exp.dataSource.AddressData(ctx, address, limitN,
-				offsetAddrOuts, txnType, coinType)
-			if err != nil {
-				log.Errorf("AddressData error encountered during fallback: %v", err)
-				err = fmt.Errorf(defaultErrorMessage)
-				return nil, err
-			}
-		}
-	}
 	return
 }
 

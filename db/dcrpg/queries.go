@@ -1616,15 +1616,42 @@ func retrieveAddressBalance(ctx context.Context, db *sql.DB, address string) (ba
 }
 
 func countMergedSpendingTxns(ctx context.Context, db *sql.DB, address string, coinType uint8) (count int64, err error) {
+	if coinType == dbtypes.CoinTypeAll {
+		return countMergedAll(ctx, db, address, internal.SelectAddressesMergedSpentCountAll)
+	}
 	return countMerged(ctx, db, address, coinType, internal.SelectAddressesMergedSpentCount)
 }
 
 func countMergedFundingTxns(ctx context.Context, db *sql.DB, address string, coinType uint8) (count int64, err error) {
+	if coinType == dbtypes.CoinTypeAll {
+		return countMergedAll(ctx, db, address, internal.SelectAddressesMergedFundingCountAll)
+	}
 	return countMerged(ctx, db, address, coinType, internal.SelectAddressesMergedFundingCount)
 }
 
 func countMergedTxns(ctx context.Context, db *sql.DB, address string, coinType uint8) (count int64, err error) {
+	if coinType == dbtypes.CoinTypeAll {
+		return countMergedAll(ctx, db, address, internal.SelectAddressesMergedCountAll)
+	}
 	return countMerged(ctx, db, address, coinType, internal.SelectAddressesMergedCount)
+}
+
+func countMergedAll(ctx context.Context, db *sql.DB, address, query string) (count int64, err error) {
+	dbtx, err := db.BeginTx(context.Background(), &sql.TxOptions{Isolation: sql.LevelDefault, ReadOnly: true})
+	if err != nil {
+		return 0, fmt.Errorf("unable to begin database transaction: %w", err)
+	}
+	var sqlCount sql.NullInt64
+	err = dbtx.QueryRowContext(ctx, query, address).Scan(&sqlCount)
+	if err != nil && err != sql.ErrNoRows {
+		if errRoll := dbtx.Rollback(); errRoll != nil {
+			log.Errorf("Rollback failed: %v", errRoll)
+		}
+		return 0, fmt.Errorf("failed to query merged count: %w", err)
+	}
+	count = sqlCount.Int64
+	err = dbtx.Commit()
+	return
 }
 
 func countMerged(ctx context.Context, db *sql.DB, address string, coinType uint8, query string) (count int64, err error) {
@@ -1835,6 +1862,9 @@ func retrieveAllAddressMergedTxns(ctx context.Context, db *sql.DB, address strin
 // Regular (non-merged) address transactions queries.
 
 func retrieveAddressTxns(ctx context.Context, db *sql.DB, address string, N, offset int64, coinType uint8) ([]*dbtypes.AddressRow, error) {
+	if coinType == dbtypes.CoinTypeAll {
+		return retrieveAddressTxnsStmtAll(ctx, db, address, N, offset)
+	}
 	return retrieveAddressTxnsStmt(ctx, db, address, N, offset,
 		internal.SelectAddressLimitNByAddress, creditDebitQuery, coinType)
 }
@@ -1847,6 +1877,16 @@ func retrieveAddressMergedTxns(ctx context.Context, db *sql.DB, address string, 
 }
 
 // Address transaction query helpers.
+
+// retrieveAddressTxnsStmtAll fetches rows without a coin_type filter.
+func retrieveAddressTxnsStmtAll(ctx context.Context, db *sql.DB, address string, N, offset int64) ([]*dbtypes.AddressRow, error) {
+	rows, err := db.QueryContext(ctx, internal.SelectAddressLimitNByAddressAll, address, N, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer closeRows(rows)
+	return scanAddressQueryRows(rows, creditDebitQuery)
+}
 
 func retrieveAddressTxnsStmt(ctx context.Context, db *sql.DB, address string, N, offset int64,
 	statement string, queryType int, coinType uint8) ([]*dbtypes.AddressRow, error) {

@@ -44,6 +44,10 @@ type CoinStat struct {
 	Size    uint32 `json:"size"`
 }
 
+// CoinTypeAll is the sentinel value meaning "no coin filter — show all coins".
+// It is used as the default when ?coin= is absent from a request.
+const CoinTypeAll = uint8(255)
+
 // VoteTicketData holds data for a single vote and its associated ticket purchase.
 type VoteTicketData struct {
 	TicketHash     string `json:"ticket_hash"`

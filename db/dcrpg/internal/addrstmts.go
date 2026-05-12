@@ -194,6 +194,14 @@ const (
 	SelectAddressesMergedCount = `SELECT COUNT( DISTINCT tx_hash ) FROM addresses
 		WHERE address = $1 AND coin_type = $2 AND valid_mainchain;`
 
+	// All-coin variants (no coin_type filter) used when ?coin= is absent.
+	SelectAddressesMergedSpentCountAll = `SELECT COUNT( DISTINCT tx_hash ) FROM addresses
+		WHERE address = $1 AND is_funding = FALSE AND valid_mainchain;`
+	SelectAddressesMergedFundingCountAll = `SELECT COUNT( DISTINCT tx_hash ) FROM addresses
+		WHERE address = $1 AND is_funding = TRUE AND valid_mainchain;`
+	SelectAddressesMergedCountAll = `SELECT COUNT( DISTINCT tx_hash ) FROM addresses
+		WHERE address = $1 AND valid_mainchain;`
+
 	// SelectAddressSpentUnspentCountAndValue gets the number and combined spent
 	// and unspent outpoints for the given address. The key is the "GROUP BY
 	// is_funding, matching_tx_hash=''" part of the statement that gets the data
@@ -255,6 +263,12 @@ const (
 		WHERE address=$1 AND coin_type=$2 AND valid_mainchain
 		ORDER BY block_time DESC, tx_hash ASC
 		LIMIT $3 OFFSET $4;`
+
+	// All-coin variant (no coin_type filter) used when ?coin= is absent.
+	SelectAddressLimitNByAddressAll = `SELECT ` + addrsColumnNames + ` FROM addresses
+		WHERE address=$1 AND valid_mainchain
+		ORDER BY block_time DESC, tx_hash ASC
+		LIMIT $2 OFFSET $3;`
 
 	// SelectAddressLimitNByAddressSubQry was used in certain cases prior to
 	// sorting the block_time_index.

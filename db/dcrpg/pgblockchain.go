@@ -2348,6 +2348,25 @@ func (pgb *ChainDB) nonMergedTxnCount(ctx context.Context, addr string, txnView 
 		return 0, err
 	}
 
+	// When no coin filter, sum across all coins.
+	if coinType == dbtypes.CoinTypeAll {
+		var numSpent, numUnspent int64
+		for _, cb := range bal.Coins {
+			numSpent += cb.NumSpent
+			numUnspent += cb.NumUnspent
+		}
+		switch txnView {
+		case dbtypes.AddrTxnAll:
+			return int((numSpent * 2) + numUnspent), nil
+		case dbtypes.AddrTxnCredit:
+			return int(numSpent + numUnspent), nil
+		case dbtypes.AddrTxnDebit:
+			return int(numSpent), nil
+		default:
+			return 0, fmt.Errorf("NonMergedTxnCount: requested count for merged view")
+		}
+	}
+
 	coinBal := bal.Coins[coinType]
 	if coinBal == nil {
 		return 0, nil
@@ -2574,12 +2593,13 @@ func (pgb *ChainDB) AddressData(ctx context.Context, address string, limitN, off
 		// Balances and txn counts
 		populateTemplate()
 
-		// Filter balance for the selected coin
-		filteredBalance := &dbtypes.AddressBalance{
-			Address: address,
-			Coins:   make(map[uint8]*dbtypes.CoinBalance),
-		}
-		if balance != nil {
+		// Filter balance for the selected coin (or keep full map when no filter).
+		filteredBalance := balance
+		if balance != nil && coinType != dbtypes.CoinTypeAll {
+			filteredBalance = &dbtypes.AddressBalance{
+				Address: address,
+				Coins:   make(map[uint8]*dbtypes.CoinBalance),
+			}
 			if coinBal, ok := balance.Coins[coinType]; ok {
 				filteredBalance.Coins[coinType] = coinBal
 				filteredBalance.TotalInputs = coinBal.NumSpent
@@ -2589,12 +2609,19 @@ func (pgb *ChainDB) AddressData(ctx context.Context, address string, limitN, off
 		addrData.Balance = filteredBalance
 		addrData.FullBalance = balance // all coins — for summary card
 
-		coinBal := filteredBalance.Coins[coinType]
-		if coinBal == nil {
-			coinBal = dbtypes.NewCoinBalance(coinType)
+		// Compute KnownTxns from the selected coin or all coins.
+		var knownSpent, knownUnspent int64
+		if coinType == dbtypes.CoinTypeAll {
+			for _, cb := range balance.Coins {
+				knownSpent += cb.NumSpent
+				knownUnspent += cb.NumUnspent
+			}
+		} else if coinBal := filteredBalance.Coins[coinType]; coinBal != nil {
+			knownSpent = coinBal.NumSpent
+			knownUnspent = coinBal.NumUnspent
 		}
-		addrData.KnownSpendingTxns = coinBal.NumSpent
-		addrData.KnownFundingTxns = coinBal.NumSpent + coinBal.NumUnspent
+		addrData.KnownSpendingTxns = knownSpent
+		addrData.KnownFundingTxns = knownSpent + knownUnspent
 		addrData.KnownTransactions = addrData.KnownSpendingTxns + addrData.KnownFundingTxns
 
 		// ActiveCoins already populated above
@@ -2624,7 +2651,7 @@ func (pgb *ChainDB) AddressData(ctx context.Context, address string, limitN, off
 				addrData.TxnCount = addrData.KnownSpendingTxns
 				addrData.Transactions = addrData.TxnsSpending
 			case dbtypes.AddrUnspentTxn:
-				addrData.TxnCount = coinBal.NumUnspent
+				addrData.TxnCount = knownUnspent
 			}
 		}
 
@@ -3252,6 +3279,10 @@ func (pgb *ChainDB) RewindStakeDB(ctx context.Context, toHeight int64, quiet ...
 // type and time grouping.
 func (pgb *ChainDB) TxHistoryData(ctx context.Context, address string, addrChart dbtypes.HistoryChart,
 	chartGroupings dbtypes.TimeBasedGrouping, coinType uint8) (cd *dbtypes.ChartsData, err error) {
+	// Charts require a specific coin; CoinTypeAll defaults to VAR (0).
+	if coinType == dbtypes.CoinTypeAll {
+		coinType = 0
+	}
 	if chartGroupings >= dbtypes.NumIntervals {
 		return nil, fmt.Errorf("invalid time grouping %d", chartGroupings)
 	}

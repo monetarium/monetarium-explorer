@@ -22,6 +22,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/docgen"
 	apitypes "github.com/monetarium/monetarium-explorer/api/types"
+	"github.com/monetarium/monetarium-explorer/db/dbtypes"
 	"github.com/monetarium/monetarium-node/chaincfg"
 	"github.com/monetarium/monetarium-node/chaincfg/chainhash"
 	chainjson "github.com/monetarium/monetarium-node/rpc/jsonrpc/types"
@@ -816,12 +817,12 @@ func ChartGroupingCtx(next http.Handler) http.Handler {
 
 // CoinCtx is a middleware that parses the optional ?coin= query parameter as a
 // uint8 and stores it in the request context. If not provided or invalid, the
-// value is 0 (VAR).
+// value is dbtypes.CoinTypeAll (255) meaning "no filter".
 func CoinCtx(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var coinType uint8
+		coinType := dbtypes.CoinTypeAll
 		if coinStr := r.URL.Query().Get("coin"); coinStr != "" {
-			if parsed, err := strconv.ParseUint(coinStr, 10, 8); err == nil {
+			if parsed, err := strconv.ParseUint(coinStr, 10, 8); err == nil && uint8(parsed) != dbtypes.CoinTypeAll {
 				coinType = uint8(parsed)
 			}
 		}
@@ -831,11 +832,11 @@ func CoinCtx(next http.Handler) http.Handler {
 }
 
 // GetCoinCtx retrieves the ctxCoin data from the request context.
-// If not set, the return value is 0 (VAR).
+// If not set, returns dbtypes.CoinTypeAll (255) meaning "no filter".
 func GetCoinCtx(r *http.Request) uint8 {
 	coin, ok := r.Context().Value(ctxCoin).(uint8)
 	if !ok {
-		return 0
+		return dbtypes.CoinTypeAll
 	}
 	return coin
 }
