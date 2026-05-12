@@ -2567,7 +2567,6 @@ func (pgb *ChainDB) AddressData(ctx context.Context, address string, limitN, off
 		addrData = new(dbtypes.AddressInfo)
 		populateTemplate()
 		addrData.Balance = &dbtypes.AddressBalance{}
-		addrData.FullBalance = &dbtypes.AddressBalance{}
 		// Still populate ActiveCoins even with no confirmed transactions
 		addrData.ActiveCoins = activeCoins
 		log.Tracef("AddressHistory: No confirmed transactions for address %s.", address)
@@ -2593,21 +2592,9 @@ func (pgb *ChainDB) AddressData(ctx context.Context, address string, limitN, off
 		// Balances and txn counts
 		populateTemplate()
 
-		// Filter balance for the selected coin (or keep full map when no filter).
-		filteredBalance := balance
-		if balance != nil && coinType != dbtypes.CoinTypeAll {
-			filteredBalance = &dbtypes.AddressBalance{
-				Address: address,
-				Coins:   make(map[uint8]*dbtypes.CoinBalance),
-			}
-			if coinBal, ok := balance.Coins[coinType]; ok {
-				filteredBalance.Coins[coinType] = coinBal
-				filteredBalance.TotalInputs = coinBal.NumSpent
-				filteredBalance.TotalOutputs = coinBal.NumSpent + coinBal.NumUnspent
-			}
-		}
-		addrData.Balance = filteredBalance
-		addrData.FullBalance = balance // all coins — for summary card
+		// Balance always holds the full per-coin map (summary card reads it).
+		// KnownTxns are computed per-coin below for pagination.
+		addrData.Balance = balance
 
 		// Compute KnownTxns from the selected coin or all coins.
 		var knownSpent, knownUnspent int64
@@ -2616,7 +2603,7 @@ func (pgb *ChainDB) AddressData(ctx context.Context, address string, limitN, off
 				knownSpent += cb.NumSpent
 				knownUnspent += cb.NumUnspent
 			}
-		} else if coinBal := filteredBalance.Coins[coinType]; coinBal != nil {
+		} else if coinBal := balance.Coins[coinType]; coinBal != nil {
 			knownSpent = coinBal.NumSpent
 			knownUnspent = coinBal.NumUnspent
 		}
