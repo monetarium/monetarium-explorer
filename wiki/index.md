@@ -83,3 +83,12 @@ _Historical data fetching, cache aggregation, and payload serialization for UI c
 
 - flow (compact): code-analysis/charts/flow.compact.md — high-level summary of both VAR and SKA chart pipelines
 - flow (full): code-analysis/charts/flow.full.md — detailed, step-by-step function trace covering RPC/SQL → cache → API → controller → Dygraphs for both pipelines
+
+### VisualBlocks
+
+_The `/visualblocks` page: latest-N blocks plus mempool rendered as flex-grow tiles. Dual pipeline (HTTP `TrimmedBlockInfo` vs WebSocket full `BlockInfo`) with two different `Subsidy` struct shapes and a JS-side coinbase filter._
+
+- flow (compact): code-analysis/visualblocks/flow.compact.md — high-level summary of the HTTP + WS pipelines and the trim asymmetry
+- flow (full): code-analysis/visualblocks/flow.full.md — detailed, step-by-step function trace covering handler, DB memo, WS encoder, JS controller, and template
+- patterns: code-analysis/visualblocks/patterns.md — cross-pipeline tile rendering, JS-side server-filter mirror, Subsidy struct asymmetry, triple-enforced 30-cap, memoized BlockInfo, lock order, WS subsidy patch
+- impact: code-analysis/visualblocks/impact.md — mutation impact across HTTP/WS/JS/DB layers, loud and silent failure modes, safe-change checklist

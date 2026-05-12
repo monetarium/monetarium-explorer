@@ -45,3 +45,25 @@ Rules:
 - Never construct labels inline (`` `SKA${n}` ``, hardcoded `"VAR"`, etc.). Always call the canonical function for the environment.
 - If the label format ever changes, update both `coinSymbol` and `renderCoinType` in the same change.
 - New formatting helpers for coin amounts go in `ska_helper.js` / `humanize_helper.js`, not in a controller.
+
+## C8: Dual-Transport Shape Asymmetry (applies to: block, transaction, visualblocks, mempool, frontend)
+
+C3 (parity) covers the *ideal*: a logical entity should be reproducible identically by template and WebSocket. C8 covers the *reality*: across several pages, the same logical entity travels in **different on-the-wire shapes** depending on transport, and the frontend must reconcile them. Pattern-Clone (C3) and Perimeter Flattening (C4) describe the symptoms; C8 names the concrete asymmetries that already exist and *must not silently drift further*.
+
+**Concrete manifestations:**
+
+- **Block** (REST vs WebSocket multi-coin amounts):
+  REST `/api/block/...` exposes `map[uint8]string` (`{"0":"...","1":"..."}`) derived from `BlockData.ExtraInfo`. WebSocket `pubsubhub` flattens the same maps into sorted `[]PoWSKAReward`-style arrays. The JS controllers require arrays; REST consumers tolerate maps. The transformation is duplicated in `explorerUI.Store` and `pubsub/pubsubhub.go.Store`. *See:* [/wiki/code-analysis/block/flow.full.md](../code-analysis/block/flow.full.md) §4.
+- **Transaction** (mempool aggregation vs confirmed array):
+  Mempool path squashes outputs into a single per-coin total (`MempoolTx.SKATotals map[uint8]string`) at ingestion via `txhelpers.SKATotalsFromMsgTx`. Confirmed path keeps the full `Vout` array verbatim from `dcrd`'s `GetRawTransactionVerbose` and exposes `apitypes.Vout[i].CoinType` / `SKAValue`. The JS mempool controller and the Go `tx.tmpl` template each handle only their respective shape; cross-cutting features must reconcile both. *See:* [/wiki/code-analysis/transaction/flow.full.md](../code-analysis/transaction/flow.full.md) §2, §9.
+- **VisualBlocks** (HTTP trim vs WebSocket full BlockInfo):
+  HTTP handler trims `*BlockInfo → *TrimmedBlockInfo` (drops Treasury/StakeFees, applies `FilterRegularTx` to remove coinbase, renames `block.Tx` → `Transactions`). WebSocket `sigNewBlock` emits the full `BlockInfo` (field name `Tx`, includes coinbase). `visualBlocks_controller.js._handleVisualBlocksUpdate` re-implements `FilterRegularTx` client-side (`block.Tx.filter(!Coinbase)`). Additionally, `Subsidy` is `BlockSubsidy{Dev}` for the mempool tile and `chainjson.GetBlockSubsidyResult{Developer}` for block tiles — both names appear in one template. *See:* [/wiki/code-analysis/visualblocks/flow.full.md](../code-analysis/visualblocks/flow.full.md) §4.
+
+**Rules wherever this pattern appears:**
+
+- Treat HTTP and WebSocket shapes as **two independent contracts**, not one. A change to a Go struct used on one path does not automatically reach the other.
+- Any logical field added to a server-rendered template must also be added to the WebSocket payload AND to the JS controller that consumes it — otherwise newly arriving entities silently miss the field while initial-render entities show it.
+- Any client-side reconciliation logic (filter, aggregate, map→array) is **load-bearing duplicate code** mirroring a backend transform. Update both sides together.
+- When two paths use different Go types for the "same" concept (e.g. `BlockSubsidy.Dev` vs `chainjson.GetBlockSubsidyResult.Developer`), document the mapping at the JS/template boundary; do not paper over it with one-sided renames.
+
+**Common failure mode:** Backend struct gets a new field. The HTTP handler is updated and the template renders the field. The next new block arrives via WebSocket, the JS re-renders that tile, and the field is missing. The page looks correct on initial load and silently broken on update — a class of bug that does not show up in `go build` or `go test`, only in live behavior.

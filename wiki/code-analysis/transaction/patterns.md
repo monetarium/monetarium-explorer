@@ -36,4 +36,4 @@ The codebase distrusts standard numeric serialization across boundaries.
 To optimize for bandwidth and UI speed, the system aggressively strips context from live entities at ingestion.
 
 - **The Pattern:** In motion (Mempool, WebSocket broadcasts), complex structural arrays (such as `Vout` outputs) are summed into a single total for the transaction's CoinType right at the ingestion layer. At rest (DB, REST API), the full dimensional array structure is provided.
-- **Implication for Mutation:** See [core/constraints.md#C4](../../core/constraints.md#C4)
+- **Implication for Mutation:** See [core/constraints.md#C4](../../core/constraints.md#C4) and [core/constraints.md#C8](../../core/constraints.md#C8) — the resulting `SKATotals` map vs verbatim `Vout` array is one of the named dual-transport shape asymmetries; cross-cutting tx features must reconcile both.
