@@ -50,8 +50,8 @@ The incremental path is the reason `TxHandler` exists: live `CoinFills` indicato
 **Description:**
 Mempool updates are emitted on **two parallel WebSocket pipelines** that serve identical JSON shapes:
 
-- **Root explorer WS:** [cmd/dcrdata/internal/explorer/websockethandlers.go](../../../cmd/dcrdata/internal/explorer/websockethandlers.go) — handles `getmempooltxs` (full `MempoolInfo`), `getmempooltrimmed` (`TrimmedMempoolInfo` for VisualBlocks), and push events `sigMempoolUpdate(MempoolShort)` / `sigNewTxs({Txs, CoinFills, TotalFillRatio, ActiveSKACount})`.
-- **PubSub WS:** [pubsub/pubsubhub.go](../../../pubsub/pubsubhub.go) — emits the same `sigMempoolUpdate(MempoolShort)` / `sigNewTxs({…})` payloads. Subscription-aware via `client.isSubscribed`.
+- **Root explorer WS:** [cmd/dcrdata/internal/explorer/websockethandlers.go](../../../cmd/dcrdata/internal/explorer/websockethandlers.go) — handles `getmempooltxs` (full `MempoolInfo`), `getmempooltrimmed` (`TrimmedMempoolInfo` for VisualBlocks), and push events `sigMempoolUpdate(MempoolShort)` / `sigNewTxs({Txs, CoinFills, TotalFillRatio, ActiveSKACount, CoinStats})`.
+- **PubSub WS:** [pubsub/pubsubhub.go](../../../pubsub/pubsubhub.go) — emits the same `sigMempoolUpdate(MempoolShort)` / `sigNewTxs({…, CoinStats})` payloads. Subscription-aware via `client.isSubscribed`.
 
 Each transport owns its own `invs` pointer + mutex; both implement `MempoolDataSaver` and read the `CoinFills` previously written by `explorerUI`.
 

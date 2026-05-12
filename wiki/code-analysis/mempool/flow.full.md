@@ -94,7 +94,7 @@ Additional CoinFills recomputation lives in **`(*explorerUI).Store`** (new-block
 #### 3.6 HTTP handlers — `cmd/dcrdata/internal/explorer/explorerroutes.go`
 
 - **`Home`** (`:182-...`) — renders `home_mempool.tmpl` via the home viewmodel; reads `exp.MempoolInventory()` and includes the entire `*types.MempoolInfo`.
-- **`Mempool`** (`:783-...`) — renders `mempool.tmpl` with the full `MempoolInfo` (still VAR-centric in the template — see Section 7).
+- **`Mempool`** (`:783-...`) — renders `mempool.tmpl` with the full `MempoolInfo`. Template is multi-coin aware (Total Sent / Transactions cards iterate `CoinStats` via `orderedMempoolCoinStats`; Regular table branches on `.SKATotals`).
 - **`VisualBlocks`** (`:353-368`) — calls `inv.Trim()` to render with a `*TrimmedMempoolInfo` (carrying `CoinFills`/`TotalFillRatio`/`ActiveSKACount`/`CoinStats`).
 
 #### 3.7 Websocket transports — **dual** (root + pubsub)
@@ -105,10 +105,10 @@ Both transports serve identical JSON shapes for mempool signals. This is part of
   - Client request `"getmempooltxs"` → marshals full `*types.MempoolInfo` (`:124-148`); short-circuits via `MempoolInfo.Ident` if the client already has the same id.
   - Client request `"getmempooltrimmed"` → marshals `inv.Trim()` plus injected `Subsidy` (`:150-167`).
   - `sigMempoolUpdate` → encodes `inv.MempoolShort` (`:284-293`).
-  - `sigNewTxs` → encodes an anonymous struct `{Txs, CoinFills, TotalFillRatio, ActiveSKACount}` snapshotted from `inv.MempoolShort` (`:298-324`).
+  - `sigNewTxs` → encodes an anonymous struct `{Txs, CoinFills, TotalFillRatio, ActiveSKACount, CoinStats}` snapshotted from `inv.MempoolShort` (`:298-324`). `CoinStats` was added so the full-mempool page's per-coin Total Sent / Transactions cards update live without a follow-up `getmempooltxs` round-trip.
 - **`pubsub/pubsubhub.go::sendLoop`** (pubsub WS):
   - `sigMempoolUpdate` → encodes `inv.MempoolShort` (`:474-489`).
-  - `sigNewTxs` → encodes `{Txs, CoinFills, TotalFillRatio, ActiveSKACount}` (`:495-529`).
+  - `sigNewTxs` → encodes `{Txs, CoinFills, TotalFillRatio, ActiveSKACount, CoinStats}` (`:495-529`). Schema mirrors the root WS payload — both transports must change together (see [patterns.md "Dual-transport WebSocket"](patterns.md)).
 
 In both pipelines the **CoinFills attached to `sigNewTxs` come from `MempoolShort.CoinFills` (not recomputed)** — the values were last written by `(*explorerUI).StoreMPData` when the new tx triggered the fan-out.
 
@@ -119,7 +119,13 @@ In both pipelines the **CoinFills attached to `sigNewTxs` come from `MempoolShor
   - `{{range .Mempool.CoinFills}}` renders one bar per coin with `GQFillRatio`, `ExtraFillRatio`, `OverflowFillRatio`, `GQPositionRatio`, `PctOfTC`, `Status`, `IsOverflow`.
   - LatestTransactions table uses `{{if .SKATotals}}` to render `SKA{n}` / `formatCoinAtoms` for SKA txs, else `VAR` / `threeSigFigs .TotalOut`.
   - `<template id="fill-bar-template">` provides the DOM scaffolding used by `injectFillBar` for dynamically-added SKA bars.
-- **`mempool.tmpl`** — full-page mempool listings. **Still VAR-centric**: uses `.LikelyMineable.RegularTotal/TicketTotal/VoteTotal/RevokeTotal` as `DCR` and `{{float64AsDecimalParts .TotalOut 8 false}}` per row. **Does not render `CoinStats` or `CoinFills`**; SKA-only transactions render with a wrong/zero DCR amount in the Total column. This is a known asymmetry with `home_mempool.tmpl`.
+- **`mempool.tmpl`** — full-page mempool listings, multi-coin aware:
+  - Current Mempool card: `Total Sent` iterates `orderedMempoolCoinStats .CoinStats` and renders one `{amount, symbol}` line per coin (VAR always; SKA-n only when `TxCount > 0`).
+  - Transactions card: VAR section is static (Regular / Tickets / Votes / Revocations from `CoinStats[0]`); SKA sections render Regular-only inside `data-mempool-target="skaSections"` for live JS rebuild.
+  - Regular transactions table: `{{if .SKATotals}}` branches per row — SKA txs show `coinSymbol` + `skaDecimalParts $amt false`, VAR txs show `VAR` + `float64AsDecimalParts .TotalOut 8 false`. SKA Fee Rate cell renders `—` (em-dash) because `MempoolTx.FeeRate` is VAR-only float64; a follow-up will add `FeeRateRaw string` for precise SKA display.
+  - Tickets / Votes / Revocations tables stay VAR-only per spec; column headers say `Total VAR` and fee-rate unit is `VAR/kB`.
+  - Treasury Spends section removed; Treasury Adds retained.
+  - `CoinFills` is not consumed here (it's a homepage indicator-bar concept).
 
 #### 3.9 Frontend — `cmd/dcrdata/public/js/`
 
@@ -206,7 +212,7 @@ When adding a **new saver**:
 
 ### Section 7 — Common Pitfalls
 
-1. **Treating `MempoolTx.TotalOut` as the canonical tx amount.** It is **VAR-only atoms** (the collector filters by `CoinType == cointype.CoinTypeVAR` at `collector.go:107-113`). For an SKA tx, `TotalOut == 0`. Use `SKATotals` for SKA amounts. The `mempool.tmpl` page violates this (renders `TotalOut` as DCR for every row, including SKA txs).
+1. **Treating `MempoolTx.TotalOut` as the canonical tx amount.** It is **VAR-only atoms** (the collector filters by `CoinType == cointype.CoinTypeVAR` at `collector.go:107-113`). For an SKA tx, `TotalOut == 0`. Use `SKATotals` for SKA amounts. Both `mempool.tmpl` (Regular table) and `home_mempool.tmpl` now branch on `.SKATotals` per row.
 2. **Assuming `SKATotals` may contain multiple coin types.** By chain invariant it has at most one entry; code that loops over it is fine, but assumptions like `len(SKATotals) > 1` are dead branches.
 3. **Forgetting the incremental path.** Adding a new aggregated field to `ParseTxns` without mirroring in `addTxToCoinStats` makes the field correct only after the next block boundary — appears as "data lags by one block" bug.
 4. **Conflating `MempoolInfo.CoinFills` and `MempoolInfo.MempoolShort.CoinFills`.** They are kept in sync by `StoreMPData` and `Store`. JSON marshalling serialises only the embedded one (`MempoolShort.CoinFills`). The outer `MempoolInfo.CoinFills` exists for in-memory readers; if you read one without updating the other you get inconsistent behaviour between HTTP-rendered pages and JSON snapshots.
@@ -240,7 +246,7 @@ When adding a **new saver**:
 - `explorer/types/explorertypes.go:1384-1445` — `MempoolTx`, `DeepCopy`, `CopyMempoolTxSlice`, `CopyCoinFillSlice`.
 - `cmd/dcrdata/views/home_mempool.tmpl:21-66` — TotalBar + CoinFills bars + `<template id="fill-bar-template">`.
 - `cmd/dcrdata/views/home_mempool.tmpl:117-135` — LatestTransactions table with `SKATotals` branching.
-- `cmd/dcrdata/views/mempool.tmpl:23-345` — VAR-centric full-page mempool listings.
+- `cmd/dcrdata/views/mempool.tmpl` — full-page mempool listings; multi-coin aware (per-coin Total Sent, per-coin Transactions sections, SKA-aware Regular table).
 - `cmd/dcrdata/public/js/controllers/homepage_controller.js:25-269` — handler registration, `updateIndicators` rAF batching, `_flushIndicators` apply/inject/zero loop.
 - `cmd/dcrdata/public/js/helpers/indicator_fill.js:20-168` — JS mirror of `computeCoinFills`.
 - `txhelpers/txhelpers.go:1305-1329` — `SKATotalsFromMsgTx`; nil-return for VAR-only txs.

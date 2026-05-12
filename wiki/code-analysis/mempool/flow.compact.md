@@ -18,7 +18,6 @@
 - **SKA → Regular only:** SKA `TicketAmount/VoteAmount/RevokeAmount` are always `"0"` (not `""`); `normalizeCoinStatsAmounts` + `skaPerTypeStr` enforce.
 - **`PctOfTC` is unclamped** — overflow must surface as text; SCSS clips visually.
 - **Inventory locking order:** `MempoolMonitor.mtx` (pointer) outermost, `MempoolInfo.RWMutex` (contents) inner. Reverse = deadlock risk against `Refresh`.
-- **`mempool.tmpl` is still VAR-centric** — renders `TotalOut` as DCR even for SKA txs; gap from `home_mempool.tmpl`.
 
 ### Mutation Checklist
 

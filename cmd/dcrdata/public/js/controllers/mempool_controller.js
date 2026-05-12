@@ -3,9 +3,18 @@ import dompurify from 'dompurify'
 import { each, map } from 'lodash-es'
 import humanize from '../helpers/humanize_helper'
 import Mempool from '../helpers/mempool_helper'
+import { renderCoinType, splitSkaAtomsNoTrailing } from '../helpers/ska_helper'
 import { keyNav } from '../services/keyboard_navigation_service'
 import ws from '../services/messagesocket_service'
 import { alertArea, copyIcon } from './clipboard_controller'
+
+const EMPTY_STATES = {
+  regular: { text: 'No transactions in mempool.', colspan: 6 },
+  tickets: { text: 'No tickets in mempool.', colspan: 5 },
+  votes: { text: 'No votes in mempool.', colspan: 8 },
+  revocations: { text: 'No revocations in mempool.', colspan: 4 },
+  tadds: { text: 'No treasury adds in mempool.', colspan: 3 }
+}
 
 function incrementValue(el) {
   if (!el) return
@@ -19,7 +28,64 @@ function rowNode(rowText) {
   return tbody.firstElementChild
 }
 
+// skaAmountHTML renders a SKA atom string into the standard .decimal-parts
+// HTML structure, matching the server-side decimalParts template output for
+// skaDecimalParts. BigInt-based; no float coercion.
+function skaAmountHTML(atomStr) {
+  const { intPart, bold, rest, trailingZeros } = splitSkaAtomsNoTrailing(atomStr || '0', false)
+  const intText = bold ? `${intPart}.${bold}` : intPart
+  let html = `<div class="decimal-parts d-inline-block"><span class="int">${intText}</span>`
+  if (bold && rest) html += `<span class="decimal">${rest}</span>`
+  if (bold && trailingZeros) html += `<span class="decimal trailing-zeroes">${trailingZeros}</span>`
+  html += '</div>'
+  return html
+}
+
+// txAmountHTML returns the inner HTML for a tx's Amount cell. SKA txs render
+// 18dp BigInt parts; VAR txs render 8dp float parts via humanize.decimalParts.
+// Per the dual-precision invariant (CLAUDE.md), SKA never goes through
+// float64.
+function txAmountHTML(tx) {
+  if (tx.ska_totals && Object.keys(tx.ska_totals).length > 0) {
+    const [, atomStr] = Object.entries(tx.ska_totals)[0]
+    return skaAmountHTML(atomStr)
+  }
+  return humanize.decimalParts(tx.total || 0, false, 8)
+}
+
+function txCoinSymbol(tx) {
+  if (tx.ska_totals && Object.keys(tx.ska_totals).length > 0) {
+    const [id] = Object.entries(tx.ska_totals)[0]
+    return renderCoinType(id)
+  }
+  return renderCoinType(0)
+}
+
+function txFeeRateHTML(tx) {
+  if (tx.ska_totals && Object.keys(tx.ska_totals).length > 0) {
+    // SKA fee rate not yet exposed precisely (MempoolTx.FeeRate is VAR-only
+    // float64; would lose precision). Tracked as follow-up; render em-dash.
+    return '&mdash;'
+  }
+  return `${tx.fee_rate} VAR/kB`
+}
+
 function txTableRow(tx) {
+  return rowNode(`<tr class="flash">
+        <td class="break-word clipboard">
+          <a class="hash" href="/tx/${tx.hash}" title="${tx.hash}">${tx.hash}</a>
+          ${copyIcon()}
+          ${alertArea()}
+        </td>
+        <td class="text-start text-nowrap">${txCoinSymbol(tx)}</td>
+        <td class="mono fs15 text-end">${txAmountHTML(tx)}</td>
+        <td class="mono fs15 text-end">${tx.size} B</td>
+        <td class="mono fs15 text-end">${txFeeRateHTML(tx)}</td>
+        <td class="mono fs15 text-end" data-time-target="age" data-age="${tx.time}">${humanize.timeSince(tx.time)}</td>
+    </tr>`)
+}
+
+function ticketTableRow(tx) {
   return rowNode(`<tr class="flash">
         <td class="break-word clipboard">
           <a class="hash" href="/tx/${tx.hash}" title="${tx.hash}">${tx.hash}</a>
@@ -28,12 +94,25 @@ function txTableRow(tx) {
         </td>
         <td class="mono fs15 text-end">${humanize.decimalParts(String(tx.total), false, 8)}</td>
         <td class="mono fs15 text-end">${tx.size} B</td>
-        <td class="mono fs15 text-end">${tx.fee_rate} DCR/kB</td>
+        <td class="mono fs15 text-end">${tx.fee_rate} VAR/kB</td>
         <td class="mono fs15 text-end" data-time-target="age" data-age="${tx.time}">${humanize.timeSince(tx.time)}</td>
     </tr>`)
 }
 
-function treasuryTxTableRow(tx) {
+function revocationTableRow(tx) {
+  return rowNode(`<tr class="flash">
+        <td class="break-word clipboard">
+          <a class="hash" href="/tx/${tx.hash}" title="${tx.hash}">${tx.hash}</a>
+          ${copyIcon()}
+          ${alertArea()}
+        </td>
+        <td class="mono fs15 text-end">${humanize.decimalParts(String(tx.total), false, 8)}</td>
+        <td class="mono fs15 text-end">${tx.size} B</td>
+        <td class="mono fs15 text-end" data-time-target="age" data-age="${tx.time}">${humanize.timeSince(tx.time)}</td>
+    </tr>`)
+}
+
+function treasuryAddTableRow(tx) {
   return rowNode(`<tr class="flash">
         <td class="break-word clipboard">
           <a class="hash" href="/tx/${tx.hash}" title="${tx.hash}">${tx.hash}</a>
@@ -69,7 +148,8 @@ function buildTable(target, txType, txns, rowFn) {
       target.appendChild(tr)
     })
   } else {
-    target.innerHTML = `<tr class="no-tx-tr"><td colspan="${txType === 'votes' ? 8 : 4}">No ${txType} in mempool.</td></tr>`
+    const { text, colspan } = EMPTY_STATES[txType]
+    target.innerHTML = `<tr class="no-tx-tr"><td colspan="${colspan}">${text}</td></tr>`
   }
 }
 
@@ -80,12 +160,97 @@ function addTxRow(tx, target, rowFn) {
   target.insertBefore(rowFn(tx), target.firstChild)
 }
 
+function emptyVarStats() {
+  return {
+    tx_count: 0,
+    size: 0,
+    amount: '0',
+    regular_count: 0,
+    regular_amount: '0',
+    ticket_count: 0,
+    ticket_amount: '0',
+    vote_count: 0,
+    vote_amount: '0',
+    revoke_count: 0,
+    revoke_amount: '0'
+  }
+}
+
+// activeSkaIds returns SKA coin-type ids from a coin_stats payload that have at
+// least one mempool tx, sorted ascending. Mirrors orderedMempoolCoinStats in
+// templates.go for the SKA portion.
+function activeSkaIds(coinStats) {
+  if (!coinStats) return []
+  const ids = []
+  Object.entries(coinStats).forEach(([k, v]) => {
+    const id = parseInt(k)
+    if (id === 0 || !v || !v.tx_count || v.tx_count <= 0) return
+    ids.push(id)
+  })
+  ids.sort((a, b) => a - b)
+  return ids
+}
+
+function totalSentSkaCol(id, stats) {
+  const col = document.createElement('div')
+  col.className = 'col-12 col-md-6 col-lg-12 col-xl-6 text-center pb-3 pt-2 pt-md-0 pt-lg-2 pt-xl-0'
+  col.setAttribute('data-coin-type', String(id))
+  const inner = document.createElement('div')
+  inner.className = 'd-inline-block text-center text-md-start text-lg-center text-xl-start'
+  const label = document.createElement('span')
+  label.className = 'text-secondary fs13'
+  label.textContent = 'Total Sent'
+  const amount = document.createElement('span')
+  amount.className = 'h4'
+  amount.textContent = humanize.formatCoinAtoms(stats.amount || '0', id)
+  const sym = document.createElement('span')
+  sym.className = 'text-secondary'
+  sym.textContent = renderCoinType(id)
+  inner.append(label, document.createElement('br'), amount, document.createTextNode(' '), sym)
+  col.appendChild(inner)
+  return col
+}
+
+function regularSkaCol(id, stats) {
+  const col = document.createElement('div')
+  col.className = 'col-12 col-md-6 col-lg-12 col-xl-6 pb-3'
+  col.setAttribute('data-coin-type', String(id))
+  const head = document.createElement('div')
+  head.className = 'text-center text-secondary fs13'
+  head.textContent = 'Regular'
+  const count = document.createElement('div')
+  count.className = 'text-center h4 mb-0'
+  count.textContent = String(stats.regular_count || 0)
+  const totalLine = document.createElement('div')
+  totalLine.className = 'text-center fs13'
+  const amount = document.createElement('span')
+  amount.textContent = humanize.formatCoinAtoms(stats.regular_amount || '0', id)
+  totalLine.append(amount, document.createTextNode(` ${renderCoinType(id)}`))
+  col.append(head, count, totalLine)
+  return col
+}
+
+// syncSkaColsIn rebuilds the SKA (CoinType > 0) child cols of a row to match
+// coin_stats. VAR cols (data-coin-type="0") and any non-coin cols are left
+// untouched. SKA cols are appended after VAR in ascending CoinType order, which
+// matches the server-side render order for stable layout across reloads.
+function syncSkaColsIn(row, coinStats, colFn) {
+  Array.from(row.children).forEach((child) => {
+    const raw = child.getAttribute('data-coin-type')
+    if (raw === null) return
+    const id = parseInt(raw, 10)
+    if (id !== 0) child.remove()
+  })
+  activeSkaIds(coinStats).forEach((id) => {
+    row.appendChild(colFn(id, coinStats[id]))
+  })
+}
+
 export default class extends Controller {
   static get targets() {
     return [
       'bestBlock',
       'bestBlockTime',
-      'tspendTransactions',
       'taddTransactions',
       'voteTransactions',
       'ticketTransactions',
@@ -93,6 +258,9 @@ export default class extends Controller {
       'regularTransactions',
       'mempool',
       'voteTally',
+      'totalSent',
+      'totalSentRow',
+      'transactionsRow',
       'regTotal',
       'regCount',
       'ticketTotal',
@@ -101,18 +269,16 @@ export default class extends Controller {
       'voteCount',
       'revTotal',
       'revCount',
-      'likelyTotal',
       'mempoolSize'
     ]
   }
 
   connect() {
-    // from txhelpers.DetermineTxTypeString
     const mempoolData = this.mempoolTarget.dataset
     ws.send('getmempooltxs', mempoolData.id)
     this.mempool = new Mempool(mempoolData, this.voteTallyTargets)
+    this.lastCoinStats = null
     this.txTargetMap = {
-      'Treasury Spend': this.tspendTransactionsTarget,
       Vote: this.voteTransactionsTarget,
       Ticket: this.ticketTransactionsTarget,
       Revocation: this.revocationTransactionsTarget,
@@ -121,15 +287,10 @@ export default class extends Controller {
     if (this.hasTaddTransactionsTarget) {
       this.txTargetMap['Treasury Add'] = this.taddTransactionsTarget
     }
-    this.countTargetMap = {
-      Vote: this.numVoteTarget,
-      Ticket: this.numTicketTarget,
-      Revocation: this.numRevocationTarget,
-      Regular: this.numRegularTarget
-    }
     ws.registerEvtHandler('newtxs', (evt) => {
       const m = JSON.parse(evt)
       const txs = Array.isArray(m) ? m : m.txs || []
+      if (!Array.isArray(m) && m.coin_stats) this.lastCoinStats = m.coin_stats
       this.mempool.mergeTxs(txs)
       this.renderNewTxns(txs)
       this.setMempoolFigures()
@@ -139,6 +300,7 @@ export default class extends Controller {
     })
     ws.registerEvtHandler('mempool', (evt) => {
       const m = JSON.parse(evt)
+      if (m.coin_stats) this.lastCoinStats = m.coin_stats
       this.mempool.replace(m)
       this.setMempoolFigures()
       this.updateBlock(m)
@@ -146,6 +308,7 @@ export default class extends Controller {
     })
     ws.registerEvtHandler('getmempooltxsResp', (evt) => {
       const m = JSON.parse(evt)
+      if (m.coin_stats) this.lastCoinStats = m.coin_stats
       this.mempool.replace(m)
       this.handleTxsResp(m)
       this.setMempoolFigures()
@@ -169,40 +332,55 @@ export default class extends Controller {
   }
 
   setMempoolFigures() {
-    const totals = this.mempool.totals()
+    this.applyCoinStats(this.lastCoinStats)
+    // Vote tally HTML is driven by the local Mempool helper; vote totals are
+    // already covered by applyCoinStats (CoinStats[0].vote_amount).
     const counts = this.mempool.counts()
-    this.regTotalTarget.textContent = humanize.threeSigFigs(totals.regular)
-    this.regCountTarget.textContent = counts.regular
-
-    this.ticketTotalTarget.textContent = humanize.threeSigFigs(totals.ticket)
-    this.ticketCountTarget.textContent = counts.ticket
-
-    this.voteTotalTarget.textContent = humanize.threeSigFigs(totals.vote)
-
     const ct = this.voteCountTarget
     while (ct.firstChild) ct.removeChild(ct.firstChild)
     this.mempool.voteSpans(counts.vote).forEach((span) => {
       ct.appendChild(span)
     })
-
-    this.revTotalTarget.textContent = humanize.threeSigFigs(totals.rev)
-    this.revCountTarget.textContent = counts.rev
-
-    this.likelyTotalTarget.textContent = humanize.threeSigFigs(totals.total)
+    const totals = this.mempool.totals()
     this.mempoolSizeTarget.textContent = humanize.bytes(totals.size)
-
     this.labelVotes()
-    // this.setVotes()
+  }
+
+  applyCoinStats(coinStats) {
+    const v = (coinStats && coinStats[0]) || emptyVarStats()
+    if (this.hasTotalSentTarget) {
+      this.totalSentTarget.textContent = humanize.formatCoinAtoms(v.amount || '0', 0)
+    }
+    if (this.hasRegCountTarget) this.regCountTarget.textContent = v.regular_count || 0
+    if (this.hasRegTotalTarget) {
+      this.regTotalTarget.textContent = humanize.formatCoinAtoms(v.regular_amount || '0', 0)
+    }
+    if (this.hasTicketCountTarget) this.ticketCountTarget.textContent = v.ticket_count || 0
+    if (this.hasTicketTotalTarget) {
+      this.ticketTotalTarget.textContent = humanize.formatCoinAtoms(v.ticket_amount || '0', 0)
+    }
+    if (this.hasVoteTotalTarget) {
+      this.voteTotalTarget.textContent = humanize.formatCoinAtoms(v.vote_amount || '0', 0)
+    }
+    if (this.hasRevCountTarget) this.revCountTarget.textContent = v.revoke_count || 0
+    if (this.hasRevTotalTarget) {
+      this.revTotalTarget.textContent = humanize.formatCoinAtoms(v.revoke_amount || '0', 0)
+    }
+    if (this.hasTotalSentRowTarget) {
+      syncSkaColsIn(this.totalSentRowTarget, coinStats, totalSentSkaCol)
+    }
+    if (this.hasTransactionsRowTarget) {
+      syncSkaColsIn(this.transactionsRowTarget, coinStats, regularSkaCol)
+    }
   }
 
   handleTxsResp(m) {
-    buildTable(this.regularTransactionsTarget, 'regular transactions', m.tx, txTableRow)
-    buildTable(this.revocationTransactionsTarget, 'revocations', m.revs, txTableRow)
+    buildTable(this.regularTransactionsTarget, 'regular', m.tx, txTableRow)
+    buildTable(this.revocationTransactionsTarget, 'revocations', m.revs, revocationTableRow)
     buildTable(this.voteTransactionsTarget, 'votes', m.votes, voteTxTableRow)
-    buildTable(this.ticketTransactionsTarget, 'tickets', m.tickets, txTableRow)
-    buildTable(this.tspendTransactionsTarget, 'tspends', m.tspends, treasuryTxTableRow)
+    buildTable(this.ticketTransactionsTarget, 'tickets', m.tickets, ticketTableRow)
     if (this.hasTaddTransactionsTarget) {
-      buildTable(this.taddTransactionsTarget, 'tadds', m.tadds, treasuryTxTableRow)
+      buildTable(this.taddTransactionsTarget, 'tadds', m.tadds, treasuryAddTableRow)
     }
   }
 
@@ -211,23 +389,31 @@ export default class extends Controller {
     // top, the end result matches the original input order (newest at top).
     const txsToRender = [...txs].reverse()
     each(txsToRender, (tx) => {
-      incrementValue(this.countTargetMap[tx.Type])
+      incrementValue(this.countTargetMap ? this.countTargetMap[tx.Type] : null)
       let rowFn
       switch (tx.Type) {
         case 'Vote':
           rowFn = voteTxTableRow
           break
-        case 'Treasury Spend':
-          rowFn = treasuryTxTableRow
+        case 'Ticket':
+          rowFn = ticketTableRow
+          break
+        case 'Revocation':
+          rowFn = revocationTableRow
           break
         case 'Treasury Add':
           if (!this.hasTaddTransactionsTarget) return
-          rowFn = treasuryTxTableRow
+          rowFn = treasuryAddTableRow
           break
+        case 'Treasury Spend':
+          // Treasury Spends are not displayed on the mempool page.
+          return
         default:
           rowFn = txTableRow
       }
-      addTxRow(tx, this.txTargetMap[tx.Type], rowFn)
+      const target = this.txTargetMap[tx.Type]
+      if (!target) return
+      addTxRow(tx, target, rowFn)
     })
   }
 

@@ -108,21 +108,6 @@ JS reads `entry.symbol`, `entry.gq_fill_ratio`, `entry.pct_of_tc`, etc. directly
 
 ---
 
-## Risk: `mempool.tmpl` renders SKA txs as zero DCR
-
-**Trigger:**
-Routing more SKA transactions through the full mempool page without converting the row template to multi-coin rendering.
-
-**Affected flows:**
-- [/wiki/code-analysis/mempool/flow.full.md](flow.full.md)
-
-**Failure mode:** silent.
-
-**Description:**
-[cmd/dcrdata/views/mempool.tmpl](../../../cmd/dcrdata/views/mempool.tmpl) still uses `.LikelyMineable.RegularTotal/TicketTotal/VoteTotal/RevokeTotal` and `{{float64AsDecimalParts .TotalOut 8 false}}` per row — both VAR-only. `MempoolTx.TotalOut` for an SKA tx is `0` (collector sums VAR outputs only). The home page (`home_mempool.tmpl`) handles SKA correctly via `.SKATotals` branching; the full mempool page does not. Any SKA-heavy mempool state will silently render as a screen of zero-amount rows.
-
----
-
 ## Risk: Lock-order inversion on inventory
 
 **Trigger:**
