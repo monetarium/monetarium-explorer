@@ -2341,49 +2341,47 @@ func (pgb *ChainDB) mergedTxnCount(ctx context.Context, addr string, txnView dbt
 }
 
 // nonMergedTxnCount gets the non-merged address transaction view row count via
-// AddressBalance, which checks the cache and falls back to a DB query.
+// a direct DB count query.
 func (pgb *ChainDB) nonMergedTxnCount(ctx context.Context, addr string, txnView dbtypes.AddrTxnViewType, coinType uint8) (int, error) {
-	bal, _, err := pgb.AddressBalance(ctx, addr)
+	ctx, cancel := context.WithTimeout(ctx, pgb.queryTimeout)
+	defer cancel()
+
+	var count int64
+	var err error
+
+	// Use direct COUNT query instead of balance-derived estimate.
+	// Balance tracks spent/unspent pairs but misses unspent outputs without a matching tx.
+	if coinType == dbtypes.CoinTypeAll {
+		count, err = retrieveAddressCountAll(ctx, pgb.db, addr)
+	} else {
+		count, err = retrieveAddressCount(ctx, pgb.db, addr, coinType)
+	}
 	if err != nil {
 		return 0, err
 	}
 
-	// When no coin filter, sum across all coins.
-	if coinType == dbtypes.CoinTypeAll {
-		var numSpent, numUnspent int64
-		for _, cb := range bal.Coins {
-			numSpent += cb.NumSpent
-			numUnspent += cb.NumUnspent
-		}
-		switch txnView {
-		case dbtypes.AddrTxnAll:
-			return int((numSpent * 2) + numUnspent), nil
-		case dbtypes.AddrTxnCredit:
-			return int(numSpent + numUnspent), nil
-		case dbtypes.AddrTxnDebit:
-			return int(numSpent), nil
-		default:
-			return 0, fmt.Errorf("NonMergedTxnCount: requested count for merged view")
-		}
-	}
-
-	coinBal := bal.Coins[coinType]
-	if coinBal == nil {
-		return 0, nil
-	}
-
-	var count int64
 	switch txnView {
-	case dbtypes.AddrTxnAll:
-		count = (coinBal.NumSpent * 2) + coinBal.NumUnspent
-	case dbtypes.AddrTxnCredit:
-		count = coinBal.NumSpent + coinBal.NumUnspent
+	case dbtypes.AddrTxnAll, dbtypes.AddrTxnCredit:
+		return int(count), nil
 	case dbtypes.AddrTxnDebit:
-		count = coinBal.NumSpent
+		// For debit view, use balance to estimate spending count.
+		// A direct count of debit rows would require a more complex query.
+		bal, _, err := pgb.AddressBalance(ctx, addr)
+		if err != nil {
+			return int(count), nil
+		}
+		var numSpent int64
+		if coinType == dbtypes.CoinTypeAll {
+			for _, cb := range bal.Coins {
+				numSpent += cb.NumSpent
+			}
+		} else if cb := bal.Coins[coinType]; cb != nil {
+			numSpent = cb.NumSpent
+		}
+		return int(numSpent), nil
 	default:
 		return 0, fmt.Errorf("NonMergedTxnCount: requested count for merged view")
 	}
-	return int(count), nil
 }
 
 // CountTransactions gets the total row count for the given address and address
@@ -2488,24 +2486,12 @@ func (pgb *ChainDB) AddressHistory(ctx context.Context, address string, N, offse
 						len(addressRows))
 			}
 
-			// Build per-coin balance from aggregated data
-			coins := make(map[uint8]*dbtypes.CoinBalance)
-			// VAR coin
-			varCoin := dbtypes.NewCoinBalance(0)
-			varCoin.NumSpent = addrInfo.NumSpendingTxns
-			varCoin.NumUnspent = addrInfo.NumFundingTxns - addrInfo.NumSpendingTxns
-			varCoin.TotalSpent = int64(addrInfo.AmountSent)
-			varCoin.TotalUnspent = int64(addrInfo.AmountUnspent)
-			coins[0] = varCoin
-
-			balance = &dbtypes.AddressBalance{
-				Address:      address,
-				Coins:        coins,
-				TotalInputs:  addrInfo.NumSpendingTxns,
-				TotalOutputs: addrInfo.NumFundingTxns,
-				FromStake:    fromStake,
-				ToStake:      toStake,
-			}
+			// Use the full per-coin balance from ReduceAddressHistory directly.
+			// It already has correct Coins map (VAR + all SKA types).
+			balance = addrInfo.Balance
+			balance.Address = address
+			balance.FromStake = fromStake
+			balance.ToStake = toStake
 		}
 		// Update balance cache.
 		blockID := cache.NewBlockID(hash, height)
@@ -2515,15 +2501,21 @@ func (pgb *ChainDB) AddressHistory(ctx context.Context, address string, N, offse
 		log.Debugf("AddressHistory: Obtaining balance via DB query.")
 		balance, _, err = pgb.AddressBalance(ctx, address)
 		if err != nil && !errors.Is(err, dbtypes.ErrNoResult) && !errors.Is(err, sql.ErrNoRows) {
-			return nil, nil, err
+			log.Errorf("AddressBalance failed for %s: %v, returning rows anyway", address, err)
+			balance = &dbtypes.AddressBalance{
+				Address: address,
+				Coins:   make(map[uint8]*dbtypes.CoinBalance),
+			}
 		}
 	}
 
-	log.Infof("%s: %d spent totalling %f DCR, %d unspent totalling %f DCR",
-		address, balance.TotalInputs, dcrutil.Amount(balance.Coins[0].TotalSpent).ToCoin(),
-		balance.TotalOutputs-balance.TotalInputs, dcrutil.Amount(balance.Coins[0].TotalUnspent).ToCoin())
-	log.Infof("Receive count for address %s: count = %d at block %d.",
-		address, balance.TotalOutputs, height)
+	if balance != nil && balance.Coins != nil && balance.Coins[0] != nil {
+		log.Infof("%s: %d spent totalling %f DCR, %d unspent totalling %f DCR",
+			address, balance.TotalInputs, dcrutil.Amount(balance.Coins[0].TotalSpent).ToCoin(),
+			balance.TotalOutputs-balance.TotalInputs, dcrutil.Amount(balance.Coins[0].TotalUnspent).ToCoin())
+		log.Infof("Receive count for address %s: count = %d at block %d.",
+			address, balance.TotalOutputs, height)
+	}
 
 	return addressRows, balance, nil
 }
@@ -2566,7 +2558,7 @@ func (pgb *ChainDB) AddressData(ctx context.Context, address string, limitN, off
 		// unconfirmed transactions (or none at all).
 		addrData = new(dbtypes.AddressInfo)
 		populateTemplate()
-		addrData.Balance = &dbtypes.AddressBalance{}
+		addrData.Balance = &dbtypes.AddressBalance{Address: address, Coins: make(map[uint8]*dbtypes.CoinBalance)}
 		// Still populate ActiveCoins even with no confirmed transactions
 		addrData.ActiveCoins = activeCoins
 		log.Tracef("AddressHistory: No confirmed transactions for address %s.", address)
@@ -2592,24 +2584,31 @@ func (pgb *ChainDB) AddressData(ctx context.Context, address string, limitN, off
 		// Balances and txn counts
 		populateTemplate()
 
-		// Balance always holds the full per-coin map (summary card reads it).
-		// KnownTxns are computed per-coin below for pagination.
-		addrData.Balance = balance
+		// Use the balance computed by ReduceAddressHistory (from transactions).
+		// It has correct per-coin Coins map. Fall back to DB balance if available.
+		if addrData.Balance == nil {
+			addrData.Balance = balance
+		}
+		if addrData.Balance == nil {
+			addrData.Balance = &dbtypes.AddressBalance{Address: address, Coins: make(map[uint8]*dbtypes.CoinBalance)}
+		} else if addrData.Balance.Coins == nil {
+			addrData.Balance.Coins = make(map[uint8]*dbtypes.CoinBalance)
+		}
 
 		// Compute KnownTxns from the selected coin or all coins.
 		var knownSpent, knownUnspent int64
 		if coinType == dbtypes.CoinTypeAll {
-			for _, cb := range balance.Coins {
+			for _, cb := range addrData.Balance.Coins {
 				knownSpent += cb.NumSpent
 				knownUnspent += cb.NumUnspent
 			}
-		} else if coinBal := balance.Coins[coinType]; coinBal != nil {
+		} else if coinBal := addrData.Balance.Coins[coinType]; coinBal != nil {
 			knownSpent = coinBal.NumSpent
 			knownUnspent = coinBal.NumUnspent
 		}
 		addrData.KnownSpendingTxns = knownSpent
-		addrData.KnownFundingTxns = knownSpent + knownUnspent
-		addrData.KnownTransactions = addrData.KnownSpendingTxns + addrData.KnownFundingTxns
+		addrData.KnownFundingTxns = knownUnspent
+		addrData.KnownTransactions = knownSpent + knownUnspent
 
 		// ActiveCoins already populated above
 		addrData.ActiveCoins = activeCoins
@@ -2630,7 +2629,14 @@ func (pgb *ChainDB) AddressData(ctx context.Context, address string, limitN, off
 			// For non-merged views, use the balance data.
 			switch txnType {
 			case dbtypes.AddrTxnAll:
-				addrData.TxnCount = addrData.KnownFundingTxns + addrData.KnownSpendingTxns
+				// Use real count from DB, not balance-derived estimate.
+				// Balance tracks only spent/unspent outpoint pairs — misses unspent outputs without a matching tx.
+				realCount, err := pgb.CountTransactions(ctx, address, txnType, coinType)
+				if err == nil {
+					addrData.TxnCount = int64(realCount)
+				} else {
+					addrData.TxnCount = addrData.KnownFundingTxns + addrData.KnownSpendingTxns
+				}
 			case dbtypes.AddrTxnCredit:
 				addrData.TxnCount = addrData.KnownFundingTxns
 				addrData.Transactions = addrData.TxnsFunding

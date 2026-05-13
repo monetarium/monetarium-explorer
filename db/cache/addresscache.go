@@ -537,8 +537,16 @@ func (d *AddressCacheItem) Transactions(N, offset int, txnView dbtypes.AddrTxnVi
 		return []*dbtypes.AddressRowCompact(nil), nil, nil
 	}
 
+	// Filter by ValidMainChain before slicing.
+	filteredRows := make([]*dbtypes.AddressRowCompact, 0, len(d.rows))
+	for _, r := range d.rows {
+		if r.ValidMainChain {
+			filteredRows = append(filteredRows, r)
+		}
+	}
+
 	blockID := d.blockID()
-	numRows := len(d.rows)
+	numRows := len(filteredRows)
 
 	if N == 0 || numRows == 0 || offset >= numRows {
 		// Not a cache miss, just no requested or matching data.
@@ -551,16 +559,16 @@ func (d *AddressCacheItem) Transactions(N, offset int, txnView dbtypes.AddrTxnVi
 	switch txnView {
 	case dbtypes.AddrTxnAll:
 		// []*dbtypes.AddressRowCompact
-		return addressRows(d.rows, N, offset), blockID, nil
+		return addressRows(filteredRows, N, offset), blockID, nil
 	case dbtypes.AddrTxnCredit:
-		return creditAddressRows(d.rows, N, offset), blockID, nil
+		return creditAddressRows(filteredRows, N, offset), blockID, nil
 	case dbtypes.AddrTxnDebit:
-		return debitAddressRows(d.rows, N, offset), blockID, nil
+		return debitAddressRows(filteredRows, N, offset), blockID, nil
 	case dbtypes.AddrMergedTxn, dbtypes.AddrMergedTxnCredit, dbtypes.AddrMergedTxnDebit:
 		// []*dbtypes.AddressRowMerged
-		return dbtypes.MergeRowsCompactRange(d.rows, N, offset, txnView), blockID, nil
+		return dbtypes.MergeRowsCompactRange(filteredRows, N, offset, txnView), blockID, nil
 	case dbtypes.AddrUnspentTxn:
-		return unspentCreditAddressRows(d.rows, N, offset), blockID, nil
+		return unspentCreditAddressRows(filteredRows, N, offset), blockID, nil
 	default:
 		// This should already be caught by IsMerged err check.
 		return nil, nil, fmt.Errorf("unrecognized address transaction view: %v", txnView)

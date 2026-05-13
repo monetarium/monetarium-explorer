@@ -1888,6 +1888,19 @@ func retrieveAddressTxnsStmtAll(ctx context.Context, db *sql.DB, address string,
 	return scanAddressQueryRows(rows, creditDebitQuery)
 }
 
+// Count address rows by type (non-merged views).
+func retrieveAddressCountAll(ctx context.Context, db *sql.DB, address string) (int64, error) {
+	var count int64
+	err := db.QueryRowContext(ctx, internal.SelectAddressAllCountByAddress, address).Scan(&count)
+	return count, err
+}
+
+func retrieveAddressCount(ctx context.Context, db *sql.DB, address string, coinType uint8) (int64, error) {
+	var count int64
+	err := db.QueryRowContext(ctx, internal.SelectAddressCountByAddress, address, coinType).Scan(&count)
+	return count, err
+}
+
 func retrieveAddressTxnsStmt(ctx context.Context, db *sql.DB, address string, N, offset int64,
 	statement string, queryType int, coinType uint8) ([]*dbtypes.AddressRow, error) {
 	rows, err := db.QueryContext(ctx, statement, address, coinType, N, offset)

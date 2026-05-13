@@ -202,6 +202,14 @@ const (
 	SelectAddressesMergedCountAll = `SELECT COUNT( DISTINCT tx_hash ) FROM addresses
 		WHERE address = $1 AND valid_mainchain;`
 
+	// Count queries for pagination (no coin filter).
+	SelectAddressAllCountByAddress = `SELECT COUNT(*) FROM addresses
+		WHERE address=$1 AND valid_mainchain;`
+
+	// Count queries for pagination (with coin filter).
+	SelectAddressCountByAddress = `SELECT COUNT(*) FROM addresses
+		WHERE address=$1 AND coin_type=$2 AND valid_mainchain;`
+
 	// SelectAddressSpentUnspentCountAndValue gets the number and combined spent
 	// and unspent outpoints for the given address. The key is the "GROUP BY
 	// is_funding, matching_tx_hash=''" part of the statement that gets the data
@@ -228,7 +236,7 @@ const (
 			coin_type,
 			COUNT(*),
 			SUM(value),
-			COALESCE(SUM(ska_value::numeric), 0)::text AS ska_total,
+			COALESCE(SUM(NULLIF(ska_value, '')::numeric), 0)::text AS ska_total,
 			is_funding,
 			(matching_tx_hash IS NULL) AS all_empty_matching
 			-- NOT BOOL_AND(matching_tx_hash IS NULL) AS no_empty_matching
