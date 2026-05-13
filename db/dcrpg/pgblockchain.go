@@ -2507,6 +2507,16 @@ func (pgb *ChainDB) AddressHistory(ctx context.Context, address string, N, offse
 				Coins:   make(map[uint8]*dbtypes.CoinBalance),
 			}
 		}
+		// TODO: Remove flat VAR fields sync once frontend is updated for multi-coin support.
+		// Sync flat fields from Coins[0] for backward compatibility.
+		if balance != nil && balance.Coins != nil {
+			if varBal, ok := balance.Coins[0]; ok {
+				balance.TotalSpent = varBal.TotalSpent
+				balance.TotalUnspent = varBal.TotalUnspent
+				balance.NumSpent = varBal.NumSpent
+				balance.NumUnspent = varBal.NumUnspent
+			}
+		}
 	}
 
 	if balance != nil && balance.Coins != nil && balance.Coins[0] != nil {
@@ -2584,15 +2594,24 @@ func (pgb *ChainDB) AddressData(ctx context.Context, address string, limitN, off
 		// Balances and txn counts
 		populateTemplate()
 
-		// Use the balance computed by ReduceAddressHistory (from transactions).
-		// It has correct per-coin Coins map. Fall back to DB balance if available.
-		if addrData.Balance == nil {
-			addrData.Balance = balance
-		}
+		// Use the DB-computed full balance for the summary card. ReduceAddressHistory
+		// computes balance from the paginated row slice which only has N rows, giving
+		// wrong totals for every page except the first. Always prefer the full
+		// balance from AddressHistory.
+		addrData.Balance = balance
 		if addrData.Balance == nil {
 			addrData.Balance = &dbtypes.AddressBalance{Address: address, Coins: make(map[uint8]*dbtypes.CoinBalance)}
 		} else if addrData.Balance.Coins == nil {
 			addrData.Balance.Coins = make(map[uint8]*dbtypes.CoinBalance)
+		}
+
+		// TODO: Remove flat VAR field sync once frontend uses Coins map directly.
+		// Sync flat fields from Coins[0] to keep template backward compatible.
+		if varBal, ok := addrData.Balance.Coins[0]; ok {
+			addrData.Balance.TotalSpent = varBal.TotalSpent
+			addrData.Balance.TotalUnspent = varBal.TotalUnspent
+			addrData.Balance.NumSpent = varBal.NumSpent
+			addrData.Balance.NumUnspent = varBal.NumUnspent
 		}
 
 		// Compute KnownTxns from the selected coin or all coins.

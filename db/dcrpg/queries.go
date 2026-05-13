@@ -1609,6 +1609,16 @@ func retrieveAddressBalance(ctx context.Context, db *sql.DB, address string) (ba
 		balance.TotalInputs += cb.NumSpent
 		balance.TotalOutputs += cb.NumSpent + cb.NumUnspent
 	}
+
+	// TODO: Remove flat VAR fields once frontend is updated for multi-coin support.
+	// Sync flat fields from Coins[0] for backward compatibility.
+	if varBal, ok := balance.Coins[0]; ok {
+		balance.TotalSpent = varBal.TotalSpent
+		balance.TotalUnspent = varBal.TotalUnspent
+		balance.NumSpent = varBal.NumSpent
+		balance.NumUnspent = varBal.NumUnspent
+	}
+
 	closeRows(rows)
 
 	err = dbtx.Commit()
