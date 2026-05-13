@@ -602,5 +602,5 @@ func UnconfirmedTxnsForAddress(client MempoolTxGetter, address string,
 		addressOutpoints.Update(prevTxns, outpoints, prevouts)
 	}
 
-	return addressOutpoints, nil, err
+	return addressOutpoints, map[uint8]int64{}, err
 }

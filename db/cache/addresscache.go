@@ -894,11 +894,12 @@ func (ac *AddressCache) Rows(addr string, coinType uint8) ([]*dbtypes.AddressRow
 		ac.cacheMetrics.rowMiss()
 		return nil, nil
 	}
-	ac.cacheMetrics.rowHit()
 	rows, _ := aci.Rows()
 	if rows == nil {
+		ac.cacheMetrics.rowMiss()
 		return nil, nil
 	}
+	ac.cacheMetrics.rowHit()
 	var filtered []*dbtypes.AddressRowCompact
 	for _, r := range rows {
 		if r.CoinType == coinType {

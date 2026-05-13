@@ -2423,6 +2423,24 @@ func BigAddSKA(acc *big.Int, s string) {
 // bigAddSKA is the package-local alias.
 func bigAddSKA(acc *big.Int, s string) { BigAddSKA(acc, s) }
 
+// FormatSKAPerVAR formats a SKA atom string as a human-readable coin amount
+// (e.g. "1.23 SKA1"). coinType is the SKA type number (1-255).
+func FormatSKAPerVAR(atomsStr string, coinType uint8) string {
+	atoms, ok := new(big.Int).SetString(atomsStr, 10)
+	if !ok {
+		return "0 SKA" + strconv.FormatUint(uint64(coinType), 10)
+	}
+	denom := new(big.Int).Exp(big.NewInt(10), big.NewInt(18), nil)
+	coins := new(big.Float).Quo(new(big.Float).SetInt(atoms), new(big.Float).SetInt(denom))
+	label := "SKA" + strconv.FormatUint(uint64(coinType), 10)
+	s := coins.Text('f', 18)
+	if strings.Contains(s, ".") {
+		s = strings.TrimRight(s, "0")
+		s = strings.TrimRight(s, ".")
+	}
+	return s + " " + label
+}
+
 // HasStakeOutputs checks whether any of the Address tx outputs were
 // stake-related.
 func (balance *AddressBalance) HasStakeOutputs() bool {

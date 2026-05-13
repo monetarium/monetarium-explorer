@@ -1801,9 +1801,9 @@ func (c *appContext) addressIoCsv(crlf bool, w http.ResponseWriter, r *http.Requ
 
 		var amount string
 		if r.CoinType == 0 {
-			amount = strconv.FormatFloat(dcrutil.Amount(r.Value).ToCoin(), 'f', -1, 64)
+			amount = strconv.FormatFloat(dcrutil.Amount(r.Value).ToCoin(), 'f', 8, 64)
 		} else {
-			amount = r.SKAValue
+			amount = dbtypes.FormatSKAPerVAR(r.SKAValue, r.CoinType)
 		}
 
 		err = writer.Write([]string{

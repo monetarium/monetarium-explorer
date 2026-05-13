@@ -2510,7 +2510,7 @@ func (pgb *ChainDB) AddressHistory(ctx context.Context, address string, N, offse
 	}
 
 	if balance != nil && balance.Coins != nil && balance.Coins[0] != nil {
-		log.Infof("%s: %d spent totalling %f DCR, %d unspent totalling %f DCR",
+		log.Infof("%s: %d spent totalling %f VAR, %d unspent totalling %f VAR",
 			address, balance.TotalInputs, dcrutil.Amount(balance.Coins[0].TotalSpent).ToCoin(),
 			balance.TotalOutputs-balance.TotalInputs, dcrutil.Amount(balance.Coins[0].TotalUnspent).ToCoin())
 		log.Infof("Receive count for address %s: count = %d at block %d.",
@@ -2525,8 +2525,8 @@ func (pgb *ChainDB) AddressData(ctx context.Context, address string, limitN, off
 	txnType dbtypes.AddrTxnViewType, coinType uint8) (addrData *dbtypes.AddressInfo, err error) {
 	var activeCoins []uint8
 	_, addrType, addrErr := txhelpers.AddressValidation(address, pgb.chainParams)
-	if addrErr != nil && !errors.Is(err, txhelpers.AddressErrorNoError) {
-		return nil, err
+	if addrErr != nil && !errors.Is(addrErr, txhelpers.AddressErrorNoError) {
+		return nil, addrErr
 	}
 
 	merged, err := txnType.IsMerged()
