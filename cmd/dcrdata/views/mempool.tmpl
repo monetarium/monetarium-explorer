@@ -115,9 +115,14 @@
                       <table class="table">
                           <thead>
                             <tr>
-                              <th>Transaction ID</th>
+                              <th class="position-relative" data-tooltip="Transaction ID">
+                                <span class="d-sm-none">TxID</span>
+                                <span class="d-none d-sm-inline">Transaction ID</span>
+                              </th>
                               <th class="text-end">Total VAR</th>
-                              <th class="text-end">Time in Mempool</th>
+                              <th class="text-end position-relative" data-tooltip="Time in Mempool">
+                                Age
+                              </th>
                             </tr>
                           </thead>
                           <tbody data-mempool-target="taddTransactions">
@@ -145,13 +150,18 @@
                       <table class="table">
                           <thead>
                             <tr>
-                              <th>Transaction ID</th>
+                              <th class="position-relative" data-tooltip="Transaction ID">
+                                <span class="d-sm-none">TxID</span>
+                                <span class="d-none d-sm-inline">Transaction ID</span>
+                              </th>
                               <th>Voting On</th>
                               <th class="text-end"><div class="inline-block position-relative"><span class="d-none d-sm-inline">Validator ID</span><span class="d-inline d-sm-none" data-tooltip="Validator ID">VID</span></div></th>
                               <th class="text-end"><div class="inline-block position-relative"><span class="d-none d-sm-inline">Vote Version</span><span class="d-inline d-sm-none" data-tooltip="Vote Version">Ver</span></div></th>
                               <th class="text-end d-none d-sm-table-cell">Total VAR</th>
                               <th class="text-end">Size</th>
-                              <th class="text-end d-none d-sm-table-cell jsonly">Time in Mempool</th>
+                              <th class="text-end d-none d-sm-table-cell jsonly position-relative" data-tooltip="Time in Mempool">
+                                Age
+                              </th>
                             </tr>
                           </thead>
                           <tbody data-mempool-target="voteTransactions">
@@ -192,11 +202,19 @@
                       <table class="table">
                           <thead>
                             <tr>
-                              <th>Transaction ID</th>
+                              <th class="position-relative" data-tooltip="Transaction ID">
+                                <span class="d-sm-none">TxID</span>
+                                <span class="d-none d-sm-inline">Transaction ID</span>
+                              </th>
                               <th class="text-end">Total VAR</th>
                               <th class="text-end">Size</th>
-                              <th class="text-end">Fee Rate</th>
-                              <th class="text-end">Time in Mempool</th>
+                              <th class="text-end position-relative" data-tooltip="Fee Rate">
+                                <span class="d-sm-none">Fee</span>
+                                <span class="d-none d-sm-inline">Fee Rate</span>
+                              </th>
+                              <th class="text-end position-relative" data-tooltip="Time in Mempool">
+                                Age
+                              </th>
                             </tr>
                           </thead>
                           <tbody data-mempool-target="ticketTransactions">
@@ -231,10 +249,15 @@
                       <table class="table">
                           <thead>
                             <tr>
-                              <th>Transaction ID</th>
+                              <th class="position-relative" data-tooltip="Transaction ID">
+                                <span class="d-sm-none">TxID</span>
+                                <span class="d-none d-sm-inline">Transaction ID</span>
+                              </th>
                               <th class="text-end">Total VAR</th>
                               <th class="text-end">Size</th>
-                              <th class="text-end">Time in Mempool</th>
+                              <th class="text-end position-relative" data-tooltip="Time in Mempool">
+                                Age
+                              </th>
                             </tr>
                           </thead>
                           <tbody data-mempool-target="revocationTransactions">
@@ -268,12 +291,20 @@
                       <table class="table">
                           <thead>
                             <tr>
-                              <th>Transaction ID</th>
+                              <th class="position-relative" data-tooltip="Transaction ID">
+                                <span class="d-sm-none">TxID</span>
+                                <span class="d-none d-sm-inline">Transaction ID</span>
+                              </th>
                               <th class="text-start">Coin</th>
-                              <th class="text-end">Amount</th>
+                              <th class="text-end">Total</th>
                               <th class="text-end">Size</th>
-                              <th class="text-end">Fee Rate</th>
-                              <th class="text-end">Time in Mempool</th>
+                              <th class="text-end position-relative" data-tooltip="Fee Rate">
+                                <span class="d-sm-none">Fee</span>
+                                <span class="d-none d-sm-inline">Fee Rate</span>
+                              </th>
+                              <th class="text-end position-relative" data-tooltip="Time in Mempool">
+                                Age
+                              </th>
                             </tr>
                           </thead>
                           <tbody data-mempool-target="regularTransactions">
