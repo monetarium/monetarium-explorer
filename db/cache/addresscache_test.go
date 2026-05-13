@@ -96,9 +96,10 @@ func TestAddressCacheItem_Transactions(t *testing.T) {
 	txHash, _ := chainhash.NewHashFromStr("05e7195ce139c62a46cb77e0002018a14ebe7e6442cd6c2e39274902a44a2a66")
 	aci.rows = []*dbtypes.AddressRowCompact{
 		{
-			Address: "Dsnieug5H7Zn3SjUWwbcZ17ox9d3F2TEvZV",
-			TxHash:  dbtypes.ChainHash(*txHash),
-			Value:   121,
+			Address:        "Dsnieug5H7Zn3SjUWwbcZ17ox9d3F2TEvZV",
+			TxHash:         dbtypes.ChainHash(*txHash),
+			Value:          121,
+			ValidMainChain: true,
 		},
 	}
 
