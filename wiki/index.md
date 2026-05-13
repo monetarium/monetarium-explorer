@@ -72,10 +72,12 @@ _Aggregation and grouping of blocks over specific time intervals (days, weeks, m
 
 ### Mempool
 
-_Multi-coin aggregation, websocket data preparation, and template rendering for unconfirmed transactions._
+_Multi-coin aggregation (CoinStats + derived CoinFills), dual collection paths (batch ParseTxns at block boundary vs. incremental addTxToCoinStats per tx), multi-saver fan-out, dual-transport WS delivery, and live indicator rendering._
 
-- flow (compact): code-analysis/mempool/flow.compact.md — high-level summary of mempool state aggregation
-- flow (full): code-analysis/mempool/flow.full.md — detailed, step-by-step function trace for deep debugging of mempool data tracking
+- flow (compact): code-analysis/mempool/flow.compact.md — high-level summary of mempool state aggregation, fan-out, and WS delivery
+- flow (full): code-analysis/mempool/flow.full.md — detailed, step-by-step function trace covering monitor/collector, savers, CoinFills derivation, WS encoders, templates, and JS controller
+- patterns: code-analysis/mempool/patterns.md — batch+incremental aggregation, multi-saver fan-out, dual-transport WS, atom-string arithmetic, derived-view dual write, inventory locking, rAF indicator batching
+- impact: code-analysis/mempool/impact.md — precision, batch/incremental drift, CoinFills recompute gaps, saver nil-guard, DeepCopy/Trim omissions, WS schema drift, Go↔JS drift, mempool.tmpl SKA gap, lock-order inversion
 
 ### Charts
 

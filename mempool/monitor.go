@@ -251,14 +251,15 @@ func (p *MempoolMonitor) TxHandler(rawTx *chainjson.TxRawResult) error {
 		VoutCount: len(msgTx.TxOut),
 		Vin:       p.collector.populateMempoolInputs(p.ctx, msgTx, txType, p.txnsStore),
 		// Coinbase is not in mempool
-		Hash:      hash,
-		Time:      rawTx.Time,
-		Size:      int32(len(rawTx.Hex) / 2),
-		TotalOut:  txhelpers.TotalOutFromMsgTx(msgTx).ToCoin(),
-		Type:      txTypeStr,
-		TypeID:    int(txType),
-		VoteInfo:  voteInfo,
-		SKATotals: txhelpers.SKATotalsFromMsgTx(msgTx),
+		Hash:        hash,
+		Time:        rawTx.Time,
+		Size:        int32(len(rawTx.Hex) / 2),
+		TotalOut:    txhelpers.TotalOutFromMsgTx(msgTx).ToCoin(),
+		Type:        txTypeStr,
+		TypeID:      int(txType),
+		VoteInfo:    voteInfo,
+		SKATotals:   txhelpers.SKATotalsFromMsgTx(msgTx),
+		SKAFeeRates: txhelpers.SKAFeeRateMapFromVerboseVin(rawTx.Vin, msgTx),
 	}
 
 	// Maintain a separate total that excludes votes for sidechain

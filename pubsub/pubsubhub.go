@@ -509,15 +509,17 @@ loop:
 			inv := psh.MempoolInventory()
 			inv.RLock()
 			newTxsPayload := struct {
-				Txs            pstypes.TxList          `json:"txs"`
-				CoinFills      []exptypes.CoinFillData `json:"coin_fills"`
-				TotalFillRatio float64                 `json:"total_fill_ratio"`
-				ActiveSKACount int                     `json:"active_ska_count"`
+				Txs            pstypes.TxList                      `json:"txs"`
+				CoinFills      []exptypes.CoinFillData             `json:"coin_fills"`
+				TotalFillRatio float64                             `json:"total_fill_ratio"`
+				ActiveSKACount int                                 `json:"active_ska_count"`
+				CoinStats      map[uint8]exptypes.MempoolCoinStats `json:"coin_stats"`
 			}{
 				Txs:            txSlice,
 				CoinFills:      inv.MempoolShort.CoinFills,
 				TotalFillRatio: inv.MempoolShort.TotalFillRatio,
 				ActiveSKACount: inv.MempoolShort.ActiveSKACount,
+				CoinStats:      inv.MempoolShort.CoinStats,
 			}
 			inv.RUnlock()
 

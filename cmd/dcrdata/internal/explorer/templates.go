@@ -11,6 +11,7 @@ import (
 	"math"
 	"math/big"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -511,6 +512,56 @@ func formatCoinAtoms(atomStr string, coinType uint8) string {
 	return threeSigFigs(skaCoinValue(atomStr))
 }
 
+// MempoolCoinRow is an ordered per-coin row for mempool template rendering.
+// VAR (CoinType=0) is always present; SKA-n rows follow ascending and only
+// when the coin has at least one mempool tx.
+type MempoolCoinRow struct {
+	CoinType uint8
+	Symbol   string
+	Stats    types.MempoolCoinStats
+}
+
+// orderedMempoolCoinStats returns the per-coin rows for the mempool page in the
+// order required by wiki/specs/mempool/spec.md: VAR (always), then SKA-n
+// ascending with TxCount > 0. Per the mempool flow.compact.md "SKA → Regular
+// only" invariant, all per-type *Count fields on SKA rows are zero except
+// RegularCount, so callers can safely render only the Regular row in the SKA
+// section.
+func orderedMempoolCoinStats(stats map[uint8]types.MempoolCoinStats) []MempoolCoinRow {
+	varStats, ok := stats[0]
+	if !ok {
+		varStats = types.MempoolCoinStats{
+			Amount:        "0",
+			RegularAmount: "0",
+			TicketAmount:  "0",
+			VoteAmount:    "0",
+			RevokeAmount:  "0",
+		}
+	}
+	rows := []MempoolCoinRow{{
+		CoinType: 0,
+		Symbol:   coinSymbol(0),
+		Stats:    varStats,
+	}}
+	skaKeys := make([]int, 0, len(stats))
+	for k, v := range stats {
+		if k == 0 || v.TxCount == 0 {
+			continue
+		}
+		skaKeys = append(skaKeys, int(k))
+	}
+	sort.Ints(skaKeys)
+	for _, k := range skaKeys {
+		ct := uint8(k)
+		rows = append(rows, MempoolCoinRow{
+			CoinType: ct,
+			Symbol:   coinSymbol(ct),
+			Stats:    stats[ct],
+		})
+	}
+	return rows
+}
+
 // formatSKAAmountCell renders the aggregate SKA-amount table cell shared by
 // the Latest Blocks (home) and Blocks listing tables. The rule is:
 //
@@ -706,6 +757,7 @@ func makeTemplateFuncMap(params *chaincfg.Params) template.FuncMap {
 		"formatCoinAtoms":         formatCoinAtoms,
 		"formatSKAAmountCell":     formatSKAAmountCell,
 		"formatAtomsAsCoinString": formatAtomsAsCoinString,
+		"orderedMempoolCoinStats": orderedMempoolCoinStats,
 		"coinDecimalParts": func(atomStr string, coinType uint8, useCommas bool, boldNumPlaces ...int) []string {
 			return coinDecimalParts(atomStr, coinType, useCommas, boldNumPlaces...)
 		},
