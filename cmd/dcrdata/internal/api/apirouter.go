@@ -182,8 +182,8 @@ func NewAPIRouter(app *appContext, JSONIndent string, useRealIP, compressLarge b
 				re.Use(m.AddressPathCtxN(1))
 				re.Get("/totals", app.addressTotals)
 				re.Get("/", app.getAddressTransactions)
-				re.With(m.ChartGroupingCtx).Get("/types/{chartgrouping}", app.getAddressTxTypesData)
-				re.With(m.ChartGroupingCtx).Get("/amountflow/{chartgrouping}", app.getAddressTxAmountFlowData)
+				re.With(m.ChartGroupingCtx, m.CoinCtx).Get("/types/{chartgrouping}", app.getAddressTxTypesData)
+				re.With(m.ChartGroupingCtx, m.CoinCtx).Get("/amountflow/{chartgrouping}", app.getAddressTxAmountFlowData)
 				re.With(compMiddleware).Get("/raw", app.getAddressTransactionsRaw)
 				re.Route("/count/{N}", func(ri chi.Router) {
 					ri.Use(m.NPathCtx)
@@ -196,7 +196,6 @@ func NewAPIRouter(app *appContext, JSONIndent string, useRealIP, compressLarge b
 					})
 				})
 			})
-
 		})
 	})
 
@@ -316,6 +315,7 @@ func NewFileRouter(app *appContext, useRealIP bool) fileMux {
 		rd.Use(m.CacheControl(180))
 		// The carriage return option is handled on the path to facilitate more
 		// effective caching in downstream delivery.
+		rd.Use(m.CoinCtx)
 		rd.With(m.AddressPathCtxN(1)).Get("/io/{address}", app.addressIoCsvNoCR)
 		rd.With(m.AddressPathCtxN(1)).Get("/io/{address}/win", app.addressIoCsvCR)
 	})

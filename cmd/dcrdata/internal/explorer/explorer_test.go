@@ -50,7 +50,7 @@ func (m *mockDataSource) TreasuryTxns(ctx context.Context, n, offset int64, txTy
 func (m *mockDataSource) AddressHistory(ctx context.Context, address string, N, offset int64, txnType dbtypes.AddrTxnViewType) ([]*dbtypes.AddressRow, *dbtypes.AddressBalance, error) {
 	return nil, nil, nil
 }
-func (m *mockDataSource) AddressData(ctx context.Context, address string, N, offset int64, txnType dbtypes.AddrTxnViewType) (*dbtypes.AddressInfo, error) {
+func (m *mockDataSource) AddressData(ctx context.Context, address string, N, offset int64, txnType dbtypes.AddrTxnViewType, coinType uint8) (*dbtypes.AddressInfo, error) {
 	return nil, nil
 }
 func (m *mockDataSource) DevBalance(ctx context.Context) (*dbtypes.AddressBalance, error) {

@@ -188,13 +188,27 @@ const (
 	*/
 
 	SelectAddressesMergedSpentCount = `SELECT COUNT( DISTINCT tx_hash ) FROM addresses
-		WHERE address = $1 AND is_funding = FALSE AND valid_mainchain;`
-
+		WHERE address = $1 AND coin_type = $2 AND is_funding = FALSE AND valid_mainchain;`
 	SelectAddressesMergedFundingCount = `SELECT COUNT( DISTINCT tx_hash ) FROM addresses
-		WHERE address = $1 AND is_funding = TRUE AND valid_mainchain;`
-
+		WHERE address = $1 AND coin_type = $2 AND is_funding = TRUE AND valid_mainchain;`
 	SelectAddressesMergedCount = `SELECT COUNT( DISTINCT tx_hash ) FROM addresses
+		WHERE address = $1 AND coin_type = $2 AND valid_mainchain;`
+
+	// All-coin variants (no coin_type filter) used when ?coin= is absent.
+	SelectAddressesMergedSpentCountAll = `SELECT COUNT( DISTINCT tx_hash ) FROM addresses
+		WHERE address = $1 AND is_funding = FALSE AND valid_mainchain;`
+	SelectAddressesMergedFundingCountAll = `SELECT COUNT( DISTINCT tx_hash ) FROM addresses
+		WHERE address = $1 AND is_funding = TRUE AND valid_mainchain;`
+	SelectAddressesMergedCountAll = `SELECT COUNT( DISTINCT tx_hash ) FROM addresses
 		WHERE address = $1 AND valid_mainchain;`
+
+	// Count queries for pagination (no coin filter).
+	SelectAddressAllCountByAddress = `SELECT COUNT(*) FROM addresses
+		WHERE address=$1 AND valid_mainchain;`
+
+	// Count queries for pagination (with coin filter).
+	SelectAddressCountByAddress = `SELECT COUNT(*) FROM addresses
+		WHERE address=$1 AND coin_type=$2 AND valid_mainchain;`
 
 	// SelectAddressSpentUnspentCountAndValue gets the number and combined spent
 	// and unspent outpoints for the given address. The key is the "GROUP BY
@@ -222,6 +236,7 @@ const (
 			coin_type,
 			COUNT(*),
 			SUM(value),
+			COALESCE(SUM(NULLIF(ska_value, '')::numeric), 0)::text AS ska_total,
 			is_funding,
 			(matching_tx_hash IS NULL) AS all_empty_matching
 			-- NOT BOOL_AND(matching_tx_hash IS NULL) AS no_empty_matching
@@ -230,6 +245,11 @@ const (
 		GROUP BY tx_type=0, coin_type, is_funding,
 			matching_tx_hash IS NULL  -- separate spent and unspent
 		ORDER BY count, is_funding;`
+
+	SelectAddressCoinTypes = `SELECT DISTINCT coin_type
+		FROM addresses
+		WHERE address = $1
+		ORDER BY coin_type`
 
 	SelectAddressUnspentWithTxn = `SELECT
 			addresses.address,
@@ -248,6 +268,12 @@ const (
 	// is_funding=true, there is no need to join vouts on tx_hash and tx_index.
 
 	SelectAddressLimitNByAddress = `SELECT ` + addrsColumnNames + ` FROM addresses
+		WHERE address=$1 AND coin_type=$2 AND valid_mainchain
+		ORDER BY block_time DESC, tx_hash ASC
+		LIMIT $3 OFFSET $4;`
+
+	// All-coin variant (no coin_type filter) used when ?coin= is absent.
+	SelectAddressLimitNByAddressAll = `SELECT ` + addrsColumnNames + ` FROM addresses
 		WHERE address=$1 AND valid_mainchain
 		ORDER BY block_time DESC, tx_hash ASC
 		LIMIT $2 OFFSET $3;`
@@ -316,27 +342,24 @@ const (
 		COUNT(CASE WHEN tx_type = 2 THEN 1 ELSE NULL END) as SSGen,
 		COUNT(CASE WHEN tx_type = 3 THEN 1 ELSE NULL END) as SSRtx
 		FROM addresses
-		WHERE address=$1 AND valid_mainchain
+		WHERE address=$1 AND coin_type=$2 AND valid_mainchain
 		GROUP BY timestamp
 		ORDER BY timestamp;`
-
 	selectAddressAmountFlowByAddress = `SELECT %s as timestamp,
 		SUM(CASE WHEN is_funding = TRUE THEN value ELSE 0 END) as received,
 		SUM(CASE WHEN is_funding = FALSE THEN value ELSE 0 END) as sent
 		FROM addresses
-		WHERE address=$1 AND valid_mainchain
+		WHERE address=$1 AND coin_type=$2 AND valid_mainchain
 		GROUP BY timestamp
 		ORDER BY timestamp;`
 
 	// UPDATEs/SETs
-
 	UpdateAllAddressesMatchingTxHashRange = `UPDATE addresses SET matching_tx_hash=transactions.tx_hash
 		FROM vouts, transactions
 		WHERE block_height >= $1 AND block_height < $2 AND (vouts.value>0 OR vouts.coin_type > 0) AND addresses.is_funding
 			AND vouts.tx_hash=addresses.tx_hash
 			AND vouts.tx_index=addresses.tx_vin_vout_index
 			AND transactions.id=vouts.spend_tx_row_id;`
-
 	UpdateAllAddressesMatchingTxHashRangeXX = `UPDATE addresses SET matching_tx_hash=vins.tx_hash
 		FROM vins, transactions
 		WHERE transactions.block_height >= $1 AND transactions.block_height < $2

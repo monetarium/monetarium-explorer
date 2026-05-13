@@ -772,8 +772,8 @@ func _main(ctx context.Context) error {
 		r.With(explore.BlockHashPathOrIndexCtx).Get("/block/{blockhash}", explore.Block)
 		r.With(explorer.TransactionHashCtx).Get("/tx/{txid}", explore.TxPage)
 		r.With(explorer.TransactionHashCtx, explorer.TransactionIoIndexCtx).Get("/tx/{txid}/{inout}/{inoutid}", explore.TxPage)
-		r.With(explorer.AddressPathCtx).Get("/address/{address}", explore.AddressPage)
-		r.With(explorer.AddressPathCtx).Get("/addresstable/{address}", explore.AddressTable)
+		r.With(explorer.AddressPathCtx, mw.CoinCtx).Get("/address/{address}", explore.AddressPage)
+		r.With(explorer.AddressPathCtx, mw.CoinCtx).Get("/addresstable/{address}", explore.AddressTable)
 		r.Get("/proposals", func(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "proposals not available", http.StatusGone)
 		})

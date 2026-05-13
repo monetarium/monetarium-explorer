@@ -22,6 +22,14 @@ import (
 	"sync"
 	"time"
 
+	apitypes "github.com/monetarium/monetarium-explorer/api/types"
+	m "github.com/monetarium/monetarium-explorer/cmd/dcrdata/internal/middleware"
+	"github.com/monetarium/monetarium-explorer/db/cache"
+	"github.com/monetarium/monetarium-explorer/db/dbtypes"
+	"github.com/monetarium/monetarium-explorer/exchanges"
+	"github.com/monetarium/monetarium-explorer/gov/agendas"
+	"github.com/monetarium/monetarium-explorer/gov/politeia"
+	"github.com/monetarium/monetarium-explorer/txhelpers"
 	"github.com/monetarium/monetarium-node/blockchain/standalone"
 	"github.com/monetarium/monetarium-node/chaincfg"
 	"github.com/monetarium/monetarium-node/chaincfg/chainhash"
@@ -31,15 +39,6 @@ import (
 	"github.com/monetarium/monetarium-node/txscript/stdaddr"
 	"github.com/monetarium/monetarium-node/txscript/stdscript"
 	"github.com/monetarium/monetarium-node/wire"
-
-	apitypes "github.com/monetarium/monetarium-explorer/api/types"
-	m "github.com/monetarium/monetarium-explorer/cmd/dcrdata/internal/middleware"
-	"github.com/monetarium/monetarium-explorer/db/cache"
-	"github.com/monetarium/monetarium-explorer/db/dbtypes"
-	"github.com/monetarium/monetarium-explorer/exchanges"
-	"github.com/monetarium/monetarium-explorer/gov/agendas"
-	"github.com/monetarium/monetarium-explorer/gov/politeia"
-	"github.com/monetarium/monetarium-explorer/txhelpers"
 )
 
 // maxBlockRangeCount is the maximum number of blocks that can be requested at
@@ -63,13 +62,13 @@ type DataSource interface {
 	AddressTotals(ctx context.Context, address string) (*apitypes.AddressTotals, error)
 	VotesInBlock(ctx context.Context, hash string) (int16, error)
 	TxHistoryData(ctx context.Context, address string, addrChart dbtypes.HistoryChart,
-		chartGroupings dbtypes.TimeBasedGrouping) (*dbtypes.ChartsData, error)
+		chartGroupings dbtypes.TimeBasedGrouping, coinType uint8) (*dbtypes.ChartsData, error)
 	TreasuryBalance(context.Context) (*dbtypes.TreasuryBalance, error)
 	BinnedTreasuryIO(ctx context.Context, chartGroupings dbtypes.TimeBasedGrouping) (*dbtypes.ChartsData, error)
 	TicketPoolVisualization(ctx context.Context, interval dbtypes.TimeBasedGrouping) (
 		*dbtypes.PoolTicketsData, *dbtypes.PoolTicketsData, *dbtypes.PoolTicketsData, int64, error)
 	AgendaVotes(ctx context.Context, agendaID string, chartType int) (*dbtypes.AgendaVoteChoices, error)
-	AddressRowsCompact(ctx context.Context, address string) ([]*dbtypes.AddressRowCompact, error)
+	AddressRowsCompact(ctx context.Context, address string, coinType uint8) ([]*dbtypes.AddressRowCompact, error)
 	Height() int64
 	IsDCP0010Active(height int64) bool
 	IsDCP0011Active(height int64) bool
@@ -1758,11 +1757,8 @@ func (c *appContext) addressIoCsv(crlf bool, w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	// TODO: Improve the DB component also to avoid retrieving all row data
-	// and/or put a hard limit on the number of rows that can be retrieved.
-	// However it is a slice of pointers, and they are are also in the address
-	// cache and thus shared across calls to the same address.
-	rows, err := c.DataSource.AddressRowsCompact(ctx, address)
+	coinType := m.GetCoinCtx(r)
+	rows, err := c.DataSource.AddressRowsCompact(ctx, address, coinType)
 	if err != nil {
 		log.Errorf("Failed to fetch AddressTxIoCsv: %v", err)
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
@@ -1778,7 +1774,7 @@ func (c *appContext) addressIoCsv(crlf bool, w http.ResponseWriter, r *http.Requ
 	writer.UseCRLF = crlf
 
 	err = writer.Write([]string{"tx_hash", "direction", "io_index",
-		"valid_mainchain", "value", "time_stamp", "tx_type", "matching_tx_hash"})
+		"valid_mainchain", "coin_type", "amount", "time_stamp", "tx_type", "matching_tx_hash"})
 	if err != nil {
 		return // too late to write an error code
 	}
@@ -1803,12 +1799,20 @@ func (c *appContext) addressIoCsv(crlf bool, w http.ResponseWriter, r *http.Requ
 			matchingTx = r.MatchingTxHash.String()
 		}
 
+		var amount string
+		if r.CoinType == 0 {
+			amount = strconv.FormatFloat(dcrutil.Amount(r.Value).ToCoin(), 'f', 8, 64)
+		} else {
+			amount = dbtypes.FormatSKAPerVAR(r.SKAValue, r.CoinType)
+		}
+
 		err = writer.Write([]string{
 			r.TxHash.String(),
 			strDirection,
 			strconv.FormatUint(uint64(r.TxVinVoutIndex), 10),
 			strValidMainchain,
-			strconv.FormatFloat(dcrutil.Amount(r.Value).ToCoin(), 'f', -1, 64),
+			strconv.FormatUint(uint64(r.CoinType), 10),
+			amount,
 			strconv.FormatInt(r.TxBlockTime, 10),
 			txhelpers.TxTypeToString(int(r.TxType)),
 			matchingTx,
@@ -1817,7 +1821,6 @@ func (c *appContext) addressIoCsv(crlf bool, w http.ResponseWriter, r *http.Requ
 			return // too late to write an error code
 		}
 		writer.Flush()
-		wf.Flush()
 	}
 }
 
@@ -1842,7 +1845,8 @@ func (c *appContext) getAddressTxTypesData(w http.ResponseWriter, r *http.Reques
 		http.Error(w, http.StatusText(http.StatusUnprocessableEntity), http.StatusUnprocessableEntity)
 		return
 	}
-	data, err := c.DataSource.TxHistoryData(ctx, address, dbtypes.TxsType, interval)
+	coinType := m.GetCoinCtx(r)
+	data, err := c.DataSource.TxHistoryData(ctx, address, dbtypes.TxsType, interval, coinType)
 	if dbtypes.IsTimeoutErr(err) {
 		apiLog.Errorf("TxHistoryData: %v", err)
 		http.Error(w, "Database timeout.", http.StatusServiceUnavailable)
@@ -1872,12 +1876,14 @@ func (c *appContext) getAddressTxAmountFlowData(w http.ResponseWriter, r *http.R
 		http.Error(w, http.StatusText(http.StatusUnprocessableEntity), http.StatusUnprocessableEntity)
 		return
 	}
+
 	interval := dbtypes.TimeGroupingFromStr(chartGrouping)
 	if interval == dbtypes.UnknownGrouping {
 		http.Error(w, http.StatusText(http.StatusUnprocessableEntity), http.StatusUnprocessableEntity)
 		return
 	}
-	data, err := c.DataSource.TxHistoryData(ctx, address, dbtypes.AmountFlow, interval)
+	coinType := m.GetCoinCtx(r)
+	data, err := c.DataSource.TxHistoryData(ctx, address, dbtypes.AmountFlow, interval, coinType)
 	if dbtypes.IsTimeoutErr(err) {
 		apiLog.Errorf("TxHistoryData: %v", err)
 		http.Error(w, "Database timeout.", http.StatusServiceUnavailable)

@@ -1447,6 +1447,28 @@ func retrieveAddressSpent(ctx context.Context, db *sql.DB, address string) (coun
 // 	return
 // }
 
+// retrieveAddressCoinTypes gets the sorted list of coin types with activity for an address.
+func retrieveAddressCoinTypes(ctx context.Context, db *sql.DB, address string) ([]uint8, error) {
+	var coinTypes []uint8
+	rows, err := db.QueryContext(ctx, internal.SelectAddressCoinTypes, address)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	defer closeRows(rows)
+
+	for rows.Next() {
+		var ct uint8
+		if err = rows.Scan(&ct); err != nil {
+			return nil, err
+		}
+		coinTypes = append(coinTypes, ct)
+	}
+	return coinTypes, rows.Err()
+}
+
 // retrieveAddressBalance gets the numbers of spent and unspent outpoints
 // for the given address, the total amounts spent and unspent, the number of
 // distinct spending transactions, and the fraction spent to and received from
@@ -1481,20 +1503,40 @@ func retrieveAddressBalance(ctx context.Context, db *sql.DB, address string) (ba
 		return
 	}
 
-	var fromStake, toStake int64
+	balance.Coins = make(map[uint8]*dbtypes.CoinBalance)
+
+	var fromStakeVAR, toStakeVAR int64
+	// Per-coin SKA accumulators (big.Int, keyed by coin_type).
+	skaSpent := make(map[uint8]*big.Int)
+	skaUnspent := make(map[uint8]*big.Int)
+
 	for rows.Next() {
 		var count, totalValue int64
+		var skaTotal string
 		var noMatchingTx, isFunding, isRegular bool
 		var coinType uint8
-		err = rows.Scan(&isRegular, &coinType, &count, &totalValue, &isFunding, &noMatchingTx)
+		err = rows.Scan(&isRegular, &coinType, &count, &totalValue, &skaTotal, &isFunding, &noMatchingTx)
 		if err != nil {
 			return
 		}
 
+		coinBalance, exists := balance.Coins[coinType]
+		if !exists {
+			coinBalance = dbtypes.NewCoinBalance(coinType)
+			balance.Coins[coinType] = coinBalance
+		}
+
 		// Unspent == funding with no matching transaction
 		if isFunding && noMatchingTx {
-			balance.NumUnspent += count
-			balance.TotalUnspent += totalValue
+			coinBalance.NumUnspent += count
+			if coinType == 0 {
+				coinBalance.TotalUnspent += totalValue
+			} else {
+				if skaUnspent[coinType] == nil {
+					skaUnspent[coinType] = new(big.Int)
+				}
+				bigAddSKA(skaUnspent[coinType], skaTotal)
+			}
 		}
 		// Spent == spending (but ensure a matching transaction is set)
 		if !isFunding {
@@ -1503,45 +1545,126 @@ func retrieveAddressBalance(ctx context.Context, db *sql.DB, address string) (ba
 					" unset for %s!", address)
 				continue
 			}
-			balance.NumSpent += count
-			balance.TotalSpent += totalValue
-			if !isRegular {
-				toStake += totalValue
+			coinBalance.NumSpent += count
+			if coinType == 0 {
+				coinBalance.TotalSpent += totalValue
+			} else {
+				if skaSpent[coinType] == nil {
+					skaSpent[coinType] = new(big.Int)
+				}
+				bigAddSKA(skaSpent[coinType], skaTotal)
 			}
-		} else if !isRegular {
-			fromStake += totalValue
+			// Stake metrics computed from VAR only
+			if coinType == 0 && !isRegular {
+				toStakeVAR += totalValue
+			}
+		} else if coinType == 0 && !isRegular {
+			fromStakeVAR += totalValue
 		}
 	}
 	if err = rows.Err(); err != nil {
 		return
 	}
 
-	totalTransfer := balance.TotalSpent + balance.TotalUnspent
-	if totalTransfer > 0 {
-		balance.FromStake = float64(fromStake) / float64(totalTransfer)
+	// Write accumulated SKA strings into CoinBalance and compute TotalReceived.
+	for coinType, cb := range balance.Coins {
+		if coinType > 0 {
+			spent := skaSpent[coinType]
+			unspent := skaUnspent[coinType]
+			if spent != nil {
+				cb.TotalSpentSKA = spent.String()
+			}
+			if unspent != nil {
+				cb.TotalUnspentSKA = unspent.String()
+			}
+			// TotalReceivedSKA = spent + unspent
+			var recv big.Int
+			if spent != nil {
+				recv.Add(&recv, spent)
+			}
+			if unspent != nil {
+				recv.Add(&recv, unspent)
+			}
+			if recv.Sign() > 0 {
+				cb.TotalReceivedSKA = recv.String()
+			}
+		} else {
+			cb.TotalReceived = cb.TotalSpent + cb.TotalUnspent
+		}
 	}
-	if balance.TotalSpent > 0 {
-		balance.ToStake = float64(toStake) / float64(balance.TotalSpent)
+
+	// Compute stake percentages from VAR coin balance only
+	if varBalance, exists := balance.Coins[0]; exists {
+		totalTransferVAR := varBalance.TotalSpent + varBalance.TotalUnspent
+		if totalTransferVAR > 0 {
+			balance.FromStake = float64(fromStakeVAR) / float64(totalTransferVAR)
+		}
+		if varBalance.TotalSpent > 0 {
+			balance.ToStake = float64(toStakeVAR) / float64(varBalance.TotalSpent)
+		}
 	}
+
+	// Compute TotalOutputs and TotalInputs
+	for _, cb := range balance.Coins {
+		balance.TotalInputs += cb.NumSpent
+		balance.TotalOutputs += cb.NumSpent + cb.NumUnspent
+	}
+
+	// TODO: Remove flat VAR fields once frontend is updated for multi-coin support.
+	// Sync flat fields from Coins[0] for backward compatibility.
+	if varBal, ok := balance.Coins[0]; ok {
+		balance.TotalSpent = varBal.TotalSpent
+		balance.TotalUnspent = varBal.TotalUnspent
+		balance.NumSpent = varBal.NumSpent
+		balance.NumUnspent = varBal.NumUnspent
+	}
+
 	closeRows(rows)
 
 	err = dbtx.Commit()
 	return
 }
 
-func countMergedSpendingTxns(ctx context.Context, db *sql.DB, address string) (count int64, err error) {
-	return countMerged(ctx, db, address, internal.SelectAddressesMergedSpentCount)
+func countMergedSpendingTxns(ctx context.Context, db *sql.DB, address string, coinType uint8) (count int64, err error) {
+	if coinType == dbtypes.CoinTypeAll {
+		return countMergedAll(ctx, db, address, internal.SelectAddressesMergedSpentCountAll)
+	}
+	return countMerged(ctx, db, address, coinType, internal.SelectAddressesMergedSpentCount)
 }
 
-func countMergedFundingTxns(ctx context.Context, db *sql.DB, address string) (count int64, err error) {
-	return countMerged(ctx, db, address, internal.SelectAddressesMergedFundingCount)
+func countMergedFundingTxns(ctx context.Context, db *sql.DB, address string, coinType uint8) (count int64, err error) {
+	if coinType == dbtypes.CoinTypeAll {
+		return countMergedAll(ctx, db, address, internal.SelectAddressesMergedFundingCountAll)
+	}
+	return countMerged(ctx, db, address, coinType, internal.SelectAddressesMergedFundingCount)
 }
 
-func countMergedTxns(ctx context.Context, db *sql.DB, address string) (count int64, err error) {
-	return countMerged(ctx, db, address, internal.SelectAddressesMergedCount)
+func countMergedTxns(ctx context.Context, db *sql.DB, address string, coinType uint8) (count int64, err error) {
+	if coinType == dbtypes.CoinTypeAll {
+		return countMergedAll(ctx, db, address, internal.SelectAddressesMergedCountAll)
+	}
+	return countMerged(ctx, db, address, coinType, internal.SelectAddressesMergedCount)
 }
 
-func countMerged(ctx context.Context, db *sql.DB, address, query string) (count int64, err error) {
+func countMergedAll(ctx context.Context, db *sql.DB, address, query string) (count int64, err error) {
+	dbtx, err := db.BeginTx(context.Background(), &sql.TxOptions{Isolation: sql.LevelDefault, ReadOnly: true})
+	if err != nil {
+		return 0, fmt.Errorf("unable to begin database transaction: %w", err)
+	}
+	var sqlCount sql.NullInt64
+	err = dbtx.QueryRowContext(ctx, query, address).Scan(&sqlCount)
+	if err != nil && err != sql.ErrNoRows {
+		if errRoll := dbtx.Rollback(); errRoll != nil {
+			log.Errorf("Rollback failed: %v", errRoll)
+		}
+		return 0, fmt.Errorf("failed to query merged count: %w", err)
+	}
+	count = sqlCount.Int64
+	err = dbtx.Commit()
+	return
+}
+
+func countMerged(ctx context.Context, db *sql.DB, address string, coinType uint8, query string) (count int64, err error) {
 	// Query for merged transaction count.
 	var dbtx *sql.Tx
 	dbtx, err = db.BeginTx(context.Background(), &sql.TxOptions{
@@ -1554,7 +1677,7 @@ func countMerged(ctx context.Context, db *sql.DB, address, query string) (count 
 	}
 
 	var sqlCount sql.NullInt64
-	err = dbtx.QueryRowContext(ctx, query, address).
+	err = dbtx.QueryRowContext(ctx, query, address, coinType).
 		Scan(&sqlCount)
 	if err != nil && err != sql.ErrNoRows {
 		if errRoll := dbtx.Rollback(); errRoll != nil {
@@ -1748,23 +1871,49 @@ func retrieveAllAddressMergedTxns(ctx context.Context, db *sql.DB, address strin
 
 // Regular (non-merged) address transactions queries.
 
-func retrieveAddressTxns(ctx context.Context, db *sql.DB, address string, N, offset int64) ([]*dbtypes.AddressRow, error) {
+func retrieveAddressTxns(ctx context.Context, db *sql.DB, address string, N, offset int64, coinType uint8) ([]*dbtypes.AddressRow, error) {
+	if coinType == dbtypes.CoinTypeAll {
+		return retrieveAddressTxnsStmtAll(ctx, db, address, N, offset)
+	}
 	return retrieveAddressTxnsStmt(ctx, db, address, N, offset,
-		internal.SelectAddressLimitNByAddress, creditDebitQuery)
+		internal.SelectAddressLimitNByAddress, creditDebitQuery, coinType)
 }
 
 // Merged address transactions queries.
 
 func retrieveAddressMergedTxns(ctx context.Context, db *sql.DB, address string, N, offset int64) ([]*dbtypes.AddressRow, error) {
 	return retrieveAddressTxnsStmt(ctx, db, address, N, offset,
-		internal.SelectAddressMergedView, mergedQuery)
+		internal.SelectAddressMergedView, mergedQuery, 0)
 }
 
 // Address transaction query helpers.
 
+// retrieveAddressTxnsStmtAll fetches rows without a coin_type filter.
+func retrieveAddressTxnsStmtAll(ctx context.Context, db *sql.DB, address string, N, offset int64) ([]*dbtypes.AddressRow, error) {
+	rows, err := db.QueryContext(ctx, internal.SelectAddressLimitNByAddressAll, address, N, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer closeRows(rows)
+	return scanAddressQueryRows(rows, creditDebitQuery)
+}
+
+// Count address rows by type (non-merged views).
+func retrieveAddressCountAll(ctx context.Context, db *sql.DB, address string) (int64, error) {
+	var count int64
+	err := db.QueryRowContext(ctx, internal.SelectAddressAllCountByAddress, address).Scan(&count)
+	return count, err
+}
+
+func retrieveAddressCount(ctx context.Context, db *sql.DB, address string, coinType uint8) (int64, error) {
+	var count int64
+	err := db.QueryRowContext(ctx, internal.SelectAddressCountByAddress, address, coinType).Scan(&count)
+	return count, err
+}
+
 func retrieveAddressTxnsStmt(ctx context.Context, db *sql.DB, address string, N, offset int64,
-	statement string, queryType int) ([]*dbtypes.AddressRow, error) {
-	rows, err := db.QueryContext(ctx, statement, address, N, offset)
+	statement string, queryType int, coinType uint8) ([]*dbtypes.AddressRow, error) {
+	rows, err := db.QueryContext(ctx, statement, address, coinType, N, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -1907,9 +2056,9 @@ func retrieveAddressIDsByOutpoint(ctx context.Context, db *sql.DB, txHash dbtype
 // The time interval is grouping records by week, month, year, day and all.
 // For all time interval, transactions are grouped by the unique
 // timestamps (blocks) available.
-func retrieveTxHistoryByType(ctx context.Context, db *sql.DB, addr, timeInterval string) (*dbtypes.ChartsData, error) {
+func retrieveTxHistoryByType(ctx context.Context, db *sql.DB, addr, timeInterval string, coinType uint8) (*dbtypes.ChartsData, error) {
 	rows, err := db.QueryContext(ctx, internal.MakeSelectAddressTxTypesByAddress(timeInterval),
-		addr)
+		addr, coinType)
 	if err != nil {
 		return nil, err
 	}
@@ -1944,12 +2093,12 @@ func retrieveTxHistoryByType(ctx context.Context, db *sql.DB, addr, timeInterval
 // the given time interval. The time interval is grouping records by week,
 // month, year, day and all. For all time interval, transactions are grouped by
 // the unique timestamps (blocks) available.
-func retrieveTxHistoryByAmountFlow(ctx context.Context, db *sql.DB, addr, timeInterval string) (*dbtypes.ChartsData, error) {
-	rows, err := db.QueryContext(ctx, internal.MakeSelectAddressAmountFlowByAddress(timeInterval), addr)
+func retrieveTxHistoryByAmountFlow(ctx context.Context, db *sql.DB, addr, timeInterval string, coinType uint8) (*dbtypes.ChartsData, error) {
+	rows, err := db.QueryContext(ctx, internal.MakeSelectAddressAmountFlowByAddress(timeInterval), addr, coinType)
 	if err != nil {
 		return nil, err
 	}
-	return parseRowsSentReceived(rows)
+	return parseRowsSentReceived(rows, coinType)
 }
 
 // --- vins and vouts tables ---
@@ -4130,16 +4279,18 @@ func binnedTreasuryIO(ctx context.Context, db *sql.DB, timeInterval string) (*db
 	if err != nil {
 		return nil, err
 	}
-	return parseRowsSentReceived(rows)
+	return parseRowsSentReceived(rows, 0)
 }
 
 func toCoin[T int64 | uint64](amt T) float64 {
 	return float64(amt) / 1e8
 }
 
-func parseRowsSentReceived(rows *sql.Rows) (*dbtypes.ChartsData, error) {
+func parseRowsSentReceived(rows *sql.Rows, coinType uint8) (*dbtypes.ChartsData, error) {
 	defer closeRows(rows)
 	var items = new(dbtypes.ChartsData)
+	var balanceVAR int64
+	var balanceSKA, receivedSKA, sentSKA big.Int
 	for rows.Next() {
 		var blockTime time.Time
 		var received, sent uint64
@@ -4149,13 +4300,26 @@ func parseRowsSentReceived(rows *sql.Rows) (*dbtypes.ChartsData, error) {
 		}
 
 		items.Time = append(items.Time, dbtypes.NewTimeDef(blockTime))
-		items.Received = append(items.Received, toCoin(received))
-		items.Sent = append(items.Sent, toCoin(sent))
-		// Net represents the difference between the received and sent amount for a
-		// given block. If the difference is positive then the value is unspent amount
-		// otherwise if the value is zero then all amount is spent and if the net amount
-		// is negative then for the given block more amount was sent than received.
-		items.Net = append(items.Net, toCoin(received-sent))
+		if coinType == 0 {
+			items.Received = append(items.Received, toCoin(received))
+			items.Sent = append(items.Sent, toCoin(sent))
+			net := int64(received) - int64(sent)
+			items.Net = append(items.Net, toCoin(net))
+			balanceVAR += net
+			items.Balance = append(items.Balance, toCoin(balanceVAR))
+		} else {
+			// SKA: DB values are raw atom counts (1e18 scale). Use big.Int throughout.
+			r := new(big.Int).SetUint64(received)
+			s := new(big.Int).SetUint64(sent)
+			receivedSKA.Add(&receivedSKA, r)
+			sentSKA.Add(&sentSKA, s)
+			net := new(big.Int).Sub(r, s)
+			balanceSKA.Add(&balanceSKA, net)
+			items.ReceivedAtoms = append(items.ReceivedAtoms, receivedSKA.String())
+			items.SentAtoms = append(items.SentAtoms, sentSKA.String())
+			items.NetAtoms = append(items.NetAtoms, net.String())
+			items.BalanceAtoms = append(items.BalanceAtoms, balanceSKA.String())
+		}
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -4824,4 +4988,14 @@ func retrieveDiff(ctx context.Context, db *sql.DB, timestamp int64) (float64, er
 	tDef := dbtypes.NewTimeDefFromUNIX(timestamp)
 	err := db.QueryRowContext(ctx, internal.SelectDiffByTime, tDef).Scan(&diff)
 	return diff, err
+}
+
+// bigAddSKA adds a decimal-string SKA atom value into a *big.Int accumulator.
+func bigAddSKA(acc *big.Int, s string) {
+	if s == "" || s == "0" {
+		return
+	}
+	if v, ok := new(big.Int).SetString(s, 10); ok {
+		acc.Add(acc, v)
+	}
 }

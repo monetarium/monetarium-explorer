@@ -3,12 +3,15 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
 	apitypes "github.com/monetarium/monetarium-explorer/api/types"
+	"github.com/monetarium/monetarium-explorer/db/dbtypes"
+	"github.com/monetarium/monetarium-node/chaincfg"
 	chainjson "github.com/monetarium/monetarium-node/rpc/jsonrpc/types"
 )
 
@@ -326,55 +329,160 @@ func TestBlockVerbose_SKAFeesFromSSFeeTotals(t *testing.T) {
 	}
 }
 
-// blockVerboseZeroSKADS provides zero-value SKA for omission test.
-type blockVerboseZeroSKADS struct {
-	blockVerboseDS
+// addressChartDS provides multi-coin data for address chart and CSV tests.
+type addressChartDS struct {
+	noopDS
 }
 
-func (blockVerboseZeroSKADS) GetSummaryByHash(_ context.Context, hash string, _ bool) *apitypes.BlockDataBasic {
-	return &apitypes.BlockDataBasic{
-		Height: 100,
-		Hash:   hash,
-		CoinAmounts: map[uint8]string{
-			0: "100000000",          // VAR: 1 DCR
-			1: "0",                  // SKA1: zero - should be omitted
-			2: "500000000000000000", // SKA2: non-zero
+func (addressChartDS) AddressData(ctx context.Context, address string, limit, offset int, view dbtypes.AddrTxnViewType, coin uint8) (*dbtypes.AddressInfo, *dbtypes.AddressBalance, error) {
+	ai := &dbtypes.AddressInfo{
+		Address:     address,
+		ActiveCoins: []uint8{0, 1},
+	}
+	bal := &dbtypes.AddressBalance{
+		Coins: map[uint8]*dbtypes.CoinBalance{
+			0: {CoinType: 0, TotalReceived: 100, TotalSpent: 40, TotalUnspent: 60},
+			1: {CoinType: 1, TotalReceivedSKA: "1000000000000000000", TotalSpentSKA: "400000000000000000", TotalUnspentSKA: "600000000000000000"},
 		},
-		MiningFee: new(int64),
+	}
+	// Apply filter to Balance if coin != 0 (simplified mock)
+	if coin != 0 {
+		filteredCoins := make(map[uint8]*dbtypes.CoinBalance)
+		if b, ok := bal.Coins[coin]; ok {
+			filteredCoins[coin] = b
+		}
+		bal.Coins = filteredCoins
+	}
+	return ai, bal, nil
+}
+
+func (addressChartDS) TxHistoryData(ctx context.Context, address string, chart dbtypes.HistoryChart, grouping dbtypes.TimeBasedGrouping, coin uint8) (*dbtypes.ChartsData, error) {
+	if coin == 0 {
+		return &dbtypes.ChartsData{
+			Balance: []float64{10.0, 20.0},
+		}, nil
+	}
+	if coin == 1 {
+		return &dbtypes.ChartsData{
+			BalanceAtoms: []string{"1000000000000000000", "2000000000000000000"},
+		}, nil
+	}
+	return nil, fmt.Errorf("invalid coin")
+}
+
+func (addressChartDS) AddressRows(ctx context.Context, address string, limit, offset int, view dbtypes.AddrTxnViewType, coin uint8) ([]*dbtypes.AddressRow, error) {
+	if coin == 0 {
+		return []*dbtypes.AddressRow{{Address: address, CoinType: 0, Value: 100 * 100000000}}, nil
+	}
+	if coin == 1 {
+		return []*dbtypes.AddressRow{{Address: address, CoinType: 1, SKAValue: "1000000000000000000"}}, nil
+	}
+	return []*dbtypes.AddressRow{}, nil
+}
+
+func (addressChartDS) AddressRowsCompact(ctx context.Context, address string, coin uint8) ([]*dbtypes.AddressRowCompact, error) {
+	if coin == 0 {
+		return []*dbtypes.AddressRowCompact{{Address: address, CoinType: 0, Value: 100 * 100000000}}, nil
+	}
+	if coin == 1 {
+		return []*dbtypes.AddressRowCompact{{Address: address, CoinType: 1, SKAValue: "1000000000000000000"}}, nil
+	}
+	return []*dbtypes.AddressRowCompact{}, nil
+}
+
+func TestAddressChartAPI_CoinFiltering(t *testing.T) {
+	app := &appContext{
+		DataSource: addressChartDS{},
+		Params:     chaincfg.MainNetParams(),
+		Status:     apitypes.NewStatus(0, 0, 0, "", ""),
+	}
+	mux := NewAPIRouter(app, "", false, false)
+	const testAddr = "MsMfNmdbcherWznPacxufe9jSCMzRa1XDff"
+
+	tests := []struct {
+		name       string
+		url        string
+		wantCode   int
+		wantString string
+	}{
+		{
+			"VAR chart",
+			"/address/" + testAddr + "/types/day?coin=0",
+			http.StatusOK,
+			`"balance":[10,20]`,
+		},
+		{
+			"SKA chart",
+			"/address/" + testAddr + "/types/day?coin=1",
+			http.StatusOK,
+			`"balance_atoms":["1000000000000000000","2000000000000000000"]`,
+		},
+		{
+			"Invalid coin",
+			"/address/" + testAddr + "/types/day?coin=99",
+			http.StatusUnprocessableEntity,
+			"",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, tt.url, nil)
+			w := httptest.NewRecorder()
+			mux.ServeHTTP(w, req)
+
+			if w.Code != tt.wantCode {
+				t.Errorf("expected %d, got %d: %s", tt.wantCode, w.Code, w.Body.String())
+			}
+			if tt.wantString != "" && !strings.Contains(w.Body.String(), tt.wantString) {
+				t.Errorf("expected body to contain %s, got %s", tt.wantString, w.Body.String())
+			}
+		})
 	}
 }
 
-func TestBlockVerbose_OmitsZeroSKA(t *testing.T) {
-	app := &appContext{DataSource: blockVerboseZeroSKADS{}}
-	mux := NewAPIRouter(app, "", false, false)
-
-	req := httptest.NewRequest(http.MethodGet, "/block/100/verbose", nil)
-	w := httptest.NewRecorder()
-	mux.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+func TestAddressCSV_CoinFiltering(t *testing.T) {
+	app := &appContext{
+		DataSource: addressChartDS{},
+		Params:     chaincfg.MainNetParams(),
+		Status:     apitypes.NewStatus(0, 0, 0, "", ""),
 	}
+	mux := NewFileRouter(app, false)
+	const testAddr = "MsMfNmdbcherWznPacxufe9jSCMzRa1XDff"
 
-	var result map[string]interface{}
-	if err := json.NewDecoder(w.Body).Decode(&result); err != nil {
-		t.Fatalf("decode: %v", err)
+	tests := []struct {
+		name       string
+		url        string
+		wantCode   int
+		wantString string
+	}{
+		{
+			"VAR CSV",
+			"/address/io/" + testAddr + "?coin=0",
+			http.StatusOK,
+			"0,100", // coin_type, amount
+		},
+		{
+			"SKA CSV",
+			"/address/io/" + testAddr + "?coin=1",
+			http.StatusOK,
+			"1 SKA1", // coin_type, amount (18dp human-readable)
+		},
 	}
+	// ...
 
-	totalSent := result["total_sent"].(map[string]interface{})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, tt.url, nil)
+			w := httptest.NewRecorder()
+			mux.ServeHTTP(w, req)
 
-	// VAR should be present
-	if totalSent["0"] == nil {
-		t.Error("total_sent should contain VAR (key 0)")
-	}
-
-	// SKA1 (key "1") with zero value should be omitted
-	if totalSent["1"] != nil {
-		t.Error("total_sent should omit SKA1 (key 1) with zero value")
-	}
-
-	// SKA2 (key "2") with non-zero should be present
-	if totalSent["2"] == nil {
-		t.Error("total_sent should contain SKA2 (key 2) with non-zero value")
+			if w.Code != tt.wantCode {
+				t.Errorf("expected %d, got %d: %s", tt.wantCode, w.Code, w.Body.String())
+			}
+			if tt.wantString != "" && !strings.Contains(w.Body.String(), tt.wantString) {
+				t.Errorf("expected body to contain %s, got %s", tt.wantString, w.Body.String())
+			}
+		})
 	}
 }

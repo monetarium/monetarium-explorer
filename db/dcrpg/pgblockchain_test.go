@@ -70,7 +70,7 @@ func TestInsertSwap(t *testing.T) {
 func TestChainDB_AddressTransactionsAll(t *testing.T) {
 	// address with no transactions.
 	address := "DsUBCQWJsW8raht1i4gXTv7xPu3ySpUxxxx"
-	rows, err := db.AddressTransactionsAll(address)
+	rows, err := db.AddressTransactionsAll(context.Background(), address)
 	if err != nil {
 		t.Errorf("err should have been nil, was: %v", err)
 	}
@@ -78,7 +78,7 @@ func TestChainDB_AddressTransactionsAll(t *testing.T) {
 		t.Fatalf("should have been no rows, got %v", rows)
 	}
 
-	height, hash, _ := db.HeightHashDBLegacy()
+	height, hash, _ := db.HeightHashDBLegacy(context.Background())
 	h, _ := chainhash.NewHashFromStr(hash)
 	blockID := cache.NewBlockID(h, int64(height))
 	wasStored := db.AddressCache.StoreRows(address, rows, blockID)
@@ -86,7 +86,7 @@ func TestChainDB_AddressTransactionsAll(t *testing.T) {
 		t.Fatalf("Address not stored in cache!")
 	}
 
-	r, bid := db.AddressCache.Rows(address)
+	r, bid := db.AddressCache.Rows(address, 0)
 	if bid == nil {
 		t.Errorf("BlockID should not have been nil since this is a cache hit.")
 	}
@@ -98,7 +98,7 @@ func TestChainDB_AddressTransactionsAll(t *testing.T) {
 func TestMergeRows(t *testing.T) {
 	address := "Dcur2mcGjmENx4DhNqDctW5wJCVyT3Qeqkx"
 
-	rows, err := db.AddressTransactionsAll(address)
+	rows, err := db.AddressTransactionsAll(context.Background(), address)
 	if err != nil {
 		t.Errorf("err should have been nil, was: %v", err)
 	}
@@ -115,7 +115,7 @@ func TestMergeRows(t *testing.T) {
 	t.Logf("%d rows combined to %d merged rows in %v", len(rows),
 		len(mergedRows), time.Since(tStart))
 
-	mergedRows0, err := db.AddressTransactionsAllMerged(address)
+	mergedRows0, err := db.AddressTransactionsAllMerged(context.Background(), address)
 	if err != nil {
 		t.Errorf("err should have been nil, was: %v", err)
 	}
@@ -127,17 +127,6 @@ func TestMergeRows(t *testing.T) {
 		t.Errorf("len(mergedRows) = %d != len(mergedRows0) = %d",
 			len(mergedRows), len(mergedRows0))
 	}
-
-	// for _, mr0 := range mergedRows0 {
-	// 	mr, ok := mrMap[mr0.TxHash]
-	// 	if !ok {
-	// 		t.Errorf("TxHash %s not found in mergedRows.", mr0.TxHash)
-	// 		continue
-	// 	}
-	// 	if !reflect.DeepEqual(mr, mr0) {
-	// 		t.Errorf("wanted %v, got %v", mr0, mr)
-	// 	}
-	// }
 }
 
 func TestRetrieveUTXOs(t *testing.T) {
@@ -396,5 +385,126 @@ func TestUpdateChainState(t *testing.T) {
 	// expected payload including the internal UnmarshalJSON implementation.
 	if reflect.DeepEqual(dbRPC.deployments.chainInfo, expectedPayload) {
 		t.Fatalf("expected both payloads to match but the did not")
+	}
+}
+
+func TestCountTransactions(t *testing.T) {
+	ctx := context.Background()
+	address := "Dcur2mcGjmENx4DhNqDctW5wJCVyT3Qeqkx"
+
+	tests := []struct {
+		name    string
+		view    dbtypes.AddrTxnViewType
+		coin    uint8
+		wantMin int
+	}{
+		{"all_var", dbtypes.AddrTxnAll, 0, 1},
+		{"credit_var", dbtypes.AddrTxnCredit, 0, 1},
+		{"debit_var", dbtypes.AddrTxnDebit, 0, 1},
+		{"merged_var", dbtypes.AddrMergedTxn, 0, 1},
+		{"all_ska", dbtypes.AddrTxnAll, 1, 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			count, err := db.CountTransactions(ctx, address, tt.view, tt.coin)
+			if err != nil {
+				t.Fatalf("CountTransactions failed: %v", err)
+			}
+			if count < tt.wantMin {
+				t.Errorf("CountTransactions() = %d, want at least %d", count, tt.wantMin)
+			}
+			t.Logf("View %s, Coin %d: count = %d", tt.view, tt.coin, count)
+		})
+	}
+}
+
+func TestAddressMultiCoinData(t *testing.T) {
+	ctx := context.Background()
+	address := "Dcur2mcGjmENx4DhNqDctW5wJCVyT3Qeqkx"
+
+	t.Run("ActiveCoins", func(t *testing.T) {
+		addrData, err := db.AddressData(ctx, address, 20, 0, dbtypes.AddrTxnAll, 0)
+		if err != nil {
+			t.Fatalf("AddressData failed: %v", err)
+		}
+		if len(addrData.ActiveCoins) == 0 {
+			t.Error("expected at least one active coin")
+		}
+		t.Logf("ActiveCoins for %s: %v", address, addrData.ActiveCoins)
+	})
+
+	t.Run("PerCoinBalance", func(t *testing.T) {
+		addrData, err := db.AddressData(ctx, address, 20, 0, dbtypes.AddrTxnAll, 0)
+		if err != nil {
+			t.Fatalf("AddressData failed: %v", err)
+		}
+		for ct, cb := range addrData.Balance.Coins {
+			if ct == 0 {
+				if cb.TotalReceived == 0 && cb.NumSpent == 0 && cb.NumUnspent == 0 {
+					t.Errorf("VAR balance seems empty for active address")
+				}
+			} else {
+				if cb.TotalReceivedSKA == "" && cb.NumSpent == 0 && cb.NumUnspent == 0 {
+					t.Errorf("SKA coin %d balance seems empty", ct)
+				}
+			}
+		}
+	})
+
+	t.Run("CoinFiltering", func(t *testing.T) {
+		// Test with VAR (coin 0)
+		dataVar, err := db.AddressData(ctx, address, 20, 0, dbtypes.AddrTxnAll, 0)
+		if err != nil {
+			t.Fatalf("AddressData(VAR) failed: %v", err)
+		}
+		if dataVar.Balance.Coins[0] == nil {
+			t.Error("expected VAR balance in data")
+		}
+		if len(dataVar.Balance.Coins) < len(dataVar.ActiveCoins) {
+			t.Errorf("Balance.Coins has %d entries, want at least %d (ActiveCoins)",
+				len(dataVar.Balance.Coins), len(dataVar.ActiveCoins))
+		}
+
+		// Test with a known SKA coin if present
+		if len(dataVar.ActiveCoins) > 1 {
+			skaCoin := dataVar.ActiveCoins[1]
+			dataSka, err := db.AddressData(ctx, address, 20, 0, dbtypes.AddrTxnAll, skaCoin)
+			if err != nil {
+				t.Fatalf("AddressData(SKA) failed: %v", err)
+			}
+			// Balance must still contain all coins even when SKA coin is selected.
+			if dataSka.Balance.Coins[skaCoin] == nil {
+				t.Errorf("expected SKA coin %d balance in data", skaCoin)
+			}
+			if len(dataSka.Balance.Coins) < len(dataSka.ActiveCoins) {
+				t.Errorf("Balance.Coins has %d entries, want at least %d (ActiveCoins)",
+					len(dataSka.Balance.Coins), len(dataSka.ActiveCoins))
+			}
+		}
+	})
+}
+
+func TestTxHistoryCoinFiltering(t *testing.T) {
+	ctx := context.Background()
+	address := "Dcur2mcGjmENx4DhNqDctW5wJCVyT3Qeqkx"
+
+	t.Run("VAR history", func(t *testing.T) {
+		data, err := db.TxHistoryData(ctx, address, dbtypes.TxsType, dbtypes.DayGrouping, 0)
+		if err != nil {
+			t.Fatalf("TxHistoryData(VAR) failed: %v", err)
+		}
+		if data == nil {
+			t.Fatal("expected data")
+		}
+	})
+
+	coins, err := db.ActiveCoinsForAddress(ctx, address)
+	if err != nil {
+		t.Fatalf("ActiveCoinsForAddress failed: %v", err)
+	}
+	if len(coins) > 1 { // Assuming a helper or checking ActiveCoins
+		// This is a bit tricky since I don't know if there are SKA txs for this specific address in the test DB
+		// but I can test that the function doesn't crash.
 	}
 }

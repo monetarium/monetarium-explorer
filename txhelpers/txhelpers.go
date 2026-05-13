@@ -296,6 +296,8 @@ type PrevOut struct {
 	TxSpending       chainhash.Hash
 	InputIndex       int
 	PreviousOutpoint *wire.OutPoint
+	CoinType         uint8
+	SKAValue         string
 }
 
 // TxWithBlockData contains a MsgTx and the block hash and height in which it
@@ -305,7 +307,19 @@ type TxWithBlockData struct {
 	BlockHeight int64
 	BlockHash   string
 	MemPoolTime int64
+	// CoinInfo maps output index to coin type and SKA value for that output.
+	// Used by FillAddressTransactions to provide coin-aware sent amounts.
+	CoinInfo CoinInfoMap
 }
+
+// CoinOutputInfo holds coin-specific metadata for a transaction output.
+type CoinOutputInfo struct {
+	CoinType uint8
+	SKAValue string
+}
+
+// CoinInfoMap maps output index to coin type and SKA value for that output.
+type CoinInfoMap map[uint32]CoinOutputInfo
 
 // Hash returns the chainhash.Hash of the transaction.
 func (t *TxWithBlockData) Hash() chainhash.Hash {
@@ -515,11 +529,25 @@ func TxPrevOutsByAddr(txAddrOuts MempoolAddressStore, txnsStore TxnsStore, msgTx
 
 		newPrevOuts++
 
+		// Build coin info map for the previous transaction's outputs.
+		coinInfo := make(CoinInfoMap)
+		for i, txOut := range prevTx.TxOut {
+			ska := ""
+			if txOut.SKAValue != nil {
+				ska = txOut.SKAValue.String()
+			}
+			coinInfo[uint32(i)] = CoinOutputInfo{
+				CoinType: uint8(txOut.CoinType),
+				SKAValue: ska,
+			}
+		}
+
 		// Put the previous outpoint's transaction in the txnsStore.
 		txnsStore[hash] = &TxWithBlockData{
 			Tx:          prevTx,
 			BlockHeight: prevTxRaw.BlockHeight,
 			BlockHash:   prevTxRaw.BlockHash,
+			CoinInfo:    coinInfo,
 		}
 
 		tree := TxTree(prevTx)
@@ -528,6 +556,10 @@ func TxPrevOutsByAddr(txAddrOuts MempoolAddressStore, txnsStore TxnsStore, msgTx
 			TxSpending:       *msgTx.CachedTxHash(),
 			InputIndex:       inIdx,
 			PreviousOutpoint: outpoint,
+			CoinType:         uint8(txOut.CoinType),
+		}
+		if txOut.SKAValue != nil {
+			prevOutExtended.SKAValue = txOut.SKAValue.String()
 		}
 
 		// For each address paid to by this previous outpoint, record the
