@@ -1,12 +1,10 @@
 import { Controller } from '@hotwired/stimulus'
-import dompurify from 'dompurify'
 import { each, map } from 'lodash-es'
 import humanize from '../helpers/humanize_helper'
 import Mempool from '../helpers/mempool_helper'
 import { renderCoinType, splitSkaAtoms } from '../helpers/ska_helper'
 import { keyNav } from '../services/keyboard_navigation_service'
 import ws from '../services/messagesocket_service'
-import { alertArea, copyIcon } from './clipboard_controller'
 
 const EMPTY_STATES = {
   regular: { text: 'No transactions in mempool.', colspan: 6 },
@@ -21,39 +19,74 @@ function incrementValue(el) {
   el.textContent = parseInt(el.textContent) + 1
 }
 
-function rowNode(rowText) {
-  const tbody = document.createElement('tbody')
-  tbody.innerHTML = rowText
-  dompurify.sanitize(tbody, { IN_PLACE: true, FORBID_TAGS: ['svg', 'math'] })
-  return tbody.firstElementChild
+function setHashLink(el, hash, withTitle = true) {
+  el.href = `/tx/${hash}`
+  if (withTitle) el.title = hash
+  el.textContent = hash
 }
 
-// skaAmountHTML renders a SKA atom string into the standard .decimal-parts
-// HTML structure, matching the server-side decimalParts template output for
-// skaDecimalParts. BigInt-based; no float coercion.
-function skaAmountHTML(atomStr) {
+function setAgeCell(cell, time) {
+  cell.dataset.age = time
+  cell.textContent = humanize.timeSince(time)
+}
+
+// humanize.decimalParts returns HTML built from a server-provided numeric
+// value — no user-controlled content reaches this path, so innerHTML is safe.
+function setVarAmountHTML(cell, total) {
+  cell.innerHTML = humanize.decimalParts(String(total || 0), false, 8)
+}
+
+// appendSkaDecimalParts builds the .decimal-parts DOM structure for a SKA atom
+// string and appends it to parent. BigInt-based; no float coercion. Mirrors
+// the server-side skaDecimalParts template.
+function appendSkaDecimalParts(parent, atomStr) {
   const { intPart, bold, rest, trailingZeros } = splitSkaAtoms(atomStr || '0', false)
-  const intText = bold ? `${intPart}.${bold}` : intPart
-  let html = `<div class="decimal-parts d-inline-block"><span class="int">${intText}</span>`
-  if (bold && rest) html += `<span class="decimal">${rest}</span>`
-  if (bold && trailingZeros) html += `<span class="decimal trailing-zeroes">${trailingZeros}</span>`
-  html += '</div>'
-  return html
+  const wrap = document.createElement('div')
+  wrap.className = 'decimal-parts d-inline-block'
+  const intSpan = document.createElement('span')
+  intSpan.className = 'int'
+  intSpan.textContent = bold ? `${intPart}.${bold}` : intPart
+  wrap.appendChild(intSpan)
+  if (bold && rest) {
+    const restSpan = document.createElement('span')
+    restSpan.className = 'decimal'
+    restSpan.textContent = rest
+    wrap.appendChild(restSpan)
+  }
+  if (bold && trailingZeros) {
+    const tz = document.createElement('span')
+    tz.className = 'decimal trailing-zeroes'
+    tz.textContent = trailingZeros
+    wrap.appendChild(tz)
+  }
+  parent.appendChild(wrap)
 }
 
-// txAmountHTML returns the inner HTML for a tx's Amount cell. SKA txs render
-// 18dp BigInt parts; VAR txs render 8dp float parts via humanize.decimalParts.
-// Per the dual-precision invariant (CLAUDE.md), SKA never goes through
-// float64.
-function txAmountHTML(tx) {
+function fillTxAmountCell(cell, tx) {
   if (tx.ska_totals && Object.keys(tx.ska_totals).length > 0) {
     const [, atomStr] = Object.entries(tx.ska_totals)[0]
-    return skaAmountHTML(atomStr)
+    appendSkaDecimalParts(cell, atomStr)
+    return
   }
-  return humanize.decimalParts(tx.total || 0, false, 8)
+  setVarAmountHTML(cell, tx.total)
 }
 
-function txCoinSymbol(tx) {
+function fillTxFeeRateCell(cell, tx) {
+  if (tx.ska_totals && Object.keys(tx.ska_totals).length > 0) {
+    const [id] = Object.entries(tx.ska_totals)[0]
+    const rateAtoms = tx.ska_fee_rates && tx.ska_fee_rates[id]
+    if (!rateAtoms) {
+      cell.textContent = '—'
+      return
+    }
+    appendSkaDecimalParts(cell, rateAtoms)
+    cell.appendChild(document.createTextNode(` ${renderCoinType(id)}/kB`))
+    return
+  }
+  cell.textContent = `${tx.fee_rate} VAR/kB`
+}
+
+function txCoinSymbolText(tx) {
   if (tx.ska_totals && Object.keys(tx.ska_totals).length > 0) {
     const [id] = Object.entries(tx.ska_totals)[0]
     return renderCoinType(id)
@@ -61,85 +94,62 @@ function txCoinSymbol(tx) {
   return renderCoinType(0)
 }
 
-function txFeeRateHTML(tx) {
-  if (tx.ska_totals && Object.keys(tx.ska_totals).length > 0) {
-    const [id] = Object.entries(tx.ska_totals)[0]
-    const rateAtoms = tx.ska_fee_rates && tx.ska_fee_rates[id]
-    if (!rateAtoms) return '&mdash;'
-    return `${skaAmountHTML(rateAtoms)} ${renderCoinType(id)}/kB`
-  }
-  return `${tx.fee_rate} VAR/kB`
+function cloneTxRow(template, tx) {
+  const tr = template.content.firstElementChild.cloneNode(true)
+  setHashLink(tr.querySelector('[data-slot="hashLink"]'), tx.hash)
+  tr.querySelector('[data-slot="coinSymbol"]').textContent = txCoinSymbolText(tx)
+  fillTxAmountCell(tr.querySelector('[data-slot="amount"]'), tx)
+  tr.querySelector('[data-slot="size"]').textContent = `${tx.size} B`
+  fillTxFeeRateCell(tr.querySelector('[data-slot="feeRate"]'), tx)
+  setAgeCell(tr.querySelector('[data-slot="age"]'), tx.time)
+  return tr
 }
 
-function txTableRow(tx) {
-  return rowNode(`<tr class="flash">
-        <td class="break-word clipboard">
-          <a class="hash" href="/tx/${tx.hash}" title="${tx.hash}">${tx.hash}</a>
-          ${copyIcon()}
-          ${alertArea()}
-        </td>
-        <td class="text-start text-nowrap">${txCoinSymbol(tx)}</td>
-        <td class="mono fs15 text-end">${txAmountHTML(tx)}</td>
-        <td class="mono fs15 text-end">${tx.size} B</td>
-        <td class="mono fs15 text-end">${txFeeRateHTML(tx)}</td>
-        <td class="mono fs15 text-end" data-time-target="age" data-age="${tx.time}">${humanize.timeSince(tx.time)}</td>
-    </tr>`)
+function cloneTicketRow(template, tx) {
+  const tr = template.content.firstElementChild.cloneNode(true)
+  setHashLink(tr.querySelector('[data-slot="hashLink"]'), tx.hash)
+  setVarAmountHTML(tr.querySelector('[data-slot="amount"]'), tx.total)
+  tr.querySelector('[data-slot="size"]').textContent = `${tx.size} B`
+  tr.querySelector('[data-slot="feeRate"]').textContent = `${tx.fee_rate} VAR/kB`
+  setAgeCell(tr.querySelector('[data-slot="age"]'), tx.time)
+  return tr
 }
 
-function ticketTableRow(tx) {
-  return rowNode(`<tr class="flash">
-        <td class="break-word clipboard">
-          <a class="hash" href="/tx/${tx.hash}" title="${tx.hash}">${tx.hash}</a>
-          ${copyIcon()}
-          ${alertArea()}
-        </td>
-        <td class="mono fs15 text-end">${humanize.decimalParts(String(tx.total), false, 8)}</td>
-        <td class="mono fs15 text-end">${tx.size} B</td>
-        <td class="mono fs15 text-end">${tx.fee_rate} VAR/kB</td>
-        <td class="mono fs15 text-end" data-time-target="age" data-age="${tx.time}">${humanize.timeSince(tx.time)}</td>
-    </tr>`)
+function cloneRevocationRow(template, tx) {
+  const tr = template.content.firstElementChild.cloneNode(true)
+  setHashLink(tr.querySelector('[data-slot="hashLink"]'), tx.hash)
+  setVarAmountHTML(tr.querySelector('[data-slot="amount"]'), tx.total)
+  tr.querySelector('[data-slot="size"]').textContent = `${tx.size} B`
+  setAgeCell(tr.querySelector('[data-slot="age"]'), tx.time)
+  return tr
 }
 
-function revocationTableRow(tx) {
-  return rowNode(`<tr class="flash">
-        <td class="break-word clipboard">
-          <a class="hash" href="/tx/${tx.hash}" title="${tx.hash}">${tx.hash}</a>
-          ${copyIcon()}
-          ${alertArea()}
-        </td>
-        <td class="mono fs15 text-end">${humanize.decimalParts(String(tx.total), false, 8)}</td>
-        <td class="mono fs15 text-end">${tx.size} B</td>
-        <td class="mono fs15 text-end" data-time-target="age" data-age="${tx.time}">${humanize.timeSince(tx.time)}</td>
-    </tr>`)
+function cloneTreasuryAddRow(template, tx) {
+  const tr = template.content.firstElementChild.cloneNode(true)
+  setHashLink(tr.querySelector('[data-slot="hashLink"]'), tx.hash)
+  setVarAmountHTML(tr.querySelector('[data-slot="amount"]'), tx.total)
+  setAgeCell(tr.querySelector('[data-slot="age"]'), tx.time)
+  return tr
 }
 
-function treasuryAddTableRow(tx) {
-  return rowNode(`<tr class="flash">
-        <td class="break-word clipboard">
-          <a class="hash" href="/tx/${tx.hash}" title="${tx.hash}">${tx.hash}</a>
-          ${copyIcon()}
-          ${alertArea()}
-        </td>
-        <td class="mono fs15 text-end">${humanize.decimalParts(String(tx.total), false, 8)}</td>
-        <td class="mono fs15 text-end" data-time-target="age" data-age="${tx.time}">${humanize.timeSince(tx.time)}</td>
-    </tr>`)
-}
-
-function voteTxTableRow(tx) {
-  return rowNode(`<tr class="flash" data-height="${tx.vote_info.block_validation.height}" data-blockhash="${tx.vote_info.block_validation.hash}">
-        <td class="break-word clipboard">
-          <a class="hash" href="/tx/${tx.hash}">${tx.hash}</a>
-          ${copyIcon()}
-          ${alertArea()}
-        </td>
-        <td class="mono fs15"><a href="/block/${tx.vote_info.block_validation.hash}">${tx.vote_info.block_validation.height}<span
-          class="small">${tx.vote_info.last_block ? ' best' : ''}</span></a></td>
-        <td class="mono fs15 text-end"><a href="/tx/${tx.vote_info.ticket_spent}">${tx.vote_info.mempool_ticket_index}<a/></td>
-        <td class="mono fs15 text-end">${tx.vote_info.vote_version}</td>
-        <td class="mono fs15 text-end d-none d-sm-table-cell">${humanize.decimalParts(String(tx.total), false, 8)}</td>
-        <td class="mono fs15 text-end">${humanize.bytes(tx.size)}</td>
-        <td class="mono fs15 text-end d-none d-sm-table-cell jsonly" data-time-target="age" data-age="${tx.time}">${humanize.timeSince(tx.time)}</td>
-    </tr>`)
+function cloneVoteRow(template, tx) {
+  const tr = template.content.firstElementChild.cloneNode(true)
+  const v = tx.vote_info
+  tr.dataset.height = v.block_validation.height
+  tr.dataset.blockhash = v.block_validation.hash
+  setHashLink(tr.querySelector('[data-slot="hashLink"]'), tx.hash, false)
+  const blockLink = tr.querySelector('[data-slot="blockLink"]')
+  blockLink.href = `/block/${v.block_validation.hash}`
+  tr.querySelector('[data-slot="blockHeight"]').textContent = v.block_validation.height
+  tr.querySelector('[data-slot="bestMarker"]').textContent = v.last_block ? ' best' : ''
+  const ticketLink = tr.querySelector('[data-slot="ticketLink"]')
+  ticketLink.href = `/tx/${v.ticket_spent}`
+  ticketLink.textContent = v.mempool_ticket_index
+  tr.querySelector('[data-slot="voteVersion"]').textContent = v.vote_version
+  setVarAmountHTML(tr.querySelector('[data-slot="amount"]'), tx.total)
+  tr.querySelector('[data-slot="size"]').textContent = humanize.bytes(tx.size)
+  setAgeCell(tr.querySelector('[data-slot="age"]'), tx.time)
+  return tr
 }
 
 function buildTable(target, txType, txns, rowFn) {
@@ -270,7 +280,12 @@ export default class extends Controller {
       'voteCount',
       'revTotal',
       'revCount',
-      'mempoolSize'
+      'mempoolSize',
+      'txRowTemplate',
+      'ticketRowTemplate',
+      'revocationRowTemplate',
+      'treasuryAddRowTemplate',
+      'voteRowTemplate'
     ]
   }
 
@@ -279,6 +294,13 @@ export default class extends Controller {
     ws.send('getmempooltxs', mempoolData.id)
     this.mempool = new Mempool(mempoolData, this.voteTallyTargets)
     this.lastCoinStats = null
+    this.txTableRow = (tx) => cloneTxRow(this.txRowTemplateTarget, tx)
+    this.ticketTableRow = (tx) => cloneTicketRow(this.ticketRowTemplateTarget, tx)
+    this.revocationTableRow = (tx) => cloneRevocationRow(this.revocationRowTemplateTarget, tx)
+    this.voteTxTableRow = (tx) => cloneVoteRow(this.voteRowTemplateTarget, tx)
+    this.treasuryAddTableRow = this.hasTreasuryAddRowTemplateTarget
+      ? (tx) => cloneTreasuryAddRow(this.treasuryAddRowTemplateTarget, tx)
+      : null
     this.txTargetMap = {
       Vote: this.voteTransactionsTarget,
       Ticket: this.ticketTransactionsTarget,
@@ -376,12 +398,12 @@ export default class extends Controller {
   }
 
   handleTxsResp(m) {
-    buildTable(this.regularTransactionsTarget, 'regular', m.tx, txTableRow)
-    buildTable(this.revocationTransactionsTarget, 'revocations', m.revs, revocationTableRow)
-    buildTable(this.voteTransactionsTarget, 'votes', m.votes, voteTxTableRow)
-    buildTable(this.ticketTransactionsTarget, 'tickets', m.tickets, ticketTableRow)
-    if (this.hasTaddTransactionsTarget) {
-      buildTable(this.taddTransactionsTarget, 'tadds', m.tadds, treasuryAddTableRow)
+    buildTable(this.regularTransactionsTarget, 'regular', m.tx, this.txTableRow)
+    buildTable(this.revocationTransactionsTarget, 'revocations', m.revs, this.revocationTableRow)
+    buildTable(this.voteTransactionsTarget, 'votes', m.votes, this.voteTxTableRow)
+    buildTable(this.ticketTransactionsTarget, 'tickets', m.tickets, this.ticketTableRow)
+    if (this.hasTaddTransactionsTarget && this.treasuryAddTableRow) {
+      buildTable(this.taddTransactionsTarget, 'tadds', m.tadds, this.treasuryAddTableRow)
     }
   }
 
@@ -394,23 +416,23 @@ export default class extends Controller {
       let rowFn
       switch (tx.Type) {
         case 'Vote':
-          rowFn = voteTxTableRow
+          rowFn = this.voteTxTableRow
           break
         case 'Ticket':
-          rowFn = ticketTableRow
+          rowFn = this.ticketTableRow
           break
         case 'Revocation':
-          rowFn = revocationTableRow
+          rowFn = this.revocationTableRow
           break
         case 'Treasury Add':
-          if (!this.hasTaddTransactionsTarget) return
-          rowFn = treasuryAddTableRow
+          if (!this.treasuryAddTableRow) return
+          rowFn = this.treasuryAddTableRow
           break
         case 'Treasury Spend':
           // Treasury Spends are not displayed on the mempool page.
           return
         default:
-          rowFn = txTableRow
+          rowFn = this.txTableRow
       }
       const target = this.txTargetMap[tx.Type]
       if (!target) return

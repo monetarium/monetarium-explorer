@@ -112,6 +112,16 @@
               <div class="row">
                   <div class="col-sm-24">
                   <h4 class="pt-5 pb-2"><span>Treasury Adds</span></h4>
+                      <template data-mempool-target="treasuryAddRowTemplate">
+                          <tr class="flash">
+                              <td class="break-word clipboard">
+                                  <a class="hash" data-slot="hashLink"></a>
+                                  {{template "copyTextIcon"}}
+                              </td>
+                              <td class="mono fs15 text-end" data-slot="amount"></td>
+                              <td class="mono fs15 text-end" data-time-target="age" data-slot="age"></td>
+                          </tr>
+                      </template>
                       <table class="table">
                           <thead>
                             <tr>
@@ -147,6 +157,24 @@
                   <div class="col-sm-24">
                   <h4 class="pt-3 pb-2"><span>Votes</span></h4>
 
+                      <template data-mempool-target="voteRowTemplate">
+                          <tr class="flash">
+                              <td class="break-word clipboard">
+                                  <a class="hash" data-slot="hashLink"></a>
+                                  {{template "copyTextIcon"}}
+                              </td>
+                              <td class="mono fs15">
+                                  <a data-slot="blockLink"><span data-slot="blockHeight"></span><span class="small" data-slot="bestMarker"></span></a>
+                              </td>
+                              <td class="mono fs15 text-end">
+                                  <a data-slot="ticketLink"></a>
+                              </td>
+                              <td class="mono fs15 text-end" data-slot="voteVersion"></td>
+                              <td class="mono fs15 text-end d-none d-sm-table-cell" data-slot="amount"></td>
+                              <td class="mono fs15 text-end" data-slot="size"></td>
+                              <td class="mono fs15 text-end d-none d-sm-table-cell jsonly" data-time-target="age" data-slot="age"></td>
+                          </tr>
+                      </template>
                       <table class="table">
                           <thead>
                             <tr>
@@ -199,6 +227,18 @@
               <div class="row">
                   <div class="col-sm-24">
                   <h4 class="pt-4 pb-2"><span>Tickets</span></h4>
+                      <template data-mempool-target="ticketRowTemplate">
+                          <tr class="flash">
+                              <td class="break-word clipboard">
+                                  <a class="hash" data-slot="hashLink"></a>
+                                  {{template "copyTextIcon"}}
+                              </td>
+                              <td class="mono fs15 text-end" data-slot="amount"></td>
+                              <td class="mono fs15 text-end" data-slot="size"></td>
+                              <td class="mono fs15 text-end" data-slot="feeRate"></td>
+                              <td class="mono fs15 text-end" data-time-target="age" data-slot="age"></td>
+                          </tr>
+                      </template>
                       <table class="table">
                           <thead>
                             <tr>
@@ -246,6 +286,17 @@
               <div class="row">
                   <div class="col-sm-24">
                   <h4 class="pt-5 pb-2"><span>Revocations</span></h4>
+                      <template data-mempool-target="revocationRowTemplate">
+                          <tr class="flash">
+                              <td class="break-word clipboard">
+                                  <a class="hash" data-slot="hashLink"></a>
+                                  {{template "copyTextIcon"}}
+                              </td>
+                              <td class="mono fs15 text-end" data-slot="amount"></td>
+                              <td class="mono fs15 text-end" data-slot="size"></td>
+                              <td class="mono fs15 text-end" data-time-target="age" data-slot="age"></td>
+                          </tr>
+                      </template>
                       <table class="table">
                           <thead>
                             <tr>
@@ -288,6 +339,19 @@
               <div class="row">
                   <div class="col-sm-24">
                   <h4 class="pt-5 pb-2"><span>Transactions</span></h4>
+                      <template data-mempool-target="txRowTemplate">
+                          <tr class="flash">
+                              <td class="break-word clipboard">
+                                  <a class="hash" data-slot="hashLink"></a>
+                                  {{template "copyTextIcon"}}
+                              </td>
+                              <td class="text-start text-nowrap" data-slot="coinSymbol"></td>
+                              <td class="mono fs15 text-end wrap-decimal" data-slot="amount"></td>
+                              <td class="mono fs15 text-end" data-slot="size"></td>
+                              <td class="mono fs15 text-end wrap-decimal" data-slot="feeRate"></td>
+                              <td class="mono fs15 text-end" data-time-target="age" data-slot="age"></td>
+                          </tr>
+                      </template>
                       <table class="table">
                           <thead>
                             <tr>
