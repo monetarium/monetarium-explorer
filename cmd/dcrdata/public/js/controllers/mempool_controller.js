@@ -10,8 +10,7 @@ const EMPTY_STATES = {
   regular: { text: 'No transactions in mempool.', colspan: 6 },
   tickets: { text: 'No tickets in mempool.', colspan: 5 },
   votes: { text: 'No votes in mempool.', colspan: 8 },
-  revocations: { text: 'No revocations in mempool.', colspan: 4 },
-  tadds: { text: 'No treasury adds in mempool.', colspan: 3 }
+  revocations: { text: 'No revocations in mempool.', colspan: 4 }
 }
 
 function incrementValue(el) {
@@ -120,14 +119,6 @@ function cloneRevocationRow(template, tx) {
   setHashLink(tr.querySelector('[data-slot="hashLink"]'), tx.hash)
   setVarAmountHTML(tr.querySelector('[data-slot="amount"]'), tx.total)
   tr.querySelector('[data-slot="size"]').textContent = `${tx.size} B`
-  setAgeCell(tr.querySelector('[data-slot="age"]'), tx.time)
-  return tr
-}
-
-function cloneTreasuryAddRow(template, tx) {
-  const tr = template.content.firstElementChild.cloneNode(true)
-  setHashLink(tr.querySelector('[data-slot="hashLink"]'), tx.hash)
-  setVarAmountHTML(tr.querySelector('[data-slot="amount"]'), tx.total)
   setAgeCell(tr.querySelector('[data-slot="age"]'), tx.time)
   return tr
 }
@@ -262,7 +253,6 @@ export default class extends Controller {
     return [
       'bestBlock',
       'bestBlockTime',
-      'taddTransactions',
       'voteTransactions',
       'ticketTransactions',
       'revocationTransactions',
@@ -284,7 +274,6 @@ export default class extends Controller {
       'txRowTemplate',
       'ticketRowTemplate',
       'revocationRowTemplate',
-      'treasuryAddRowTemplate',
       'voteRowTemplate'
     ]
   }
@@ -298,17 +287,11 @@ export default class extends Controller {
     this.ticketTableRow = (tx) => cloneTicketRow(this.ticketRowTemplateTarget, tx)
     this.revocationTableRow = (tx) => cloneRevocationRow(this.revocationRowTemplateTarget, tx)
     this.voteTxTableRow = (tx) => cloneVoteRow(this.voteRowTemplateTarget, tx)
-    this.treasuryAddTableRow = this.hasTreasuryAddRowTemplateTarget
-      ? (tx) => cloneTreasuryAddRow(this.treasuryAddRowTemplateTarget, tx)
-      : null
     this.txTargetMap = {
       Vote: this.voteTransactionsTarget,
       Ticket: this.ticketTransactionsTarget,
       Revocation: this.revocationTransactionsTarget,
       Regular: this.regularTransactionsTarget
-    }
-    if (this.hasTaddTransactionsTarget) {
-      this.txTargetMap['Treasury Add'] = this.taddTransactionsTarget
     }
     ws.registerEvtHandler('newtxs', (evt) => {
       const m = JSON.parse(evt)
@@ -402,9 +385,6 @@ export default class extends Controller {
     buildTable(this.revocationTransactionsTarget, 'revocations', m.revs, this.revocationTableRow)
     buildTable(this.voteTransactionsTarget, 'votes', m.votes, this.voteTxTableRow)
     buildTable(this.ticketTransactionsTarget, 'tickets', m.tickets, this.ticketTableRow)
-    if (this.hasTaddTransactionsTarget && this.treasuryAddTableRow) {
-      buildTable(this.taddTransactionsTarget, 'tadds', m.tadds, this.treasuryAddTableRow)
-    }
   }
 
   renderNewTxns(txs) {
@@ -425,11 +405,7 @@ export default class extends Controller {
           rowFn = this.revocationTableRow
           break
         case 'Treasury Add':
-          if (!this.treasuryAddTableRow) return
-          rowFn = this.treasuryAddTableRow
-          break
         case 'Treasury Spend':
-          // Treasury Spends are not displayed on the mempool page.
           return
         default:
           rowFn = this.txTableRow

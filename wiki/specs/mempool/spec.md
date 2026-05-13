@@ -124,8 +124,8 @@
 - Колонка:
   - `Total DCR` → `Total VAR`
 
-- Таблица **Treasury Spends**:
-  - должна быть удалена
+- Таблицы **Treasury Spends** и **Treasury Adds**:
+  - должны быть удалены (в Monetarium нет казначейства — см. [core/pages.md](../../core/pages.md), маршруты `/treasury` и `/treasurytable` возвращают 410)
 
 ---
 

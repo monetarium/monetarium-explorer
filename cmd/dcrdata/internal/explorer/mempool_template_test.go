@@ -89,9 +89,12 @@ func TestMempoolTemplate(t *testing.T) {
 		if !strings.Contains(out, "VAR/kB") {
 			t.Error("expected VAR/kB unit label")
 		}
-		// Treasury Spends removed.
+		// Treasury Spends and Treasury Adds both removed — Monetarium has no treasury.
 		if strings.Contains(out, "Treasury Spends") {
 			t.Error("Treasury Spends section should be removed")
+		}
+		if strings.Contains(out, "Treasury Adds") {
+			t.Error("Treasury Adds section should be removed")
 		}
 		// Empty state strings — Revocations table is empty (no revs), spec text.
 		if !strings.Contains(out, "No revocations in mempool.") {

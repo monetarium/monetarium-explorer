@@ -124,7 +124,7 @@ In both pipelines the **CoinFills attached to `sigNewTxs` come from `MempoolShor
   - Transactions card: VAR section is static (Regular / Tickets / Votes / Revocations from `CoinStats[0]`); SKA sections render Regular-only inside `data-mempool-target="skaSections"` for live JS rebuild.
   - Regular transactions table: `{{if .SKATotals}}` branches per row — SKA txs show `coinSymbol` + `skaDecimalParts $amt false`, VAR txs show `VAR` + `float64AsDecimalParts .TotalOut 8 false`. SKA Fee Rate cell renders `—` (em-dash) because `MempoolTx.FeeRate` is VAR-only float64; a follow-up will add `FeeRateRaw string` for precise SKA display.
   - Tickets / Votes / Revocations tables stay VAR-only per spec; column headers say `Total VAR` and fee-rate unit is `VAR/kB`.
-  - Treasury Spends section removed; Treasury Adds retained.
+  - Treasury Spends and Treasury Adds sections both removed — Monetarium has no treasury (cf. `/treasury` → 410 in [core/pages.md](../../core/pages.md)), so neither tx type can occur on-chain. Backend `TAdds` / `NumTAdds` plumbing in `explorertypes.go`, `monitor.go`, `collector.go` is retained as dead code; UI no longer surfaces it.
   - `CoinFills` is not consumed here (it's a homepage indicator-bar concept).
 
 #### 3.9 Frontend — `cmd/dcrdata/public/js/`

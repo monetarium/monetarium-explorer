@@ -108,51 +108,6 @@
                 </div>
             </div>
             <div>
-              {{if gt .NumTAdds 0 -}}{{- /* this will be rare, so only show the section header and table if needed */ -}}
-              <div class="row">
-                  <div class="col-sm-24">
-                  <h4 class="pt-5 pb-2"><span>Treasury Adds</span></h4>
-                      <template data-mempool-target="treasuryAddRowTemplate">
-                          <tr class="flash">
-                              <td class="break-word clipboard">
-                                  <a class="hash" data-slot="hashLink"></a>
-                                  {{template "copyTextIcon"}}
-                              </td>
-                              <td class="mono fs15 text-end" data-slot="amount"></td>
-                              <td class="mono fs15 text-end" data-time-target="age" data-slot="age"></td>
-                          </tr>
-                      </template>
-                      <table class="table">
-                          <thead>
-                            <tr>
-                              <th class="position-relative" data-tooltip="Transaction ID">
-                                <span class="d-sm-none">TxID</span>
-                                <span class="d-none d-sm-inline">Transaction ID</span>
-                              </th>
-                              <th class="text-end">Total VAR</th>
-                              <th class="text-end position-relative" data-tooltip="Time in Mempool">
-                                Age
-                              </th>
-                            </tr>
-                          </thead>
-                          <tbody data-mempool-target="taddTransactions">
-                              {{range .TAdds -}}
-                              <tr>
-                                  <td class="break-word clipboard">
-                                    <a class="hash lh1rem" href="/tx/{{.Hash}}">{{.Hash}}</a>
-                                    {{template "copyTextIcon"}}
-                                  </td>
-                                  <td class="mono fs15 text-end">
-                                    {{template "decimalParts" (float64AsDecimalParts .TotalOut 8 false)}}
-                                  </td>
-                                  <td class="mono fs15 text-end" data-time-target="age" data-age="{{.Time}}"></td>
-                              </tr>
-                              {{- end}}
-                          </tbody>
-                      </table>
-                  </div>
-              </div>
-              {{- end}}
               <div class="row">
                   <div class="col-sm-24">
                   <h4 class="pt-3 pb-2"><span>Votes</span></h4>
