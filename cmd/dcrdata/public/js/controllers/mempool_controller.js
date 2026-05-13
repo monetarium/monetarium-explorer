@@ -3,7 +3,7 @@ import dompurify from 'dompurify'
 import { each, map } from 'lodash-es'
 import humanize from '../helpers/humanize_helper'
 import Mempool from '../helpers/mempool_helper'
-import { renderCoinType, splitSkaAtomsNoTrailing } from '../helpers/ska_helper'
+import { renderCoinType, splitSkaAtoms } from '../helpers/ska_helper'
 import { keyNav } from '../services/keyboard_navigation_service'
 import ws from '../services/messagesocket_service'
 import { alertArea, copyIcon } from './clipboard_controller'
@@ -32,7 +32,7 @@ function rowNode(rowText) {
 // HTML structure, matching the server-side decimalParts template output for
 // skaDecimalParts. BigInt-based; no float coercion.
 function skaAmountHTML(atomStr) {
-  const { intPart, bold, rest, trailingZeros } = splitSkaAtomsNoTrailing(atomStr || '0', false)
+  const { intPart, bold, rest, trailingZeros } = splitSkaAtoms(atomStr || '0', false)
   const intText = bold ? `${intPart}.${bold}` : intPart
   let html = `<div class="decimal-parts d-inline-block"><span class="int">${intText}</span>`
   if (bold && rest) html += `<span class="decimal">${rest}</span>`
