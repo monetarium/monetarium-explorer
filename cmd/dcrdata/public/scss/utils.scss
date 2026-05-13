@@ -24,6 +24,20 @@
   word-break: break-all;
 }
 
+// Lets the fractional digits of a `decimalParts`-rendered number wrap across
+// lines inside a narrow column. Overrides `.d-inline-block` on the wrapper so
+// the inner spans participate in normal text flow, and allows the fractional
+// span to break between digits (needed for SKA's 18-digit precision).
+.wrap-decimal {
+  .decimal-parts {
+    display: inline !important;
+  }
+
+  .decimal {
+    word-break: break-all;
+  }
+}
+
 .color-inherit {
   color: inherit !important;
 }

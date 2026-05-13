@@ -287,10 +287,10 @@
                                   {{- if .SKATotals -}}
                                   {{- range $id, $amt := .SKATotals}}
                                   <td class="text-start text-nowrap">{{coinSymbol $id}}</td>
-                                  <td class="mono fs15 text-end">{{template "decimalParts" (skaDecimalParts $amt false)}}</td>
+                                  <td class="mono fs15 text-end wrap-decimal">{{template "decimalParts" (skaDecimalParts $amt false)}}</td>
                                   {{- end}}
                                   <td class="mono fs15 text-end">{{.Size}} B</td>
-                                  <td class="mono fs15 text-end">
+                                  <td class="mono fs15 text-end wrap-decimal">
                                     {{- if .SKAFeeRates -}}
                                     {{- range $id2, $rate := .SKAFeeRates -}}
                                     {{template "decimalParts" (skaDecimalParts $rate false)}} {{coinSymbol $id2}}/kB
