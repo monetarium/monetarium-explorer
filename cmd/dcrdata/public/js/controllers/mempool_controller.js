@@ -63,9 +63,10 @@ function txCoinSymbol(tx) {
 
 function txFeeRateHTML(tx) {
   if (tx.ska_totals && Object.keys(tx.ska_totals).length > 0) {
-    // SKA fee rate not yet exposed precisely (MempoolTx.FeeRate is VAR-only
-    // float64; would lose precision). Tracked as follow-up; render em-dash.
-    return '&mdash;'
+    const [id] = Object.entries(tx.ska_totals)[0]
+    const rateAtoms = tx.ska_fee_rates && tx.ska_fee_rates[id]
+    if (!rateAtoms) return '&mdash;'
+    return `${skaAmountHTML(rateAtoms)} ${renderCoinType(id)}/kB`
   }
   return `${tx.fee_rate} VAR/kB`
 }

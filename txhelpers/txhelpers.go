@@ -1328,6 +1328,78 @@ func SKATotalsFromMsgTx(msgTx *wire.MsgTx) map[uint8]string {
 	return out
 }
 
+// skaCoinTypeOf returns the SKA coin-type of the first SKA output in msgTx and
+// true, or (0, false) if the tx has no SKA outputs. By the single-coin-per-tx
+// invariant this uniquely identifies the tx's SKA coin type.
+func skaCoinTypeOf(msgTx *wire.MsgTx) (uint8, bool) {
+	for _, v := range msgTx.TxOut {
+		if v.CoinType.IsSKA() {
+			return uint8(v.CoinType), true
+		}
+	}
+	return 0, false
+}
+
+// SKAFeeRateMapFromAtoms computes the SKA fee rate in atoms/kB from a fee
+// amount given in atoms (decimal string). Returns a map keyed by the tx's
+// single SKA coin type, or nil if feeAtoms is empty, the tx has no SKA
+// outputs, or the serialized size is zero. Negative fee amounts are clamped
+// to zero (mirrors the confirmed-tx path in db/dcrpg/pgblockchain.go).
+func SKAFeeRateMapFromAtoms(feeAtoms string, msgTx *wire.MsgTx) map[uint8]string {
+	if feeAtoms == "" {
+		return nil
+	}
+	ct, ok := skaCoinTypeOf(msgTx)
+	if !ok {
+		return nil
+	}
+	txSize := int64(msgTx.SerializeSize())
+	if txSize <= 0 {
+		return nil
+	}
+	fee, ok := new(big.Int).SetString(feeAtoms, 10)
+	if !ok || fee == nil {
+		return nil
+	}
+	if fee.Sign() < 0 {
+		fee.SetInt64(0)
+	}
+	rate := new(big.Int).Mul(fee, big.NewInt(1000))
+	rate.Quo(rate, big.NewInt(txSize))
+	return map[uint8]string{ct: rate.String()}
+}
+
+// SKAFeeRateMapFromVerboseVin computes the SKA fee rate in atoms/kB by summing
+// per-input SKAAmountIn atoms from a verbose tx's vin slice and subtracting
+// the matching coin-type output total. Returns nil for VAR-only txs. Negative
+// results (input sum < output sum) are clamped to zero.
+func SKAFeeRateMapFromVerboseVin(vin []chainjson.Vin, msgTx *wire.MsgTx) map[uint8]string {
+	ct, ok := skaCoinTypeOf(msgTx)
+	if !ok {
+		return nil
+	}
+	totalIn := new(big.Int)
+	for i := range vin {
+		s := vin[i].SKAAmountIn
+		if s == "" {
+			continue
+		}
+		v, ok := new(big.Int).SetString(s, 10)
+		if !ok || v == nil {
+			continue
+		}
+		totalIn.Add(totalIn, v)
+	}
+	totalOut := new(big.Int)
+	for _, o := range msgTx.TxOut {
+		if uint8(o.CoinType) == ct && o.SKAValue != nil {
+			totalOut.Add(totalOut, o.SKAValue)
+		}
+	}
+	fee := new(big.Int).Sub(totalIn, totalOut)
+	return SKAFeeRateMapFromAtoms(fee.String(), msgTx)
+}
+
 // TotalVout computes the total value of a slice of chainjson.Vout
 func TotalVout(vouts []chainjson.Vout) dcrutil.Amount {
 	var total dcrutil.Amount

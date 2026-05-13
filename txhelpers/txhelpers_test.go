@@ -13,6 +13,7 @@ import (
 	"github.com/monetarium/monetarium-node/chaincfg/chainhash"
 	"github.com/monetarium/monetarium-node/cointype"
 	"github.com/monetarium/monetarium-node/dcrutil"
+	chainjson "github.com/monetarium/monetarium-node/rpc/jsonrpc/types"
 	"github.com/monetarium/monetarium-node/wire"
 )
 
@@ -337,5 +338,121 @@ func TestSKATotalsFromMsgTx_VAROnly(t *testing.T) {
 	tx.AddTxOut(wire.NewTxOut(100_000_000, nil))
 	if got := SKATotalsFromMsgTx(tx); got != nil {
 		t.Errorf("expected nil for VAR-only tx, got %v", got)
+	}
+}
+
+// newSKAMsgTx returns a msg tx with one SKA output of the given coin type and
+// atoms, suitable for fee-rate helper tests.
+func newSKAMsgTx(t *testing.T, ct uint8, atoms *big.Int) *wire.MsgTx {
+	t.Helper()
+	tx := wire.NewMsgTx()
+	tx.AddTxOut(wire.NewTxOutSKA(atoms, cointype.CoinType(ct), nil))
+	return tx
+}
+
+func TestSKAFeeRateMapFromAtoms_VAROnly(t *testing.T) {
+	tx := wire.NewMsgTx()
+	tx.AddTxOut(wire.NewTxOut(100_000_000, nil))
+	if got := SKAFeeRateMapFromAtoms("1000", tx); got != nil {
+		t.Errorf("expected nil for VAR-only tx, got %v", got)
+	}
+}
+
+func TestSKAFeeRateMapFromAtoms_EmptyFee(t *testing.T) {
+	tx := newSKAMsgTx(t, 1, big.NewInt(1e18))
+	if got := SKAFeeRateMapFromAtoms("", tx); got != nil {
+		t.Errorf("expected nil for empty feeAtoms, got %v", got)
+	}
+}
+
+func TestSKAFeeRateMapFromAtoms_PositiveFee(t *testing.T) {
+	tx := newSKAMsgTx(t, 1, big.NewInt(1e18))
+	feeAtoms := "12345" // arbitrary
+	got := SKAFeeRateMapFromAtoms(feeAtoms, tx)
+	if got == nil {
+		t.Fatal("expected non-nil result")
+	}
+	fee, _ := new(big.Int).SetString(feeAtoms, 10)
+	want := new(big.Int).Mul(fee, big.NewInt(1000))
+	want.Quo(want, big.NewInt(int64(tx.SerializeSize())))
+	if got[1] != want.String() {
+		t.Errorf("rate: want %s, got %s", want.String(), got[1])
+	}
+	if _, hasVAR := got[0]; hasVAR {
+		t.Error("result should not contain VAR key")
+	}
+}
+
+func TestSKAFeeRateMapFromAtoms_ZeroFee(t *testing.T) {
+	tx := newSKAMsgTx(t, 2, big.NewInt(5e18))
+	got := SKAFeeRateMapFromAtoms("0", tx)
+	if got == nil {
+		t.Fatal("expected non-nil result for zero fee")
+	}
+	if got[2] != "0" {
+		t.Errorf("rate: want 0, got %s", got[2])
+	}
+}
+
+func TestSKAFeeRateMapFromAtoms_NegativeClampsToZero(t *testing.T) {
+	tx := newSKAMsgTx(t, 1, big.NewInt(1e18))
+	got := SKAFeeRateMapFromAtoms("-99", tx)
+	if got == nil {
+		t.Fatal("expected non-nil result for negative fee")
+	}
+	if got[1] != "0" {
+		t.Errorf("rate: want 0 (clamped), got %s", got[1])
+	}
+}
+
+func TestSKAFeeRateMapFromVerboseVin_VAROnly(t *testing.T) {
+	tx := wire.NewMsgTx()
+	tx.AddTxOut(wire.NewTxOut(100_000_000, nil))
+	vin := []chainjson.Vin{{SKAAmountIn: "1000"}}
+	if got := SKAFeeRateMapFromVerboseVin(vin, tx); got != nil {
+		t.Errorf("expected nil for VAR-only tx, got %v", got)
+	}
+}
+
+func TestSKAFeeRateMapFromVerboseVin_PositiveFee(t *testing.T) {
+	out := big.NewInt(1e18)
+	tx := newSKAMsgTx(t, 1, out)
+	// totalIn = out + 12345 → fee = 12345
+	in := new(big.Int).Add(out, big.NewInt(12345)).String()
+	vin := []chainjson.Vin{{SKAAmountIn: in}}
+	got := SKAFeeRateMapFromVerboseVin(vin, tx)
+	if got == nil {
+		t.Fatal("expected non-nil result")
+	}
+	want := new(big.Int).Mul(big.NewInt(12345), big.NewInt(1000))
+	want.Quo(want, big.NewInt(int64(tx.SerializeSize())))
+	if got[1] != want.String() {
+		t.Errorf("rate: want %s, got %s", want.String(), got[1])
+	}
+}
+
+func TestSKAFeeRateMapFromVerboseVin_InsufficientInputsClampsToZero(t *testing.T) {
+	// totalIn (1) < totalOut (1e18) → fee negative → clamp 0.
+	tx := newSKAMsgTx(t, 1, big.NewInt(1e18))
+	vin := []chainjson.Vin{{SKAAmountIn: "1"}}
+	got := SKAFeeRateMapFromVerboseVin(vin, tx)
+	if got == nil {
+		t.Fatal("expected non-nil result")
+	}
+	if got[1] != "0" {
+		t.Errorf("rate: want 0 (clamped), got %s", got[1])
+	}
+}
+
+func TestSKAFeeRateMapFromVerboseVin_EmptyAmountsClampToZero(t *testing.T) {
+	// All inputs missing SKAAmountIn → totalIn=0 → fee negative → 0.
+	tx := newSKAMsgTx(t, 1, big.NewInt(1e18))
+	vin := []chainjson.Vin{{}, {}}
+	got := SKAFeeRateMapFromVerboseVin(vin, tx)
+	if got == nil {
+		t.Fatal("expected non-nil result")
+	}
+	if got[1] != "0" {
+		t.Errorf("rate: want 0 (clamped), got %s", got[1])
 	}
 }

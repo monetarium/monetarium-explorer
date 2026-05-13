@@ -1399,10 +1399,11 @@ type MempoolTx struct {
 	TotalOut  float64        `json:"total"`
 	// Consider atom representation:
 	//TotalOutAmt int64        `json:"total_amount"`
-	Type      string           `json:"Type"`
-	TypeID    int              `json:"typeID"` // stake package types
-	VoteInfo  *VoteInfo        `json:"vote_info,omitempty"`
-	SKATotals map[uint8]string `json:"ska_totals,omitempty"`
+	Type        string           `json:"Type"`
+	TypeID      int              `json:"typeID"` // stake package types
+	VoteInfo    *VoteInfo        `json:"vote_info,omitempty"`
+	SKATotals   map[uint8]string `json:"ska_totals,omitempty"`
+	SKAFeeRates map[uint8]string `json:"ska_fee_rates,omitempty"` // SKA fee rate in atoms/kB, keyed by coin type
 }
 
 func (mpt *MempoolTx) DeepCopy() *MempoolTx {
@@ -1417,6 +1418,12 @@ func (mpt *MempoolTx) DeepCopy() *MempoolTx {
 		out.SKATotals = make(map[uint8]string, len(mpt.SKATotals))
 		for k, v := range mpt.SKATotals {
 			out.SKATotals[k] = v
+		}
+	}
+	if mpt.SKAFeeRates != nil {
+		out.SKAFeeRates = make(map[uint8]string, len(mpt.SKAFeeRates))
+		for k, v := range mpt.SKAFeeRates {
+			out.SKAFeeRates[k] = v
 		}
 	}
 	return &out

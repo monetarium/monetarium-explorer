@@ -290,7 +290,13 @@
                                   <td class="mono fs15 text-end">{{template "decimalParts" (skaDecimalParts $amt false)}}</td>
                                   {{- end}}
                                   <td class="mono fs15 text-end">{{.Size}} B</td>
-                                  <td class="mono fs15 text-end">&mdash;</td>
+                                  <td class="mono fs15 text-end">
+                                    {{- if .SKAFeeRates -}}
+                                    {{- range $id2, $rate := .SKAFeeRates -}}
+                                    {{template "decimalParts" (skaDecimalParts $rate false)}} {{coinSymbol $id2}}/kB
+                                    {{- end -}}
+                                    {{- else -}}&mdash;{{- end -}}
+                                  </td>
                                   {{- else}}
                                   <td class="text-start text-nowrap">VAR</td>
                                   <td class="mono fs15 text-end">{{template "decimalParts" (float64AsDecimalParts .TotalOut 8 false)}}</td>

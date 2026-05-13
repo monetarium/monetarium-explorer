@@ -152,14 +152,15 @@ func (t *DataCollector) mempoolTxns() ([]exptypes.MempoolTx, txhelpers.MempoolAd
 			Vin:       t.populateMempoolInputs(context.TODO(), msgTx, txType, txnsStore),
 			// Coinbase:  txhelpers.IsCoinBaseTx(msgTx), // commented because coinbase is not in mempool
 
-			Hash:      hashStr, // dup of TxID!
-			Time:      tx.Time,
-			Size:      tx.Size,
-			TotalOut:  dcrutil.Amount(totalOut).ToCoin(),
-			Type:      txhelpers.TxTypeToString(int(txType)),
-			TypeID:    int(txType),
-			VoteInfo:  voteInfo,
-			SKATotals: txhelpers.SKATotalsFromMsgTx(msgTx),
+			Hash:        hashStr, // dup of TxID!
+			Time:        tx.Time,
+			Size:        tx.Size,
+			TotalOut:    dcrutil.Amount(totalOut).ToCoin(),
+			Type:        txhelpers.TxTypeToString(int(txType)),
+			TypeID:      int(txType),
+			VoteInfo:    voteInfo,
+			SKATotals:   txhelpers.SKATotalsFromMsgTx(msgTx),
+			SKAFeeRates: txhelpers.SKAFeeRateMapFromAtoms(tx.SKAFee, msgTx),
 		})
 	}
 

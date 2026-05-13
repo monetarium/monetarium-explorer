@@ -130,7 +130,8 @@ func TestMempoolTemplate(t *testing.T) {
 			Transactions: []types.MempoolTx{
 				{Hash: "varhash", Time: 1, Size: 250, TotalOut: 1.5, FeeRate: 0.0001, Type: "Regular"},
 				{Hash: "skahash", Time: 2, Size: 250, Type: "Regular",
-					SKATotals: map[uint8]string{1: "1230000000000000000"}},
+					SKATotals:   map[uint8]string{1: "1230000000000000000"},
+					SKAFeeRates: map[uint8]string{1: "4920000000000000"}},
 			},
 		}
 		out := renderMempool(t, tmpl, inv)
@@ -143,9 +144,10 @@ func TestMempoolTemplate(t *testing.T) {
 		if !strings.Contains(out, "skahash") {
 			t.Error("missing SKA tx hash in output")
 		}
-		// SKA row should not render `VAR/kB` (fee rate em-dash). The literal
-		// `—` is fine; we just verify no `VAR/kB` for the SKA row by checking
-		// only one VAR/kB occurrence (the one VAR tx).
+		// SKA row renders SKA1/kB for its fee rate, never VAR/kB.
+		if !strings.Contains(out, "SKA1/kB") {
+			t.Error("expected SKA1/kB unit on SKA fee rate cell")
+		}
 		varKbCount := strings.Count(out, "VAR/kB")
 		if varKbCount == 0 {
 			t.Error("expected at least one VAR/kB for the VAR tx")
