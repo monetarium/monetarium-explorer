@@ -290,8 +290,9 @@ func TestStore_PoWSKARewardsFallback(t *testing.T) {
 		defer exp.pageData.RUnlock()
 		if len(exp.pageData.HomeInfo.PoWSKARewards) != 1 {
 			t.Errorf("Expected 1 reward from fallback, got %d", len(exp.pageData.HomeInfo.PoWSKARewards))
-		} else if exp.pageData.HomeInfo.PoWSKARewards[0].Amount != "50" {
-			t.Errorf("Expected reward amount 50, got %s", exp.pageData.HomeInfo.PoWSKARewards[0].Amount)
+		} else if exp.pageData.HomeInfo.PoWSKARewards[0].Amount != "25" {
+			// Fees are split 50/50 between PoW and PoS, so fallback returns half of total fees
+			t.Errorf("Expected reward amount 25 (50/2), got %s", exp.pageData.HomeInfo.PoWSKARewards[0].Amount)
 		}
 	})
 
