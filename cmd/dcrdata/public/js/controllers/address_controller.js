@@ -208,7 +208,6 @@ export default class extends Controller {
     return [
       'options',
       'addr',
-      'balance',
       'flow',
       'zoom',
       'interval',
@@ -285,7 +284,6 @@ export default class extends Controller {
       offset: parseInt(cdata.get('offset')),
       count: parseInt(cdata.get('txnCount'))
     }
-    ctrl.balance = cdata.get('balance')
 
     const rawActiveCoins = ctrl.element.getAttribute('data-active-coins') || '[]'
     try {
@@ -938,16 +936,22 @@ export default class extends Controller {
           const count = this.txnCountTarget
           count.dataset.txnCount++
           setTxnCountText(count, count.dataset.txnCount)
-          this.numUnconfirmedTargets.forEach((tr, _i) => {
-            const td = tr.querySelector('td.addr-unconfirmed-count')
+          // Decrement only the unconfirmed counter whose coin matches the
+          // confirmed transaction. The coin type comes from the SSR-rendered
+          // data-coin-type attribute on the row's Coin column.
+          const rowCoinType = row.querySelector('[data-coin-type]')?.dataset.coinType
+          this.numUnconfirmedTargets.forEach((tr) => {
+            if (rowCoinType !== undefined && tr.dataset.coinType !== rowCoinType) return
+            const countSpan = tr.querySelector('.addr-unconfirmed-count')
             let unconfirmedCount = parseInt(tr.dataset.count)
-            if (unconfirmedCount) unconfirmedCount--
+            if (isNaN(unconfirmedCount)) unconfirmedCount = 0
+            if (unconfirmedCount > 0) unconfirmedCount--
             tr.dataset.count = unconfirmedCount
             if (unconfirmedCount === 0) {
-              tr.classList.add('.d-hide')
+              tr.classList.add('d-hide')
               delete tr.dataset.addressTarget
-            } else {
-              td.textContent = unconfirmedCount
+            } else if (countSpan) {
+              countSpan.textContent = unconfirmedCount.toLocaleString()
             }
           })
         }
