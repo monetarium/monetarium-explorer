@@ -48,14 +48,16 @@
               <br>
               {{- range $ct := $active}}
                 {{- $cb := index $balance.Coins $ct}}
-                <span class="lh1rem d-block pt-1 fs18 fs14-decimal fw-bold">
-                  {{- if eq $ct 0 -}}
-                    {{template "decimalParts" (amountAsDecimalParts $cb.TotalUnspent true)}}
-                  {{- else -}}
-                    {{template "decimalParts" (skaDecimalParts $cb.TotalUnspentSKA true)}}
-                  {{- end -}}
-                  <span class="text-secondary fs14 ms-1">{{coinSymbol $ct}}</span>
-                </span>
+                {{- if $cb}}
+                  <span class="lh1rem d-block pt-1 fs18 fs14-decimal fw-bold">
+                    {{- if eq $ct 0 -}}
+                      {{template "decimalParts" (amountAsDecimalParts $cb.TotalUnspent true)}}
+                    {{- else -}}
+                      {{template "decimalParts" (skaDecimalParts $cb.TotalUnspentSKA true)}}
+                    {{- end -}}
+                    <span class="text-secondary fs14 ms-1">{{coinSymbol $ct}}</span>
+                  </span>
+                {{- end}}
               {{- else}}
                 <span class="lh1rem d-inline-block pt-1 fs18 fs14-decimal fw-bold">&mdash;</span>
               {{- end}}
@@ -65,14 +67,16 @@
               <br>
               {{- range $ct := $active}}
                 {{- $cb := index $balance.Coins $ct}}
-                <span class="lh1rem d-block pt-1 fs18 fs14-decimal fw-bold">
-                  {{- if eq $ct 0 -}}
-                    {{template "decimalParts" (amountAsDecimalParts $cb.TotalReceived true)}}
-                  {{- else -}}
-                    {{template "decimalParts" (skaDecimalParts $cb.TotalReceivedSKA true)}}
-                  {{- end -}}
-                  <span class="text-secondary fs14 ms-1">{{coinSymbol $ct}}</span>
-                </span>
+                {{- if $cb}}
+                  <span class="lh1rem d-block pt-1 fs18 fs14-decimal fw-bold">
+                    {{- if eq $ct 0 -}}
+                      {{template "decimalParts" (amountAsDecimalParts $cb.TotalReceived true)}}
+                    {{- else -}}
+                      {{template "decimalParts" (skaDecimalParts $cb.TotalReceivedSKA true)}}
+                    {{- end -}}
+                    <span class="text-secondary fs14 ms-1">{{coinSymbol $ct}}</span>
+                  </span>
+                {{- end}}
               {{- else}}
                 <span class="lh1rem d-inline-block pt-1 fs18 fs14-decimal fw-bold">&mdash;</span>
               {{- end}}
@@ -86,14 +90,16 @@
               <br>
               {{- range $ct := $active}}
                 {{- $cb := index $balance.Coins $ct}}
-                <span class="lh1rem d-block pt-1 fs18 fs14-decimal fw-bold">
-                  {{- if eq $ct 0 -}}
-                    {{template "decimalParts" (amountAsDecimalParts $cb.TotalSpent true)}}
-                  {{- else -}}
-                    {{template "decimalParts" (skaDecimalParts $cb.TotalSpentSKA true)}}
-                  {{- end -}}
-                  <span class="text-secondary fs14 ms-1">{{coinSymbol $ct}}</span>
-                </span>
+                {{- if $cb}}
+                  <span class="lh1rem d-block pt-1 fs18 fs14-decimal fw-bold">
+                    {{- if eq $ct 0 -}}
+                      {{template "decimalParts" (amountAsDecimalParts $cb.TotalSpent true)}}
+                    {{- else -}}
+                      {{template "decimalParts" (skaDecimalParts $cb.TotalSpentSKA true)}}
+                    {{- end -}}
+                    <span class="text-secondary fs14 ms-1">{{coinSymbol $ct}}</span>
+                  </span>
+                {{- end}}
               {{- else}}
                 <span class="lh1rem d-inline-block pt-1 fs18 fs14-decimal fw-bold">&mdash;</span>
               {{- end}}
