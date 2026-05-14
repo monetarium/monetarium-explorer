@@ -7,6 +7,7 @@ import { padPoints, sizedBarPlotter } from '../helpers/chart_helper'
 import { requestJSON } from '../helpers/http'
 import humanize from '../helpers/humanize_helper'
 import { getDefault } from '../helpers/module_helper'
+import { renderCoinType, splitSkaAtomsNoTrailing } from '../helpers/ska_helper'
 import TurboQuery from '../helpers/turbolinks_helper'
 import Zoom from '../helpers/zoom_helper'
 import globalEventBus from '../services/event_bus_service'
@@ -27,20 +28,51 @@ function txTypesFunc(d, binSize) {
   return p
 }
 
-function amountFlowProcessor(d, binSize) {
+function amountFlowProcessor(d, binSize, coinType, atomsByTime) {
   const flowData = []
   const balanceData = []
-  let balance = 0
+  atomsByTime.clear()
+  const isVAR = coinType === 0
 
   d.time.forEach((n, i) => {
-    const v = d.net[i]
-    let netReceived = 0
-    let netSent = 0
-
-    v > 0 ? (netReceived = v) : (netSent = v * -1)
-    flowData.push([new Date(n), d.received[i], d.sent[i], netReceived, netSent])
-    balance += v
-    balanceData.push([new Date(n), balance])
+    const time = new Date(n)
+    if (isVAR) {
+      const v = d.net[i]
+      let netReceived = 0
+      let netSent = 0
+      v > 0 ? (netReceived = v) : (netSent = v * -1)
+      flowData.push([time, d.received[i], d.sent[i], netReceived, netSent])
+      // Server precomputes the cumulative VAR balance per bin (`*big.Int`
+      // accumulator at db/dcrpg/queries.go); reading it here removes the
+      // JS-side Number accumulator that lost precision at high balances.
+      balanceData.push([time, d.balance[i]])
+    } else {
+      const receivedStr = (d.received_atoms && d.received_atoms[i]) || '0'
+      const sentStr = (d.sent_atoms && d.sent_atoms[i]) || '0'
+      const netStr = (d.net_atoms && d.net_atoms[i]) || '0'
+      const balStr = (d.balance_atoms && d.balance_atoms[i]) || '0'
+      // Sign split happens on the string — no BigInt arithmetic.
+      const isNeg = netStr.charAt(0) === '-'
+      const netReceivedStr = isNeg ? '0' : netStr
+      const netSentStr = isNeg ? netStr.slice(1) : '0'
+      // Number() conversion is lossy at 18 decimals but acceptable for
+      // pixel positioning. Legend reads the original atom strings below.
+      flowData.push([
+        time,
+        Number(receivedStr),
+        Number(sentStr),
+        Number(netReceivedStr),
+        Number(netSentStr)
+      ])
+      balanceData.push([time, Number(balStr)])
+      atomsByTime.set(time.getTime(), {
+        Received: receivedStr,
+        Spent: sentStr,
+        'Net Received': netReceivedStr,
+        'Net Spent': netSentStr,
+        Balance: balStr
+      })
+    }
   })
 
   padPoints(flowData, binSize)
@@ -69,21 +101,46 @@ function formatter(data) {
   return html
 }
 
-function customizedFormatter(data) {
-  let xHTML = ''
-  if (data.xHTML !== undefined) {
-    xHTML = humanize.date(data.x, false, true)
+function formatSkaAtoms(atomStr) {
+  const parts = splitSkaAtomsNoTrailing(atomStr)
+  let frac = `${parts.bold}${parts.rest}`
+  // Drop trailing zeros from the bold prefix only when rest is empty so the
+  // legend never shows a stray ".00" tail.
+  if (parts.rest === '') frac = frac.replace(/0+$/, '')
+  return frac.length === 0 ? parts.intPart : `${parts.intPart}.${frac}`
+}
+
+function makeAmountFormatter(coinType, atomsByTime) {
+  const isVAR = coinType === 0
+  const coinLabel = renderCoinType(coinType)
+  return function (data) {
+    let xHTML = ''
+    if (data.xHTML !== undefined) {
+      xHTML = humanize.date(data.x, false, true)
+    }
+    let html = `${this.getLabels()[0]}: ${xHTML}`
+    const atoms = isVAR ? null : atomsByTime.get(data.x)
+    data.series.forEach((series) => {
+      if (series.color === undefined) return
+      if (series.y === 0) return
+      const l = `<span style="color: ${series.color};"> ${series.labelHTML}`
+      html = `<span style="color:#2d2d2d;">${html}</span>`
+      let valueStr = ''
+      if (isVAR) {
+        valueStr = isNaN(series.y) ? '' : `${series.y} ${coinLabel}`
+      } else {
+        const atomStr = atoms ? atoms[series.labelHTML] : null
+        if (atomStr) {
+          valueStr = `${formatSkaAtoms(atomStr)} ${coinLabel}`
+        } else if (!isNaN(series.y)) {
+          // Fall back for padPoints synthetic boundary points (no atoms map entry).
+          valueStr = `${series.y} ${coinLabel}`
+        }
+      }
+      html += `<br>${series.dashHTML}${l}: ${valueStr}</span> `
+    })
+    return html
   }
-  let html = `${this.getLabels()[0]}: ${xHTML}`
-  data.series.forEach((series) => {
-    if (series.color === undefined) return
-    // Skip display of zeros
-    if (series.y === 0) return
-    const l = `<span style="color: ${series.color};"> ${series.labelHTML}`
-    html = `<span style="color:#2d2d2d;">${html}</span>`
-    html += `<br>${series.dashHTML}${l}: ${isNaN(series.y) ? '' : `${series.y} DCR`}</span> `
-  })
-  return html
 }
 
 function setTxnCountText(el, count) {
@@ -124,12 +181,11 @@ function createOptions() {
     fillGraph: false
   }
 
+  // ylabel and legendFormatter are coin-dependent; built per-fetch in popChartCache.
   amountFlowGraphOptions = {
     labels: ['Date', 'Received', 'Spent', 'Net Received', 'Net Spent'],
     colors: ['#2971FF', '#2ED6A1', '#41BF53', '#FF0090'],
-    ylabel: 'Total (DCR)',
     visibility: [true, false, false, false],
-    legendFormatter: customizedFormatter,
     stackedGraph: true,
     fillGraph: false
   }
@@ -137,9 +193,7 @@ function createOptions() {
   balanceGraphOptions = {
     labels: ['Date', 'Balance'],
     colors: ['#41BF53'],
-    ylabel: 'Balance (DCR)',
     plotter: [Dygraph.Plotters.linePlotter, Dygraph.Plotters.fillPlotter],
-    legendFormatter: customizedFormatter,
     stackedGraph: false,
     visibility: [true],
     fillGraph: true,
@@ -188,13 +242,15 @@ export default class extends Controller {
       'fullscreen',
       'tablePagination',
       'paginationheader',
-      'coinFilter'
+      'coinFilter',
+      'coin'
     ]
   }
 
   async connect() {
     ctrl = this
     ctrl.retrievedData = {}
+    ctrl.skaAtomsByTime = new Map()
     ctrl.ajaxing = false
     ctrl.qrCode = false
     ctrl.requestedChart = false
@@ -354,6 +410,31 @@ export default class extends Controller {
       this.coinFilterTarget.value =
         settings.coin === null || settings.coin === undefined ? '' : String(settings.coin)
     }
+    // The chart selector is always pinned to a single coin (no "All" option):
+    // when settings.coin is unset, show the effective default coin.
+    if (this.hasCoinTarget) {
+      const effective =
+        settings.coin === null || settings.coin === undefined
+          ? String(this.effectiveCoin())
+          : String(settings.coin)
+      if (this.coinTarget.querySelector(`option[value="${effective}"]`)) {
+        this.coinTarget.value = effective
+      }
+    }
+  }
+
+  // effectiveCoin returns the integer coin actually used for chart fetches.
+  // Mirrors the backend's CoinTypeAll → 0 collapse for chart endpoints.
+  effectiveCoin() {
+    const raw = this.settings.coin
+    if (raw !== null && raw !== undefined && raw !== '') {
+      const n = parseInt(raw, 10)
+      if (Number.isInteger(n)) return n
+    }
+    if (Array.isArray(this.activeCoins) && this.activeCoins.length > 0) {
+      return this.activeCoins[0]
+    }
+    return 0
   }
 
   changePageSize() {
@@ -367,7 +448,14 @@ export default class extends Controller {
   changeCoin(e) {
     const v = e.target.value
     this.settings.coin = v === '' ? null : v
+    // Keep both selectors (chart + table) in sync regardless of which one fired.
+    this.normalizeCoinSetting()
+    // Pagination loses meaning when scope changes — fetchTable writes
+    // settings.start = 0 and runs query.replace, persisting the new coin to URL.
     this.fetchTable(this.txnType, this.pageSize, 0)
+    // Invalidate the drawGraph short-circuit so a coin change refetches the chart.
+    this.state.coin = '__force_refetch__'
+    this.drawGraph()
   }
 
   nextPage() {
@@ -520,7 +608,11 @@ export default class extends Controller {
     // Check for invalid view parameters
     if (!ctrl.validChartType(settings.chart) || !ctrl.validGraphInterval()) return
 
-    if (settings.chart === ctrl.state.chart && settings.bin === ctrl.state.bin) {
+    if (
+      settings.chart === ctrl.state.chart &&
+      settings.bin === ctrl.state.bin &&
+      settings.coin === ctrl.state.coin
+    ) {
       // Only the zoom has changed.
       const zoom = Zoom.decode(settings.zoom)
       if (zoom) {
@@ -535,7 +627,8 @@ export default class extends Controller {
   }
 
   async fetchGraphData(chart, bin) {
-    const cacheKey = `${chart}-${bin}`
+    const coin = ctrl.effectiveCoin()
+    const cacheKey = `${chart}-${bin}-${coin}`
     if (ctrl.ajaxing === cacheKey) {
       return
     }
@@ -558,7 +651,7 @@ export default class extends Controller {
     let url = `/api/treasury/io/${bin}`
     if (this.dcrAddress !== 'treasury') {
       const chartKey = chart === 'balance' ? 'amountflow' : chart
-      url = `/api/address/${ctrl.dcrAddress}/${chartKey}/${bin}`
+      url = `/api/address/${ctrl.dcrAddress}/${chartKey}/${bin}?coin=${coin}`
     }
 
     const graphDataResponse = await requestJSON(url)
@@ -573,13 +666,14 @@ export default class extends Controller {
       return
     }
 
+    const coin = ctrl.effectiveCoin()
     const binSize = Zoom.mapValue(bin) || blockDuration
     if (chart === 'types') {
-      ctrl.retrievedData[`types-${bin}`] = txTypesFunc(data, binSize)
+      ctrl.retrievedData[`types-${bin}-${coin}`] = txTypesFunc(data, binSize)
     } else if (chart === 'amountflow' || chart === 'balance') {
-      const processed = amountFlowProcessor(data, binSize)
-      ctrl.retrievedData[`amountflow-${bin}`] = processed.flow
-      ctrl.retrievedData[`balance-${bin}`] = processed.balance
+      const processed = amountFlowProcessor(data, binSize, coin, ctrl.skaAtomsByTime)
+      ctrl.retrievedData[`amountflow-${bin}-${coin}`] = processed.flow
+      ctrl.retrievedData[`balance-${bin}-${coin}`] = processed.balance
     } else return
     setTimeout(() => {
       ctrl.popChartCache(chart, bin)
@@ -587,28 +681,43 @@ export default class extends Controller {
   }
 
   popChartCache(chart, bin) {
-    const cacheKey = `${chart}-${bin}`
+    const coin = ctrl.effectiveCoin()
+    const cacheKey = `${chart}-${bin}-${coin}`
     const binSize = Zoom.mapValue(bin) || blockDuration
     if (!ctrl.retrievedData[cacheKey] || ctrl.requestedChart !== cacheKey) {
       return
     }
     const data = ctrl.retrievedData[cacheKey]
     let options = null
+    const coinLabel = renderCoinType(coin)
+    const amountFormatter = makeAmountFormatter(coin, ctrl.skaAtomsByTime)
     ctrl.flowTarget.classList.add('d-hide')
     switch (chart) {
       case 'types':
-        options = typesGraphOptions
-        options.plotter = sizedBarPlotter(binSize)
+        options = {
+          ...typesGraphOptions,
+          ylabel: 'Tx Count',
+          legendFormatter: formatter,
+          plotter: sizedBarPlotter(binSize)
+        }
         break
 
       case 'amountflow':
-        options = amountFlowGraphOptions
-        options.plotter = sizedBarPlotter(binSize)
+        options = {
+          ...amountFlowGraphOptions,
+          ylabel: `Total (${coinLabel})`,
+          legendFormatter: amountFormatter,
+          plotter: sizedBarPlotter(binSize)
+        }
         ctrl.flowTarget.classList.remove('d-hide')
         break
 
       case 'balance':
-        options = balanceGraphOptions
+        options = {
+          ...balanceGraphOptions,
+          ylabel: `Balance (${coinLabel})`,
+          legendFormatter: amountFormatter
+        }
         break
     }
     options.zoomCallback = null

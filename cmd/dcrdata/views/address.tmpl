@@ -131,6 +131,44 @@
                     <option name="amountflow" value="amountflow">Sent/Received</option>
                 </select>
               </div>
+              <div class="btn-set secondary-card d-inline-flex flex-nowrap mx-2">
+                <label>Coin</label>
+                {{- if gt (len .ActiveCoins) 1}}
+                <select
+                    class="chart-box d-inline-flex dropdown"
+                    data-address-target="coin"
+                    data-action="change->address#changeCoin"
+                    name="coin"
+                >
+                    {{- range $i, $ct := .ActiveCoins}}
+                    <option value="{{$ct}}"{{if eq $i 0}} selected{{end}}>{{coinSymbol $ct}}</option>
+                    {{- end}}
+                </select>
+                {{- else if .ActiveCoins}}
+                {{- $onlyCoin := index .ActiveCoins 0}}
+                <span title="This address only has {{coinSymbol $onlyCoin}} transactions">
+                  <select
+                      class="chart-box d-inline-flex dropdown"
+                      data-address-target="coin"
+                      name="coin"
+                      disabled
+                  >
+                      <option value="{{$onlyCoin}}" selected>{{coinSymbol $onlyCoin}}</option>
+                  </select>
+                </span>
+                {{- else}}
+                <span title="This address has no transactions">
+                  <select
+                      class="chart-box d-inline-flex dropdown"
+                      data-address-target="coin"
+                      name="coin"
+                      disabled
+                  >
+                      <option value="" selected>-</option>
+                  </select>
+                </span>
+                {{- end}}
+              </div>
               <div
                   class="btn-set secondary-card d-inline-flex flex-nowrap mx-2"
                   data-toggle="buttons"
