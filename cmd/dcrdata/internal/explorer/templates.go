@@ -6,6 +6,7 @@ package explorer
 
 import (
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"math"
@@ -763,6 +764,19 @@ func makeTemplateFuncMap(params *chaincfg.Params) template.FuncMap {
 		},
 		"skaDecimalParts": func(atomStr string, useCommas bool, boldNumPlaces ...int) []string {
 			return skaDecimalParts(atomStr, useCommas, boldNumPlaces...)
+		},
+		"jsonMarshal": func(v any) (string, error) {
+			// json.Marshal encodes []byte (alias of []uint8) as base64.
+			// Coerce []uint8 to []int so coin_type slices render as JSON arrays.
+			if u, ok := v.([]uint8); ok {
+				ints := make([]int, len(u))
+				for i, n := range u {
+					ints[i] = int(n)
+				}
+				v = ints
+			}
+			b, err := json.Marshal(v)
+			return string(b), err
 		},
 		"skaDecimalPartsNoTrailing": func(atomStr string, useCommas bool, boldNumPlaces ...int) []string {
 			return skaDecimalPartsNoTrailing(atomStr, useCommas, boldNumPlaces...)

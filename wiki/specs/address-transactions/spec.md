@@ -165,11 +165,13 @@ Tx Type | Tx ID | Coin | I/O Count | Credit | Debit | Time | Age | Confirms | Si
 - `value="" → "All"` (default; означает «без фильтра, все монеты»).
 - `value="0" → coinSymbol 0 ("VAR")` — только если `0 ∈ ActiveCoins`.
 - `value="N" → coinSymbol N ("SKA{N}")` — для каждого `N ∈ ActiveCoins`, `N != 0`.
-- Селектор скрыт, если `len(ActiveCoins) <= 1` (только один coin → нечего выбирать).
+- Если `len(ActiveCoins) <= 1` — селектор **задизейблен** (`disabled`) и обёрнут в `<span title="...">`, чтобы tooltip работал на disabled-элементе (одинаковое поведение с charts-карточкой, см. [address-charts §3.1](../address-charts/spec.md)). Скрывать селектор полностью не следует: пользователь должен видеть активную монету адреса и понимать, почему выбор недоступен. В этом режиме селектор не несёт `data-address-target="coinFilter"` / `data-action` — он полностью статичен и не участвует в JS-нормализации.
+  - `len(ActiveCoins) == 1`: единственная опция — `coinSymbol $onlyCoin`, pre-selected; tooltip — `"This address only has {coinSymbol} transactions"`.
+  - `ActiveCoins пуст` (адрес без транзакций, non-dummy): единственная опция — `"All"`, pre-selected; tooltip — `"This address has no transactions"`. Фильтр всё равно рендерится, чтобы layout/контролы оставались стабильными между адресами. В этом случае селектор `txntype` также рендерится **disabled** (фильтровать всё равно нечего); tooltip-объяснение даёт соседний `coin`-селектор.
 
 **Поведение:**
 
-- `<select data-address-target="coinFilter" data-action="change->address#changeCoin">`.
+- `<select data-address-target="coinFilter" data-action="change->address#changeCoin">` (только при `len(ActiveCoins) > 1`).
 - Изменение пишет `settings.coin = e.target.value` (или `delete settings.coin` если выбран «All»), сбрасывает `?start=0` (см. address-overview §4), делает refetch таблицы (`fetchTable`).
 - Текущее значение читается из URL в `connect()` и нормализуется (если значение не из `ActiveCoins` или не пустое — нормализуется к "All").
 

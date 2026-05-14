@@ -1542,7 +1542,6 @@ func (exp *explorerUI) AddressPage(w http.ResponseWriter, r *http.Request) {
 		Type         txhelpers.AddressType
 		CRLFDownload bool
 		Pages        []pageNumber
-		FiatBalance  interface{} // TODO: Remove once frontend is updated for multi-coin support
 	}
 
 	// Grab the URL query parameters
@@ -1623,6 +1622,9 @@ func (exp *explorerUI) AddressPage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	linkTemplate := fmt.Sprintf("/address/%s?start=%%d&n=%d&txntype=%v", addrData.Address, limitN, txnType)
+	if coinType := middleware.GetCoinCtx(r); coinType != dbtypes.CoinTypeAll {
+		linkTemplate += fmt.Sprintf("&coin=%d", coinType)
+	}
 
 	// Execute the HTML template.
 	pageData := AddressPageData{
@@ -1630,7 +1632,6 @@ func (exp *explorerUI) AddressPage(w http.ResponseWriter, r *http.Request) {
 		Data:           addrData,
 		CRLFDownload:   UseCRLF,
 		Pages:          calcPages(int(addrData.TxnCount), int(limitN), int(offsetAddrOuts), linkTemplate),
-		FiatBalance:    nil, // TODO: Remove once frontend is updated for multi-coin support
 	}
 	str, err := exp.templates.exec("address", pageData)
 	if err != nil {
@@ -1669,6 +1670,9 @@ func (exp *explorerUI) AddressTable(w http.ResponseWriter, r *http.Request) {
 	}
 
 	linkTemplate := "/address/" + addrData.Address + "?start=%d&n=" + strconv.FormatInt(limitN, 10) + "&txntype=" + fmt.Sprintf("%v", txnType)
+	if coinType := middleware.GetCoinCtx(r); coinType != dbtypes.CoinTypeAll {
+		linkTemplate += fmt.Sprintf("&coin=%d", coinType)
+	}
 
 	response := struct {
 		TxnCount int64        `json:"tx_count"`

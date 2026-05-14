@@ -51,10 +51,14 @@ _End-to-end pipeline for transaction processing, decoding, and rendering inputs/
 
 ### Address
 
-_Address page rendering, paginated transaction table, chart endpoints, and TurboQuery-driven URL state (chart kind, zoom, group-by, pagination)._
+_Address page rendering: paginated transaction table, chart endpoints, CSV download, multi-coin backend (`?coin=` via `CoinCtx` middleware) with frontend still rendering VAR-only, and TurboQuery-driven URL state (chart kind, zoom, group-by, pagination)._
 
-- flow (compact): code-analysis/address/flow.compact.md — high-level summary of the address page data path and URL-state contract
-- flow (full): code-analysis/address/flow.full.md — detailed function trace for the address handler, chart API, and frontend controller (including the stale-zoom-param failure mode)
+- flow (compact): code-analysis/address/flow.compact.md — high-level summary of the address page data path, URL contract, and the dual-field migration shim
+- flow (full): code-analysis/address/flow.full.md — detailed function trace covering handler, DB layer with per-coin `Coins` map, cache, chart API, CSV, frontend controller (stale-zoom-param failure mode + confirmed SKA SQL precision bug)
+- patterns: code-analysis/address/patterns.md — `CoinCtx` URL contract, dual-field migration shim, coin-aware aggregation pipelines, per-coin caching, SKA decimal-string atom pipeline, TurboQuery URL ownership
+- impact (summary card): code-analysis/address/summary.impact.md — left-top card; backend per-coin complete, template still reads legacy flat fields and labels everything `DCR`; `FiatBalance` now `nil`
+- impact (transactions): code-analysis/address/transactions.impact.md — bottom section + `/addresstable` XHR + CSV; per-row coin fields populated but unread by template; CSV is multi-coin complete (`coin_type` column added, `value`→`amount` renamed)
+- impact (charts): code-analysis/address/charts.impact.md — chart API now `?coin=N`-aware end-to-end on backend; frontend doesn't emit `?coin=`; **confirmed SKA SQL precision bug** in `selectAddressAmountFlowByAddress`
 
 ### Windows
 
