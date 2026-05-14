@@ -13,6 +13,7 @@
       data-address-dcraddress="{{.Address}}"
       data-address-txn-count="{{$TxnCount}}"
       data-address-balance="{{toFloat64Amount .Balance.TotalUnspent}}"
+      data-active-coins='{{jsonMarshal .ActiveCoins}}'
     >
     <div class="fullscreen d-none" data-address-target="fullscreen" data-action="click->address#exitFullscreen">
       <div class="secondary-card d-inline-block w-100 h-100 p-4" data-address-target="bigchart"></div>
@@ -261,6 +262,7 @@
                 data-address-target="txntype"
                 data-action="change->address#changeTxType"
                 class="form-control-sm mb-2 me-sm-2 mb-sm-0 dropwdown"
+                {{- if not .ActiveCoins}} disabled{{end}}
               >
                   <option {{if eq $txType "all"}}selected{{end}} value="all">All</option>
                   <option {{if eq $txType "unspent"}}selected{{end}} value="unspent">Unspent</option>
@@ -270,6 +272,43 @@
                   <option {{if eq $txType "merged_credit"}}selected{{end}} value="merged_credit">Merged Credits</option>
                   <option {{if eq $txType "merged_debit"}}selected{{end}} value="merged_debit">Merged Debits</option>
               </select>
+            </div>
+            <div class="d-inline-block text-end">
+              <label class="mb-0 me-1" for="coin">Coin</label>
+              {{- if gt (len .ActiveCoins) 1}}
+              <select
+                name="coin"
+                data-address-target="coinFilter"
+                data-action="change->address#changeCoin"
+                class="form-control-sm mb-2 me-sm-2 mb-sm-0 dropwdown"
+              >
+                  <option value="">All</option>
+                  {{- range .ActiveCoins}}
+                  <option value="{{.}}">{{coinSymbol .}}</option>
+                  {{- end}}
+              </select>
+              {{- else if .ActiveCoins}}
+              {{- $onlyCoin := index .ActiveCoins 0}}
+              <span title="This address only has {{coinSymbol $onlyCoin}} transactions">
+                <select
+                  name="coin"
+                  class="form-control-sm mb-2 me-sm-2 mb-sm-0 dropwdown"
+                  disabled
+                >
+                  <option value="{{$onlyCoin}}" selected>{{coinSymbol $onlyCoin}}</option>
+                </select>
+              </span>
+              {{- else}}
+              <span title="This address has no transactions">
+                <select
+                  name="coin"
+                  class="form-control-sm mb-2 me-sm-2 mb-sm-0 dropwdown"
+                  disabled
+                >
+                  <option value="" selected>All</option>
+                </select>
+              </span>
+              {{- end}}
             </div>
             <div class="d-inline-block text-end">
               <label class="mb-0 me-1" for="pagesize">Page size</label>

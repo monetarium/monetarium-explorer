@@ -187,7 +187,8 @@ export default class extends Controller {
       'bigchart',
       'fullscreen',
       'tablePagination',
-      'paginationheader'
+      'paginationheader',
+      'coinFilter'
     ]
   }
 
@@ -215,7 +216,8 @@ export default class extends Controller {
       'flow',
       'n',
       'start',
-      'txntype'
+      'txntype',
+      'coin'
     ]))
 
     ctrl.state = Object.assign({}, settings)
@@ -229,8 +231,17 @@ export default class extends Controller {
     }
     ctrl.balance = cdata.get('balance')
 
+    const rawActiveCoins = ctrl.element.getAttribute('data-active-coins') || '[]'
+    try {
+      ctrl.activeCoins = JSON.parse(rawActiveCoins)
+    } catch {
+      ctrl.activeCoins = []
+    }
+    if (!Array.isArray(ctrl.activeCoins)) ctrl.activeCoins = []
+
     // Get initial view settings from the url
     ctrl.query.update(settings)
+    ctrl.normalizeCoinSetting()
     ctrl.setChartType()
     if (settings.flow) ctrl.setFlowChecks()
     if (settings.zoom !== null) {
@@ -319,7 +330,30 @@ export default class extends Controller {
   makeTableUrl(txType, count, offset) {
     const root =
       this.dcrAddress === 'treasury' ? 'treasurytable' : `addresstable/${this.dcrAddress}`
-    return `/${root}?txntype=${txType}&n=${count}&start=${offset}`
+    return `/${root}?txntype=${txType}&n=${count}&start=${offset}${this.coinUrlSegment()}`
+  }
+
+  coinUrlSegment() {
+    const coin = this.settings.coin
+    return coin === null || coin === undefined || coin === '' ? '' : `&coin=${coin}`
+  }
+
+  normalizeCoinSetting() {
+    const settings = this.settings
+    if (settings.coin !== null && settings.coin !== undefined && settings.coin !== '') {
+      const n = parseInt(settings.coin, 10)
+      if (!Number.isInteger(n) || !this.activeCoins.includes(n)) {
+        settings.coin = null
+        this.query.replace(settings)
+      } else {
+        // Canonicalize string form for downstream URL building.
+        settings.coin = String(n)
+      }
+    }
+    if (this.hasCoinFilterTarget) {
+      this.coinFilterTarget.value =
+        settings.coin === null || settings.coin === undefined ? '' : String(settings.coin)
+    }
   }
 
   changePageSize() {
@@ -327,6 +361,12 @@ export default class extends Controller {
   }
 
   changeTxType() {
+    this.fetchTable(this.txnType, this.pageSize, 0)
+  }
+
+  changeCoin(e) {
+    const v = e.target.value
+    this.settings.coin = v === '' ? null : v
     this.fetchTable(this.txnType, this.pageSize, 0)
   }
 
@@ -445,10 +485,11 @@ export default class extends Controller {
     let links = ''
 
     const root = this.dcrAddress === 'treasury' ? 'treasury' : `address/${this.dcrAddress}`
+    const coinSeg = this.coinUrlSegment()
 
     if (typeof offset !== 'undefined' && offset > 0) {
       links =
-        `<a href="/${root}?start=${offset - pageSize}&n=${pageSize}&txntype=${txnType}" ` +
+        `<a href="/${root}?start=${offset - pageSize}&n=${pageSize}&txntype=${txnType}${coinSeg}" ` +
         'class="d-inline-block monicon-arrow-left m-1 fz20" data-action="click->address#pageNumberLink"></a>' +
         '\n'
     }
@@ -463,7 +504,7 @@ export default class extends Controller {
     if (txCount - offset > pageSize) {
       links +=
         '\n' +
-        `<a href="/${root}?start=${offset + pageSize}&n=${pageSize}&txntype=${txnType}" ` +
+        `<a href="/${root}?start=${offset + pageSize}&n=${pageSize}&txntype=${txnType}${coinSeg}" ` +
         'class="d-inline-block monicon-arrow-right m-1 fs20" data-action="click->address#pageNumberLink"></a>'
     }
 

@@ -1623,6 +1623,9 @@ func (exp *explorerUI) AddressPage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	linkTemplate := fmt.Sprintf("/address/%s?start=%%d&n=%d&txntype=%v", addrData.Address, limitN, txnType)
+	if coinType := middleware.GetCoinCtx(r); coinType != dbtypes.CoinTypeAll {
+		linkTemplate += fmt.Sprintf("&coin=%d", coinType)
+	}
 
 	// Execute the HTML template.
 	pageData := AddressPageData{
@@ -1669,6 +1672,9 @@ func (exp *explorerUI) AddressTable(w http.ResponseWriter, r *http.Request) {
 	}
 
 	linkTemplate := "/address/" + addrData.Address + "?start=%d&n=" + strconv.FormatInt(limitN, 10) + "&txntype=" + fmt.Sprintf("%v", txnType)
+	if coinType := middleware.GetCoinCtx(r); coinType != dbtypes.CoinTypeAll {
+		linkTemplate += fmt.Sprintf("&coin=%d", coinType)
+	}
 
 	response := struct {
 		TxnCount int64        `json:"tx_count"`
