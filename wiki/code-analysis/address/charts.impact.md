@@ -2,16 +2,20 @@
 
 Change-surface reference for the right-top "charts" card on `/address/{address}`. Companion to `wiki/code-analysis/address/flow.compact.md` and `flow.full.md`; covers only the chart UI, its API endpoints, the DB query path, and URL state. Summary card and transactions table are out of scope.
 
+## TL;DR
+
+The chart endpoints are now per-coin: `TxHistoryData(... coinType uint8)` flows from route → handler → DB → cache, with `?coin=N` parsed by `m.CoinCtx` middleware on `/api/address/{addr}/{types|amountflow}/{chartgrouping}`. Cache key includes coin type. `ChartsData` ships parallel `BalanceAtoms`/`ReceivedAtoms`/`SentAtoms`/`NetAtoms` SKA-string series alongside the existing VAR float series, and `parseRowsSentReceived` populates both via `*big.Int`. The SKA precision bug in `selectAddressAmountFlowByAddress` (formerly summing `addresses.value INT8` for SKA, truncating 1e18-scale atoms to ~zero) was **fixed in PR #263 (commit `49953185`)**: the SQL now also emits `COALESCE(SUM(NULLIF(ska_value,'')::numeric), 0)::text` columns and `parseRowsSentReceived` scans them as strings for `coinType > 0`. SKA `amountflow`/`balance` series are now correct end-to-end on the backend. The frontend has not adopted any of the new fields: `address_controller.js` does not declare `coin` in its TurboQuery null-template, does not append `?coin=` to chart URLs, and `amountFlowProcessor` (line 30-53) still integrates `d.net[i]` as a float64 JS `Number`. Legend/ylabels still say `DCR`.
+
 ---
 
 ## 1. Scope
 
 Template region (the right-top card):
-- `cmd/dcrdata/views/address.tmpl:113-183` — the `<div class="col-24 col-xl-13 secondary-card p-2">` block.
+- [cmd/dcrdata/views/address.tmpl:113-183](cmd/dcrdata/views/address.tmpl#L113-L183) — the `<div class="col-24 col-xl-13 secondary-card p-2">` block.
   - Fullscreen mount: `address.tmpl:17-19` (`fullscreen` + `bigchart` targets) — outside the card but driven by `toggleExpand` on the card's `expando`.
   - Container `data-controller="address newblock"` and the per-page payload attributes are at `address.tmpl:10-16` (read by `connect()`).
 
-Frontend controller sections (`cmd/dcrdata/public/js/controllers/address_controller.js`):
+Frontend controller sections ([cmd/dcrdata/public/js/controllers/address_controller.js](cmd/dcrdata/public/js/controllers/address_controller.js)):
 - Module-level chart helpers: `txTypesFunc` (18-28), `amountFlowProcessor` (30-53), `formatter` / `customizedFormatter` (55-87), `createOptions` / `commonOptions` / `typesGraphOptions` / `amountFlowGraphOptions` / `balanceGraphOptions` (97-148).
 - Targets used on this card: `options`, `flow`, `zoom`, `interval`, `chartbox`, `noconfirms`, `chart`, `chartLoader`, `expando`, `littlechart`, `bigchart`, `fullscreen` (declared in the `targets` list at 153-191).
 - Lifecycle: `connect` (194-254), `disconnect` (256-262), `bindElements` (274-282), `initializeChart` (265-272).
@@ -22,66 +26,70 @@ Frontend controller sections (`cmd/dcrdata/public/js/controllers/address_control
 - Dygraph wrapper: `createGraph` (433-435).
 - Dygraph lazy load: `Dygraph = await getDefault(import('../vendor/dygraphs.min.js'))` at 248-250.
 
-Backend chart routes and handlers (chart side only):
-- `cmd/dcrdata/internal/api/apirouter.go:185-186` — `/api/address/{address}/types/{chartgrouping}` and `/api/address/{address}/amountflow/{chartgrouping}`.
-- `cmd/dcrdata/internal/api/apiroutes.go:1777-1811` (`getAddressTxTypesData`), `:1813-1846` (`getAddressTxAmountFlowData`).
-- `DataSource.TxHistoryData` interface entry: `apiroutes.go:65-66`.
-- Mock: `cmd/dcrdata/internal/api/noop_ds_test.go:40-42`.
+Backend chart routes and handlers:
+- [cmd/dcrdata/internal/api/apirouter.go:185-186](cmd/dcrdata/internal/api/apirouter.go#L185-L186) — routes wrapped with `m.ChartGroupingCtx, m.CoinCtx`:
+  - `/api/address/{address}/types/{chartgrouping}`
+  - `/api/address/{address}/amountflow/{chartgrouping}`
+- [cmd/dcrdata/internal/api/apiroutes.go:1827-1862](cmd/dcrdata/internal/api/apiroutes.go#L1827-L1862) — `getAddressTxTypesData`. Reads `coinType := m.GetCoinCtx(r)` (1848), calls `TxHistoryData(ctx, address, dbtypes.TxsType, interval, coinType)`.
+- [cmd/dcrdata/internal/api/apiroutes.go:1864-1896](cmd/dcrdata/internal/api/apiroutes.go#L1864-L1896) — `getAddressTxAmountFlowData`. Same shape with `dbtypes.AmountFlow`.
+- DataSource interface: [cmd/dcrdata/internal/api/apiroutes.go:64-66](cmd/dcrdata/internal/api/apiroutes.go#L64-L66) — `TxHistoryData(... coinType uint8)`.
+- Mocks: [noop_ds_test.go:40](cmd/dcrdata/internal/api/noop_ds_test.go#L40), [apiroutes_test.go:359](cmd/dcrdata/internal/api/apiroutes_test.go#L359).
 
 Backend DB path:
-- `db/dcrpg/pgblockchain.go:3112-3182` (`(*ChainDB).TxHistoryData` — cache lookup + dispatch).
-- `db/dcrpg/queries.go:1909-1939` (`retrieveTxHistoryByType`), `:1946-1952` (`retrieveTxHistoryByAmountFlow`), `:4139-4164` (`parseRowsSentReceived`), `:4135-4137` (`toCoin` helper).
-- `db/dcrpg/internal/addrstmts.go:312-329` (raw SQL for both kinds), `:417-425` (`MakeSelectAddressTxTypesByAddress`, `MakeSelectAddressAmountFlowByAddress`).
-- Cache: `db/cache/addresscache.go:460-482` (`(*AddressCacheItem).HistoryChart`), `:854-868` (`(*AddressCache).HistoryChart`), `:1120-1166` (`StoreHistoryChart`). Cache buckets keyed by `dbtypes.HistoryChart` × `dbtypes.TimeBasedGrouping`.
-- Types: `db/dbtypes/types.go:855-862` (`HistoryChart`/`TxsType`/`AmountFlow`), `:745-770` (`TimeBasedGrouping` + `TimeIntervals`), `:822-862` (`TimeBasedGroupings`/`TimeGroupingFromStr`), `:2030-2040` (`ChartsData`).
+- [db/dcrpg/pgblockchain.go:3323-3397](db/dcrpg/pgblockchain.go#L3323-L3397) (`(*ChainDB).TxHistoryData(... coinType uint8)`).
+- [db/dcrpg/queries.go:2054-2089](db/dcrpg/queries.go#L2054-L2089) (`retrieveTxHistoryByType(... coinType uint8)`).
+- [db/dcrpg/queries.go:2091-2102](db/dcrpg/queries.go#L2091-L2102) (`retrieveTxHistoryByAmountFlow(... coinType uint8)`).
+- [db/dcrpg/queries.go:4289-4331](db/dcrpg/queries.go#L4289-L4331) (`parseRowsSentReceived(rows, coinType uint8)`).
+- [db/dcrpg/internal/addrstmts.go:338-359](db/dcrpg/internal/addrstmts.go#L338-L359) (`selectAddressTxTypesByAddress` and `selectAddressAmountFlowByAddress` — both filter `WHERE address=$1 AND coin_type=$2 AND valid_mainchain`).
+- Cache: [db/cache/addresscache.go:378-379](db/cache/addresscache.go#L378-L379) (`TxHistory{TypeByInterval [NumIntervals]map[uint8]*ChartsData, AmtFlowByInterval [NumIntervals]map[uint8]*ChartsData}`); accessor [`HistoryChart(... coinType uint8)`:461,866](db/cache/addresscache.go#L461); writer [`StoreHistoryChart(... coinType uint8, ...)`:1143](db/cache/addresscache.go#L1143).
+- Types: [db/dbtypes/types.go:855+](db/dbtypes/types.go) (`HistoryChart`/`TxsType`/`AmountFlow`), 745+ (`TimeBasedGrouping` + `TimeIntervals`), 822+ (`TimeBasedGroupings`/`TimeGroupingFromStr`), [2041-2057](db/dbtypes/types.go#L2041-L2057) (`ChartsData` with new `*Atoms` SKA fields).
 
 ---
 
 ## 2. Backend touch points
 
-**Chart route registration** — `cmd/dcrdata/internal/api/apirouter.go:185-186`:
+**Chart route registration** — [cmd/dcrdata/internal/api/apirouter.go:185-186](cmd/dcrdata/internal/api/apirouter.go#L185-L186):
 ```
-re.With(m.ChartGroupingCtx).Get("/types/{chartgrouping}", app.getAddressTxTypesData)
-re.With(m.ChartGroupingCtx).Get("/amountflow/{chartgrouping}", app.getAddressTxAmountFlowData)
+re.With(m.ChartGroupingCtx, m.CoinCtx).Get("/types/{chartgrouping}", app.getAddressTxTypesData)
+re.With(m.ChartGroupingCtx, m.CoinCtx).Get("/amountflow/{chartgrouping}", app.getAddressTxAmountFlowData)
 ```
-Both inherit `m.AddressPathCtxN(1)` from the enclosing group (apirouter.go:181-198) so they accept exactly one address (rejects multi-address `,`-separated input). `m.ChartGroupingCtx` (`internal/middleware/apimiddleware.go:817+`) extracts `chartgrouping` URL segment.
+Both inherit `m.AddressPathCtxN(1)` from the enclosing group (apirouter.go:181-198) so they accept exactly one address (rejects multi-address `,`-separated input). `m.ChartGroupingCtx` ([apimiddleware.go:810](cmd/dcrdata/internal/middleware/apimiddleware.go#L810)) extracts the `chartgrouping` URL segment. `m.CoinCtx` ([apimiddleware.go:818-842](cmd/dcrdata/internal/middleware/apimiddleware.go#L818-L842)) parses `?coin=N` (1-255) into the request context; missing/invalid → `dbtypes.CoinTypeAll = 255`.
 
 There is **no `balance` route**. The "balance" chart kind is a frontend-only derivation: `address_controller.js:519` rewrites `chart === 'balance'` to URL key `amountflow` before fetching, then `amountFlowProcessor` (30-53) runs both `flow` and `balance` series from a single response.
 
 **Handler entry points**:
-- `getAddressTxTypesData` (apiroutes.go:1777) — calls `TxHistoryData(ctx, addr, dbtypes.TxsType, interval)`.
-- `getAddressTxAmountFlowData` (apiroutes.go:1813) — calls `TxHistoryData(ctx, addr, dbtypes.AmountFlow, interval)`.
+- `getAddressTxTypesData` ([apiroutes.go:1827](cmd/dcrdata/internal/api/apiroutes.go#L1827)) — calls `TxHistoryData(ctx, addr, dbtypes.TxsType, interval, coinType)`.
+- `getAddressTxAmountFlowData` ([apiroutes.go:1864](cmd/dcrdata/internal/api/apiroutes.go#L1864)) — calls `TxHistoryData(ctx, addr, dbtypes.AmountFlow, interval, coinType)`.
 
-Both pin the address parameter at index 0 (`addresses[0]`) after the `len(addresses) > 1` reject (lines 1781-1785 / 1817-1821), translate `chartgrouping` to `dbtypes.TimeBasedGrouping` via `TimeGroupingFromStr` (1793/1828), reject `UnknownGrouping`, and pass `dbtypes.IsTimeoutErr` failures through as HTTP 503. JSON serialization is plain `writeJSON(w, data, m.GetIndentCtx(r))`.
+Both pin the address parameter at index 0 (`addresses[0]`) after the `len(addresses) > 1` reject, translate `chartgrouping` to `dbtypes.TimeBasedGrouping` via `TimeGroupingFromStr`, reject `UnknownGrouping`, and pass `dbtypes.IsTimeoutErr` failures through as HTTP 503. JSON serialization is plain `writeJSON(w, data, m.GetIndentCtx(r))`.
 
-**`TxHistoryData` signature** — `db/dcrpg/pgblockchain.go:3114-3115`:
+**`TxHistoryData` signature** — [db/dcrpg/pgblockchain.go:3325-3326](db/dcrpg/pgblockchain.go#L3325-L3326):
 ```
 func (pgb *ChainDB) TxHistoryData(ctx context.Context, address string,
     addrChart dbtypes.HistoryChart,
-    chartGroupings dbtypes.TimeBasedGrouping) (cd *dbtypes.ChartsData, err error)
+    chartGroupings dbtypes.TimeBasedGrouping, coinType uint8) (cd *dbtypes.ChartsData, err error)
 ```
-**No `CoinType` parameter.** This is the central multi-coin gap (see §6).
 
-Call sites:
-- `cmd/dcrdata/internal/api/apiroutes.go:1798` (`TxsType`), `:1833` (`AmountFlow`).
-- Recursive self-call inside the `CacheLocks.bal.TryLock` busy-wait: `pgblockchain.go:3150`.
+**`CoinTypeAll → 0` collapse**: at the top of `TxHistoryData` (3327-3330):
+```
+if coinType == dbtypes.CoinTypeAll {
+    coinType = 0
+}
+```
+This is a chart-specific semantic: `255` ("no filter") is not meaningful for charts, so the default coin (VAR) is used. Different from table/CSV pipelines where `255` means "all coins".
 
-Interface declaration: `apiroutes.go:65-66` (`DataSource.TxHistoryData`).
+**`db/cache` interaction** ([db/cache/addresscache.go](db/cache/addresscache.go)):
+- Pre-DB lookup at `pgblockchain.go:3343`: `pgb.AddressCache.HistoryChart(address, addrChart, chartGroupings, coinType)`. If cache hit and `validBlock != nil`, returns immediately.
+- Per-address singleflight: `pgb.CacheLocks.bal.TryLock(address)` (3354). Concurrent callers wait on a channel; the winner runs the query.
+- Post-query store: `pgb.AddressCache.StoreHistoryChart(...)` (3394) keyed by `(address, HistoryChart, TimeBasedGrouping, coinType)`.
+- Cache shape: `AddressCacheItem.history` holds `TypeByInterval[grouping]` and `AmtFlowByInterval[grouping]` slots — two `[NumIntervals]map[uint8]*ChartsData` arrays per address (the inner map is keyed by `coinType`). [addresscache.go:378-379](db/cache/addresscache.go#L378-L379).
+- **Cache key now includes coin type** — different `?coin=` values cache independently. Cache invalidation (`FreshenAddressCaches`) is still per-address (whole address, all coins together).
 
-Mock: `noop_ds_test.go:40-42` (returns `nil, nil`). Any signature change here cascades.
+**SQL queries** — [db/dcrpg/internal/addrstmts.go](db/dcrpg/internal/addrstmts.go):
+- `selectAddressTxTypesByAddress` (338-347) — `COUNT(...)` of regular-tx funding/spending and `tx_type = 1/2/3` (SSTx/SSGen/SSRtx) over `addresses` rows for the given address. **Filters by `coin_type=$2`**. Counts are coin-agnostic by nature; tickets/votes/revocations are inherently VAR-only on consensus, so the `Tickets/Votes/RevokeTx` series are zero for `coinType > 0`.
+- `selectAddressAmountFlowByAddress` (348-359) — partitioned `SUM`s from the `addresses` table. **Filters by `coin_type=$2`**. Emits **four** columns (PR #263): VAR `received`/`sent` from `value INT8` guarded by `coin_type = 0`, plus SKA `received_ska`/`sent_ska` from `COALESCE(SUM(NULLIF(ska_value,'')::numeric), 0)::text` guarded by `coin_type > 0`. The `CASE` guards are belt-and-braces — the `WHERE coin_type=$2` filter already restricts rows to one coin family, so the other pair sums to zero.
 
-**`db/cache` interaction** (`db/cache/addresscache.go`):
-- Pre-DB lookup at `pgblockchain.go:3128`: `pgb.AddressCache.HistoryChart(address, addrChart, chartGroupings)`. If cache hit and `validBlock != nil`, returns immediately.
-- Per-address singleflight: `pgb.CacheLocks.bal.TryLock(address)` (3139). Concurrent callers wait on a channel; the winner runs the query.
-- Post-query store: `pgb.AddressCache.StoreHistoryChart(...)` (3179).
-- Cache shape: `AddressCacheItem.history` holds `TypeByInterval[grouping]` and `AmtFlowByInterval[grouping]` slots — two `[NumIntervals]*ChartsData` arrays per address. (`addresscache.go:471-481`, `:1156-1163`.)
-- **No coin-type dimension** in the cache key. Adding per-coin data requires either a new dimension (e.g. `[NumIntervals]*ChartsData[CoinType]`) or a separate cache map.
-
-**SQL queries** — `db/dcrpg/internal/addrstmts.go`:
-- `selectAddressTxTypesByAddress` (312-321) — `COUNT(...)` of regular-tx funding/spending and `tx_type = 1/2/3` (SSTx/SSGen/SSRtx) over `addresses` rows for the given address. **Does not filter by `coin_type`** and **does not reference `ska_value`**. Counts are coin-agnostic; tickets/votes/revocations are inherently VAR-only on Decred-derived consensus, so this row is structurally a count of "all txs (mostly VAR)".
-- `selectAddressAmountFlowByAddress` (323-329) — `SUM(value)` from the `addresses` table partitioned by `is_funding`. **`addresses.value` is `INT8` and stores VAR atoms only** (`addrstmts.go:21`). The `ska_value TEXT` column at line 23 exists in the schema but is **not summed** here.
-
-**`ChartsData` struct fields populated per kind** — `db/dbtypes/types.go:2030-2040`:
+**`ChartsData` struct** — [db/dbtypes/types.go:2041-2057](db/dbtypes/types.go#L2041-L2057):
 ```
 type ChartsData struct {
     Time        []TimeDef `json:"time,omitempty"`
@@ -93,11 +101,16 @@ type ChartsData struct {
     Received    []float64 `json:"received,omitempty"`
     Sent        []float64 `json:"sent,omitempty"`
     Net         []float64 `json:"net,omitempty"`
+    // Per-coin running balances (computed server-side via *big.Int for SKA)
+    Balance       []float64 `json:"balance,omitempty"`       // VAR running balance (float64, 8 decimals)
+    BalanceAtoms  []string  `json:"balance_atoms,omitempty"` // SKA running balance (string, 18 decimals)
+    ReceivedAtoms []string  `json:"received_atoms,omitempty"`
+    SentAtoms     []string  `json:"sent_atoms,omitempty"`
+    NetAtoms      []string  `json:"net_atoms,omitempty"`
 }
 ```
-- **`types`**: populates `Time`, `SentRtx`, `ReceivedRtx`, `Tickets`, `Votes`, `RevokeTx` (queries.go:1927-1932). Counts are `uint64` / `uint32`, no atomic precision concern.
-- **`amountflow`**: populates `Time`, `Received`, `Sent`, `Net` via `parseRowsSentReceived` (queries.go:4139-4163). `received`/`sent` come back as `uint64` then run through `toCoin = float64(amt) / 1e8` (queries.go:4135-4137). `Net = toCoin(received - sent)`. **Float64 boundary, hard-coded `1e-8` (VAR scale).**
-- **No `Balance` field on the wire.** The frontend computes balance by integrating `amountflow` (`amountFlowProcessor` lines 30-53).
+- **`types`**: populates `Time`, `SentRtx`, `ReceivedRtx`, `Tickets`, `Votes`, `RevokeTx` ([queries.go:2067-2089](db/dcrpg/queries.go#L2067-L2089)). Counts are `uint64` / `uint32`, no atomic precision concern — but stake counts are zero for non-VAR coins.
+- **`amountflow`**: populates `Time`, `Received`, `Sent`, `Net`, `Balance` (VAR float64 fields) AND `ReceivedAtoms`, `SentAtoms`, `NetAtoms`, `BalanceAtoms` (SKA string fields) via `parseRowsSentReceived` ([queries.go:4289-4331](db/dcrpg/queries.go#L4289-L4331)). Server-side cumulative balance computed via running `int64` (VAR) or `*big.Int` (SKA) — frontend doesn't have to integrate.
 
 ---
 
@@ -105,41 +118,37 @@ type ChartsData struct {
 
 ### 3.1 `balance`
 - **Wire**: not a backend kind. `address_controller.js:519` rewrites the URL chart segment to `amountflow` before calling `/api/address/{addr}/amountflow/{bin}`.
-- **Data source**: same response as `amountflow` (`Received`, `Sent`, `Net` `[]float64`).
-- **Frontend transform**: `amountFlowProcessor` (30-53) walks `d.net[i]` and accumulates a running JS `Number` `balance += v` (line 42). Both flow and balance series are cached in `retrievedData` (line 540-541).
-- **Coin-type assumption**: implicitly VAR-only. The accumulator is a JS `Number` and the source is float64 already lossy at the API boundary. SKA cannot pass through this without precision loss.
-- **Status**: implicitly VAR-only end-to-end. The float64-everywhere assumption (`1e-8` scaling, `Number` accumulator, `digitsAfterDecimal: 8`) makes this incompatible with SKA without a parallel pipeline.
+- **Data source**: same response as `amountflow` (now includes `Balance []float64` and `BalanceAtoms []string` server-side).
+- **Frontend transform**: `amountFlowProcessor` (30-53) walks `d.net[i]` and accumulates a running JS `Number` `balance += v` (line 42). **Ignores `d.balance`/`d.balance_atoms` from the server.** Both flow and balance series are cached in `retrievedData` (line 540-541).
+- **Coin-type assumption**: implicitly VAR-only on the frontend. The accumulator is a JS `Number` and the source is `d.net[i]` (float64, already lossy at the API boundary for VAR). For SKA: backend produces `BalanceAtoms` (correct), but the frontend never reads it, so the chart line uses the broken `d.net[i]` SKA values (see §6).
+- **Status**: backend can produce a precise SKA balance series; frontend does not consume it.
 
 ### 3.2 `types` (Tx Type)
-- **Wire**: `GET /api/address/{addr}/types/{bin}` → `TxHistoryData(.., TxsType, ..)` → `retrieveTxHistoryByType` → JSON with `time`, `sentRtx`, `receivedRtx`, `tickets`, `votes`, `revokeTx`.
-- **DB query**: `selectAddressTxTypesByAddress` (`addrstmts.go:312-321`) — counts only, partitioned by `tx_type`. **Not filtered by `coin_type`.**
+- **Wire**: `GET /api/address/{addr}/types/{bin}?coin=N` → `TxHistoryData(.., TxsType, .., coinType)` → `retrieveTxHistoryByType` → JSON with `time`, `sentRtx`, `receivedRtx`, `tickets`, `votes`, `revokeTx`.
+- **DB query**: `selectAddressTxTypesByAddress` ([addrstmts.go:338-347](db/dcrpg/internal/addrstmts.go#L338-L347)) — counts only, partitioned by `tx_type`, **filtered by `coin_type=$2`**.
 - **Fields populated**: see §2 above.
 - **Frontend transform**: `txTypesFunc` (`address_controller.js:18-28`) maps to a Dygraph 6-column row (`Date`, `sentRtx`, `receivedRtx`, `tickets`, `votes`, `revokeTx`).
-- **Coin-type assumption**: tickets / votes / revocations are stake-tree primitives that exist only in VAR (per `CLAUDE.md` — SKA txs are pure value transfers, no ticket purchases). So `Tickets`/`Votes`/`RevokeTx` series are **structurally VAR-only**. `SentRtx`/`ReceivedRtx` are the only series that could meaningfully aggregate across coin types — and currently they do, silently mixing VAR and SKA tx counts when the same address holds both.
-- **Status**: coin-agnostic for regular-tx counts (VAR + SKA mixed); structurally VAR-only for stake-tree counts. With the multi-coin model, when interpreting "Tx Type" for a non-VAR coin, three of the five series are always zero.
+- **Coin-type assumption**: tickets / votes / revocations are stake-tree primitives that exist only in VAR. So `Tickets`/`Votes`/`RevokeTx` series are **structurally VAR-only**. For `coinType > 0` they are always zero. Now that the SQL filters by coin, `SentRtx`/`ReceivedRtx` no longer mix VAR/SKA — they show only the selected coin's regular-tx counts.
+- **Status**: per-coin counts are correct; the frontend has no way to set `?coin=` today.
 
 ### 3.3 `amountflow` (Sent/Received)
-- **Wire**: `GET /api/address/{addr}/amountflow/{bin}` → `TxHistoryData(.., AmountFlow, ..)` → `retrieveTxHistoryByAmountFlow` → `parseRowsSentReceived` → JSON with `time`, `received`, `sent`, `net`.
-- **DB query**: `selectAddressAmountFlowByAddress` (`addrstmts.go:323-329`) — sums `addresses.value` partitioned by `is_funding`.
-- **Fields populated**: `Time`, `Received`, `Sent`, `Net` `[]float64`.
-- **Frontend transform**: `amountFlowProcessor` (30-53) emits `[Date, received, sent, netReceived, netSent]` rows (lines 41) and the parallel balance series (43).
-- **Coin-type assumption**: **implicitly VAR-only** at three layers:
-  1. `addresses.value INT8` is the VAR atom column; `ska_value TEXT` is ignored by the SUM.
-  2. `parseRowsSentReceived` scans into `uint64`, divides by `1e8` (`toCoin`).
-  3. JSON shape uses `[]float64`.
-  Result: for a SKA address, the sums are 0 (no VAR rows) regardless of how many SKA atoms moved. There is no "mixed coin" failure mode for `amountflow` because it only ever reads VAR; it just silently shows all-zero for SKA.
+- **Wire**: `GET /api/address/{addr}/amountflow/{bin}?coin=N` → `TxHistoryData(.., AmountFlow, .., coinType)` → `retrieveTxHistoryByAmountFlow` → `parseRowsSentReceived` → JSON with `time`, `received`, `sent`, `net`, `balance`, `received_atoms`, `sent_atoms`, `net_atoms`, `balance_atoms`.
+- **DB query**: `selectAddressAmountFlowByAddress` ([addrstmts.go:348-359](db/dcrpg/internal/addrstmts.go#L348-L359)) — partitioned `SUM`s. VAR (`coin_type = 0`) sums `value INT8`; SKA (`coin_type > 0`) sums `NULLIF(ska_value,'')::numeric` and casts to `text`. Filtered by `coin_type=$2`.
+- **Fields populated**: VAR float series + SKA string atom series (when `coinType > 0`).
+- **Frontend transform**: `amountFlowProcessor` (30-53) emits `[Date, received, sent, netReceived, netSent]` rows (line 41) and the parallel balance series (43). Reads only `d.net[i]` / `d.received[i]` / `d.sent[i]` (VAR float fields).
+- **Coin-type assumption**: backend SKA precision is correct as of PR #263 (see §6.3); frontend still consumes VAR float fields only.
 
 ---
 
 ## 4. Template touch points
 
-`cmd/dcrdata/views/address.tmpl` — every Stimulus target / button / option on this card:
+[cmd/dcrdata/views/address.tmpl](cmd/dcrdata/views/address.tmpl) — every Stimulus target / button / option on this card:
 
 Container payload (read by controller `connect`):
 - `address.tmpl:11` `data-controller="address newblock"` (co-mounted; `newblock` may mutate `txnCount` outside the chart card).
 - `:13` `data-address-dcraddress="{{.Address}}"` — used in `fetchGraphData` URL (`/api/address/${ctrl.dcrAddress}/...`).
 - `:14` `data-address-txn-count="{{$TxnCount}}"` — read in `connect()` for `paginationParams.count` (228); not used for chart logic.
-- `:15` `data-address-balance="{{toFloat64Amount .Balance.TotalUnspent}}"` — read into `ctrl.balance` (230) but **not actually used by chart code** (no usages elsewhere in the controller).
+- `:15` `data-address-balance="{{toFloat64Amount .Balance.TotalUnspent}}"` — read into `ctrl.balance` (230) but **not actually used by chart code**. VAR-only float; will silently mislead if reused for SKA.
 
 Fullscreen mount (driven by chart's `expando`):
 - `:17-19` `data-address-target="fullscreen"` and inner `data-address-target="bigchart"`. `toggleExpand` (830) appends/removes `chartbox` to/from these.
@@ -186,19 +195,17 @@ Hard-coded labels on this card / its options:
 - `:162-173` checkbox labels `Sent` / `Received` / `Net`.
 - **No coin labels in the template.** Coin labels live in the controller (next section).
 
-Currency labels in the *summary* card (out of scope but easy to confuse): `:48`, `:50`, `:64`, `:66`, `:77`, `:79` all hard-code `DCR`. The chart card itself has no `DCR`/`VAR` tokens.
-
 ---
 
 ## 5. Frontend touch points (URL contract + zoom)
 
-**TurboQuery null-template (must declare every persisted key)** — `address_controller.js:211-219`:
+**TurboQuery null-template (must declare every persisted key)** — [address_controller.js:211-219](cmd/dcrdata/public/js/controllers/address_controller.js#L211-L219):
 ```
 ctrl.settings = TurboQuery.nullTemplate([
   'chart', 'zoom', 'bin', 'flow', 'n', 'start', 'txntype'
 ])
 ```
-This card owns `chart`, `zoom`, `bin`, `flow`. (`n`, `start`, `txntype` belong to the table.) New URL keys (e.g. `coin`) require a new entry here per the rule in `flow.compact.md` mutation checklist.
+This card owns `chart`, `zoom`, `bin`, `flow`. (`n`, `start`, `txntype` belong to the table.) **`coin` is NOT declared.** Per the rule in `flow.compact.md` mutation checklist, adding a coin selector requires a new entry here.
 
 **URL key flow (UI → settings → URL → fetch)**:
 
@@ -208,6 +215,7 @@ This card owns `chart`, `zoom`, `bin`, `flow`. (`n`, `start`, `txntype` belong t
 | `bin`    | `<button>` click in `interval` set                              | `changeBin` (626): `settings.bin = target.name`   | `setGraphQuery` → `query.replace`     | `fetchGraphData` (520): `/api/address/${addr}/${chartKey}/${bin}`                |
 | `zoom`   | `onZoom` button (666), `_zoomCallback` Dygraph drag (749), `_drawCallback` Dygraph slide (738) | `setZoom` (683) writes `settings.zoom = Zoom.encode(start, end)`; callbacks at 744 / 753 do the same | `query.replace(settings)` (690 / 745 / 754) | `drawGraph` short-circuit (482-488): if only zoom changed, decode and re-apply without refetch |
 | `flow`   | `<input type=checkbox>` change in `flow`                       | `updateFlow` (639): `settings.flow = bitmap` (646) | `setGraphQuery` (647)                 | not used in fetch URL; consumed only by `setFlowChecks`/`updateFlow` for visibility bitmap |
+| `coin`   | (not implemented)                                              | (not implemented)                          | (not in URL)                          | (not in URL — backend only sees it on initial page load if user typed `?coin=` manually) |
 
 **Initial load** (`connect()`): `query.update(settings)` (233) populates from URL; `setChartType()` (234) syncs `<select>`; `setFlowChecks()` (235) syncs flow checkboxes; if `bin == null`, `getBin()` (242) reads `bin` from URL again or falls back to `activeBin` (the currently-selected interval button, default `month`).
 
@@ -216,7 +224,7 @@ This card owns `chart`, `zoom`, `bin`, `flow`. (`n`, `start`, `txntype` belong t
 - `validGraphInterval` (601-608) — looks for a button with `name === bin`. Unknown `bin` falls back through `getBin()` → `activeBin` → default `month`.
 - `validateZoom` (610-618) — `Zoom.validate(activeZoomKey || settings.zoom, ctrl.xRange, binSize)`. **Clamps silently** to the new chart's `xRange` (no error). This is what hides the stale-zoom failure mode.
 
-**Stale-`?zoom=` failure mode** (per `flow.full.md §6`):
+**Stale-`?zoom=` failure mode** (per `flow.full.md`):
 - `changeGraph` (620-624) writes the new `chart` to settings then calls `setGraphQuery` → `query.replace(this.settings)` **without resetting `settings.zoom`**.
 - Same in `changeBin` (626-633).
 - Result: when switching from a long-history chart kind to a shorter one, `?zoom=` in the URL still encodes the prior chart's window; on the next refresh, `validateZoom` clamps it silently to the new range. The user sees a "different" zoom than they last set.
@@ -224,34 +232,81 @@ This card owns `chart`, `zoom`, `bin`, `flow`. (`n`, `start`, `txntype` belong t
 
 **Group-by visibility** — `setButtonVisibility` (758-772) hides bins coarser than the current `chartDuration` (`xRange[1] - xRange[0]`) **per data range, not per tx count**. The `data-fixed="1"` attribute on `all` zoom and on `day` / `all` (Block) interval buttons exempts them. The `data-txcount="{{$TxnCount}}"` on `interval` (`address.tmpl:149`) is unread (template residue).
 
-**Cache** — `ctrl.retrievedData` (196) keyed by `${chart}-${bin}` (497). `popChartCache` (548) replays cached data without re-fetching when both keys match. Note the `processData` quirk at 538-542: an `amountflow` fetch fills both `amountflow-${bin}` and `balance-${bin}` cache entries, but a separate `balance` request still hits the URL on first switch.
+**Cache** — `ctrl.retrievedData` (196) keyed by `${chart}-${bin}` (497). `popChartCache` (548) replays cached data without re-fetching when both keys match. Note the `processData` quirk at 538-542: an `amountflow` fetch fills both `amountflow-${bin}` and `balance-${bin}` cache entries, but a separate `balance` request still hits the URL on first switch. **Cache key does not include coin** — switching `?coin=` would not clear `retrievedData` (a multi-coin frontend will need to refactor this key).
 
 ---
 
-## 6. Multi-coin gaps
+## 6. Multi-coin gaps + the SKA SQL precision fix (PR #263)
 
-The most important section. Each gap is a precise file:line where the current pipeline assumes coin-agnostic-aggregating or single-coin-VAR.
+### 6.1 Backend per-coin plumbing — **complete**
 
-### 6.1 No `CoinType` parameter on chart endpoints
+- ✅ Route: `m.CoinCtx` middleware on both chart endpoints ([apirouter.go:185-186](cmd/dcrdata/internal/api/apirouter.go#L185-L186)).
+- ✅ Handler: reads `coinType := m.GetCoinCtx(r)` and threads through to `TxHistoryData` ([apiroutes.go:1848,1885](cmd/dcrdata/internal/api/apiroutes.go#L1848-L1885)).
+- ✅ DB layer signature: `TxHistoryData(... coinType uint8)` ([pgblockchain.go:3325-3326](db/dcrpg/pgblockchain.go#L3325-L3326)).
+- ✅ Cache key: `(address, HistoryChart, TimeBasedGrouping, coinType)` ([addresscache.go:461,1143](db/cache/addresscache.go#L461-L1143)).
+- ✅ Mock: [noop_ds_test.go:40](cmd/dcrdata/internal/api/noop_ds_test.go#L40), [apiroutes_test.go:359](cmd/dcrdata/internal/api/apiroutes_test.go#L359).
+- ✅ SQL: `selectAddressTxTypesByAddress` and `selectAddressAmountFlowByAddress` filter by `coin_type=$2` ([addrstmts.go:345,357](db/dcrpg/internal/addrstmts.go#L345-L357)). SKA precision in `selectAddressAmountFlowByAddress` was fixed in PR #263 (see §6.3).
 
-- **Route**: `cmd/dcrdata/internal/api/apirouter.go:185-186` — only `{address}` and `{chartgrouping}` URL params; no coin-type segment.
-- **Handler**: `apiroutes.go:1798`, `:1833` — both call `TxHistoryData(ctx, address, dbtypes.TxsType, interval)` / `(.., AmountFlow, ..)` without coin type.
-- **DB layer signature**: `db/dcrpg/pgblockchain.go:3114-3115` — no `CoinType` argument.
-- **Cache key**: `db/cache/addresscache.go:471-481`, `:1156-1163` — keyed by (address, `HistoryChart`, `TimeBasedGrouping`); no coin-type dimension.
-- **Mock**: `cmd/dcrdata/internal/api/noop_ds_test.go:40-42` — must be updated together with the interface (`apiroutes.go:65-66`).
-- **Frontend URL builder**: `address_controller.js:519-521` — emits `/api/address/${addr}/${chartKey}/${bin}`; no coin segment.
+**The remaining gap is the frontend URL builder + TurboQuery null-template + chart cache key.**
 
-### 6.2 Float64 / `1e-8` precision on `amountflow`
+### 6.2 Float64 precision — partially fixed at backend; frontend still drops it
 
-- **`parseRowsSentReceived`** at `db/dcrpg/queries.go:4139-4163`:
-  - Line 4144 — `var received, sent uint64` (overflows for SKA atoms).
-  - Line 4151-4157 — `items.Received = append(.., toCoin(received))`, `items.Sent = .., items.Net = toCoin(received-sent)`.
-  - `toCoin` (queries.go:4135-4137): `float64(amt) / 1e8` — VAR scale only.
-- **JSON shape**: `db/dbtypes/types.go:2037-2039` — `Received`, `Sent`, `Net` are `[]float64`.
-- **Frontend**: `address_controller.js:30-53` (`amountFlowProcessor`) — accumulates `balance` via `+=` on JS `Number`; `digitsAfterDecimal: 8` on Dygraph (commonOptions, line 101); legend format `${series.y} DCR` (line 84).
-- **Schema source**: `db/dcrpg/internal/addrstmts.go:21,23` — `value INT8` (VAR atoms) is what `selectAddressAmountFlowByAddress` sums; `ska_value TEXT` is ignored.
+**Backend** now produces dual fields ([db/dbtypes/types.go:2052-2056](db/dbtypes/types.go#L2052-L2056)):
+- `Balance []float64` (VAR running balance, float64, 8 decimals).
+- `BalanceAtoms []string` (SKA running balance, big.Int-derived decimal string, 18 decimals).
+- `ReceivedAtoms []string`, `SentAtoms []string`, `NetAtoms []string` — parallel SKA series for the per-bin deltas.
 
-### 6.3 Hard-coded `DCR` / VAR-implying labels in chart options
+`parseRowsSentReceived` ([queries.go:4289-4331](db/dcrpg/queries.go#L4289-L4331)) populates VAR fields for `coinType == 0` and SKA fields for `coinType > 0`, using a `*big.Int` running balance for SKA. The legacy float fields (`Received`/`Sent`/`Net`) stay empty for SKA responses. As of PR #263, the SKA inputs to the `*big.Int` accumulator come from the SQL's new `received_ska`/`sent_ska` text columns (correct 1e18 atoms), not from the truncated `value INT8` SUM.
+
+**Frontend** still uses the float fields exclusively:
+- [address_controller.js:30-53](cmd/dcrdata/public/js/controllers/address_controller.js#L30-L53) (`amountFlowProcessor`) — `d.net[i]` accumulator on JS `Number`. Ignores `d.balance_atoms`/`d.received_atoms`/`d.sent_atoms`/`d.net_atoms`.
+- `digitsAfterDecimal: 8` (commonOptions, line 101).
+- `customizedFormatter` (84): `${series.y} DCR`.
+- `amountFlowGraphOptions.ylabel = 'Total (DCR)'` (130).
+- `balanceGraphOptions.ylabel = 'Balance (DCR)'` (140).
+
+For SKA: the new atom-string fields would render correctly via `ska_helper.js` (`splitSkaAtomsNoTrailing`, `renderCoinType`). None are used here.
+
+### 6.3 ✅ Fixed in PR #263: SKA `amountflow` SQL precision
+
+**Status: fixed** — merged in PR #263 (commit `49953185`, "db/dcrpg: fix SKA precision in address amountflow query").
+
+**The bug (historical):** `selectAddressAmountFlowByAddress` used to sum `addresses.value INT8` regardless of coin type. For SKA rows, that column contains the truncated INT8 representation of `vout.Value` (commonly `0`), not the 1e18-scale atoms — those live in the parallel `ska_value TEXT` column. So `parseRowsSentReceived` faithfully fed truncated/zero `uint64`s into its `*big.Int` accumulator, and `/api/address/{addr}/amountflow/{bin}?coin=N` shipped zeroed `Received`/`Sent`/`Net`/`Balance` series for every SKA coin. The chart was invisible because no frontend exercised the SKA path — `address_controller.js` still hard-codes VAR scale (`toCoin / 1e8`, `DCR` legend), so SKA-holding addresses silently rendered as VAR-only.
+
+**The fix:** mirror the dual-column pattern already used by `SelectAddressSpentUnspentCountAndValue` ([addrstmts.go:234-247](db/dcrpg/internal/addrstmts.go#L234-L247)). The SQL now emits four `SUM` columns, with `CASE` guards on `coin_type` as belt-and-braces (the `WHERE coin_type=$2` filter already restricts rows to one coin family):
+
+`selectAddressAmountFlowByAddress` ([addrstmts.go:351-359](db/dcrpg/internal/addrstmts.go#L351-L359)):
+```sql
+SELECT %s as timestamp,
+    SUM(CASE WHEN is_funding = TRUE  AND coin_type = 0 THEN value ELSE 0 END) as received,
+    SUM(CASE WHEN is_funding = FALSE AND coin_type = 0 THEN value ELSE 0 END) as sent,
+    COALESCE(SUM(CASE WHEN is_funding = TRUE  AND coin_type > 0 THEN NULLIF(ska_value, '')::numeric ELSE 0 END), 0)::text as received_ska,
+    COALESCE(SUM(CASE WHEN is_funding = FALSE AND coin_type > 0 THEN NULLIF(ska_value, '')::numeric ELSE 0 END), 0)::text as sent_ska
+FROM addresses
+WHERE address=$1 AND coin_type=$2 AND valid_mainchain
+GROUP BY timestamp
+ORDER BY timestamp;
+```
+
+`parseRowsSentReceived` ([queries.go:4296-4324](db/dcrpg/queries.go#L4296-L4324)) now scans both pairs — `receivedVAR, sentVAR uint64` and `receivedSKAStr, sentSKAStr string` — and, for `coinType > 0`, builds the `big.Int` from the text columns instead of converting the truncated `uint64`:
+
+```go
+var receivedVAR, sentVAR uint64
+var receivedSKAStr, sentSKAStr string
+err := rows.Scan(&blockTime, &receivedVAR, &sentVAR, &receivedSKAStr, &sentSKAStr)
+...
+// SKA branch:
+r, _ := new(big.Int).SetString(receivedSKAStr, 10)
+s, _ := new(big.Int).SetString(sentSKAStr, 10)
+```
+
+The `COALESCE(..., 0)::text` cast guarantees a valid decimal string for `SetString` even on empty result sets.
+
+**Safety of the wider scan signature:** `parseRowsSentReceived` is also called by `binnedTreasuryIO`, but the treasury subsystem was removed and `MakeSelectTreasuryIOStatement` returns an empty string — `db.QueryContext` errors before `Scan` is reached, so adding the two extra scan targets is safe.
+
+**Historical note** on probable cause: the SKA `*big.Int` plumbing in `parseRowsSentReceived` was added in commit `944a20ee` ("address chart API endpoints, Tasks 15, 16 partial") on the assumption that the existing `value` column carried the right number, mirroring how `selectAddressTxTypesByAddress` (counts only) works. The schema reality wasn't checked against the SQL. PR #263 lands the SQL fix before the frontend coin selector (#249) ships, so the SKA chart pipeline is correct from day one when the dropdown becomes visible.
+
+### 6.4 Hard-coded `DCR` / VAR-implying labels in chart options
 
 Within the chart card and its controller (template currency labels in the summary card are out of scope here):
 - `address_controller.js:84` — `customizedFormatter` legend: `${series.y} DCR`. Used by `amountFlowGraphOptions` (line 132) and `balanceGraphOptions` (line 142).
@@ -260,19 +315,18 @@ Within the chart card and its controller (template currency labels in the summar
 - `address_controller.js:120` — `typesGraphOptions.ylabel = 'Tx Count'` (no coin label; OK).
 - **No use of `helpers/ska_helper.js`** anywhere in `address_controller.js`. `renderCoinType`, `splitSkaAtoms`, `splitSkaAtomsNoTrailing` are unused on this surface.
 
-### 6.4 Implicit aggregation across coins
-
-- `selectAddressTxTypesByAddress` (`db/dcrpg/internal/addrstmts.go:312-321`) does not filter by `coin_type`; counts mix VAR and SKA regular-tx rows. Tickets/votes/revocations are inherently VAR-only on consensus, so they remain VAR-only in aggregate but the regular-tx counts silently mix.
-- `selectAddressAmountFlowByAddress` (323-329) sums only `value` (VAR). It is *not* aggregating across coins; it is **silently dropping all SKA**. This is a different gap shape from `types`.
-
 ### 6.5 `data-address-balance` is VAR-only
 
-- `address.tmpl:15` `data-address-balance="{{toFloat64Amount .Balance.TotalUnspent}}"` (lossy for SKA per `flow.compact.md C1` violation note).
-- Read into `ctrl.balance` (`address_controller.js:230`) but currently unused by chart logic — still a hidden contract that breaks if `AddressInfo.Balance` becomes per-coin.
+- `address.tmpl:15` `data-address-balance="{{toFloat64Amount .Balance.TotalUnspent}}"` (lossy for SKA per `flow.compact.md` C1 violation note).
+- Read into `ctrl.balance` ([address_controller.js:230](cmd/dcrdata/public/js/controllers/address_controller.js#L230)) but currently unused by chart logic — still a hidden contract that breaks if the template ever stops syncing the legacy flat fields.
 
 ### 6.6 `flow` bitmap is single-coin-aware only
 
 - The flow checkboxes (`address.tmpl:160-174`, controller `updateFlow` 639) toggle Dygraph series visibility on a single dataset. There is no per-coin filtering concept; if the response carried multiple coin series, the bitmap couldn't address them.
+
+### 6.7 `?coin=` propagation through chart cache (frontend)
+
+`ctrl.retrievedData` is keyed by `${chart}-${bin}` ([address_controller.js:497](cmd/dcrdata/public/js/controllers/address_controller.js#L497)). When a coin selector is added, this key needs to become `${chart}-${bin}-${coin}` or the controller needs to clear `retrievedData` on coin change. Without this, switching coins would replay stale cached data.
 
 ---
 
@@ -281,19 +335,18 @@ Within the chart card and its controller (template currency labels in the summar
 Reference: `wiki/code-analysis/charts/flow.compact.md` and `flow.full.md`. Summary of the precedent for adding per-coin chart endpoints, and what would map vs. diverge.
 
 **Reuses** (the address charts can adopt directly):
-- **URL prefix namespace**. `coin-supply/{N}` (1≤N≤255) is parsed by `db/cache/charts.go:92-109` (`IsSKASupplyChart`, `SkaCoinType`) and JS `skaCoinTypeFromChart` (`charts_controller.js:60`). An address-chart equivalent could mirror this with e.g. `/api/address/{addr}/amountflow/{N}/{bin}` or `?coin=N` (see open questions §9).
-- **String-only SKA pipeline**. SQL `::text` → Go `[]string` + `*big.Int.Add` → JSON `"supply": []string` → JS `Number(s) * 1e-18` for the line, `splitSkaAtomsNoTrailing` for the legend (`charts_controller.js:661-687`). The address `amountflow` SKA equivalent must adopt the same string discipline (do not reuse `parseRowsSentReceived`'s `uint64` + `toCoin` path).
-- **`ActiveSKATypes` projection from `HomeInfo.SKACoinSupply`**. `cmd/dcrdata/internal/explorer/explorerroutes.go:1911-1932` populates `ActiveSKATypes []uint8` for the charts page. `AddressPage` (`explorerroutes.go:1534-1651`) does **not** currently project this; adding a coin selector would require it (or a per-address active-coin set, which is a different question).
+- **URL prefix namespace**. `coin-supply/{N}` (1≤N≤255) is parsed by `db/cache/charts.go` (`IsSKASupplyChart`, `SkaCoinType`) and JS `skaCoinTypeFromChart` (`charts_controller.js:60`). The address-chart equivalent has chosen the **`?coin=N` query path** instead (via `m.CoinCtx`); URL-segment per-coin route would also work but does not match the existing chart-controller convention.
+- **String-only SKA pipeline**. SQL `::text` → Go `[]string` + `*big.Int.Add` → JSON `"supply": []string` → JS `Number(s) * 1e-18` for the line, `splitSkaAtomsNoTrailing` for the legend (`charts_controller.js:661-687`). The address `amountflow` SKA equivalent now follows the same string discipline at the SQL boundary as of PR #263 (see §6.3): `SUM(ska_value::numeric)::text` columns scanned as strings, `*big.Int` accumulator end-to-end.
+- **`ActiveCoins` projection**. `AddressInfo.ActiveCoins []uint8` is already populated from `retrieveAddressCoinTypes` ([queries.go:1450-1469](db/dcrpg/queries.go#L1450-L1469)). The chart card can use this for a coin selector dropdown without a new query.
 - **`renderCoinType(coinType)` for labels** (`ska_helper.js:16`). Replaces hard-coded `DCR` / `VAR` in the controller.
-- **`Zoom.project` across data-range changes** (`charts_controller.js` line 901, per `flow.full.md`). The address controller does not currently call this; adopting it would resolve the stale-zoom failure mode at the same time.
-- **Mock co-update pattern**. `noop_ds_test.go:131` is the SKA precedent for keeping an interface-method mock in sync.
+- **`Zoom.project` across data-range changes** (`charts_controller.js`). The address controller does not currently call this; adopting it would resolve the stale-zoom failure mode at the same time.
+- **Mock co-update pattern**. `noop_ds_test.go` is the precedent for keeping interface-method mocks in sync.
 
-**Divergences** expected for address charts:
-- The coin-supply pipeline is **per-coin-type** at the chart level (one chart, one coin). `amountflow` for an address could be **per-coin** or **per-coin-stacked** or **per-coin-line** — that's a UX choice (§9). Either way the *backend* signature change is the same: add `coinType uint8` to `TxHistoryData` and pass through to a coin-aware SQL query.
-- **Cache shape diverges**. Coin-supply uses a single `ChartData.SKASupply[uint8]SKASupplyChartData` keyed only by coin type. The address cache is keyed by `(address, HistoryChart, TimeBasedGrouping)`; adding coin type produces a 4-tuple key. The cache data structure (`AddressCacheItem.history`) needs a per-coin slice or per-coin map; not a drop-in.
-- **Cumulative-vs-per-block invariants don't carry over**. SKA coin supply is cumulative per-height; address `amountflow` is per-bin (delta) with the cumulative balance computed client-side in `amountFlowProcessor`. There is **no equivalent of the "`accumulate()` for VAR / pre-cumulated for SKA" split**; both flow charts on the address page are per-bin deltas. **However**: the `balance` derived chart is a JS-side cumulative sum (`address_controller.js:42`), and that's where SKA precision will silently break — running `balance += BigDecimalString` requires `BigInt` in JS or string-arith helpers, mirroring the lesson from `splitSkaAtomsNoTrailing`.
-- **`h` field convention** for time-axis SKA responses (`charts/flow.full.md §4`) does not naturally apply: `ChartsData` uses `time` only, no block height. If the new endpoint is height-aligned (e.g., per-block bin), include `h` for parity; otherwise drop it.
-- **`coin-supply/0` legacy duality** is not relevant — there's no existing bare `amountflow` route to deprecate; the `/api/address/{addr}/amountflow/{bin}` route can either stay as VAR-only or adopt a `0` / default-coin convention.
+**Divergences** for address charts:
+- **Per-coin display UX**: coin-supply is one chart per coin (selector); address `amountflow`/`balance` could be **per-coin selector** (mirror coin-supply), **stacked across coins** (bad — different scales), or **side-by-side small multiples**. UX choice (§9).
+- **Cache shape diverges**. Coin-supply uses a single `ChartData.SKASupply[uint8]SKASupplyChartData` keyed only by coin type. The address cache is keyed by `(address, HistoryChart, TimeBasedGrouping, coinType)` — already a 4-tuple. Adding per-coin in the JS-side `retrievedData` is a separate change.
+- **Cumulative-vs-per-block invariants**. SKA coin supply is cumulative per-height. Address `amountflow` is per-bin (delta) with the cumulative balance now computed **server-side** (via `Balance []float64` for VAR or `BalanceAtoms []string` for SKA). The JS `amountFlowProcessor` (line 42) duplicates this in a lossy way for VAR and ignores the precise SKA version. **Recommendation**: switch the JS to consume the server-side balance, making `Balance`/`BalanceAtoms` the single source of truth.
+- **`h` (height) field convention**: coin-supply responses include `h` for block-aligned cumulation. Address charts use time bins, so `h` does not naturally apply.
 
 ---
 
@@ -303,7 +356,7 @@ Reference: `wiki/code-analysis/charts/flow.compact.md` and `flow.full.md`. Summa
 - Container attributes shared with this card via the same `data-controller="address"` element:
   - `data-address-balance` (`:15`) — read by controller (`:230`) but not used in chart code today.
   - `data-address-txn-count` (`:14`) — read at `connect():228` for table pagination, also stamped on `txnCount` target in the table footer (`:192`).
-- The summary card uses `toFloat64Amount` / `amountAsDecimalParts` for `Balance.TotalUnspent`/`TotalSpent` (`:48,50,64,66,77,79`). When the address page goes multi-coin, both surfaces must change together — but the chart card itself doesn't read these template fields.
+- The summary card uses `toFloat64Amount` / `amountAsDecimalParts` for `Balance.TotalUnspent`/`TotalSpent` (`:48,50,64,66,77,79`). When the address page goes multi-coin frontend, both surfaces must change together — but the chart card itself doesn't read these template fields.
 
 **Transactions table** (`address.tmpl:185-297`):
 - Independent state machine; no zoom/chart dependency.
@@ -322,41 +375,47 @@ Reference: `wiki/code-analysis/charts/flow.compact.md` and `flow.full.md`. Summa
 
 These are decisions a spec author cannot answer from the code alone. Ordered roughly by blast radius.
 
-1. **Per-coin lines on one chart, separate chart per coin, or coin selector?**
-   - One stacked Dygraph with N series — easy to retrofit `amountflow`/`balance`, hard to label legend (`splitSkaAtomsNoTrailing` per series), bad UX with mixed-magnitude coins (one VAR series at 1e8 + one SKA series at 1e18).
-   - Selector dropdown (mirroring `coin-supply/{N}`) — clean precedent, but doubles fetches for users comparing coins.
+1. **Per-coin lines on one chart, separate chart per coin, or coin selector?** With `?coin=N` already wired in middleware/handler/DB, the cheapest UX is a coin selector dropdown that emits `?coin=N` and refetches. Alternatives:
+   - Stacked Dygraph with N series — bad for mixed-magnitude coins (one VAR series at 1e8 + one SKA series at 1e18).
+   - Selector dropdown (mirroring `coin-supply/{N}` UX, but using `?coin=` query rather than path segment) — clean precedent, doubles fetches for users comparing coins.
    - Always-stacked + a "show coins" multi-select — heaviest, but most consistent with the chart card's existing flow checkbox pattern.
 
 2. **Should `types` be VAR-only by definition?** Tickets/votes/revocations are stake-tree primitives that don't exist for SKA. Options:
    - Hide the `Tx Type` chart for non-VAR coin selection.
-   - Show only `SentRtx` / `ReceivedRtx` series (reduce to a 2-series chart).
-   - Show all 5 with the stake series always-zero (current implicit behavior, just made explicit per coin).
+   - Show only `SentRtx` / `ReceivedRtx` series (reduce to a 2-series chart) for SKA.
+   - Show all 5 with the stake series always-zero (current implicit behavior).
 
 3. **What does `amountflow` look like for an address that holds both VAR and SKA?**
    - "All coins" aggregated is meaningless (different scales).
-   - Default-to-VAR with a coin selector is the most direct port of the coin-supply pattern.
-   - Default-to-the-address's-primary-coin (whatever that means) requires a backend "primary coin" inference.
+   - Default-to-VAR (`coinType = 0` when `?coin=` is missing) is the current backend behavior.
+   - Or default-to-the-address's-primary-coin (whatever that means) requires a backend "primary coin" inference.
 
-4. **Should `?coin=` join the URL contract?** Mirroring `coin-supply/{N}` would put the coin in the path: `/api/address/{addr}/amountflow/{N}/{bin}`. Mirroring the existing flow bitmap pattern would put it in the query: `?coin=1`. The latter is cheaper (no router change) but breaks the precedent set by `apirouter.go:240-243`.
+4. **Use `?coin=` query or `/coin-supply/N`-style path segment?** The decision was **already made**: `?coin=` query via `m.CoinCtx` middleware, divergent from `coin-supply`'s URL-segment convention. Worth being explicit in any chart-controller refactor to avoid accidentally introducing a parallel URL shape.
 
-5. **Where does the `balance` chart get its precision from?**
-   - The current JS-side accumulator (`balance += v`) on float64 is already lossy for very large VAR addresses (the `1e-8` `toCoin` already burned precision before JS). For SKA it's catastrophic.
-   - Options: server-side cumulative sum returned alongside `flow` (one extra column on the `amountflow` JSON), or client-side `BigInt`-based accumulator on the raw atom strings.
+5. **Where does the `balance` chart get its precision from?** Backend now produces a precise per-coin balance series (`Balance []float64` or `BalanceAtoms []string`); as of PR #263 the SKA series is correctly populated from `ska_value` atoms. Options:
+   - Switch JS to consume the server-side balance (recommended — eliminates JS-side accumulator drift, picks up correct SKA precision automatically).
+   - Keep the JS-side accumulator and only use the server series for SKA.
+   - Stay with current JS-only behavior (loses precision for both VAR and SKA at high-balance addresses).
 
 6. **Should `data-address-balance` (`address.tmpl:15`) become per-coin?** Currently dead-but-wired to `ctrl.balance`. If multi-coin, a `data-address-balances='{"0":"...","1":"...","2":"..."}'` JSON-stringified attribute is one path; another is to drop the attribute and have the chart card read balances from a server-side payload.
 
-7. **Stale-`?zoom=` fix concurrent with multi-coin work?** The bugfix branch `bugfix/stale-zoom-param` and a multi-coin chart refactor will both touch `setGraphQuery` / `changeGraph` / `changeBin`. Decide order: a per-coin URL param will inevitably re-enter `setGraphQuery`, so it's natural to fix the stale-zoom invariant in the same pass (drop or `Zoom.project` `settings.zoom` on chart-kind change).
+7. **Stale-`?zoom=` fix concurrent with multi-coin work?** A multi-coin chart refactor will touch `setGraphQuery` / `changeGraph` / `changeBin`. Decide order: a per-coin URL param will inevitably re-enter `setGraphQuery`, so it's natural to fix the stale-zoom invariant in the same pass (drop or `Zoom.project` `settings.zoom` on chart-kind change).
 
-8. **Does the chart card need an `ActiveSKATypes` projection?** The `Charts` page (`/charts`) does this from `HomeInfo.SKACoinSupply`. For an address, the more useful projection is "which coin types has *this address* ever held," which requires a new DB query (`SELECT DISTINCT coin_type FROM addresses WHERE address=$1`). Project-wide vs. per-address coin lists is a meaningful UX difference.
+8. **Coin selector should source from `ActiveCoins` or all known coin types?** `AddressInfo.ActiveCoins []uint8` lists only coins this address has touched. The home-page list shows all known SKA coins. UX: probably restrict to `ActiveCoins` (no point letting users select a coin the address has no activity in).
 
-9. **Should the Tx Type chart distinguish VAR-vs-SKA regular txs?** A 7-series chart (`SentRtx-VAR`, `ReceivedRtx-VAR`, `SentRtx-SKA`, `ReceivedRtx-SKA`, `Tickets`, `Votes`, `Revocations`) is one option. A coin-segmented dropdown is another. A per-coin-type version of the existing 5-series chart is a third.
+9. **Should the Tx Type chart distinguish VAR-vs-SKA regular txs?** Now that the SQL filters by coin, this is handled by the coin selector — `?coin=0` shows VAR `SentRtx`/`ReceivedRtx`, `?coin=1` shows SKA1 versions, etc. No per-chart-series split needed.
+
+10. ~~**Fix the SKA `amountflow` SQL bug (§6.3) before or after the frontend lands?**~~ **Resolved**: fixed before the frontend (PR #263, merged 2026-05-14). Frontend coin selector (#249) will consume the correct SKA `received_atoms`/`sent_atoms`/`net_atoms`/`balance_atoms` series from day one.
 
 ---
 
 ### See also
 
-- `wiki/code-analysis/address/flow.compact.md` — TurboQuery URL ownership; stale-zoom failure mode summary.
-- `wiki/code-analysis/address/flow.full.md` — detailed per-layer breakdown that this note builds on.
-- `wiki/code-analysis/charts/flow.compact.md` and `flow.full.md` — `coin-supply/{N}` precedent for per-coin chart endpoints; SKA string-pipeline rules; `Zoom.project` pattern.
-- `wiki/core/constraints.md#C1` — numeric precision & bifurcation (currently violated on the chart card's `amountflow`/`balance` paths via `parseRowsSentReceived`'s `uint64` + `toCoin`).
-- `wiki/core/constraints.md#C7` — centralized coin-type label rendering (`renderCoinType`); currently *not* applied on this surface (`DCR`-string in `customizedFormatter` and ylabels).
+- [flow.compact.md](flow.compact.md) — TurboQuery URL ownership; stale-zoom failure mode summary; backend per-coin status.
+- [flow.full.md](flow.full.md) — detailed per-layer breakdown that this note builds on; PR #263 SKA SQL fix also covered there.
+- [patterns.md](patterns.md) — `CoinCtx` URL/middleware contract; `CoinTypeAll → 0` chart-collapse semantics.
+- [summary.impact.md](summary.impact.md) — companion surface (also still VAR-only at the template level).
+- [transactions.impact.md](transactions.impact.md) — per-row coin fields populated but unread; CSV is multi-coin complete.
+- /wiki/code-analysis/charts/flow.compact.md and flow.full.md — `coin-supply/{N}` precedent for per-coin chart endpoints; SKA string-pipeline rules; `Zoom.project` pattern.
+- /wiki/core/constraints.md#C1 — numeric precision & bifurcation. The backend `selectAddressAmountFlowByAddress` / `parseRowsSentReceived` path is now C1-compliant for SKA (PR #263). The JS-side `Number` accumulator in `amountFlowProcessor` still violates C1 — it ignores the precise `*_atoms` fields and re-integrates `d.net[i]` as a JS `Number`.
+- /wiki/core/constraints.md#C7 — centralized coin-type label rendering (`renderCoinType`); currently *not* applied on this surface (`DCR`-string in `customizedFormatter` and ylabels).
