@@ -4293,24 +4293,26 @@ func parseRowsSentReceived(rows *sql.Rows, coinType uint8) (*dbtypes.ChartsData,
 	var balanceSKA, receivedSKA, sentSKA big.Int
 	for rows.Next() {
 		var blockTime time.Time
-		var received, sent uint64
-		err := rows.Scan(&blockTime, &received, &sent)
+		var receivedVAR, sentVAR uint64
+		var receivedSKAStr, sentSKAStr string
+		err := rows.Scan(&blockTime, &receivedVAR, &sentVAR, &receivedSKAStr, &sentSKAStr)
 		if err != nil {
 			return nil, err
 		}
 
 		items.Time = append(items.Time, dbtypes.NewTimeDef(blockTime))
 		if coinType == 0 {
-			items.Received = append(items.Received, toCoin(received))
-			items.Sent = append(items.Sent, toCoin(sent))
-			net := int64(received) - int64(sent)
+			items.Received = append(items.Received, toCoin(receivedVAR))
+			items.Sent = append(items.Sent, toCoin(sentVAR))
+			net := int64(receivedVAR) - int64(sentVAR)
 			items.Net = append(items.Net, toCoin(net))
 			balanceVAR += net
 			items.Balance = append(items.Balance, toCoin(balanceVAR))
 		} else {
 			// SKA: DB values are raw atom counts (1e18 scale). Use big.Int throughout.
-			r := new(big.Int).SetUint64(received)
-			s := new(big.Int).SetUint64(sent)
+			// COALESCE(..., 0)::text in the SQL guarantees valid decimal strings.
+			r, _ := new(big.Int).SetString(receivedSKAStr, 10)
+			s, _ := new(big.Int).SetString(sentSKAStr, 10)
 			receivedSKA.Add(&receivedSKA, r)
 			sentSKA.Add(&sentSKA, s)
 			net := new(big.Int).Sub(r, s)

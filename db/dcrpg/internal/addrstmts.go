@@ -345,9 +345,14 @@ const (
 		WHERE address=$1 AND coin_type=$2 AND valid_mainchain
 		GROUP BY timestamp
 		ORDER BY timestamp;`
+	// VAR amounts come from value INT8; SKA amounts come from ska_value TEXT
+	// (1e18-scale atoms that exceed int64). Both columns are emitted on every
+	// row; the WHERE coin_type=$2 filter ensures only one pair is non-zero.
 	selectAddressAmountFlowByAddress = `SELECT %s as timestamp,
-		SUM(CASE WHEN is_funding = TRUE THEN value ELSE 0 END) as received,
-		SUM(CASE WHEN is_funding = FALSE THEN value ELSE 0 END) as sent
+		SUM(CASE WHEN is_funding = TRUE  AND coin_type = 0 THEN value ELSE 0 END) as received,
+		SUM(CASE WHEN is_funding = FALSE AND coin_type = 0 THEN value ELSE 0 END) as sent,
+		COALESCE(SUM(CASE WHEN is_funding = TRUE  AND coin_type > 0 THEN NULLIF(ska_value, '')::numeric ELSE 0 END), 0)::text as received_ska,
+		COALESCE(SUM(CASE WHEN is_funding = FALSE AND coin_type > 0 THEN NULLIF(ska_value, '')::numeric ELSE 0 END), 0)::text as sent_ska
 		FROM addresses
 		WHERE address=$1 AND coin_type=$2 AND valid_mainchain
 		GROUP BY timestamp
