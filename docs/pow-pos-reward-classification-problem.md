@@ -1,152 +1,186 @@
-# Problem: PoW vs PoS fee-reward transactions are indistinguishable on-chain
+# Explorer ignores the SSFee SF/MF marker → PoW vs PoS fee rewards mis-attributed
 
-> **Status:** problem statement / draft for discussion
-> **Audience:** monetarium-node developers (primary), monetarium-explorer maintainers (secondary)
-> **Related:** `txhelpers/ssfee.go` · `cmd/dcrdata/internal/explorer/explorer.go` · `REWARDS_LOGIC.md`
+> **Status:** problem statement + fix spec
+> **Owner:** monetarium-explorer
+> **Node-side work required:** none (see "Why the earlier 'node bug' framing was wrong")
+> **Related:** `txhelpers/ssfee.go` · `cmd/dcrdata/internal/explorer/explorer.go` · `pubsub/pubsubhub.go` · `REWARDS_LOGIC.md` · node-side corrected analysis: `monetarium-node/ssfee-classification-analysis.md`
 
 ## Summary
 
-When SKA outputs are spent in a block, the collected fees are redistributed via
-special stake transactions. Part of that redistribution is the **PoW reward to
-the block's miner**; the rest is the **PoS reward split among the voters
-(stakers)**. The explorer needs to attribute each portion correctly.
+When SKA outputs are spent in a block, monetarium-node redistributes the
+collected fees via **SSFee transactions (`TxType = 7`)**. The node already makes
+the PoW-vs-PoS purpose **deterministic on-chain**: every SSFee carries an
+`OP_RETURN` marker — **`"SF"` = staker fee (PoS reward)**, **`"MF"` = miner fee
+(PoW reward)** — and the split is the consensus constant `SSVMonetarium` (50%
+PoW / 50% PoS), applied per coin type.
 
-The problem: **monetarium-node classifies the PoW-reward transaction and the
-PoS-reward transactions with the same transaction type**, so the explorer cannot
-tell programmatically which is which. Today the explorer works around this by
-**hardcoding a 50/50 PoW/PoS split** — a number known only verbally (from
-Mihail), not derivable from on-chain data. Without that assumption the explorer
-would attribute 100% of the fees to staking.
+The explorer **never reads this marker**. Instead it:
 
-We believe the root cause is node-side (`stake.DetermineTxType` collapsing
-distinct reward transactions into one type, and the related SSRtx→SSFee
-misclassification). A node-side fix that exposes a distinct, reliable type would
-let the explorer compute the split from data instead of a constant.
+- divides total SKA fees by 2 as a heuristic (`divideByTwoSKAFees`) to guess the
+  PoW portion, and
+- attributes VAR vote rewards from SSGen-only / net-redistribution math that
+  omits SSFee `"SF"` staker payouts, and
+- carries `TODO(monetarium-node)` comments asking for a node fix that, per the
+  node code and the corrected node-side analysis, **is not needed and must not
+  be made**.
 
-## Background: how SKA fee rewards are distributed
+Net effect: PoW vs PoS reward attribution is a heuristic, not derived from the
+authoritative on-chain signal that already exists. This is an **explorer-only
+defect with an explorer-only fix** — `stake.HasSSFeeMarker` is already exported
+from the `blockchain/stake` package the explorer imports today.
 
-(See `REWARDS_LOGIC.md` for the full model.)
+## Background: how the node actually splits fees (ground truth)
 
-- SKA coins are not mined. SKA rewards come **exclusively from transaction
-  fees**, generated when SKA outputs are spent in a block.
-- The collected SKA fees in a block are redistributed within that same block via
-  special stake transactions (`TxTypeSSFee` and friends).
-- That redistribution has **two distinct purposes**:
-  1. **PoW portion** — paid to the block's miner.
-  2. **PoS portion** — split among the tickets that voted in the block.
-- For VAR, the protocol split is **50% PoW / 50% PoS** (`REWARDS_LOGIC.md`,
-  "Distribution Split"). The same 50/50 ratio is *assumed* for the SKA fee
-  redistribution, but this is an external assumption, not something the explorer
-  reads from the chain.
+(Node code, for reference — do not change it.)
 
-## The problem
+- SKA rewards come exclusively from transaction fees, redistributed within the
+  same block via SSFee transactions (`TxType = 7`). See `REWARDS_LOGIC.md`.
+- Each SSFee carries an `OP_RETURN` marker created by
+  `CreateStakerSSFeeMarker` (node `blockchain/stake/ssfee.go:82`):
+  `OP_RETURN + OP_DATA_8 + "SF"/"MF" + height(4) + voter_seq(2)`.
+- Classification helper, **already exported and importable**:
+  `stake.HasSSFeeMarker(script []byte) SSFeeMarkerType` →
+  `SSFeeMarkerStaker` (`"SF"`, PoS) or `SSFeeMarkerMiner` (`"MF"`, PoW)
+  (node `blockchain/stake/ssfee.go:41,59,64`). The node itself routes on this
+  (`staketx.go:1390`: `HasSSFeeMarker(out.PkScript) == SSFeeMarkerMiner`).
+- The split ratio is the consensus constant `SSVMonetarium` →
+  `GetSubsidyProportions = (50, 50, 0, 100)` (node
+  `blockchain/standalone/subsidy.go:613`), applied to fee redistribution per
+  coin type via `CalcFeeSplitByCoinType` (node
+  `internal/blockchain/validate.go:2609`). It is **not** a verbal convention and
+  **not** explorer-specific knowledge — it is enforced consensus, identical
+  across all coin types.
 
-A fee-redistribution transaction that pays the **PoW reward** and one that pays
-a **PoS reward** are reported by the node with the **same transaction type**.
-There is no field on the transaction that says "this one is PoW" vs "this one is
-PoS".
+So the PoW/PoS attribution the explorer needs is not ambiguous on-chain. The
+`"SF"`/`"MF"` marker on each SSFee output is the authoritative discriminator.
 
-Consequences:
+## The actual problem (explorer-side)
 
-1. **The split is hardcoded, not derived.** `divideByTwoSKAFees`
-   (`cmd/dcrdata/internal/explorer/explorer.go`) divides total fees by 2 to get
-   the PoW portion. If the protocol ratio ever differs from 50/50, or differs
-   per coin, the explorer is silently wrong.
-2. **Fragile provenance.** The 50/50 number came from a verbal statement, not
-   from spec or chain data. If nobody had said "it's 50/50", the explorer would
-   have attributed **100% to staking** and shown PoW SKA reward as zero.
-3. **Manual disambiguation only.** Today a human can guess which transaction is
-   PoW by cross-referencing the home-page PoW figure and by the ratio between
-   staker payouts (e.g. one staker with 2 tickets vs another with 3). There is
-   no deterministic on-chain signal — `decoded` output differs in many ways but
-   none of them authoritatively marks PoW vs PoS.
-4. **Related node misclassification.** `txhelpers/ssfee.go` already carries
-   `TODO(monetarium-node)` workarounds: SSRtx (`type=3`) transactions are
-   sometimes classified as SSFee (`type=7`) by `stake.DetermineTxType`, so the
-   fee-summation code defensively accepts **both** types. This is the same class
-   of "the node collapses types we need separated" bug.
+1. **No marker decoding anywhere.** The explorer has zero SSFee-marker code.
+   `txhelpers/ssfee.go` classifies solely via `stake.DetermineTxType` and never
+   inspects the `OP_RETURN` payload. There is no `HasSSFeeMarker` call, no
+   `"SF"`/`"MF"` handling.
 
-## Worked example (from the call)
+2. **`/2` heuristic for the PoW portion.** `divideByTwoSKAFees`
+   (`cmd/dcrdata/internal/explorer/explorer.go:72-91`) blindly halves all SKA
+   fees to approximate the PoW share. Its two fallback paths
+   (`explorer.go` ≈ 838-890) apply the same `/2` to `ExtraInfo.SKAPoWRewards`
+   and to a backward block search. The 50/50 *ratio* happens to match
+   consensus, but the *method* is a guess: it ignores the per-tx marker, ignores
+   the node's integer `CalcFeeSplitByCoinType` rounding (remainder to miner),
+   and cannot attribute a specific transaction to PoW or PoS.
 
-A single fee-distribution transaction distributed fees across **three
-addresses**:
+3. **Vote VAR Reward omits SSFee `"SF"` payouts.** `ComputeVoteVARReward`
+   (`txhelpers/ssfee.go`) and its callers in
+   `explorer.go` (≈ 668-708) and `pubsub/pubsubhub.go` (≈ 726-763) derive the
+   vote reward from SSGen-only / net-redistribution (`Outputs − Inputs`) math.
+   In this fork staker VAR rewards are delivered via SSFee `"SF"` transactions
+   by design; not reading the marker is why the regression test
+   `TestComputeVoteVARReward` (block 36354) currently *expects to fail* at
+   `Fee == 0`.
 
-- **1 address** received the **PoW reward** (the block's miner).
-- **2 addresses** received **PoS rewards** — but these represent more underlying
-  tickets than addresses, because one staker can hold several tickets (e.g. one
-  staker with 2 tickets, another with 3; the same staker can even receive the
-  whole reward, so the address count can be as low as 2).
+4. **`explorer.go` and `pubsubhub.go` have drifted.** The SKA vote-reward path
+   in `explorer.go` divides totals by 2; the equivalent in
+   `pubsub/pubsubhub.go` (≈ 806-812) does **not**. The same logical quantity is
+   computed two different ways on the HTTP vs WebSocket paths — a live
+   inconsistency independent of the marker issue, and exactly the kind of
+   duplicate-calc drift `CLAUDE.md` warns about for `pubsubhub.go`.
 
-The reward is **not displayed anywhere** on the transaction page. It is the
-difference between inputs and outputs: in the example, ~1226 fee in vs ~1281
-out, a difference of ~0.50-something — that delta is the reward. The
-stake/reward transaction also **consolidates the address's own pre-existing SKA
-coins** with the reward and sends the total back to the same address, so the
-reward must be computed as `outputs − inputs` net of the consolidated
-self-funds. The PoW address in this example received ~0.9 (matching the
-home-page PoW figure ≈ 0.9 → confirming, by cross-reference, which transaction
-was the PoW one); the two staker addresses received ~0.36 and the remainder.
+5. **Workaround comments rest on a debunked premise.** Two
+   `TODO(monetarium-node)` comments in `txhelpers/ssfee.go` (≈ 142-144 and
+   181-182) state that SSRtx with an `"SF"` marker should be classified as
+   `type=3` not `type=7`, and defensively accept both. That premise is false
+   (next section). These comments and the dual-type acceptance should be removed
+   as part of the fix, not deferred to a node release.
 
-This example is the empirical basis for the 50/50 assumption: full block fee
-≈ 1.83…, PoW reward ≈ 0.916… (≈ half), which is why the code halves the total.
+### Worked example (from the call) — re-read with ground truth
 
-## Secondary issue: reward not surfaced in the UI
+A fee-distribution transaction spread fees over three addresses; a human had to
+cross-reference the home-page PoW figure (≈ 0.9) and infer staker ratios
+(2 tickets vs 3) to guess *which* transaction was PoW. That manual guessing was
+necessary **only because the explorer discards the `"MF"`/`"SF"` marker**. With
+the marker decoded, the PoW transaction (`"MF"`) and the staker transactions
+(`"SF"`) are identified directly, per-coin, with no inference and no `/2`.
 
-The stake/reward transaction is an **unusual transaction**: it does not *pay* a
-fee, it *receives* a reward. The transaction detail page renders it like an
-ordinary transaction (`GetExplorerTx` in `db/dcrpg/pgblockchain.go` populates no
-reward/subsidy fields; `TxInfo` has none). The reward amount is computable
-(`outputs − inputs`, net of self-consolidated coins) but is shown nowhere.
-Whether and how to display it (e.g. an explicit "reward" line on the tx page) is
-an open product question, separate from but adjacent to the classification
-problem.
+The reward also isn't surfaced on the tx detail page (`GetExplorerTx` /
+`TxInfo` populate no reward fields). The amount is computable
+(`outputs − inputs`, net of self-consolidated coins). Whether to display it is a
+separate, optional product question — noted, not in scope for the core fix.
 
-## Suspected root cause (node-side)
+## Why the earlier "node bug" framing was wrong
 
-`txhelpers.DetermineTxType` delegates entirely to the node's
-`stake.DetermineTxType(msgTx)`. The hypothesis is that the node's stake-tx
-detection (`staketx.go`) does not assign a distinct type to the PoW-reward
-redistribution transaction, and additionally misclassifies SSRtx (`type=3`) as
-SSFee (`type=7`). The second part is already corroborated from the explorer
-side: `txhelpers/ssfee.go` carries explicit `TODO(monetarium-node)` notes
-stating that SSRtx transactions with the "SF" marker should be classified as
-`type=3`, not `type=7`, and the fee-summation code defensively accepts both
-types until the node is fixed.
+The original mental model (a node defect collapsing PoW/PoS, SSRtx
+misclassified as SSFee) is contradicted by both the node code and the
+project's own corrected analysis (`monetarium-node/ssfee-classification-analysis.md`,
+which supersedes `ssrtx-detection-issue.md`):
 
-Caveat: this is a **hypothesis, not a confirmed diagnosis**. The exact node-side
-mechanism has not yet been independently verified by us or reviewed with the
-node developers; it should be validated against `staketx.go` before being acted
-on as fact.
+- `CheckSSRtx` requires **every** output to be `OP_SSRTX`-tagged
+  (`staketx.go:1285-1296`); `CheckSSFee` requires an `OP_RETURN` `"SF"`/`"MF"`
+  marker. These are mutually exclusive — an SSFee can never be a
+  misclassified SSRtx, regardless of detection order.
+- The transaction in question is a legitimate node-generated staker SSFee
+  (`TxType = 7`), working as designed.
+- **No node code change is warranted.** The only optional node follow-up is a
+  documentation fix: the stale comment at `staketx.go:38`
+  (`TxTypeSSFee // Stake fee distribution for non-VAR coin types`) contradicts
+  `CheckSSFee`, which explicitly permits staker `"SF"` SSFee to distribute VAR.
+  That is a non-consensus comment cleanup, not a prerequisite for this fix.
 
-## What a fix looks like
+## The fix (explorer-only)
 
-**Node-side (prerequisite):**
+No node release or node code change is required. `stake.HasSSFeeMarker` is
+already exported from `github.com/monetarium/monetarium-node/blockchain/stake`,
+which the explorer already imports (`txhelpers/ssfee.go:10`).
 
-- `stake.DetermineTxType` (or an adjacent API) should assign the PoW-reward
-  redistribution transaction a **distinct, stable transaction type** from the
-  PoS-reward transactions, and correctly classify SSRtx as `type=3` rather than
-  `type=7`.
+1. **Decode the marker in `txhelpers`.** For each `TxType=7` transaction,
+   classify outputs with `stake.HasSSFeeMarker(out.PkScript)` →
+   `SSFeeMarkerStaker` (PoS) vs `SSFeeMarkerMiner` (PoW).
+2. **Make `BlockSSFeeTotals` return a split.** Replace the single per-coin map
+   with a PoW/PoS-split result per coin type. VAR net-redistribution stays as
+   is where already correct; SKA totals are summed by marker, not halved.
+3. **Delete the `/2` heuristic.** Remove `divideByTwoSKAFees` and its fallback
+   call sites in `explorer.go`; derive the PoW portion from `"MF"`-marked
+   outputs (optionally cross-check against the node's
+   `GetSubsidyProportions`/`CalcFeeSplitByCoinType` rounding for parity).
+4. **Include `"SF"` SSFee payouts in Vote VAR Reward** so
+   `ComputeVoteVARReward` no longer caps at 0 for SSFee-delivered staker
+   rewards.
+5. **Reconcile `explorer.go` ↔ `pubsubhub.go`.** Both paths must use the same
+   marker-based split; eliminate the divide-by-2 vs no-divide drift.
+6. **Remove the two `TODO(monetarium-node)` workarounds** and the dual
+   `type=3`/`type=7` acceptance in `txhelpers/ssfee.go`.
 
-**Explorer-side (follow-up, once the node exposes the type):**
+### Files to change
 
-- Replace the hardcoded `divideByTwoSKAFees` 50/50 split with attribution
-  derived from the node-reported transaction type.
-- Remove the dual-type `TODO(monetarium-node)` workarounds in
-  `txhelpers/ssfee.go` (`ComputeTxFeeData`, `BlockSSFeeTotals`).
-- Re-verify home-page Mining/Voting cards and `pubsub/pubsubhub.go` (the reward
-  calc is duplicated there) against the new, data-derived split.
-- (Optional, separate) surface the per-transaction reward amount on the
-  transaction detail page.
+| File | Area | Change |
+|------|------|--------|
+| `txhelpers/ssfee.go` | `ComputeTxFeeData`, `BlockSSFeeTotals` | Decode `HasSSFeeMarker`; return PoW/PoS split per coin; drop dual-type workaround + TODOs |
+| `cmd/dcrdata/internal/explorer/explorer.go` | `divideByTwoSKAFees` + call sites (~72-91, ~838-890), Vote VAR Reward (~668-708) | Remove `/2`; use marker split; include `"SF"` payouts |
+| `pubsub/pubsubhub.go` | reward calc (~726-763, ~806-812) | Align with marker-based split; remove drift |
+| `txhelpers/ssfee_test.go` | see below | Update expectations to marker-based behavior |
+
+### Tests impacted
+
+- `TestComputeVoteVARReward` (block 36354) — currently asserts the *broken*
+  capped-at-0 behavior; flip to expect the marker-derived non-zero fee.
+- `TestBlockSSFeeTotals_WithType7` / `TestFullPipelineWithType7` (block 36600) —
+  currently assert `type=7` is treated identically to SSRtx; must assert
+  marker-based PoW/PoS split instead.
+- `TestBlockSSFeeTotals*`, `TestFullPipelineWithSSRtx`,
+  `TestComputeVoteVARReward_NegativeFee` — re-verify against the split return
+  type.
+- Add cases with explicit `"SF"` and `"MF"` `OP_RETURN` outputs asserting PoW
+  and PoS totals match marker content.
 
 ## Open questions
 
-1. Is the SKA fee split actually 50/50, or is that only true for VAR subsidy and
-   merely *assumed* for SKA fees? Is it the same across all coin types?
-2. Is the PoW/PoS ambiguity the *same* node defect as the SSRtx→SSFee
-   misclassification, or two separate issues that happen to surface together?
-3. What is the authoritative source of the split ratio — spec, node parameters,
-   or computed per block? The explorer should read it, not hardcode it.
-4. Should the node-side change be a new `stake.TxType`, or extra metadata on the
-   existing transaction? (Affects how invasive the explorer follow-up is.)
-5. Does the suspected node-side mechanism hold up against `staketx.go`? (Needs
-   validation before being shared with node devs as a diagnosis.)
+1. **Return shape.** Should `BlockSSFeeTotals` return `{PoW, PoS}` per coin, or
+   should callers classify? (Affects how many call sites change.)
+2. **VAR side.** Does VAR vote-reward attribution also need the `"SF"`/`"MF"`
+   split, or is net-redistribution (`Outputs − Inputs`) sufficient for VAR while
+   only SKA needs the marker? Confirm against block 36354 expectations.
+3. **Rounding parity.** Should the explorer mirror the node's exact integer
+   `CalcFeeSplitByCoinType` (remainder-to-miner) for displayed PoW/PoS amounts,
+   or is summing marked outputs inherently exact?
+4. **Optional node follow-up.** File a separate, low-priority node issue for the
+   stale `staketx.go:38` comment only — not blocking this fix.
