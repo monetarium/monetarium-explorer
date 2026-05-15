@@ -1752,7 +1752,7 @@ func (pgb *ChainDB) AddressTransactionsAll(ctx context.Context, address string) 
 	defer cancel()
 
 	const limit = 3000000
-	addressRows, err = retrieveAddressTxns(ctx, pgb.db, address, limit, 0, 0)
+	addressRows, err = retrieveAddressTxns(ctx, pgb.db, address, limit, 0, dbtypes.CoinTypeAll)
 	// addressRows, err = retrieveAllMainchainAddressTxns(ctx, pgb.db, address)
 	err = pgb.replaceCancelError(err)
 	return
