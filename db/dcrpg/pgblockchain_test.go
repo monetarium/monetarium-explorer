@@ -102,26 +102,22 @@ func TestMergeRows(t *testing.T) {
 	if err != nil {
 		t.Errorf("err should have been nil, was: %v", err)
 	}
-	if rows == nil {
+	if len(rows) == 0 {
 		t.Fatalf("should have rows, got none")
 	}
 
-	// Regression test: AddressTransactionsAll must return ALL coin types,
-	// not just VAR (coin type 0). This was a bug where the shortcut path
-	// in AddressHistory filtered by coin_type=0 instead of CoinTypeAll.
+	// AddressTransactionsAll must not silently coin-filter; over a multi-coin
+	// address it returns every coin type. The shared test DB is seeded from a
+	// VAR-only mainnet fixture, so this test cannot exercise the multi-coin
+	// case — that regression is guarded DB-free by TestCoinFilterBeforePagination
+	// in db/dbtypes/coinfilter_test.go. Here we only sanity-check the rows.
 	coinTypes := make(map[uint8]bool)
 	for _, r := range rows {
 		coinTypes[r.CoinType] = true
 	}
-	if len(coinTypes) == 0 {
-		t.Error("expected at least one coin type in rows")
-	}
 	if len(coinTypes) > 1 {
-		var types []uint8
-		for ct := range coinTypes {
-			types = append(types, ct)
-		}
-		t.Logf("AddressTransactionsAll returned %d rows with %d coin types: %v", len(rows), len(types), types)
+		t.Logf("AddressTransactionsAll returned %d rows spanning coin types %v",
+			len(rows), coinTypes)
 	}
 
 	tStart := time.Now()

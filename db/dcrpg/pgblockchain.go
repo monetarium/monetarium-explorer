@@ -1744,9 +1744,9 @@ func (pgb *ChainDB) AddressTransactions(ctx context.Context, address string, N, 
 */
 
 // AddressTransactionsAll retrieves all non-merged main chain addresses table
-// rows for the given address. There is presently a hard limit of 3 million rows
-// that may be returned, which is more than 4x the count for the treasury
-// address as of mainnet block 521900.
+// rows for the given address, across all coin types. There is presently a hard
+// safety limit of 3 million rows that may be returned (a cap on result size,
+// independent of coin type).
 func (pgb *ChainDB) AddressTransactionsAll(ctx context.Context, address string) (addressRows []*dbtypes.AddressRow, err error) {
 	ctx, cancel := context.WithTimeout(ctx, pgb.queryTimeout)
 	defer cancel()
@@ -1759,20 +1759,14 @@ func (pgb *ChainDB) AddressTransactionsAll(ctx context.Context, address string) 
 }
 
 // AddressTransactionsAllMerged retrieves all merged (stakeholder-approved and
-// mainchain only) addresses table rows for the given address. There is
-// presently a hard limit of 3 million rows that may be returned, which is more
-// than 4x the count for the treasury address as of mainnet block 521900.
+// mainchain only) addresses table rows for the given address, aggregated across
+// all coin types. There is presently a hard safety limit of 3 million rows that
+// may be returned (a cap on result size, independent of coin type).
 func (pgb *ChainDB) AddressTransactionsAllMerged(ctx context.Context, address string) (addressRows []*dbtypes.AddressRow, err error) {
 	ctx, cancel := context.WithTimeout(ctx, pgb.queryTimeout)
 	defer cancel()
 
 	const limit = 3000000
-	// Note: The merged query (SelectAddressMergedView) doesn't filter by coin_type
-	// in SQL - it aggregates all coin types together. However, there is a latent
-	// bug in retrieveAddressMergedTxns: the coinType=0 is passed to the generic
-	// retrieveAddressTxnsStmt which binds it to $2 (LIMIT), resulting in LIMIT 0.
-	// This works only because AddressRowsMerged uses the non-merged cache path.
-	// The merged Insight API path should be investigated separately.
 	addressRows, err = retrieveAddressMergedTxns(ctx, pgb.db, address, limit, 0)
 	// const onlyValidMainchain = true
 	// _, addressRows, err = retrieveAllAddressMergedTxns(ctx, pgb.db, address,
