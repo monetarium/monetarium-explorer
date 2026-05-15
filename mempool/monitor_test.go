@@ -3,7 +3,11 @@ package mempool
 import (
 	"testing"
 
+	"github.com/monetarium/monetarium-node/chaincfg/chainhash"
+	"github.com/monetarium/monetarium-node/wire"
+
 	exptypes "github.com/monetarium/monetarium-explorer/explorer/types"
+	"github.com/monetarium/monetarium-explorer/txhelpers"
 )
 
 // TestAddTxToCoinStats_IncrementalVAR verifies that the incremental per-tx
@@ -98,5 +102,58 @@ func TestAddTxToCoinStats_IncrementalAccumulates(t *testing.T) {
 	}
 	if s.Amount != "450000000" {
 		t.Errorf("Amount: want 450000000, got %s", s.Amount)
+	}
+}
+
+// TestUnconfirmedTxnsForAddress_PerCoinCounts is the regression guard for
+// issue #247: an address with one unconfirmed VAR tx and two unconfirmed SKA1
+// txs must report numByCoin[0]==1, numByCoin[1]==2, and an aggregate of 3.
+// Counts are distinct per tx hash (not per outpoint), so two outpoints from
+// the same SKA1 tx still count once.
+func TestUnconfirmedTxnsForAddress_PerCoinCounts(t *testing.T) {
+	const addr = "TestAddr"
+
+	// Three distinct unconfirmed txs funding the address: one VAR (coin 0)
+	// and two SKA1 (coin 1). The VAR tx contributes two outpoints to prove
+	// the count is per-tx, not per-outpoint.
+	varHash := chainhash.Hash{0x01}
+	ska1aHash := chainhash.Hash{0x02}
+	ska1bHash := chainhash.Hash{0x03}
+
+	txnsStore := txhelpers.TxnsStore{
+		varHash:   {CoinInfo: txhelpers.CoinInfoMap{0: {CoinType: 0}, 1: {CoinType: 0}}},
+		ska1aHash: {CoinInfo: txhelpers.CoinInfoMap{0: {CoinType: 1}}},
+		ska1bHash: {CoinInfo: txhelpers.CoinInfoMap{0: {CoinType: 1}}},
+	}
+
+	outs := txhelpers.NewAddressOutpoints(addr)
+	outs.Outpoints = []*wire.OutPoint{
+		{Hash: varHash, Index: 0},
+		{Hash: varHash, Index: 1}, // same tx, second output — must not double-count
+		{Hash: ska1aHash, Index: 0},
+		{Hash: ska1bHash, Index: 0},
+	}
+
+	p := &MempoolMonitor{txnsStore: txnsStore}
+	p.addrMap.store = txhelpers.MempoolAddressStore{addr: outs}
+
+	_, numByCoin, err := p.UnconfirmedTxnsForAddress(addr)
+	if err != nil {
+		t.Fatalf("UnconfirmedTxnsForAddress: %v", err)
+	}
+
+	if got := numByCoin[0]; got != 1 {
+		t.Errorf("numByCoin[VAR]: want 1, got %d", got)
+	}
+	if got := numByCoin[1]; got != 2 {
+		t.Errorf("numByCoin[SKA1]: want 2, got %d", got)
+	}
+
+	var aggregate int64
+	for _, n := range numByCoin {
+		aggregate += n
+	}
+	if aggregate != 3 {
+		t.Errorf("aggregate NumUnconfirmed: want 3, got %d", aggregate)
 	}
 }
