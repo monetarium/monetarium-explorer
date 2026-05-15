@@ -172,15 +172,38 @@ which the explorer already imports (`txhelpers/ssfee.go:10`).
 - Add cases with explicit `"SF"` and `"MF"` `OP_RETURN` outputs asserting PoW
   and PoS totals match marker content.
 
-## Open questions
+## Decisions
 
-1. **Return shape.** Should `BlockSSFeeTotals` return `{PoW, PoS}` per coin, or
-   should callers classify? (Affects how many call sites change.)
-2. **VAR side.** Does VAR vote-reward attribution also need the `"SF"`/`"MF"`
-   split, or is net-redistribution (`Outputs − Inputs`) sufficient for VAR while
-   only SKA needs the marker? Confirm against block 36354 expectations.
-3. **Rounding parity.** Should the explorer mirror the node's exact integer
-   `CalcFeeSplitByCoinType` (remainder-to-miner) for displayed PoW/PoS amounts,
-   or is summing marked outputs inherently exact?
-4. **Optional node follow-up.** File a separate, low-priority node issue for the
-   stale `staketx.go:38` comment only — not blocking this fix.
+These were open during drafting and are now resolved from the node code and
+corrected node-side analysis. Recorded so the implementation doesn't relitigate
+them.
+
+- **VAR also needs the marker — resolved.** Net-redistribution alone is *not*
+  sufficient for VAR. `ComputeVoteVARReward` (`txhelpers/ssfee.go:32-45`)
+  consumes a single lumped VAR net (`Σ(Outputs − Inputs)` over SSGen/SSRtx/SSFee
+  together) and caps it to 0 when negative. At block 36354 the consolidation
+  makes that lumped net ≤ 0, masking the positive `"SF"` SSFee staker payouts —
+  which is exactly why `TestComputeVoteVARReward` currently *expects to fail*.
+  Staker VAR rewards are delivered via SSFee `"SF"` by design (corrected
+  analysis, lines 121-128). The fix must isolate `"SF"`-marked SSFee payouts for
+  VAR, not only SKA.
+- **No rounding replication needed — resolved.** The node has *already* written
+  the exact post-`CalcFeeSplitByCoinType` (remainder-to-miner) amounts into the
+  SSFee outputs themselves; the marker only tags which output is PoW vs PoS.
+  Summing the actual `"MF"`/`"SF"` outputs reads those exact consensus amounts,
+  so the explorer must **not** re-derive the 50/50 ratio or replicate integer
+  rounding for *actuals*. Ratio math remains only for theoretical
+  projections/averages (e.g. `AvgSSFeeRate` using `TicketsPerBlock`), unchanged.
+- **Return shape — recommended.** `BlockSSFeeTotals` should return a per-coin
+  `{PoW, PoS}` split (e.g. two maps or a struct) rather than pushing
+  classification onto each caller — `explorer.go` and `pubsubhub.go` currently
+  drift precisely because the split is decided at the call site. Centralizing it
+  in `txhelpers` is what removes the drift. Final shape is an implementation
+  call (TDD), but classification must live in one place.
+
+## Tracked follow-up (non-blocking)
+
+- File a separate, low-priority **node** issue for the stale `staketx.go:38`
+  comment (`TxTypeSSFee // Stake fee distribution for non-VAR coin types`),
+  which contradicts `CheckSSFee` permitting staker `"SF"` SSFee to distribute
+  VAR. Documentation-only; not a prerequisite for the explorer fix.
