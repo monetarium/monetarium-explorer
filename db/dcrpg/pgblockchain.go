@@ -2593,6 +2593,40 @@ func (pgb *ChainDB) AddressData(ctx context.Context, address string, limitN, off
 			addrData = new(dbtypes.AddressInfo)
 		}
 
+		// Filter transactions by coin type if specified
+		if coinType != dbtypes.CoinTypeAll {
+			// Filter main transaction list
+			if len(addrData.Transactions) > 0 {
+				filtered := make([]*dbtypes.AddressTx, 0, len(addrData.Transactions))
+				for _, tx := range addrData.Transactions {
+					if tx.CoinType == coinType {
+						filtered = append(filtered, tx)
+					}
+				}
+				addrData.Transactions = filtered
+			}
+			// Filter funding transactions
+			if len(addrData.TxnsFunding) > 0 {
+				filtered := make([]*dbtypes.AddressTx, 0, len(addrData.TxnsFunding))
+				for _, tx := range addrData.TxnsFunding {
+					if tx.CoinType == coinType {
+						filtered = append(filtered, tx)
+					}
+				}
+				addrData.TxnsFunding = filtered
+			}
+			// Filter spending transactions
+			if len(addrData.TxnsSpending) > 0 {
+				filtered := make([]*dbtypes.AddressTx, 0, len(addrData.TxnsSpending))
+				for _, tx := range addrData.TxnsSpending {
+					if tx.CoinType == coinType {
+						filtered = append(filtered, tx)
+					}
+				}
+				addrData.TxnsSpending = filtered
+			}
+		}
+
 		// Balances and txn counts
 		populateTemplate()
 
