@@ -102,7 +102,7 @@ type explorerDataSource interface {
 	PoolStatusForTicket(ctx context.Context, txid string) (dbtypes.TicketSpendType, dbtypes.TicketPoolStatus, error)
 	TreasuryBalance(context.Context) (*dbtypes.TreasuryBalance, error)
 	TreasuryTxns(ctx context.Context, n, offset int64, txType stake.TxType) ([]*dbtypes.TreasuryTx, error)
-	AddressHistory(ctx context.Context, address string, N, offset int64, txnType dbtypes.AddrTxnViewType) ([]*dbtypes.AddressRow, *dbtypes.AddressBalance, error)
+	AddressHistory(ctx context.Context, address string, N, offset int64, txnType dbtypes.AddrTxnViewType, coinType uint8) ([]*dbtypes.AddressRow, *dbtypes.AddressBalance, error)
 	AddressData(ctx context.Context, address string, N, offset int64, txnType dbtypes.AddrTxnViewType, coinType uint8) (*dbtypes.AddressInfo, error)
 	DevBalance(ctx context.Context) (*dbtypes.AddressBalance, error)
 	FillAddressTransactions(ctx context.Context, addrInfo *dbtypes.AddressInfo) error

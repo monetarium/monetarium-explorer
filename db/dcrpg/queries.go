@@ -1881,9 +1881,21 @@ func retrieveAddressTxns(ctx context.Context, db *sql.DB, address string, N, off
 
 // Merged address transactions queries.
 
+// retrieveAddressMergedTxns fetches the per-transaction aggregated ("merged")
+// main chain address rows. SelectAddressMergedView has no coin_type predicate
+// (it aggregates all coin types) and binds $1=address, $2=LIMIT, $3=OFFSET, so
+// it must be queried directly. Routing it through retrieveAddressTxnsStmt would
+// inject a coin type as $2, which the merged statement uses as LIMIT — passing
+// the historical coinType=0 there produced "LIMIT 0" and silently returned no
+// rows.
 func retrieveAddressMergedTxns(ctx context.Context, db *sql.DB, address string, N, offset int64) ([]*dbtypes.AddressRow, error) {
-	return retrieveAddressTxnsStmt(ctx, db, address, N, offset,
-		internal.SelectAddressMergedView, mergedQuery, 0)
+	rows, err := db.QueryContext(ctx, internal.SelectAddressMergedView, address, N, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer closeRows(rows)
+	const onlyValidMainchain = true
+	return scanAddressMergedRows(rows, address, mergedQuery, onlyValidMainchain)
 }
 
 // Address transaction query helpers.

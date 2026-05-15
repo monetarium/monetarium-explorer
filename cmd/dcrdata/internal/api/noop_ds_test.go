@@ -26,7 +26,7 @@ func (noopDS) SpendingTransaction(_ context.Context, _ string, _ uint32) (string
 func (noopDS) SpendingTransactions(_ context.Context, _ string) ([]string, []uint32, []uint32, error) {
 	return nil, nil, nil, nil
 }
-func (noopDS) AddressHistory(_ context.Context, _ string, _, _ int64, _ dbtypes.AddrTxnViewType) ([]*dbtypes.AddressRow, *dbtypes.AddressBalance, error) {
+func (noopDS) AddressHistory(_ context.Context, _ string, _, _ int64, _ dbtypes.AddrTxnViewType, _ uint8) ([]*dbtypes.AddressRow, *dbtypes.AddressBalance, error) {
 	return nil, nil, nil
 }
 func (noopDS) FillAddressTransactions(_ context.Context, _ *dbtypes.AddressInfo) error { return nil }

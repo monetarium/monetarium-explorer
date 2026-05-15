@@ -55,7 +55,7 @@ type DataSource interface {
 	GetBlockByHash(context.Context, string) (*wire.MsgBlock, error)
 	SpendingTransaction(ctx context.Context, fundingTx string, vout uint32) (string, uint32, error)
 	SpendingTransactions(ctx context.Context, fundingTxID string) ([]string, []uint32, []uint32, error)
-	AddressHistory(ctx context.Context, address string, N, offset int64, txnType dbtypes.AddrTxnViewType) ([]*dbtypes.AddressRow, *dbtypes.AddressBalance, error)
+	AddressHistory(ctx context.Context, address string, N, offset int64, txnType dbtypes.AddrTxnViewType, coinType uint8) ([]*dbtypes.AddressRow, *dbtypes.AddressBalance, error)
 	FillAddressTransactions(ctx context.Context, addrInfo *dbtypes.AddressInfo) error
 	AddressTransactionDetails(ctx context.Context, addr string, count, skip int64,
 		txnType dbtypes.AddrTxnViewType) (*apitypes.Address, error)
