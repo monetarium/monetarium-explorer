@@ -1784,7 +1784,7 @@ func (pgb *ChainDB) AddressTransactionsAllMerged(ctx context.Context, address st
 // AddressHistoryAll retrieves N address rows of type AddrTxnAll, skipping over
 // offset rows first, in order of block time.
 func (pgb *ChainDB) AddressHistoryAll(ctx context.Context, address string, N, offset int64) ([]*dbtypes.AddressRow, *dbtypes.AddressBalance, error) {
-	return pgb.AddressHistory(ctx, address, N, offset, dbtypes.AddrTxnAll)
+	return pgb.AddressHistory(ctx, address, N, offset, dbtypes.AddrTxnAll, dbtypes.CoinTypeAll)
 }
 
 // TicketPoolBlockMaturity returns the block at which all tickets with height
@@ -2423,10 +2423,63 @@ func (pgb *ChainDB) CountTransactions(ctx context.Context, addr string, txnView 
 // containing values for a certain type of transaction (all, credits, or debits)
 // for the given address.
 func (pgb *ChainDB) AddressHistory(ctx context.Context, address string, N, offset int64,
-	txnView dbtypes.AddrTxnViewType) ([]*dbtypes.AddressRow, *dbtypes.AddressBalance, error) {
+	txnView dbtypes.AddrTxnViewType, coinType uint8) ([]*dbtypes.AddressRow, *dbtypes.AddressBalance, error) {
 	_, err := stdaddr.DecodeAddress(address, pgb.chainParams)
 	if err != nil {
 		return nil, nil, err
+	}
+
+	// Coin-filtered views must paginate over the per-coin row subset. The
+	// row cache (and the SQL LIMIT/OFFSET it mirrors) operate on the full
+	// all-coin set, so filtering after pagination yields under-filled pages
+	// with most coin rows unreachable. Restrict to the coin first, then
+	// slice for the requested page/view.
+	if coinType != dbtypes.CoinTypeAll {
+		var fullRows []*dbtypes.AddressRow
+		compact, blockID := pgb.AddressCache.Rows(address, coinType)
+		if blockID != nil {
+			fullRows = dbtypes.UncompactRows(compact)
+		} else {
+			// Cache miss: populate the address row cache, then filter.
+			allRows, uErr := pgb.updateAddressRows(ctx, address)
+			if uErr != nil && !errors.Is(uErr, dbtypes.ErrNoResult) && !errors.Is(uErr, sql.ErrNoRows) {
+				if IsRetryError(uErr) {
+					return pgb.AddressHistory(ctx, address, N, offset, txnView, coinType)
+				}
+				return nil, nil, fmt.Errorf("failed to updateAddressRows: %w", uErr)
+			}
+			for _, r := range allRows {
+				if r.CoinType == coinType {
+					fullRows = append(fullRows, r)
+				}
+			}
+		}
+
+		pagedRows, sErr := dbtypes.SliceAddressRows(fullRows, int(N), int(offset), txnView)
+		if sErr != nil {
+			return nil, nil, fmt.Errorf("failed to SliceAddressRows: %w", sErr)
+		}
+
+		// Always use the full per-coin DB balance so the Coins map stays
+		// complete for the coin selector; a row-derived shortcut would yield
+		// a single-coin balance for the coin-filtered slice.
+		balance, _, bErr := pgb.AddressBalance(ctx, address)
+		if bErr != nil && !errors.Is(bErr, dbtypes.ErrNoResult) && !errors.Is(bErr, sql.ErrNoRows) {
+			log.Errorf("AddressBalance failed for %s: %v, returning rows anyway", address, bErr)
+			balance = &dbtypes.AddressBalance{
+				Address: address,
+				Coins:   make(map[uint8]*dbtypes.CoinBalance),
+			}
+		}
+		if balance != nil && balance.Coins != nil {
+			if varBal, ok := balance.Coins[0]; ok {
+				balance.TotalSpent = varBal.TotalSpent
+				balance.TotalUnspent = varBal.TotalUnspent
+				balance.NumSpent = varBal.NumSpent
+				balance.NumUnspent = varBal.NumUnspent
+			}
+		}
+		return pagedRows, balance, nil
 	}
 
 	// Try the address rows cache.
@@ -2451,7 +2504,7 @@ func (pgb *ChainDB) AddressHistory(ctx context.Context, address string, N, offse
 			// be updated with this data, although it may not be. Try again.
 			if IsRetryError(err) {
 				// Try again, starting with cache.
-				return pgb.AddressHistory(ctx, address, N, offset, txnView)
+				return pgb.AddressHistory(ctx, address, N, offset, txnView, dbtypes.CoinTypeAll)
 			}
 			return nil, nil, fmt.Errorf("failed to updateAddressRows: %w", err)
 		}
@@ -2550,7 +2603,7 @@ func (pgb *ChainDB) AddressData(ctx context.Context, address string, limitN, off
 		return nil, err
 	}
 
-	addrHist, balance, err := pgb.AddressHistory(ctx, address, limitN, offsetAddrOuts, txnType)
+	addrHist, balance, err := pgb.AddressHistory(ctx, address, limitN, offsetAddrOuts, txnType, coinType)
 	if dbtypes.IsTimeoutErr(err) {
 		return nil, err
 	}
@@ -2597,39 +2650,10 @@ func (pgb *ChainDB) AddressData(ctx context.Context, address string, limitN, off
 			addrData = new(dbtypes.AddressInfo)
 		}
 
-		// Filter transactions by coin type if specified
-		if coinType != dbtypes.CoinTypeAll {
-			// Filter main transaction list
-			if len(addrData.Transactions) > 0 {
-				filtered := make([]*dbtypes.AddressTx, 0, len(addrData.Transactions))
-				for _, tx := range addrData.Transactions {
-					if tx.CoinType == coinType {
-						filtered = append(filtered, tx)
-					}
-				}
-				addrData.Transactions = filtered
-			}
-			// Filter funding transactions
-			if len(addrData.TxnsFunding) > 0 {
-				filtered := make([]*dbtypes.AddressTx, 0, len(addrData.TxnsFunding))
-				for _, tx := range addrData.TxnsFunding {
-					if tx.CoinType == coinType {
-						filtered = append(filtered, tx)
-					}
-				}
-				addrData.TxnsFunding = filtered
-			}
-			// Filter spending transactions
-			if len(addrData.TxnsSpending) > 0 {
-				filtered := make([]*dbtypes.AddressTx, 0, len(addrData.TxnsSpending))
-				for _, tx := range addrData.TxnsSpending {
-					if tx.CoinType == coinType {
-						filtered = append(filtered, tx)
-					}
-				}
-				addrData.TxnsSpending = filtered
-			}
-		}
+		// Coin filtering is applied at the query/cache layer by
+		// AddressHistory (per-coin rows are paginated correctly there), so
+		// addrData.Transactions / TxnsFunding / TxnsSpending are already
+		// restricted to the requested coin. No post-pagination filtering.
 
 		// Balances and txn counts
 		populateTemplate()
@@ -2747,11 +2771,9 @@ func (pgb *ChainDB) AddressData(ctx context.Context, address string, limitN, off
 		addrData.UnconfirmedTxns = new(dbtypes.AddressTransactions)
 	}
 
-	// Funding transactions (unconfirmed)
-	var received, sent, numReceived, numSent int64
-	// Per-coin SKA accumulators for the mempool overlay.
-	skaReceivedByType := make(map[uint8]*big.Int)
-	skaSpentByType := make(map[uint8]*big.Int)
+	// Funding transactions (unconfirmed). These are shown in the transaction
+	// list but, by design, do not contribute to the balance totals (see the
+	// note after the spending loop).
 FUNDING_TX_DUPLICATE_CHECK:
 	for _, f := range addressUTXOs.Outpoints {
 		// TODO: handle merged transactions
@@ -2811,21 +2833,6 @@ FUNDING_TX_DUPLICATE_CHECK:
 				addrData.Transactions = append(addrData.Transactions, addrTx)
 			}
 		}
-
-		if addrData.Balance.Coins[coinType] == nil {
-			addrData.Balance.Coins[coinType] = dbtypes.NewCoinBalance(coinType)
-		}
-		if coinType == 0 {
-			received += fundingTx.Tx.TxOut[f.Index].Value
-			numReceived++
-		} else {
-			addrData.Balance.Coins[coinType].NumUnspent++
-			if skaReceivedByType[coinType] == nil {
-				skaReceivedByType[coinType] = new(big.Int)
-			}
-			dbtypes.BigAddSKA(skaReceivedByType[coinType], receivedSKA)
-		}
-		addrData.Balance.TotalOutputs++
 	}
 
 	// Spending transactions (unconfirmed)
@@ -2901,28 +2908,13 @@ SPENDING_TX_DUPLICATE_CHECK:
 				addrData.Transactions = append(addrData.Transactions, addrTx)
 			}
 		}
-
-		coinType := f.CoinType
-		if addrData.Balance.Coins[coinType] == nil {
-			addrData.Balance.Coins[coinType] = dbtypes.NewCoinBalance(coinType)
-		}
-		if coinType == 0 {
-			sent += valuein
-			numSent++
-		} else {
-			if skaSpentByType[coinType] == nil {
-				skaSpentByType[coinType] = new(big.Int)
-			}
-			dbtypes.BigAddSKA(skaSpentByType[coinType], f.SKAValue)
-		}
-		addrData.Balance.Coins[coinType].NumSpent++
-		addrData.Balance.TotalInputs++
 	} // range addressUTXOs.PrevOuts
 
-	// NOTE: Unconfirmed transactions are NOT added to the balance display.
-	// This is intentional - only confirmed transactions affect the balance.
-	// Unconfirmed transactions are tracked separately via NumUnconfirmed and
-	// NumUnconfirmedByCoin, which are displayed as indicators to users.
+	// NOTE: Unconfirmed (mempool) transactions appear in the transaction list
+	// above but are intentionally NOT folded into the balance totals: only
+	// confirmed transactions affect the balance. Unconfirmed activity is
+	// surfaced separately via NumUnconfirmed and NumUnconfirmedByCoin, which
+	// the UI displays as pending indicators.
 
 	// Sort by date and calculate block height.
 	addrData.PostProcess(uint32(pgb.Height()))
@@ -3065,7 +3057,7 @@ func (pgb *ChainDB) addressInfo(ctx context.Context, addr string, count, skip in
 	}
 
 	// Get rows from the addresses table for the address
-	addrHist, balance, err := pgb.AddressHistory(ctx, addr, count, skip, txnType)
+	addrHist, balance, err := pgb.AddressHistory(ctx, addr, count, skip, txnType, dbtypes.CoinTypeAll)
 	if err != nil {
 		log.Errorf("Unable to get address %s history: %v", address, err)
 		return nil, nil, err
