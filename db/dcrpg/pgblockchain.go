@@ -2872,45 +2872,10 @@ SPENDING_TX_DUPLICATE_CHECK:
 		addrData.Balance.TotalInputs++
 	} // range addressUTXOs.PrevOuts
 
-	// Totals from funding and spending transactions.
-	if addrData.Balance.Coins == nil {
-		addrData.Balance.Coins = make(map[uint8]*dbtypes.CoinBalance)
-	}
-	if addrData.Balance.Coins[0] == nil {
-		addrData.Balance.Coins[0] = dbtypes.NewCoinBalance(0)
-	}
-	addrData.Balance.Coins[0].NumSpent += numSent
-	addrData.Balance.Coins[0].NumUnspent += (numReceived - numSent)
-	addrData.Balance.Coins[0].TotalSpent += sent
-	addrData.Balance.Coins[0].TotalUnspent += (received - sent)
-	addrData.Balance.TotalInputs += numSent
-	addrData.Balance.TotalOutputs += numReceived
-
-	// Write accumulated SKA values into CoinBalance.
-	for ct, acc := range skaReceivedByType {
-		if addrData.Balance.Coins[ct] == nil {
-			addrData.Balance.Coins[ct] = dbtypes.NewCoinBalance(ct)
-		}
-		cb := addrData.Balance.Coins[ct]
-		spent := skaSpentByType[ct]
-		var unspent big.Int
-		unspent.Set(acc)
-		if spent != nil {
-			cb.TotalSpentSKA = spent.String()
-			unspent.Sub(&unspent, spent)
-		}
-		cb.TotalUnspentSKA = unspent.String()
-		cb.TotalReceivedSKA = acc.String()
-	}
-	for ct, acc := range skaSpentByType {
-		if skaReceivedByType[ct] != nil {
-			continue // already handled above
-		}
-		if addrData.Balance.Coins[ct] == nil {
-			addrData.Balance.Coins[ct] = dbtypes.NewCoinBalance(ct)
-		}
-		addrData.Balance.Coins[ct].TotalSpentSKA = acc.String()
-	}
+	// NOTE: Unconfirmed transactions are NOT added to the balance display.
+	// This is intentional - only confirmed transactions affect the balance.
+	// Unconfirmed transactions are tracked separately via NumUnconfirmed and
+	// NumUnconfirmedByCoin, which are displayed as indicators to users.
 
 	// Sort by date and calculate block height.
 	addrData.PostProcess(uint32(pgb.Height()))
