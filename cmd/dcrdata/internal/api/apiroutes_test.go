@@ -466,7 +466,7 @@ func TestAddressCSV_CoinFiltering(t *testing.T) {
 			"SKA CSV",
 			"/address/io/" + testAddr + "?coin=1",
 			http.StatusOK,
-			"1 SKA1", // coin_type, amount (18dp human-readable)
+			"1,1,0,Regular,", // coin_type=1, amount=1 (bare decimal, no label)
 		},
 	}
 	// ...

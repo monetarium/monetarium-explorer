@@ -361,3 +361,27 @@ func TestReduceAddressHistory_MixedCoin(t *testing.T) {
 		t.Errorf("SKA TotalUnspentSKA: want 2500000000000000000, got %q", skaCoin.TotalUnspentSKA)
 	}
 }
+
+// TestFormatSKACoins covers the label-free SKA atoms→coins formatter used by
+// the CSV export (the amount column must be a bare parseable number, with the
+// coin disambiguated by the separate coin_type column).
+func TestFormatSKACoins(t *testing.T) {
+	cases := []struct {
+		atoms string
+		want  string
+	}{
+		{"", "0"},
+		{"not-a-number", "0"},
+		{"0", "0"},
+		{"500", "0.0000000000000005"},
+		{"70000000", "0.00000000007"},
+		{"1000000000000000000", "1"},
+		{"5000000000000000000000", "5000"},
+		{"1230000000000000000", "1.23"},
+	}
+	for _, c := range cases {
+		if got := FormatSKACoins(c.atoms); got != c.want {
+			t.Errorf("FormatSKACoins(%q) = %q, want %q", c.atoms, got, c.want)
+		}
+	}
+}

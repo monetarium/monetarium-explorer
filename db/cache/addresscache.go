@@ -900,6 +900,9 @@ func (ac *AddressCache) Rows(addr string, coinType uint8) ([]*dbtypes.AddressRow
 		return nil, nil
 	}
 	ac.cacheMetrics.rowHit()
+	if coinType == dbtypes.CoinTypeAll {
+		return rows, aci.blockID()
+	}
 	var filtered []*dbtypes.AddressRowCompact
 	for _, r := range rows {
 		if r.CoinType == coinType {

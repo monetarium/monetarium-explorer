@@ -13,7 +13,7 @@ chi `/address/{addr}` → `AddressPathCtx` → `AddressPage` + `middleware.GetCo
 
 ### Critical Constraints
 - **Coin filter must precede LIMIT/OFFSET** (`TestCoinFilterBeforePagination`).
-- **`CoinTypeAll` must stay 255**, distinct from every real coin (`TestCoinTypeAllSentinel`).
+- **`CoinTypeAll` must stay 255**, distinct from every real coin (`TestCoinTypeAllSentinel`). Any in-memory `if r.CoinType == coinType` row filter must short-circuit on `CoinTypeAll` (return all rows) — `AddressCache.Rows` / `AddressRowsCompact` do; missing this empties the no-`?coin=` CSV (`TestAddressCacheRows_CoinTypeAll`).
 - **Mempool must not affect balance** — confirmed-DB only by design; don't reintroduce the deleted accumulator.
 - **Merged view has no `coin_type` predicate** — query `SelectAddressMergedView` directly with `(address,N,offset)`; the old stmt-helper route bound `coinType=0` as `LIMIT 0` → zero rows (fixed `be28442e`).
 - **SKA precision (C1):** atoms stay strings to the render boundary; never `ToCoin()`/float a displayed SKA value.
