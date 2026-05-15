@@ -2719,6 +2719,9 @@ func (pgb *ChainDB) AddressData(ctx context.Context, address string, limitN, off
 		}
 	}
 
+	// Store coin type filter before it's shadowed by local variables
+	coinTypeFilter := coinType
+
 	// Check for unconfirmed transactions.
 	addressUTXOs, numByCoin, err := pgb.mp.UnconfirmedTxnsForAddress(address)
 	if err != nil || addressUTXOs == nil {
@@ -2799,7 +2802,10 @@ FUNDING_TX_DUPLICATE_CHECK:
 				CoinType:         coinType,
 				SKAValue:         receivedSKA,
 			}
-			addrData.Transactions = append(addrData.Transactions, addrTx)
+			// Filter by coin type if specified
+			if coinTypeFilter == dbtypes.CoinTypeAll || coinTypeFilter == coinType {
+				addrData.Transactions = append(addrData.Transactions, addrTx)
+			}
 		}
 
 		if addrData.Balance.Coins[coinType] == nil {
@@ -2886,7 +2892,10 @@ SPENDING_TX_DUPLICATE_CHECK:
 				CoinType:       coinType,
 				SKAValue:       f.SKAValue,
 			}
-			addrData.Transactions = append(addrData.Transactions, addrTx)
+			// Filter by coin type if specified
+			if coinTypeFilter == dbtypes.CoinTypeAll || coinTypeFilter == coinType {
+				addrData.Transactions = append(addrData.Transactions, addrTx)
+			}
 		}
 
 		coinType := f.CoinType
