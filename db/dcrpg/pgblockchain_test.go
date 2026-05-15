@@ -106,6 +106,24 @@ func TestMergeRows(t *testing.T) {
 		t.Fatalf("should have rows, got none")
 	}
 
+	// Regression test: AddressTransactionsAll must return ALL coin types,
+	// not just VAR (coin type 0). This was a bug where the shortcut path
+	// in AddressHistory filtered by coin_type=0 instead of CoinTypeAll.
+	coinTypes := make(map[uint8]bool)
+	for _, r := range rows {
+		coinTypes[r.CoinType] = true
+	}
+	if len(coinTypes) == 0 {
+		t.Error("expected at least one coin type in rows")
+	}
+	if len(coinTypes) > 1 {
+		var types []uint8
+		for ct := range coinTypes {
+			types = append(types, ct)
+		}
+		t.Logf("AddressTransactionsAll returned %d rows with %d coin types: %v", len(rows), len(types), types)
+	}
+
 	tStart := time.Now()
 	// mergedRows, mrMap, err := dbtypes.MergeRows(rows)
 	mergedRows, err := dbtypes.MergeRows(rows)

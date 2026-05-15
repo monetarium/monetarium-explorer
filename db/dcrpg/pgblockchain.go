@@ -1767,6 +1767,8 @@ func (pgb *ChainDB) AddressTransactionsAllMerged(ctx context.Context, address st
 	defer cancel()
 
 	const limit = 3000000
+	// Note: The merged query (SelectAddressMergedView) doesn't filter by coin_type
+	// in SQL - it aggregates all coin types together. The offset (0) here is correct.
 	addressRows, err = retrieveAddressMergedTxns(ctx, pgb.db, address, limit, 0)
 	// const onlyValidMainchain = true
 	// _, addressRows, err = retrieveAllAddressMergedTxns(ctx, pgb.db, address,
