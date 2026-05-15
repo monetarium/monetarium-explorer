@@ -51,14 +51,14 @@ _End-to-end pipeline for transaction processing, decoding, and rendering inputs/
 
 ### Address
 
-_Address page rendering: paginated transaction table, chart endpoints, CSV download, multi-coin backend (`?coin=` via `CoinCtx` middleware) with frontend still rendering VAR-only, and TurboQuery-driven URL state (chart kind, zoom, group-by, pagination)._
+_Address page rendering: paginated transaction table, chart endpoints, CSV download, **multi-coin end-to-end** (`?coin=` via `CoinCtx` middleware; filter-before-paginate; confirmed-only balance), per-coin summary card + Coin column, and TurboQuery-driven URL state (chart kind, zoom, group-by, pagination, `coin`). Revised at `HEAD=1b670255` (PR #265/#266 + db coin-filter series)._
 
-- flow (compact): code-analysis/address/flow.compact.md — high-level summary of the address page data path, URL contract, and the dual-field migration shim
-- flow (full): code-analysis/address/flow.full.md — detailed function trace covering handler, DB layer with per-coin `Coins` map, cache, chart API, CSV, frontend controller (stale-zoom-param failure mode + confirmed SKA SQL precision bug)
-- patterns: code-analysis/address/patterns.md — `CoinCtx` URL contract, dual-field migration shim, coin-aware aggregation pipelines, per-coin caching, SKA decimal-string atom pipeline, TurboQuery URL ownership
-- impact (summary card): code-analysis/address/summary.impact.md — left-top card; backend per-coin complete, template still reads legacy flat fields and labels everything `DCR`; `FiatBalance` now `nil`
-- impact (transactions): code-analysis/address/transactions.impact.md — bottom section + `/addresstable` XHR + CSV; per-row coin fields populated but unread by template; CSV is multi-coin complete (`coin_type` column added, `value`→`amount` renamed)
-- impact (charts): code-analysis/address/charts.impact.md — chart API now `?coin=N`-aware end-to-end on backend; frontend doesn't emit `?coin=`; **confirmed SKA SQL precision bug** in `selectAddressAmountFlowByAddress`
+- flow (compact): code-analysis/address/flow.compact.md — current data path, `?coin=` contract, filter-before-paginate + confirmed-only-balance invariants, and a stale-claim delta table vs. the prior revision
+- flow (full): code-analysis/address/flow.full.md — current function trace: coin-filtered `AddressHistory`, rewritten mempool overlay, merged-view LIMIT-0 fix, per-coin templates, coin-aware controller, chart serialization
+- patterns: code-analysis/address/patterns.md — `CoinCtx` URL contract, coin-aware aggregation, per-coin caching, SKA decimal-string pipeline, TurboQuery URL ownership ⚠️ **stale (pre-#265/#266: dual-field shim) — reconcile via `Consolidate: address`**
+- impact (summary card): code-analysis/address/summary.impact.md ⚠️ **stale** — describes the now-completed VAR-only→multi-coin summary migration (`FiatBalance` removed, per-coin card shipped)
+- impact (transactions): code-analysis/address/transactions.impact.md ⚠️ **stale** — per-row coin fields are now read by the template (Coin column + SKA branches shipped)
+- impact (charts): code-analysis/address/charts.impact.md ⚠️ **partially stale** — frontend now emits `?coin=`; SKA SQL precision bug fixed (PR #263)
 
 ### Windows
 

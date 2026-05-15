@@ -1,38 +1,50 @@
 ### One-line Flow
-chi `/address/{addr}` → `AddressPathCtx` → `AddressPage` → `parseAddressParams` + `middleware.GetCoinCtx` → `AddressListData(... coinType)` → PG `AddressData` (`AddressHistory` + `mergedTxnCount` / `CountTransactions` + `FillAddressTransactions` + `mempool.UnconfirmedTxnsForAddress` returning per-coin counts) → `templates.exec("address", AddressPageData{Data:*AddressInfo, Pages, FiatBalance:nil})` → `address` Stimulus controller (TurboQuery URL state; charts via `/api/address/{addr}/{types|amountflow}/{bin}?coin=N`; table via `/addresstable/{addr}?...&coin=N`; CSV via `/download/address/io/{addr}?coin=N`).
+chi `/address/{addr}` → `AddressPathCtx` → `AddressPage` + `middleware.GetCoinCtx` → `AddressData(...coinType)` → `AddressHistory(...,coinType)` [`coinType≠255`: load full per-coin rows, **filter then `SliceAddressRows`**, + full `AddressBalance`] → mempool overlay appends coin-filtered unconfirmed rows but **not** balance → `AddressInfo{Balance.Coins, ActiveCoins, NumUnconfirmedByCoin}` → `address.tmpl` (`range .ActiveCoins`) + `extras.tmpl` (Coin column) → `address` controller (TurboQuery incl. `coin`; charts `/api/address/{addr}/{types|amountflow}/{bin}?coin=N`; table `/addresstable/{addr}?...&coin=N`).
+
+> Revised at `HEAD=1b670255` (PR #265/#266 + db coin-filter series). Prior revision (`a8f641f2`) is overturned — see delta table below.
 
 ### Key Architectural Patterns
-- **Inline page-payload struct:** `AddressPageData{*CommonPageData, Data, Type, CRLFDownload, Pages, FiatBalance interface{}}` — the project's standard wrapper around a `dbtypes.*Info` core. `FiatBalance` is currently always `nil` (commented `TODO: Remove once frontend is updated for multi-coin support`).
-- **Dual-field migration shim:** `AddressBalance` carries both the new `Coins map[uint8]*CoinBalance` (per-coin truth) and legacy flat `TotalSpent`/`TotalUnspent`/`NumSpent`/`NumUnspent` fields synced from `Coins[0]` (VAR-only). The template still reads the flat fields. Three sync points must stay in lockstep: `ReduceAddressHistory`, `AddressBalance` shortcut, and `AddressData` after the cache miss path.
-- **`?coin=` URL contract via `CoinCtx` middleware:** `?coin=N` (1-255) selects a single coin; absence or `255` means "no filter". A single sentinel `dbtypes.CoinTypeAll = 255` flows everywhere; chart pipeline collapses `CoinTypeAll → 0` (VAR) silently.
-- **Per-coin SKA accumulation:** every place that aggregates SKA atoms uses `*big.Int` + `dbtypes.BigAddSKA(acc, decimalString)` and writes back as `string` (e.g. `CoinBalance.TotalReceivedSKA`, `ChartsData.BalanceAtoms`). VAR continues to flow as `int64` atoms / `float64` coins.
-- **Shared params parser:** `parseAddressParams` is reused by HTML (`AddressPage`), XHR (`AddressTable`); coin filter comes from `middleware.GetCoinCtx(r)` — out-of-band from `parseAddressParams`. Both entry points must read both.
-- **TurboQuery URL ownership:** every UI write (chart, bin, zoom, pagination, type filter) goes through `this.query.replace(this.settings)` (history-replace, no full nav). All persisted keys must be declared with null values in `connect()`. `coin` is **not** in the null-template today.
-- **Zoom encoding:** base-36 ms timestamps `"<start>-<end>"`; `Zoom.validate` clamps silently to current data range — stale values never error.
+- **Filter-before-paginate (new invariant):** coin-filtered `AddressHistory` pulls the full per-coin row set (cache or `updateAddressRows`), filters by `r.CoinType`, *then* `SliceAddressRows`. Filtering after LIMIT/OFFSET = unreachable rows. Guarded by `db/dbtypes/coinfilter_test.go`.
+- **`?coin=` URL contract via `CoinCtx`:** `?coin=N` (1–254) selects one coin; absent/invalid/`255` ⇒ `CoinTypeAll=255` (no filter). Chart pipeline + JS `effectiveCoin()` both collapse `CoinTypeAll→0` (VAR). `coin` is now in the controller TurboQuery null-template and on `linkTemplate`.
+- **Confirmed-only balance:** the mempool accumulator block in `AddressData` was deleted; unconfirmed rows still listed (coin-filtered) but never folded into `Balance.Coins`. Unconfirmed surfaces via `NumUnconfirmed` / `NumUnconfirmedByCoin`.
+- **Per-coin SKA strings end-to-end:** `CoinBalance.Total*SKA` strings + `ChartsData.*Atoms` strings; server precomputes cumulative VAR `Balance` (int64→float64) and SKA `BalanceAtoms` (`big.Int`→string). JS uses `Number()` only for pixel positioning; legend reads original strings from `skaAtomsByTime`.
+- **`jsonMarshal` template func:** coerces `[]uint8`→`[]int` so `data-active-coins` is a JSON array, not base64; controller `JSON.parse`s it into `activeCoins`.
+- **Coin-keyed chart cache:** keys are `${chart}-${bin}-${coin}`; `drawGraph` short-circuit also compares `settings.coin`.
 
 ### Critical Constraints
-- **Backend is multi-coin; frontend renders VAR only (summary card + chart axes).** `AddressBalance.Coins` is populated end-to-end, but `address.tmpl` reads `Balance.TotalUnspent`/`Balance.TotalSpent`/`Balance.NumSpent`/`Balance.NumUnspent` (all flat-VAR fields) and labels everything `DCR`. Chart controller still emits `${series.y} DCR`, `Total (DCR)`, `Balance (DCR)`. SKA-aware payload (`ReceivedTotalSKA`, `SentTotalSKA`, `BalanceAtoms`, etc.) is delivered but unread.
-- **`?coin=` is in the URL contract for backend, not yet for the controller.** TurboQuery null-template (`address_controller.js:211-219`) does not declare `coin`. Adding a coin selector means: declare here, thread through `fetchTable`/`fetchGraphData` URL builders, and add to the `address.tmpl` container `data-` attrs.
-- **`FiatBalance` is currently always `nil`.** The `if $.FiatBalance` branch in the template never fires; the fiat row was removed pending a multi-coin price model.
-- **Dummy/zero address branch** (`AddressInfo.IsDummyAddress: true`) prevents DB timeouts on the unspendable ticket-change address. Required.
-- **Stale `?zoom=` across chart-type changes:** `changeGraph`/`changeBin` call `setGraphQuery` without resetting `settings.zoom`; URL keeps the prior chart's window, `validateZoom` silently clamps it.
-- **SKA precision in chart `amountflow` SQL — fixed in PR #263.** `selectAddressAmountFlowByAddress` now emits dual VAR/SKA `SUM` columns (`value INT8` for `coin_type = 0`; `NULLIF(ska_value,'')::numeric::text` for `coin_type > 0`), and `parseRowsSentReceived` scans both pairs — building the `*big.Int` accumulator from the text columns when `coinType > 0`. The previous bug (single `SUM(value)` truncating 1e18 SKA atoms to ~zero) is gone end-to-end on the backend. See `charts.impact.md §6.3` for the trace.
+- **Coin filter must precede LIMIT/OFFSET** (`TestCoinFilterBeforePagination`).
+- **`CoinTypeAll` must stay 255**, distinct from every real coin (`TestCoinTypeAllSentinel`).
+- **Mempool must not affect balance** — confirmed-DB only by design; don't reintroduce the deleted accumulator.
+- **Merged view has no `coin_type` predicate** — query `SelectAddressMergedView` directly with `(address,N,offset)`; the old stmt-helper route bound `coinType=0` as `LIMIT 0` → zero rows (fixed `be28442e`).
+- **SKA precision (C1):** atoms stay strings to the render boundary; never `ToCoin()`/float a displayed SKA value.
+- **Coin labels centralized (C7):** `coinSymbol` (template) / `renderCoinType` (JS); no `DCR`/`VAR` literals.
+- `AddressHistory(... txnView, coinType uint8)` — 6-site signature (DB, two Go interfaces, four mocks).
 
 ### Mutation Checklist
-When modifying the address page:
-- [ ] Touching `AddressInfo`/`AddressBalance` fields? Grep `address.tmpl`, `addressTable.tmpl` (defined in `extras.tmpl`), the three handlers in `explorerroutes.go` (`AddressPage` ~1535, `AddressTable` ~1652, `AddressListData` ~1875), DB layer (`pgblockchain.go` AddressData/AddressHistory/retrieveAddressBalance/ReduceAddressHistory), and four mocks: `cmd/dcrdata/internal/explorer/explorer_test.go`, `cmd/dcrdata/internal/api/noop_ds_test.go`, `cmd/dcrdata/internal/api/address_api_test.go`, `cmd/dcrdata/internal/api/apiroutes_test.go`.
-- [ ] Adding a per-coin field? It needs to populate from **three** code paths: `ReduceAddressHistory` (paginated row reduction), `retrieveAddressBalance` (SQL aggregate), and `AddressData`'s mempool overlay. Drop the legacy flat-field sync only when the template stops reading it.
-- [ ] New URL query key? Add a null entry in `address_controller.js:connect()` settings template (211-219) **and** decide whether it belongs in the URL builders (`makeTableUrl` ~319, `fetchGraphData` ~517). For coin-aware keys, also touch `apirouter.go` (`m.CoinCtx` middleware chain) and CSV route.
-- [ ] New chart kind or group-by bin? Match `<select>`/`<button>` `name`/`value` ↔ `apirouter.go` URL segment ↔ `fetchGraphData` URL construction.
-- [ ] Touching zoom-relevant code? Decide explicitly what `settings.zoom` means after the change (drop / project / keep) before `setGraphQuery` writes it to the URL.
-- [ ] Working on the chart `amountflow` SQL or `parseRowsSentReceived`? The dual-column SKA/VAR pattern was established by PR #263 — preserve it: VAR sums `value INT8`, SKA sums `NULLIF(ska_value,'')::numeric::text`, and the Go scan reads four columns (`receivedVAR, sentVAR uint64, receivedSKAStr, sentSKAStr string`).
-- [ ] Multi-coin frontend work? `AddressInfo.Balance.Coins` already carries the per-coin map; `ActiveCoins []uint8` carries the sorted list. Format SKA atoms as strings via `formatAtomsAsCoinString`/`skaDecimalParts`/`coinSymbol` at the template boundary, never via `ToCoin()`.
+- [ ] Change `AddressHistory` signature? Update `db/dcrpg/pgblockchain.go`, `explorer.go:105`, `apiroutes.go:58`, and mocks `noop_ds_test.go`, `explorer_test.go`, `pgblockchain_test.go`.
+- [ ] Per-coin field on `AddressInfo`/`CoinBalance`? Populate at `pgblockchain.go:2626` **and** `:2691` (both `ActiveCoins` branches) and `:2762` (`NumUnconfirmedByCoin`); confirm `retrieveAddressBalance` aggregate + the filter-before-paginate balance path.
+- [ ] New URL query key? Add to `address_controller.js` null-template (`:271-275`), `coinUrlSegment`/URL builders, `linkTemplate` (Go), and decide `CoinCtx` involvement.
+- [ ] `ChartsData` field rename? Update the matching JS string key in `amountFlowProcessor` — `omitempty` hides a mismatch (silent blank SKA chart).
+- [ ] Unconfirmed display work? Use `NumUnconfirmedByCoin`; do NOT re-fold mempool amounts into balance.
+- [ ] Merged-view query? Call `SelectAddressMergedView` directly `(address,N,offset)`; never via the coin-injecting stmt helper.
+- [ ] SKA values? `coinSymbol`/`skaDecimalParts` (template) or `renderCoinType`/`splitSkaAtomsNoTrailing` (JS); never float a displayed SKA amount.
+- [ ] `data-coin-type` attr or unconfirmed-decrement logic? Keep the SSR attr and JS string compare in lockstep.
+
+### Stale-Claim Delta (prior `a8f641f2` revision → current)
+| Prior wiki claim | Current reality |
+|---|---|
+| Frontend renders VAR only; hard-coded `DCR` | Multi-coin end-to-end; `coinSymbol`/`renderCoinType`; per-coin summary + Coin column |
+| `coin` not in TurboQuery null-template; controller not coin-aware | `coin` in null-template; `changeCoin`/`coinUrlSegment`/`effectiveCoin`; coin-keyed cache |
+| `FiatBalance` always nil, branch never fires | Field + template branch **deleted** |
+| Mempool overlay folds into balance totals | Removed; balance confirmed-only; mempool via `NumUnconfirmedByCoin` |
+| `AddressHistory(... txnView)` | `AddressHistory(... txnView, coinType uint8)` |
+| (not documented) | merged-view LIMIT-0 fix + filter-before-paginate invariant + regression tests |
+| Chart `amountflow` SKA SQL fix (PR #263) | Still valid; JS chart pipeline now coin-keyed + server-precomputed cumulative balance |
 
 See also:
-- /wiki/code-analysis/charts/flow.compact.md (shares-pattern-with: TurboQuery + Zoom validation; per-coin chart endpoints)
-- /wiki/code-analysis/transaction/flow.compact.md (depends-on: address tx list rendering)
-- /wiki/code-analysis/address/summary.impact.md (depends-on: summary card multi-coin migration — last unconverted surface)
-- /wiki/code-analysis/address/transactions.impact.md (depends-on: per-tx Coin column / coin filter UX)
-- /wiki/code-analysis/address/charts.impact.md (depends-on: chart `?coin=` URL wiring; SKA SQL precision fix in PR #263)
-- /wiki/core/constraints.md#C1 (depends-on: float64-vs-string precision — backend honored, template + controller still violate for SKA)
-- /wiki/core/constraints.md#C7 (depends-on: centralised coin-type label rendering — `DCR` literals still hard-coded in `address.tmpl` and `address_controller.js`)
+- /wiki/code-analysis/address/flow.full.md (Sections 1–8)
+- /wiki/code-analysis/charts/flow.compact.md (shares-pattern-with: TurboQuery URL ownership; per-coin chart endpoints; SKA atom strings)
+- /wiki/code-analysis/transaction/flow.compact.md (depends-on: address tx-list / Coin-column rendering)
+- /wiki/code-analysis/address/patterns.md (shares-pattern-with: CoinCtx contract, coin-aware aggregation — **reconcile via `Consolidate: address`**)
+- /wiki/code-analysis/address/{summary,transactions,charts}.impact.md (**describe now-completed/overturned migration — stale, reconcile next**)
+- /wiki/core/constraints.md#C1, #C7 (now honored in template + controller)
