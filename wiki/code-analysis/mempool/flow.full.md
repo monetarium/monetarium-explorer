@@ -252,6 +252,8 @@ When adding a **new saver**:
 - `txhelpers/txhelpers.go:1305-1329` — `SKATotalsFromMsgTx`; nil-return for VAR-only txs.
 
 See also:
+- [/wiki/code-analysis/page-rendering/patterns.md](../page-rendering/patterns.md) (shares-pattern-with: out-of-band shared page state; shared-state lock discipline; block-scoped ETag cache)
+- [/wiki/code-analysis/page-rendering/impact.md](../page-rendering/impact.md) (depends-on: saver writer/reader drift; lock-order inversion against `Store`)
 - [/wiki/code-analysis/mempool/patterns.md](patterns.md) — patterns extracted from this flow.
 - [/wiki/code-analysis/mempool/impact.md](impact.md) — mutation impact entries.
 - [/wiki/code-analysis/visualblocks/patterns.md](../visualblocks/patterns.md) (shares-pattern-with: **dual-transport WS** for mempool signals).

@@ -350,6 +350,8 @@ Primary files: `db/dcrpg/pgblockchain.go`, `db/dcrpg/queries.go`,
 ---
 
 See also:
+- /wiki/code-analysis/page-rendering/patterns.md (shares-pattern-with: `*CommonPageData` struct-embedding template injection — `AddressPageData`)
+- /wiki/code-analysis/page-rendering/impact.md (depends-on: `commonData` nil render crash)
 - /wiki/code-analysis/charts/flow.full.md (shares-pattern-with: TurboQuery URL ownership; per-coin chart endpoints; SKA atom string pipeline)
 - /wiki/code-analysis/transaction/flow.full.md (depends-on: address tx-list / Coin-column rendering)
 - /wiki/code-analysis/address/patterns.md (shares-pattern-with: CoinCtx URL contract, coin-aware aggregation, per-coin caching — **needs reconciliation via `Consolidate: address`**)

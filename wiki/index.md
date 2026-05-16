@@ -98,3 +98,17 @@ _The `/visualblocks` page: latest-N blocks plus mempool rendered as flex-grow ti
 - flow (full): code-analysis/visualblocks/flow.full.md — detailed, step-by-step function trace covering handler, DB memo, WS encoder, JS controller, and template
 - patterns: code-analysis/visualblocks/patterns.md — cross-pipeline tile rendering, JS-side server-filter mirror, Subsidy struct asymmetry, triple-enforced 30-cap, memoized BlockInfo, lock order, WS subsidy patch
 - impact: code-analysis/visualblocks/impact.md — mutation impact across HTTP/WS/JS/DB layers, loud and silent failure modes, safe-change checklist
+
+### Parameters
+
+_The `/parameters` page: active-network consensus config. ~95% static `chaincfg.Params` captured once at startup; only `MaximumBlockSize` is dynamic (tip-only RPC `GetBlockChainInfo`). Dual param injection (`commonData.ChainParams` + handler `ExtendedParams`), block-scoped ETag cache, VAR-only subsidy rows._
+
+- flow (compact): code-analysis/parameters/flow.compact.md — high-level summary of the static-vs-dynamic split, dual injection, and silent/hard failure modes
+- flow (full): code-analysis/parameters/flow.full.md — detailed, step-by-step trace from node config/RPC → pageData → handler → template, with cross-layer deps and mutation impact
+
+### Page-Rendering (cross-domain consolidation)
+
+_Mode-4 consolidation of the shared mechanics behind every server-rendered HTML page (block, mempool, visualblocks, parameters, charts, address). Not a flow — read alongside the per-domain flows it links. Covers out-of-band shared `pageData`/`invs` state, the multi-lock discipline, `*CommonPageData` struct-embedding template injection, and block-scoped ETag caching._
+
+- patterns: code-analysis/page-rendering/patterns.md — out-of-band shared page state via saver fan-out, `pageData`/`invsMtx` lock discipline, `*CommonPageData` embedding, block-scoped ETag cache
+- impact: code-analysis/page-rendering/impact.md — `commonData` nil render crash (all pages), saver writer/reader drift (HTML≠WS), lock-order inversion against `Store`
