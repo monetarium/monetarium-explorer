@@ -334,7 +334,7 @@
                 name="txntype"
                 data-address-target="txntype"
                 data-action="change->address#changeTxType"
-                class="form-control-sm mb-2 me-sm-2 mb-sm-0 dropwdown"
+                class="form-control-sm mb-2 me-sm-2 mb-sm-0 dropdown"
                 {{- if not .ActiveCoins}} disabled{{end}}
               >
                   <option {{if eq $txType "all"}}selected{{end}} value="all">All</option>
@@ -353,7 +353,7 @@
                 name="coin"
                 data-address-target="coinFilter"
                 data-action="change->address#changeCoin"
-                class="form-control-sm mb-2 me-sm-2 mb-sm-0 dropwdown"
+                class="form-control-sm mb-2 me-sm-2 mb-sm-0 dropdown"
               >
                   <option value="">All</option>
                   {{- range .ActiveCoins}}
@@ -365,7 +365,7 @@
               <span title="This address only has {{coinSymbol $onlyCoin}} transactions">
                 <select
                   name="coin"
-                  class="form-control-sm mb-2 me-sm-2 mb-sm-0 dropwdown"
+                  class="form-control-sm mb-2 me-sm-2 mb-sm-0 dropdown"
                   disabled
                 >
                   <option value="{{$onlyCoin}}" selected>{{coinSymbol $onlyCoin}}</option>
@@ -375,7 +375,7 @@
               <span title="This address has no transactions">
                 <select
                   name="coin"
-                  class="form-control-sm mb-2 me-sm-2 mb-sm-0 dropwdown"
+                  class="form-control-sm mb-2 me-sm-2 mb-sm-0 dropdown"
                   disabled
                 >
                   <option value="" selected>All</option>
