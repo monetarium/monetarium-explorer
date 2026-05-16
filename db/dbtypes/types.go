@@ -1324,29 +1324,89 @@ type AddressRowCompact struct {
 // as needed. Also node that MergedCount is of type int32 since that is big
 // enough and it allows using the padding with TxType and ValidMainChain.
 type AddressRowMerged struct {
-	Address        string
-	TxBlockTime    int64
-	TxHash         ChainHash
-	AtomsCredit    uint64
-	AtomsDebit     uint64
+	Address     string
+	TxBlockTime int64
+	TxHash      ChainHash
+	AtomsCredit uint64
+	AtomsDebit  uint64
+	// SKAAtomsCredit/SKAAtomsDebit accumulate SKA atoms (CoinType != 0). They
+	// are nil for VAR rows. SKA atoms exceed uint64, so they cannot share the
+	// AtomsCredit/AtomsDebit fields and must accumulate as *big.Int.
+	SKAAtomsCredit *big.Int
+	SKAAtomsDebit  *big.Int
 	MergedCount    int32
 	TxType         int16
 	ValidMainChain bool
+	// CoinType is the coin type of the merged transaction. A transaction is
+	// always single-coin, so every row merged under one tx hash shares it.
+	CoinType uint8
 }
 
-// IsFunding indicates the the transaction is "net funding", meaning that
-// AtomsCredit > AtomsDebit.
+// add folds a single non-merged constituent row into the merged row, keeping
+// VAR (uint64) and SKA (*big.Int) accumulators separate by coin type.
+func (arm *AddressRowMerged) add(coinType uint8, isFunding bool, value uint64, skaValue string) {
+	arm.CoinType = coinType
+	if coinType == 0 {
+		if isFunding {
+			arm.AtomsCredit += value
+		} else {
+			arm.AtomsDebit += value
+		}
+		return
+	}
+	if isFunding {
+		if arm.SKAAtomsCredit == nil {
+			arm.SKAAtomsCredit = new(big.Int)
+		}
+		BigAddSKA(arm.SKAAtomsCredit, skaValue)
+	} else {
+		if arm.SKAAtomsDebit == nil {
+			arm.SKAAtomsDebit = new(big.Int)
+		}
+		BigAddSKA(arm.SKAAtomsDebit, skaValue)
+	}
+}
+
+// skaNet returns SKAAtomsCredit - SKAAtomsDebit (signed), treating nil as zero.
+func (arm *AddressRowMerged) skaNet() *big.Int {
+	credit := arm.SKAAtomsCredit
+	if credit == nil {
+		credit = new(big.Int)
+	}
+	debit := arm.SKAAtomsDebit
+	if debit == nil {
+		debit = new(big.Int)
+	}
+	return new(big.Int).Sub(credit, debit)
+}
+
+// IsFunding indicates the transaction is "net funding": for VAR, AtomsCredit >
+// AtomsDebit; for SKA, the net SKA atom balance is positive.
 func (arm *AddressRowMerged) IsFunding() bool {
+	if arm.CoinType != 0 {
+		return arm.skaNet().Sign() > 0
+	}
 	return arm.AtomsCredit > arm.AtomsDebit
 }
 
-// Value returns the absolute (non-negative) net value of the transaction as
-// abs(AtomsCredit - AtomsDebit).
+// Value returns the absolute (non-negative) net VAR value of the transaction as
+// abs(AtomsCredit - AtomsDebit). It is meaningful only for VAR (CoinType == 0);
+// SKA values are reported via SKAValueStr.
 func (arm *AddressRowMerged) Value() uint64 {
 	if arm.AtomsCredit > arm.AtomsDebit {
 		return arm.AtomsCredit - arm.AtomsDebit
 	}
 	return arm.AtomsDebit - arm.AtomsCredit
+}
+
+// SKAValueStr returns the absolute net SKA atom value as a decimal string for
+// SKA rows (CoinType != 0), or "" for VAR rows.
+func (arm *AddressRowMerged) SKAValueStr() string {
+	if arm.CoinType == 0 {
+		return ""
+	}
+	net := arm.skaNet()
+	return net.Abs(net).String()
 }
 
 // SliceAddressRows selects a subset of the elements of the AddressRow slice
@@ -1659,11 +1719,7 @@ func MergeRows(rows []*AddressRow) ([]*AddressRowMerged, error) {
 				ValidMainChain: r.ValidMainChain,
 			}
 
-			if r.IsFunding {
-				mr.AtomsCredit = r.Value
-			} else {
-				mr.AtomsDebit = r.Value
-			}
+			mr.add(r.CoinType, r.IsFunding, r.Value, r.SKAValue)
 
 			hashMap[r.TxHash] = &mr
 			mergedRows = append(mergedRows, &mr)
@@ -1672,11 +1728,7 @@ func MergeRows(rows []*AddressRow) ([]*AddressRowMerged, error) {
 
 		// Update existing transaction in the mergedRows slice.
 		row.MergedCount++
-		if r.IsFunding {
-			row.AtomsCredit += r.Value
-		} else {
-			row.AtomsDebit += r.Value
-		}
+		row.add(r.CoinType, r.IsFunding, r.Value, r.SKAValue)
 	}
 
 	//fmt.Printf("MergeRows: guess = %d, actual = %d\n", numUniqueHashesGuess, len(mergedRows))
@@ -1765,11 +1817,7 @@ func MergeRowsRange(rows []*AddressRow, N, offset int, txnView AddrTxnViewType) 
 				ValidMainChain: r.ValidMainChain,
 			}
 
-			if r.IsFunding {
-				mr.AtomsCredit = r.Value
-			} else {
-				mr.AtomsDebit = r.Value
-			}
+			mr.add(r.CoinType, r.IsFunding, r.Value, r.SKAValue)
 
 			hashMap[r.TxHash] = &mr
 			mergedRows = append(mergedRows, &mr)
@@ -1778,11 +1826,7 @@ func MergeRowsRange(rows []*AddressRow, N, offset int, txnView AddrTxnViewType) 
 
 		// Update existing transaction in the mergedRows slice.
 		row.MergedCount++
-		if r.IsFunding {
-			row.AtomsCredit += r.Value
-		} else {
-			row.AtomsDebit += r.Value
-		}
+		row.add(r.CoinType, r.IsFunding, r.Value, r.SKAValue)
 	}
 
 	return mergedRows, nil
@@ -1815,11 +1859,7 @@ func MergeRowsCompact(rows []*AddressRowCompact) []*AddressRowMerged {
 				ValidMainChain: r.ValidMainChain,
 			}
 
-			if r.IsFunding {
-				mr.AtomsCredit = r.Value
-			} else {
-				mr.AtomsDebit = r.Value
-			}
+			mr.add(r.CoinType, r.IsFunding, r.Value, r.SKAValue)
 
 			hashMap[r.TxHash] = &mr
 			mergedRows = append(mergedRows, &mr)
@@ -1828,11 +1868,7 @@ func MergeRowsCompact(rows []*AddressRowCompact) []*AddressRowMerged {
 
 		// Update existing transaction.
 		row.MergedCount++
-		if r.IsFunding {
-			row.AtomsCredit += r.Value
-		} else {
-			row.AtomsDebit += r.Value
-		}
+		row.add(r.CoinType, r.IsFunding, r.Value, r.SKAValue)
 	}
 
 	//fmt.Printf("MergeRowsCompact: guess = %d, actual = %d\n", numUniqueHashesGuess, len(mergedRows))
@@ -1916,11 +1952,7 @@ func MergeRowsCompactRange(rows []*AddressRowCompact, N, offset int, txnView Add
 				ValidMainChain: r.ValidMainChain,
 			}
 
-			if r.IsFunding {
-				mr.AtomsCredit = r.Value
-			} else {
-				mr.AtomsDebit = r.Value
-			}
+			mr.add(r.CoinType, r.IsFunding, r.Value, r.SKAValue)
 
 			hashMap[r.TxHash] = &mr
 			mergedRows = append(mergedRows, &mr)
@@ -1929,11 +1961,7 @@ func MergeRowsCompactRange(rows []*AddressRowCompact, N, offset int, txnView Add
 
 		// Update existing merged row.
 		row.MergedCount++
-		if r.IsFunding {
-			row.AtomsCredit += r.Value
-		} else {
-			row.AtomsDebit += r.Value
-		}
+		row.add(r.CoinType, r.IsFunding, r.Value, r.SKAValue)
 	}
 
 	return mergedRows
@@ -2008,6 +2036,8 @@ func UncompactMergedRows(merged []*AddressRowMerged) []*AddressRow {
 			// no VinVoutDbID for merged
 			MergedCount: uint64(r.MergedCount),
 			TxType:      r.TxType,
+			CoinType:    r.CoinType,
+			SKAValue:    r.SKAValueStr(),
 		})
 	}
 	return rows

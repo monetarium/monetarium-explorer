@@ -2,6 +2,129 @@ package dbtypes
 
 import "testing"
 
+// TestMergedRowsPreserveCoinAndSKA guards the address-page bug where selecting a
+// merged view (e.g. "Merged debits") with a SKA coin still rendered "VAR" in the
+// Coin column and a zero amount. Merging dropped CoinType and the SKA atom value
+// because AddressRowMerged carried neither, so every merged row defaulted to
+// CoinType 0 (VAR) with an empty SKA string. Merging by tx hash never mixes
+// coins (a transaction is single-coin), so a merged row must carry the coin type
+// of its constituents and the summed SKA atoms.
+func TestMergedRowsPreserveCoinAndSKA(t *testing.T) {
+	const skaCoin uint8 = 1
+
+	// Two SKA1 debit rows in the same transaction; merging must sum the SKA
+	// atoms and keep CoinType == skaCoin.
+	var txHash ChainHash
+	txHash[0] = 0xab
+	rows := []*AddressRow{
+		{
+			Address:        "Dtest",
+			ValidMainChain: true,
+			IsFunding:      false,
+			TxHash:         txHash,
+			TxVinVoutIndex: 0,
+			Value:          0, // SKA value is not carried in the VAR int64 column
+			CoinType:       skaCoin,
+			SKAValue:       "1000000000000000000", // 1 SKA1 (1e18 atoms)
+		},
+		{
+			Address:        "Dtest",
+			ValidMainChain: true,
+			IsFunding:      false,
+			TxHash:         txHash,
+			TxVinVoutIndex: 1,
+			Value:          0,
+			CoinType:       skaCoin,
+			SKAValue:       "2000000000000000000", // 2 SKA1
+		},
+	}
+
+	merged, err := SliceAddressRows(rows, 10, 0, AddrMergedTxnDebit)
+	if err != nil {
+		t.Fatalf("SliceAddressRows merged-debit failed: %v", err)
+	}
+	if len(merged) != 1 {
+		t.Fatalf("expected 1 merged row, got %d", len(merged))
+	}
+	got := merged[0]
+	if got.CoinType != skaCoin {
+		t.Fatalf("merged row CoinType = %d, want %d (Coin column would render VAR)",
+			got.CoinType, skaCoin)
+	}
+	if got.SKAValue != "3000000000000000000" {
+		t.Fatalf("merged row SKAValue = %q, want %q (summed SKA atoms)",
+			got.SKAValue, "3000000000000000000")
+	}
+	if got.IsFunding { // debit: net is a spend, so IsFunding must be false
+		t.Fatalf("merged SKA debit row IsFunding = true, want false")
+	}
+
+	// VAR merged rows must keep working: CoinType 0, value summed in Value.
+	var varHash ChainHash
+	varHash[0] = 0xcd
+	varRows := []*AddressRow{
+		{Address: "Dtest", ValidMainChain: true, IsFunding: false, TxHash: varHash, Value: 100, CoinType: 0},
+		{Address: "Dtest", ValidMainChain: true, IsFunding: false, TxHash: varHash, Value: 250, CoinType: 0},
+	}
+	mergedVAR, err := SliceAddressRows(varRows, 10, 0, AddrMergedTxnDebit)
+	if err != nil {
+		t.Fatalf("SliceAddressRows merged-debit (VAR) failed: %v", err)
+	}
+	if len(mergedVAR) != 1 {
+		t.Fatalf("expected 1 merged VAR row, got %d", len(mergedVAR))
+	}
+	if mergedVAR[0].CoinType != 0 {
+		t.Fatalf("merged VAR row CoinType = %d, want 0", mergedVAR[0].CoinType)
+	}
+	if mergedVAR[0].Value != 350 {
+		t.Fatalf("merged VAR row Value = %d, want 350", mergedVAR[0].Value)
+	}
+	if mergedVAR[0].SKAValue != "" {
+		t.Fatalf("merged VAR row SKAValue = %q, want empty", mergedVAR[0].SKAValue)
+	}
+}
+
+// TestMergedCompactMixedCoins covers the all-coins ("Coin: All") merged path
+// that flows through MergeRowsCompactRange (the row-cache entry point). VAR and
+// SKA transactions in one merged result must each retain their own coin type
+// and value rather than collapsing every row to VAR.
+func TestMergedCompactMixedCoins(t *testing.T) {
+	var varHash, skaHash ChainHash
+	varHash[0] = 0x01
+	skaHash[0] = 0x02
+	rows := []*AddressRowCompact{
+		{Address: "Dtest", ValidMainChain: true, IsFunding: true, TxHash: varHash, Value: 500, CoinType: 0},
+		{Address: "Dtest", ValidMainChain: true, IsFunding: true, TxHash: skaHash, CoinType: 2, SKAValue: "7000000000000000000"},
+	}
+
+	merged := MergeRowsCompactRange(rows, 10, 0, AddrMergedTxn)
+	if len(merged) != 2 {
+		t.Fatalf("expected 2 merged rows, got %d", len(merged))
+	}
+	byCoin := map[uint8]*AddressRowMerged{}
+	for _, m := range merged {
+		byCoin[m.CoinType] = m
+	}
+	v, ok := byCoin[0]
+	if !ok {
+		t.Fatalf("VAR merged row missing; coin types present: %v", byCoin)
+	}
+	if v.Value() != 500 || v.SKAValueStr() != "" {
+		t.Fatalf("VAR merged row: Value=%d SKAValueStr=%q, want 500 and empty",
+			v.Value(), v.SKAValueStr())
+	}
+	s, ok := byCoin[2]
+	if !ok {
+		t.Fatalf("SKA2 merged row missing; coin types present: %v", byCoin)
+	}
+	if s.SKAValueStr() != "7000000000000000000" {
+		t.Fatalf("SKA2 merged row SKAValueStr=%q, want 7000000000000000000", s.SKAValueStr())
+	}
+	if !s.IsFunding() {
+		t.Fatalf("SKA2 merged credit row IsFunding()=false, want true")
+	}
+}
+
 // filterByCoin returns only the rows matching coinType, preserving order.
 func filterByCoin(rows []*AddressRow, coinType uint8) []*AddressRow {
 	out := make([]*AddressRow, 0, len(rows))
