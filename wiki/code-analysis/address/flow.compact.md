@@ -16,6 +16,8 @@ chi `/address/{addr}` → `AddressPathCtx` → `AddressPage` + `middleware.GetCo
 - **`CoinTypeAll` must stay 255**, distinct from every real coin (`TestCoinTypeAllSentinel`). Any in-memory `if r.CoinType == coinType` row filter must short-circuit on `CoinTypeAll` (return all rows) — `AddressCache.Rows` / `AddressRowsCompact` do; missing this empties the no-`?coin=` CSV (`TestAddressCacheRows_CoinTypeAll`).
 - **Mempool must not affect balance** — confirmed-DB only by design; don't reintroduce the deleted accumulator.
 - **Merged view has no `coin_type` predicate** — query `SelectAddressMergedView` directly with `(address,N,offset)`; the old stmt-helper route bound `coinType=0` as `LIMIT 0` → zero rows (fixed `be28442e`).
+- **CSV download is a deliberate full export.** `/download/address/io/{addr}` link (`address.tmpl:327`) is static — no `?coin=`/`?txntype=`; `addressIoCsv` always pulls `AddressRowsCompact(..., CoinTypeAll)` (full, non-merged, all-coin). On-page Type/Coin filters scoping it was explicitly declined; don't "fix" it. Rows still carry correct per-row coin/amount.
+- **Merged rows carry coin + SKA.** `AddressRowMerged{CoinType, SKAAtomsCredit/Debit *big.Int}`; `Merge*` builders fold via `add()`, `UncompactMergedRows` emits `CoinType`+`SKAValueStr()`. Fixes "Merged debits + SKA1 → VAR" bug. Guarded by `TestMergedRowsPreserveCoinAndSKA`/`TestMergedCompactMixedCoins`. Supersedes the VAR-only-merged assumption.
 - **SKA precision (C1):** atoms stay strings to the render boundary; never `ToCoin()`/float a displayed SKA value.
 - **Coin labels centralized (C7):** `coinSymbol` (template) / `renderCoinType` (JS); no `DCR`/`VAR` literals.
 - `AddressHistory(... txnView, coinType uint8)` — 6-site signature (DB, two Go interfaces, four mocks).

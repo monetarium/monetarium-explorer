@@ -44,6 +44,13 @@ and the transaction table; charts are per-coin. Mempool/unconfirmed activity is
   ├─ XHR table:  /addresstable/{addr}?txntype=…&n=…&start=…&coin=N
   │     → AddressTable → same AddressData path; linkTemplate also &coin=N
   │
+  ├─ CSV download: /download/address/io/{addr}[/win]   (STATIC href — carries NO ?coin=, NO ?txntype=)
+  │     → addressIoCsv → GetCoinCtx(r) ⇒ always CoinTypeAll (link never sets ?coin=)
+  │       → AddressRowsCompact(ctx, addr, CoinTypeAll) ⇒ FULL non-merged, all-coin row set
+  │     → streamed CSV. By design the on-page Type/Coin filters do NOT scope the
+  │       download — it is a complete raw export. Rows still render the correct
+  │       per-row coin/amount (compact rows carry CoinType + SKAValue).
+  │
   └─ Charts:     /api/address/{addr}/{amountflow|types}/{bin}?coin=N
         → re.With(m.ChartGroupingCtx, m.CoinCtx) → getAddressTx*Data → GetCoinCtx(r)
         → TxHistoryData(...coinType) → retrieveTxHistoryByAmountFlow(...coinType)
@@ -244,6 +251,21 @@ balanceSKA` → `items.BalanceAtoms`.
    helper (LIMIT-0 trap).
 6. **Centralized coin labels (core constraint C7).** Use `coinSymbol`
    (template) / `renderCoinType` (JS); no hard-coded `DCR`/`VAR` literals.
+7. **CSV download is a deliberate full, non-merged, all-coin export.** The
+   `address.tmpl:327` link is static — it carries no `?coin=` / `?txntype=`,
+   and the controller never rewrites it. `addressIoCsv` reads `GetCoinCtx(r)`
+   (so a future link *could* scope by coin) but never reads `txntype` and
+   always calls `AddressRowsCompact`. The on-page Type/Coin filters scoping the
+   download was considered and explicitly declined; it is a raw data dump, not
+   a "what you see" export. Don't "fix" the unfiltered behavior as a bug.
+8. **Merged rows carry their coin type + SKA atoms.** `AddressRowMerged` has
+   `CoinType` and `SKAAtomsCredit/Debit (*big.Int)`; the four `Merge*` builders
+   fold each constituent via `add()` and `UncompactMergedRows` emits
+   `CoinType` + `SKAValueStr()`. A tx is single-coin, so a tx-hash-keyed merged
+   row is unambiguous. Guarded by `TestMergedRowsPreserveCoinAndSKA` /
+   `TestMergedCompactMixedCoins`. (This supersedes the older assumption that
+   merged rows were VAR-only — that produced the "Merged debits + SKA1 shows
+   VAR" bug.)
 
 ---
 
@@ -265,7 +287,9 @@ When modifying *the address coin-filter / multi-coin path*, check:
 
 **Serialization boundaries**
 - `ChartsData` json tags; `data-active-coins` via `jsonMarshal`;
-  `&coin=N` on `linkTemplate` (HTML + table) and all JS URL builders + CSV.
+  `&coin=N` on `linkTemplate` (HTML + table) and all JS URL builders. The CSV
+  download link is **static** and intentionally carries neither `&coin=N` nor
+  `&txntype=` (see Constraint 7) — do not list it as a coin-URL builder.
 
 **Rendering layers**
 - Summary card, Coin column, chart legend/ylabel, coin selectors, unconfirmed
@@ -297,6 +321,8 @@ When modifying *the address coin-filter / multi-coin path*, check:
 - Trusting the prior wiki's "frontend VAR-only / `coin` not in null-template"
   — both now false.
 - Populating only one of the two `ActiveCoins` assignment branches.
+- "Fixing" the CSV download so it respects the page Type/Coin filters — the
+  unfiltered full export is intentional (Constraint 7), not an oversight.
 
 ---
 
