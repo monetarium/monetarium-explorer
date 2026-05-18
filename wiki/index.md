@@ -51,14 +51,14 @@ _End-to-end pipeline for transaction processing, decoding, and rendering inputs/
 
 ### Address
 
-_Address page rendering: paginated transaction table, chart endpoints, CSV download, multi-coin backend (`?coin=` via `CoinCtx` middleware) with frontend still rendering VAR-only, and TurboQuery-driven URL state (chart kind, zoom, group-by, pagination)._
+_Address page rendering: paginated transaction table, chart endpoints, CSV download, **multi-coin end-to-end** (`?coin=` via `CoinCtx` middleware; filter-before-paginate; confirmed-only balance), per-coin summary card + Coin column, and TurboQuery-driven URL state (chart kind, zoom, group-by, pagination, `coin`). Revised at `HEAD=1b670255` (PR #265/#266 + db coin-filter series)._
 
-- flow (compact): code-analysis/address/flow.compact.md — high-level summary of the address page data path, URL contract, and the dual-field migration shim
-- flow (full): code-analysis/address/flow.full.md — detailed function trace covering handler, DB layer with per-coin `Coins` map, cache, chart API, CSV, frontend controller (stale-zoom-param failure mode + confirmed SKA SQL precision bug)
-- patterns: code-analysis/address/patterns.md — `CoinCtx` URL contract, dual-field migration shim, coin-aware aggregation pipelines, per-coin caching, SKA decimal-string atom pipeline, TurboQuery URL ownership
-- impact (summary card): code-analysis/address/summary.impact.md — left-top card; backend per-coin complete, template still reads legacy flat fields and labels everything `DCR`; `FiatBalance` now `nil`
-- impact (transactions): code-analysis/address/transactions.impact.md — bottom section + `/addresstable` XHR + CSV; per-row coin fields populated but unread by template; CSV is multi-coin complete (`coin_type` column added, `value`→`amount` renamed)
-- impact (charts): code-analysis/address/charts.impact.md — chart API now `?coin=N`-aware end-to-end on backend; frontend doesn't emit `?coin=`; **confirmed SKA SQL precision bug** in `selectAddressAmountFlowByAddress`
+- flow (compact): code-analysis/address/flow.compact.md — current data path, `?coin=` contract, filter-before-paginate + confirmed-only-balance invariants, and a stale-claim delta table vs. the prior revision
+- flow (full): code-analysis/address/flow.full.md — current function trace: coin-filtered `AddressHistory`, rewritten mempool overlay, merged-view LIMIT-0 fix, per-coin templates, coin-aware controller, chart serialization
+- patterns: code-analysis/address/patterns.md — `CoinCtx` URL contract, coin-aware aggregation, per-coin caching, SKA decimal-string pipeline, TurboQuery URL ownership ⚠️ **stale (pre-#265/#266: dual-field shim) — reconcile via `Consolidate: address`**
+- impact (summary card): code-analysis/address/summary.impact.md ⚠️ **stale** — describes the now-completed VAR-only→multi-coin summary migration (`FiatBalance` removed, per-coin card shipped)
+- impact (transactions): code-analysis/address/transactions.impact.md ⚠️ **stale** — per-row coin fields are now read by the template (Coin column + SKA branches shipped)
+- impact (charts): code-analysis/address/charts.impact.md ⚠️ **partially stale** — frontend now emits `?coin=`; SKA SQL precision bug fixed (PR #263)
 
 ### Windows
 
@@ -98,3 +98,17 @@ _The `/visualblocks` page: latest-N blocks plus mempool rendered as flex-grow ti
 - flow (full): code-analysis/visualblocks/flow.full.md — detailed, step-by-step function trace covering handler, DB memo, WS encoder, JS controller, and template
 - patterns: code-analysis/visualblocks/patterns.md — cross-pipeline tile rendering, JS-side server-filter mirror, Subsidy struct asymmetry, triple-enforced 30-cap, memoized BlockInfo, lock order, WS subsidy patch
 - impact: code-analysis/visualblocks/impact.md — mutation impact across HTTP/WS/JS/DB layers, loud and silent failure modes, safe-change checklist
+
+### Parameters
+
+_The `/parameters` page: active-network consensus config. ~95% static `chaincfg.Params` captured once at startup; only `MaximumBlockSize` is dynamic (tip-only RPC `GetBlockChainInfo`). Dual param injection (`commonData.ChainParams` + handler `ExtendedParams`), block-scoped ETag cache, VAR-only subsidy rows._
+
+- flow (compact): code-analysis/parameters/flow.compact.md — high-level summary of the static-vs-dynamic split, dual injection, and silent/hard failure modes
+- flow (full): code-analysis/parameters/flow.full.md — detailed, step-by-step trace from node config/RPC → pageData → handler → template, with cross-layer deps and mutation impact
+
+### Page-Rendering (cross-domain consolidation)
+
+_Mode-4 consolidation of the shared mechanics behind every server-rendered HTML page (block, mempool, visualblocks, parameters, charts, address). Not a flow — read alongside the per-domain flows it links. Covers out-of-band shared `pageData`/`invs` state, the multi-lock discipline, `*CommonPageData` struct-embedding template injection, and block-scoped ETag caching._
+
+- patterns: code-analysis/page-rendering/patterns.md — out-of-band shared page state via saver fan-out, `pageData`/`invsMtx` lock discipline, `*CommonPageData` embedding, block-scoped ETag cache
+- impact: code-analysis/page-rendering/impact.md — `commonData` nil render crash (all pages), saver writer/reader drift (HTML≠WS), lock-order inversion against `Store`

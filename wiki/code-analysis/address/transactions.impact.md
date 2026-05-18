@@ -4,7 +4,7 @@ Scope of this note: the bottom section of `/address/{address}` (header range / p
 
 ## TL;DR
 
-The backend now ships per-row `CoinType uint8`, `SKAValue string`, `ReceivedTotalSKA string`, and `SentTotalSKA string` on `AddressTx`, supports `?coin=N` filtering through `CoinCtx` middleware on both `/address` HTML and `/addresstable` XHR, and has a fully coin-aware CSV pipeline (`coin_type` column + per-row `FormatSKAPerVAR` for SKA). The `addressTable` template (`extras.tmpl:210-315`) still ignores all per-row coin fields, hard-codes `Credit VAR` / `Debit VAR` headers, and renders `float64AsDecimalParts .SentTotal 8 false` / `.ReceivedTotal 8 false` — so SKA rows render `0` in the amount cell. The `if eq .SentTotal 0.0` heuristic at `extras.tmpl:277` mis-classifies every SKA debit as "sstxcommitment". The frontend controller does not declare `coin` in its TurboQuery null-template (`address_controller.js:211-219`) and does not append `?coin=` to `makeTableUrl` (319-323) — so the `?coin=` filter only flows on hard reload, not via XHR refresh today.
+The backend now ships per-row `CoinType uint8`, `SKAValue string`, `ReceivedTotalSKA string`, and `SentTotalSKA string` on `AddressTx`, supports `?coin=N` filtering through `CoinCtx` middleware on both `/address` HTML and `/addresstable` XHR, and has a fully coin-aware CSV pipeline (`coin_type` column + bare-decimal SKA amounts via `dbtypes.FormatSKACoins`). The `addressTable` template (`extras.tmpl:210-315`) still ignores all per-row coin fields, hard-codes `Credit VAR` / `Debit VAR` headers, and renders `float64AsDecimalParts .SentTotal 8 false` / `.ReceivedTotal 8 false` — so SKA rows render `0` in the amount cell. The `if eq .SentTotal 0.0` heuristic at `extras.tmpl:277` mis-classifies every SKA debit as "sstxcommitment". The frontend controller does not declare `coin` in its TurboQuery null-template (`address_controller.js:211-219`) and does not append `?coin=` to `makeTableUrl` (319-323) — so the `?coin=` filter only flows on hard reload, not via XHR refresh today.
 
 ## 1. Scope
 
@@ -54,7 +54,7 @@ Both `/address` and `/addresstable` go through `explorer.AddressPathCtx` (middle
 - **[db/dcrpg/pgblockchain.go:2312-2343](db/dcrpg/pgblockchain.go#L2312-L2343)** — `retrieveMergedTxnCount(ctx, addr, txnView, coinType)` and `mergedTxnCount(...)` (cache-aware count for `merged` / `merged_credit` / `merged_debit`). Both take `coinType uint8`.
 - **[db/dcrpg/pgblockchain.go:2345-2412](db/dcrpg/pgblockchain.go#L2345-L2412)** — `nonMergedTxnCount(...)` and `CountTransactions(...)`. When `coinType == CoinTypeAll`, dispatches to all-coin SQL variants (`SelectAddressAllCountByAddress`, `SelectAddressesMergedCountAll`); otherwise the coin-filtered variant.
 - **[db/dcrpg/pgblockchain.go:2947-3005](db/dcrpg/pgblockchain.go#L2947-L3005)** — `FillAddressTransactions`. Fills `Size`, `FormattedSize`, `Total`, `Time`, `Confirmations`, and (for matched txns) `MatchedTxIndex`. **`txn.Total = dcrutil.Amount(dbTx.Sent).ToCoin()` (2964) is still VAR-only** — fine for non-amount columns but worth noting.
-- **[db/dcrpg/pgblockchain.go:2266-2310](db/dcrpg/pgblockchain.go#L2266-L2310)** — `AddressRowsCompact(ctx, address, coinType uint8)`. CSV download source; returns `[]*dbtypes.AddressRowCompact`. When `coinType != CoinTypeAll`, filters in-memory after cache hit at 2303 (`if r.CoinType == coinType`).
+- **[db/dcrpg/pgblockchain.go:2266-2310](db/dcrpg/pgblockchain.go#L2266-L2310)** — `AddressRowsCompact(ctx, address, coinType uint8)`. CSV download source; returns `[]*dbtypes.AddressRowCompact`. Honors the `CoinTypeAll = 255` "no filter" sentinel (returns **all** coin rows unfiltered — this is the no-`?coin=N` CSV path); when `coinType != CoinTypeAll`, filters in-memory after cache hit (`if r.CoinType == coinType`). The same sentinel guard applies in `AddressCache.Rows` ([db/cache/addresscache.go](db/cache/addresscache.go)). Regression: `db/cache/addresscache_test.go::TestAddressCacheRows_CoinTypeAll`. (Before this guard, `coinType==255` matched no row and the all-coins CSV was empty.)
 
 ### Mocks (four files)
 
@@ -209,7 +209,7 @@ Per-row population ([apiroutes.go:1785-1823](cmd/dcrdata/internal/api/apiroutes.
 - **`coin_type`** — `strconv.FormatUint(uint64(r.CoinType), 10)`. New column.
 - **`amount`** (renamed from `value`):
   - VAR (`r.CoinType == 0`): `strconv.FormatFloat(dcrutil.Amount(r.Value).ToCoin(), 'f', 8, 64)` — `1.23456789`.
-  - SKA: `dbtypes.FormatSKAPerVAR(r.SKAValue, r.CoinType)` ([types.go:2428-2442](db/dbtypes/types.go#L2428-L2442)) — human-readable string like `"1.23 SKA1"`. **Note:** SKA renders as a labeled coin string, NOT raw atoms. Consumers parsing the CSV for SKA atoms need to know this.
+  - SKA: `dbtypes.FormatSKACoins(r.SKAValue)` ([types.go](db/dbtypes/types.go)) — a **bare decimal** coin amount (atoms ÷ 1e18, e.g. `0.0000000000000005`), no coin label, trailing zeros trimmed. The coin is disambiguated by the separate `coin_type` column, so `amount` is a uniform parseable number across VAR and SKA rows. (Previously `dbtypes.FormatSKAPerVAR` appended a `" SKA{n}"` label, making SKA rows non-numeric and inconsistent with VAR; that misnamed, now-unused helper was deleted. Do not confuse `dbtypes.FormatSKACoins` (atoms→coins) with `txhelpers.FormatSKAAtoms` (raw atom integer string, unchanged).)
 - `time_stamp` — Unix integer (`r.TxBlockTime`).
 - `tx_type` — `txhelpers.TxTypeToString(int(r.TxType))`.
 - `matching_tx_hash` — empty when nil.
@@ -283,8 +283,8 @@ These questions cannot be answered from code alone and must be decided before a 
 4. **CSV column schema decisions** — the choices already shipped:
    - Added `coin_type` column.
    - Renamed `value` → `amount`.
-   - SKA encoded as labeled human string `"1.23 SKA1"` via `FormatSKAPerVAR`, NOT raw atoms.
-   - Should be revisited if external tools want raw SKA atoms (which fit in a string but not float).
+   - SKA encoded as a bare decimal coin amount (atoms ÷ 1e18, no label) via `dbtypes.FormatSKACoins`; coin identified by the `coin_type` column. `amount` is a uniform parseable number across VAR and SKA rows.
+   - Note this is a coin amount, not raw atoms; revisit if external tools want raw SKA atoms (which fit in a string but not float).
 5. **`SentTotal == 0.0` sstxcommitment heuristic** (`extras.tmpl:277`) — float-compare to a magic value. For SKA, the value is always `0.0` because the ReduceAddressHistory branch leaves it zero. Either replace the heuristic with an explicit flag on `AddressTx`, or special-case by `CoinType`.
 6. **Per-coin balance summary** — out of scope for this note (see `summary.impact.md`), but a coin filter without per-coin balance numbers in the summary card will feel inconsistent.
 7. **Fiat conversion** — handler now sets `FiatBalance: nil`; no longer relevant on this surface.
