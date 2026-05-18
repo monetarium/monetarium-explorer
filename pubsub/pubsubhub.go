@@ -730,7 +730,7 @@ func (psh *PubSubHub) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgBl
 
 	var latestVarFee float64
 	if split, ok := ssFeeTotals[0]; ok && split.PoS != nil {
-		latestVarFee = float64(split.PoS.Int64()) / 1e8
+		latestVarFee = txhelpers.RewardAtomsToCoins(split.PoS, 8)
 	}
 
 	voteData, err := psh.sourceBase.GetVoteTicketDataByBlock(ctx, blockData.Header.Hash)

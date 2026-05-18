@@ -69,7 +69,6 @@ const (
 )
 
 // explorerDataSource implements extra data retrieval functions that require a
-
 // faster solution than RPC, or additional functionality.
 type explorerDataSource interface {
 	BlockHeight(ctx context.Context, hash string) (int64, error)
@@ -654,8 +653,7 @@ func (exp *explorerUI) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgB
 
 	var latestVarFee float64
 	if split, ok := ssFeeTotals[0]; ok && split.PoS != nil {
-		f, _ := new(big.Float).SetInt(split.PoS).Quo(new(big.Float).SetInt(split.PoS), big.NewFloat(1e8)).Float64()
-		latestVarFee = f
+		latestVarFee = txhelpers.RewardAtomsToCoins(split.PoS, 8)
 	}
 
 	voteData, err := exp.dataSource.GetVoteTicketDataByBlock(ctx, newBlockData.Hash)

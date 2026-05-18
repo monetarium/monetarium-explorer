@@ -284,9 +284,18 @@ func FormatSKAPerVAR(skaAtoms *big.Int, varAtoms int64) string {
 	return fmt.Sprintf("%s.%018d", intPart.String(), fracPart.Int64())
 }
 
-// SSFeeCoinTypes returns the set of unique SKA coin types that appear in any
-// of the provided block summaries.
-func SSFeeCoinTypes(summaries []BlockSummary) map[uint8]struct{} {
+// RewardAtomsToCoins converts a reward in atoms (big.Int) to coins (float64)
+// using the specified decimal precision.
+func RewardAtomsToCoins(atoms *big.Int, decimals int) float64 {
+	if atoms == nil {
+		return 0
+	}
+	f := new(big.Float).SetInt(atoms)
+	div := new(big.Float).SetInt(new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(decimals)), nil))
+	f.Quo(f, div)
+	res, _ := f.Float64()
+	return res
+}
 	out := make(map[uint8]struct{})
 	for _, s := range summaries {
 		for ct := range s.SSFeeTotalsByCoin {
