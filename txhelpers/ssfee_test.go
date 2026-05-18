@@ -358,10 +358,10 @@ func TestBlockSSFeeTotals(t *testing.T) {
 				}
 				for j, outVal := range tc.outputs {
 					tx.TxOut = append(tx.TxOut, &wire.TxOut{
-						Value:     outVal,
-						PkScript:  tc.scripts[j],
-						CoinType:  cointype.CoinType(tc.coinType),
-						SKAValue:   big.NewInt(outVal),
+						Value:    outVal,
+						PkScript: tc.scripts[j],
+						CoinType: cointype.CoinType(tc.coinType),
+						SKAValue: big.NewInt(outVal),
 					})
 				}
 				txs = append(txs, tx)
