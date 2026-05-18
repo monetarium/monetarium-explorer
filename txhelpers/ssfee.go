@@ -296,6 +296,7 @@ func RewardAtomsToCoins(atoms *big.Int, decimals int) float64 {
 	res, _ := f.Float64()
 	return res
 }
+func SSFeeCoinTypes(summaries []BlockSummary) map[uint8]struct{} {
 	out := make(map[uint8]struct{})
 	for _, s := range summaries {
 		for ct := range s.SSFeeTotalsByCoin {
