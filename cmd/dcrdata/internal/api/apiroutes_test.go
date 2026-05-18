@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"github.com/monetarium/monetarium-explorer/api/rewardtypes"
 	apitypes "github.com/monetarium/monetarium-explorer/api/types"
 	"github.com/monetarium/monetarium-explorer/db/dbtypes"
 	"github.com/monetarium/monetarium-node/chaincfg"
@@ -279,9 +281,9 @@ func (blockVerboseSKAFeeDS) GetSummaryByHash(_ context.Context, hash string, _ b
 			1: "1000000000000000000",
 		},
 		MiningFee: &fee,
-		SSFeeTotalsByCoin: map[uint8]string{
-			1: "500000000000000000", // SKA1: 0.5 SKA in atoms
-			2: "300000000000000000", // SKA2: 0.3 SKA in atoms
+		SSFeeTotalsByCoin: map[uint8]rewardtypes.SSFeeSplit{
+			1: {PoS: big.NewInt(500000000000000000)}, // SKA1: 0.5 SKA in atoms
+			2: {PoS: big.NewInt(300000000000000000)}, // SKA2: 0.3 SKA in atoms
 		},
 	}
 }

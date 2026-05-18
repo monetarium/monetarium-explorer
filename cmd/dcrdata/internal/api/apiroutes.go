@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"html"
 	"io"
+	"math/big"
 	"net/http"
 	"reflect"
 	"sort"
@@ -615,9 +616,17 @@ func (c *appContext) getBlockVerbose(w http.ResponseWriter, r *http.Request) {
 
 		// SKA fees from SSFeeTotalsByCoin (stake fee distribution)
 		if summary.SSFeeTotalsByCoin != nil {
-			for ct, fee := range summary.SSFeeTotalsByCoin {
-				if fee != "0" && fee != "" {
-					response.Fees[fmt.Sprintf("%d", ct)] = fee
+			for ct, split := range summary.SSFeeTotalsByCoin {
+				total := new(big.Int)
+				if split.PoW != nil {
+					total.Add(total, split.PoW)
+				}
+				if split.PoS != nil {
+					total.Add(total, split.PoS)
+				}
+				feeStr := total.String()
+				if feeStr != "" && feeStr != "0" {
+					response.Fees[fmt.Sprintf("%d", ct)] = feeStr
 				}
 			}
 		}

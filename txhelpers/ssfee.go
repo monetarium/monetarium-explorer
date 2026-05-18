@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/monetarium/monetarium-explorer/api/rewardtypes"
 	"github.com/monetarium/monetarium-node/blockchain/stake"
 	"github.com/monetarium/monetarium-node/chaincfg"
 	"github.com/monetarium/monetarium-node/cointype"
@@ -35,12 +36,9 @@ func ComputeVoteVARReward(latestVarFee float64, voteData []VoteTicketData, param
 		subsidyPerVote = subsidy / float64(voters)
 
 		// latestVarFee is the net redistribution (Inputs - Outputs) from BlockSSFeeTotals.
-		// Positive = net fee earned, Negative = net consolidation cost (cap to 0).
+		// We no longer cap at 0 because staker payouts ("SF") are legitimate rewards
+		// even if net redistribution is negative.
 		actualTotalFees = latestVarFee
-		if actualTotalFees < 0 {
-			log.Errorf("ComputeVoteVARReward: negative fee detected (%.8f), capping to 0", latestVarFee)
-			actualTotalFees = 0
-		}
 		feePerVote = actualTotalFees / float64(voters)
 	}
 
@@ -80,7 +78,7 @@ func ComputeVoteVARReward(latestVarFee float64, voteData []VoteTicketData, param
 
 // BlockSummary is a minimal interface for block summary data.
 type BlockSummary struct {
-	SSFeeTotalsByCoin map[uint8]string
+	SSFeeTotalsByCoin map[uint8]rewardtypes.SSFeeSplit
 	Voters            uint16
 	Hash              string
 	Height            int
@@ -169,84 +167,92 @@ func ComputeTxFeeData(msgBlock *wire.MsgBlock) []TxFeeData {
 	return result
 }
 
-// BlockSSFeeTotals sums TxTypeSSFee output SKAValues per coin type for a block.
-// For VAR, it computes the net redistribution (Outputs - Inputs) for both SSGen and SSRtx transactions.
-// Returns nil if no SSGen or SSRtx transactions are present.
-func BlockSSFeeTotals(ssGenTxs []TxFeeData, sTxs []*wire.MsgTx) map[uint8]string {
-	totals := make(map[uint8]*big.Int)
+// BlockSSFeeTotals sums rewards per coin type for a block, splitting them into PoW and PoS.
+// For SKA (cointype > 0), it uses marker-based net redistribution (Outputs - Inputs).
+// For VAR (cointype == 0), it continues to use the total net redistribution for all relevant stake txs.
+// Returns nil if no relevant transactions are present.
+func BlockSSFeeTotals(ssGenTxs []TxFeeData, sTxs []*wire.MsgTx) map[uint8]rewardtypes.SSFeeSplit {
+	totals := make(map[uint8]*rewardtypes.SSFeeSplit)
 
-	// 1. Calculate VAR fees from SSGen and SSRtx/SSFee transactions
-	// Net redistribution = Outputs - Inputs (positive = fee earned)
-	// Note: Some SSRtx transactions are misclassified as SSFee (type=7) by stake.DetermineTxType.
-	// TODO(monetarium-node): After fixing SSRtx detection in staketx.go, remove
-	// the isTxSSFee check below. Only SSRtx (type=3) should be needed.
-	var totalRedistributionNet int64
-	var ssGenFound bool
-
+	// 1. Handle VAR rewards (cointype == 0)
+	var varNet int64
+	var foundVAR bool
 	for _, tx := range ssGenTxs {
-		// Include: SSGen (2), SSRtx (3), SSFee (7 - SKA stake fee distribution)
-		isSSGen := tx.TxType == int(stake.TxTypeSSGen)
-		isSSRtx := tx.TxType == int(stake.TxTypeSSRtx)
-		isTxSSFee := tx.TxType == int(stake.TxTypeSSFee)
-
-		if !isSSGen && !isSSRtx && !isTxSSFee {
-			continue
+		// Include: SSGen (2), SSRtx (3), SSFee (7)
+		if tx.TxType == int(stake.TxTypeSSGen) || tx.TxType == int(stake.TxTypeSSRtx) || tx.TxType == int(stake.TxTypeSSFee) {
+			foundVAR = true
+			varNet += tx.TotalVAROutputs - tx.TotalInputs
 		}
-
-		ssGenFound = true
-		// Net = Outputs - Inputs (positive when output > input = fee earned)
-		redistributionNet := tx.TotalVAROutputs - tx.TotalInputs
-		totalRedistributionNet += redistributionNet
+	}
+	if foundVAR {
+		totals[0] = &rewardtypes.SSFeeSplit{
+			PoW: big.NewInt(0),
+			PoS: big.NewInt(varNet),
+		}
 	}
 
-	if ssGenFound {
-		feeVAR := totalRedistributionNet
-		totals[uint8(cointype.CoinTypeVAR)] = big.NewInt(feeVAR)
-	}
-
-	// 2. Calculate SKA fees from TxTypeSSFee transactions
+	// 2. Handle SKA rewards (cointype > 0) using markers
 	for _, tx := range sTxs {
 		if stake.DetermineTxType(tx) != stake.TxTypeSSFee {
 			continue
 		}
 
-		var inputTotal, outputTotal big.Int
-		var coinType uint8
+		if len(tx.TxOut) == 0 {
+			continue
+		}
+		coinType := tx.TxOut[0].CoinType
+		if !coinType.IsSKA() {
+			continue
+		}
 
-		// Sum all inputs for the primary coin type of this fee transaction
+		var inputTotal, outputTotal big.Int
 		for _, vin := range tx.TxIn {
 			if vin.SKAValueIn != nil {
 				inputTotal.Add(&inputTotal, vin.SKAValueIn)
 			}
 		}
-
-		// Sum all outputs
 		for _, out := range tx.TxOut {
-			if out.CoinType.IsSKA() && out.SKAValue != nil {
+			if out.SKAValue != nil {
 				outputTotal.Add(&outputTotal, out.SKAValue)
-				if coinType == 0 {
-					coinType = uint8(out.CoinType)
-				}
 			}
 		}
 
-		// Calculate actual reward: output - input
-		if coinType != 0 {
-			reward := new(big.Int).Sub(&outputTotal, &inputTotal)
-			if reward.Sign() > 0 {
-				if totals[coinType] == nil {
-					totals[coinType] = new(big.Int)
-				}
-				totals[coinType].Add(totals[coinType], reward)
+		netReward := new(big.Int).Sub(&outputTotal, &inputTotal)
+
+		isPoS := false
+		isPoW := false
+		for _, out := range tx.TxOut {
+			marker := stake.HasSSFeeMarker(out.PkScript)
+			if marker == stake.SSFeeMarkerStaker {
+				isPoS = true
+			} else if marker == stake.SSFeeMarkerMiner {
+				isPoW = true
 			}
+		}
+
+		ct := uint8(coinType)
+		if totals[ct] == nil {
+			totals[ct] = &rewardtypes.SSFeeSplit{
+				PoW: big.NewInt(0),
+				PoS: big.NewInt(0),
+			}
+		}
+
+		if isPoS {
+			totals[ct].PoS.Add(totals[ct].PoS, netReward)
+		}
+		if isPoW {
+			totals[ct].PoW.Add(totals[ct].PoW, netReward)
 		}
 	}
+
 	if len(totals) == 0 {
 		return nil
 	}
-	result := make(map[uint8]string, len(totals))
-	for ct, v := range totals {
-		result[ct] = v.String()
+
+	result := make(map[uint8]rewardtypes.SSFeeSplit, len(totals))
+	for ct, split := range totals {
+		result[ct] = *split
 	}
 	return result
 }

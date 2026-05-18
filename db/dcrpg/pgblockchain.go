@@ -32,6 +32,7 @@ import (
 	"github.com/monetarium/monetarium-node/txscript/stdscript"
 	"github.com/monetarium/monetarium-node/wire"
 
+	"github.com/monetarium/monetarium-explorer/api/rewardtypes"
 	apitypes "github.com/monetarium/monetarium-explorer/api/types"
 	"github.com/monetarium/monetarium-explorer/blockdata"
 	"github.com/monetarium/monetarium-explorer/db/cache"
@@ -6624,7 +6625,7 @@ func (pgb *ChainDB) GetExplorerBlock(ctx context.Context, hash string) *exptypes
 	}
 
 	// Populate per-coin amounts from the block summary (computed at collection time).
-	var skaFeeTotals map[uint8]string
+	var skaFeeTotals map[uint8]rewardtypes.SSFeeSplit
 	if summary := pgb.GetSummaryByHash(ctx, hash, false); summary != nil && summary.CoinAmounts != nil {
 		block.CoinAmounts = summary.CoinAmounts
 		// Also populate CoinRows on the embedded BlockBasic so the websocket
@@ -6833,9 +6834,17 @@ func (pgb *ChainDB) GetExplorerBlock(ctx context.Context, hash string) *exptypes
 	}
 	// SKA fees from SSFeeTotalsByCoin (stake fee distribution)
 	if skaFeeTotals != nil {
-		for ct, fee := range skaFeeTotals {
-			if fee != "" && fee != "0" {
-				feesMap[ct] = fee
+		for ct, split := range skaFeeTotals {
+			total := new(big.Int)
+			if split.PoW != nil {
+				total.Add(total, split.PoW)
+			}
+			if split.PoS != nil {
+				total.Add(total, split.PoS)
+			}
+			feeStr := total.String()
+			if feeStr != "" && feeStr != "0" {
+				feesMap[ct] = feeStr
 			}
 		}
 	}

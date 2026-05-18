@@ -18,7 +18,6 @@ import (
 	"os/signal"
 	"reflect"
 	"sort"
-	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -56,8 +55,8 @@ const (
 	// signals are sent to websocket clients.
 	syncStatusInterval = 2 * time.Second
 
-	// defaultAddressRows is the default number of rows to be shown on the
-	// address page table.
+	// defaultAddressRows is an upper limit on the number of rows that may be shown
+	// on the address page table.
 	defaultAddressRows int64 = 20
 
 	// MaxAddressRows is an upper limit on the number of rows that may be shown
@@ -69,28 +68,8 @@ const (
 	testnetNetName = "Testnet"
 )
 
-// divideByTwoSKAFees divides each amount in the map by 2 (big.Int).
-// Used to get PoW portion from total fees (fees are split 50/50 between PoW and PoS).
-func divideByTwoSKAFees(fees map[uint8]string) map[uint8]string {
-	if len(fees) == 0 {
-		return nil
-	}
-	half := make(map[uint8]string, len(fees))
-	two := big.NewInt(2)
-	for ct, amountStr := range fees {
-		amount, ok := new(big.Int).SetString(amountStr, 10)
-		if !ok || amount.Sign() <= 0 {
-			continue
-		}
-		half[ct] = amount.Div(amount, two).String()
-	}
-	if len(half) == 0 {
-		return nil
-	}
-	return half
-}
-
 // explorerDataSource implements extra data retrieval functions that require a
+
 // faster solution than RPC, or additional functionality.
 type explorerDataSource interface {
 	BlockHeight(ctx context.Context, hash string) (int64, error)
@@ -674,10 +653,9 @@ func (exp *explorerUI) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgB
 	ssFeeTotals := txhelpers.BlockSSFeeTotals(ssGenTxs, msgBlock.STransactions)
 
 	var latestVarFee float64
-	if fStr, ok := ssFeeTotals[0]; ok && fStr != "" {
-		if f, err := strconv.ParseInt(fStr, 10, 64); err == nil {
-			latestVarFee = float64(f) / 1e8
-		}
+	if split, ok := ssFeeTotals[0]; ok && split.PoS != nil {
+		f, _ := new(big.Float).SetInt(split.PoS).Quo(new(big.Float).SetInt(split.PoS), big.NewFloat(1e8)).Float64()
+		latestVarFee = f
 	}
 
 	voteData, err := exp.dataSource.GetVoteTicketDataByBlock(ctx, newBlockData.Hash)
@@ -724,8 +702,8 @@ func (exp *explorerUI) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgB
 	blocksPerYearBF := new(big.Float).SetPrec(256).SetFloat64(blocksPerYearVal)
 
 	coinTypes := make(map[uint8]struct{})
-	for ct, totals := range blockData.ExtraInfo.SSFeeTotalsByCoin {
-		if totals != "" {
+	for ct, split := range blockData.ExtraInfo.SSFeeTotalsByCoin {
+		if split.PoS != nil {
 			coinTypes[ct] = struct{}{}
 		}
 	}
@@ -749,34 +727,28 @@ func (exp *explorerUI) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgB
 			var totalReward *big.Int
 
 			// Find the latest block specifically for this coin type
-			if totalStr, ok := blockData.ExtraInfo.SSFeeTotalsByCoin[ct]; ok && totalStr != "" {
-				if total, parsed := new(big.Int).SetString(totalStr, 10); parsed && blockData.Header.Voters > 0 {
-					// Divide by 2 first to get PoS portion (fees are split 50/50 between PoW and PoS)
-					halfTotal := new(big.Int).Div(total, big.NewInt(2))
-					perVote := new(big.Int).Div(halfTotal, big.NewInt(int64(blockData.Header.Voters)))
+			if split, ok := blockData.ExtraInfo.SSFeeTotalsByCoin[ct]; ok && split.PoS != nil {
+				if blockData.Header.Voters > 0 {
+					perVote := new(big.Int).Div(split.PoS, big.NewInt(int64(blockData.Header.Voters)))
 					perBlock = txhelpers.FormatSKAAtoms(perVote)
 					blockHeight = int64(blockData.Header.Height)
 					blockHash = blockData.Header.Hash
-					totalReward = halfTotal
+					totalReward = split.PoS
 				}
 			}
 
 			if perBlock == "" {
 				// Fallback: Search backwards through historical summaries for this coin
 				for i := len(sum30) - 1; i >= 0; i-- {
-					if totalStr, ok := sum30[i].SSFeeTotalsByCoin[ct]; ok && totalStr != "" {
-						if total, parsed := new(big.Int).SetString(totalStr, 10); parsed {
-							bInfo := exp.dataSource.GetExplorerBlock(ctx, sum30[i].Hash)
-							if bInfo != nil && bInfo.BlockBasic.Voters > 0 {
-								// Divide by 2 first to get PoS portion (fees are split 50/50 between PoW and PoS)
-								halfTotal := new(big.Int).Div(total, big.NewInt(2))
-								perVote := new(big.Int).Div(halfTotal, big.NewInt(int64(bInfo.BlockBasic.Voters)))
-								perBlock = txhelpers.FormatSKAAtoms(perVote)
-								blockHeight = int64(sum30[i].Height)
-								blockHash = sum30[i].Hash
-								totalReward = halfTotal
-								break
-							}
+					if split, ok := sum30[i].SSFeeTotalsByCoin[ct]; ok && split.PoS != nil {
+						bInfo := exp.dataSource.GetExplorerBlock(ctx, sum30[i].Hash)
+						if bInfo != nil && bInfo.BlockBasic.Voters > 0 {
+							perVote := new(big.Int).Div(split.PoS, big.NewInt(int64(bInfo.BlockBasic.Voters)))
+							perBlock = txhelpers.FormatSKAAtoms(perVote)
+							blockHeight = int64(sum30[i].Height)
+							blockHash = sum30[i].Hash
+							totalReward = split.PoS
+							break
 						}
 					}
 				}
@@ -791,8 +763,8 @@ func (exp *explorerUI) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgB
 						// This should ideally not happen given the logic above
 						for _, s := range sum30 {
 							if int64(s.Height) == blockHeight {
-								if ts, ok := s.SSFeeTotalsByCoin[ct]; ok {
-									totalReward, _ = new(big.Int).SetString(ts, 10)
+								if split, ok := s.SSFeeTotalsByCoin[ct]; ok && split.PoS != nil {
+									totalReward = split.PoS
 								}
 								break
 							}
@@ -850,14 +822,17 @@ func (exp *explorerUI) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgB
 	}
 
 	// Fallback: use ExtraInfo SKAPoWRewards if current block has none.
-	// These are total fees from regular transactions - need to divide by 2 to get PoW portion.
+	// These are total fees from regular transactions - only the PoW portion is used.
 	if len(powRewardsMap) == 0 && len(blockData.ExtraInfo.SKAPoWRewards) > 0 {
 		powRewardsBlockHeight = newBlockData.Height
-		powRewardsMap = divideByTwoSKAFees(blockData.ExtraInfo.SKAPoWRewards)
+		powRewardsMap = make(map[uint8]string)
+		for ct, amountStr := range blockData.ExtraInfo.SKAPoWRewards {
+			powRewardsMap[ct] = amountStr
+		}
 	}
 
 	// Fallback: search backwards from the current block height for blocks with SKA activity.
-	// These are total fees - need to divide by 2 to get PoW portion.
+	// These are total fees - treated as 100% PoW.
 	if len(powRewardsMap) == 0 {
 		currentHeight := newBlockData.Height
 		for h := currentHeight - 1; h >= currentHeight-4320 && h >= 0; h-- {
@@ -867,7 +842,10 @@ func (exp *explorerUI) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgB
 			}
 			if len(skaFees) > 0 {
 				powRewardsBlockHeight = h
-				powRewardsMap = divideByTwoSKAFees(skaFees)
+				powRewardsMap = make(map[uint8]string)
+				for ct, totalStr := range skaFees {
+					powRewardsMap[ct] = totalStr
+				}
 				break
 			}
 		}
