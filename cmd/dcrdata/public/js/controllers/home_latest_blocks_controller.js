@@ -63,7 +63,7 @@ export default class extends Controller {
 
     clone.querySelector('[data-type="tx"]').textContent = String(totalTxCount)
     clone.querySelector('[data-type="var-amount"]').textContent = varAmount
-    clone.querySelector('[data-type="ska-amount"]').textContent = skaAmount || '—'
+    clone.querySelector('[data-type="ska-amount"]').textContent = skaAmount
     clone.querySelector('[data-type="size"]').textContent = humanize.bytes(block.size)
     clone.querySelector('[data-type="votes"]').textContent = block.votes
     clone.querySelector('[data-type="tickets"]').textContent = block.tickets

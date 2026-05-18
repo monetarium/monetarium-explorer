@@ -215,25 +215,26 @@
 		<tr>
 		<th class="d-none d-sm-table-cell">Tx Type</th>
 		<th class="text-start">Input/&#8203;Output ID</th>
+		<th class="text-start">Coin</th>
 	{{- if eq $txType "merged_debit"}}
 		<th class="text-end"><span class="d-sm-none position-relative" data-tooltip="merged input count">Cnt</span
 			><span class="d-none d-sm-inline">Inputs</span>
 		</th>
-		<th class="text-end">Debit VAR</th>
+		<th class="text-end">Debit</th>
 	{{- else if eq $txType "merged_credit" }}
 		<th class="text-end"><span class="d-sm-none position-relative" data-tooltip="merged output count">Cnt</span
 			><span class="d-none d-sm-inline">Outputs</span>
 		</th>
-		<th class="text-end">Credit VAR</th>
+		<th class="text-end">Credit</th>
 	{{- else if eq $txType "merged" }}
 		<th title="Count of address's inputs and outputs in the transaction." class="text-end"><span class="d-none d-sm-inline-block">I/O Count</span><span class="d-sm-none position-relative" data-tooltip="# of inputs and outputs">#</span></th>
-		<th class="text-end">Credit VAR</th>
-		<th class="text-end">Debit VAR</th>
+		<th class="text-end">Credit</th>
+		<th class="text-end">Debit</th>
 	{{- else if eq $txType "unspent" }}
-		<th class="text-end">Credit VAR</th>
+		<th class="text-end">Credit</th>
 	{{- else}}
-		<th class="text-end">Credit VAR</th>
-		<th class="text-end">Debit VAR</th>
+		<th class="text-end">Credit</th>
+		<th class="text-end">Debit</th>
 	{{- end}}
 		<th class="d-none d-sm-table-cell text-end">Time (UTC)</th>
 		<th class="text-end">Age</th>
@@ -246,25 +247,26 @@
 		<tr{{if eq .Confirmations 0}} data-address-target="pending" data-txid="{{.TxID}}"{{end}}>
 			<td class="d-none d-sm-table-cell">{{.TxType}}</td>
 			<td class="clipboard">{{template "hashElide" (hashlink .TxID .Link)}}</td>
+			<td data-coin-type="{{.CoinType}}">{{coinSymbol .CoinType}}</td>
 		{{- if eq $txType "merged_debit"}}
 			<td class="text-end">{{.MergedTxnCount}}</td>
-			<td class="text-end fs15">{{template "decimalParts" (float64AsDecimalParts .SentTotal 8 false)}}</td>
+			<td class="text-end fs15">{{if eq .CoinType 0}}{{template "decimalParts" (float64AsDecimalParts .SentTotal 8 false)}}{{else}}{{template "decimalParts" (skaDecimalParts .SKAValue true)}}{{end}}</td>
 		{{- else if eq $txType "merged_credit"}}
 			<td class="text-end">{{.MergedTxnCount}}</td>
-			<td class="text-end fs15">{{template "decimalParts" (float64AsDecimalParts .ReceivedTotal 8 false)}}</td>
+			<td class="text-end fs15">{{if eq .CoinType 0}}{{template "decimalParts" (float64AsDecimalParts .ReceivedTotal 8 false)}}{{else}}{{template "decimalParts" (skaDecimalParts .SKAValue true)}}{{end}}</td>
 		{{- else if eq $txType "merged"}}
 			<td class="text-end">{{.MergedTxnCount}}</td>
 			{{- if .IsFunding}}
-			<td class="text-end fs15">{{template "decimalParts" (float64AsDecimalParts .ReceivedTotal 8 false)}}</td>
+			<td class="text-end fs15">{{if eq .CoinType 0}}{{template "decimalParts" (float64AsDecimalParts .ReceivedTotal 8 false)}}{{else}}{{template "decimalParts" (skaDecimalParts .SKAValue true)}}{{end}}</td>
 			<td class="text-end">&mdash;</td>
 			{{- else}}
 			<td class="text-end">&mdash;</td>
-			<td class="text-end fs15">{{template "decimalParts" (float64AsDecimalParts .SentTotal 8 false)}}</td>
+			<td class="text-end fs15">{{if eq .CoinType 0}}{{template "decimalParts" (float64AsDecimalParts .SentTotal 8 false)}}{{else}}{{template "decimalParts" (skaDecimalParts .SKAValue true)}}{{end}}</td>
 			{{- end}}
 		{{- else if eq $txType "unspent"}}
-			<td class="text-end fs15">{{template "decimalParts" (float64AsDecimalParts .ReceivedTotal 8 false)}}</td>
+			<td class="text-end fs15">{{if eq .CoinType 0}}{{template "decimalParts" (float64AsDecimalParts .ReceivedTotal 8 false)}}{{else}}{{template "decimalParts" (skaDecimalParts .SKAValue true)}}{{end}}</td>
 		{{- else if or (eq $txType "credit") .IsFunding}}{{/* .IsFunding = true && txType = "all" is a credit */}}
-			<td class="text-end fs15">{{template "decimalParts" (float64AsDecimalParts .ReceivedTotal 8 false)}}</td>
+			<td class="text-end fs15">{{if eq .CoinType 0}}{{template "decimalParts" (float64AsDecimalParts .ReceivedTotal 8 false)}}{{else}}{{template "decimalParts" (skaDecimalParts .SKAValue true)}}{{end}}</td>
 			{{- if .MatchedTx}}
 			<td class="text-end"><a href="/tx/{{.MatchedTx}}/in/{{.MatchedTxIndex}}"
 				data-txid="{{.MatchedTx}}"
@@ -274,14 +276,14 @@
 			<td class="text-end">unspent</td>
 			{{- end}}
 		{{- else}}{{/* either "debit", or "all" with .IsFunding = false */ -}}
-			{{- if eq .SentTotal 0.0}}
+			{{- if and (eq .CoinType 0) (eq .SentTotal 0.0)}}
 			<td class="text-end">sstxcommitment</td>
 			{{- else if .MatchedTx }}
 			<td class="text-end"><a href="/tx/{{.MatchedTx}}/out/{{.MatchedTxIndex}}" data-action="mouseover->address#hashOver mouseout->address#hashOut">source</a></td>
 			{{- else}}
 			<td class="text-end">N/A</td>
 			{{- end}}
-			<td class="text-end fs15">{{template "decimalParts" (float64AsDecimalParts .SentTotal 8 false)}}</td>
+			<td class="text-end fs15">{{if eq .CoinType 0}}{{template "decimalParts" (float64AsDecimalParts .SentTotal 8 false)}}{{else}}{{template "decimalParts" (skaDecimalParts .SKAValue true)}}{{end}}</td>
 		{{- end}}
 			<td class="addr-tx-time d-none d-sm-table-cell text-end">{{if eq .Confirmations 0}}Unconfirmed{{else}}{{.Time.DatetimeWithoutTZ}}{{end}}</td>
 			<td class="addr-tx-age text-end">

@@ -6,11 +6,13 @@ package explorer
 
 import (
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"math"
 	"math/big"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -334,10 +336,22 @@ func amountAsDecimalPartsTrimmed(v, numPlaces int64, useCommas bool) []string {
 }
 
 // threeSigFigs returns a representation of the float formatted to three
-// significant figures, with an appropriate magnitude prefix (k, M, B).
+// significant figures, with an appropriate magnitude prefix (k, M, B, T, Q).
 // For (k, M, G) prefixes for file/memory sizes, use humanize.Bytes.
 func threeSigFigs(v float64) string {
-	if v >= 1e11 {
+	if v >= 1e17 {
+		return fmt.Sprintf("%dQ", int(math.Round(v/1e15)))
+	} else if v >= 1e16 {
+		return fmt.Sprintf("%.1fQ", math.Round(v/1e14)/10)
+	} else if v >= 1e15 {
+		return fmt.Sprintf("%.2fQ", math.Round(v/1e13)/1e2)
+	} else if v >= 1e14 {
+		return fmt.Sprintf("%dT", int(math.Round(v/1e12)))
+	} else if v >= 1e13 {
+		return fmt.Sprintf("%.1fT", math.Round(v/1e11)/10)
+	} else if v >= 1e12 {
+		return fmt.Sprintf("%.2fT", math.Round(v/1e10)/1e2)
+	} else if v >= 1e11 {
 		return fmt.Sprintf("%dB", int(math.Round(v/1e9)))
 	} else if v >= 1e10 {
 		return fmt.Sprintf("%.1fB", math.Round(v/1e8)/10)
@@ -476,6 +490,18 @@ func formatAtomsAsCoinString(atomStr string, coinType uint8, minDecimals int) st
 	return intStr + "." + fracStr
 }
 
+// coinDecimalParts dispatches between VAR (float64Formatting) and SKA
+// (skaDecimalParts) for rendering atom-string amounts via the "decimalParts"
+// template. coinType 0 = VAR (8 decimals); any other value = SKA (18 decimals,
+// big.Int-string preserved).
+func coinDecimalParts(atomStr string, coinType uint8, useCommas bool, boldNumPlaces ...int) []string {
+	if coinType == 0 {
+		v := float64(parseInt64(atomStr)) / 1e8
+		return float64Formatting(v, 8, useCommas, boldNumPlaces...)
+	}
+	return skaDecimalParts(atomStr, useCommas, boldNumPlaces...)
+}
+
 // formatCoinAtoms converts a raw atom string to a threeSigFigs-formatted coin
 // string. coinType 0 = VAR (8 decimal places), any other value = SKA (18
 // decimal places). This is the single call site for coin amount display — use
@@ -485,6 +511,77 @@ func formatCoinAtoms(atomStr string, coinType uint8) string {
 		return threeSigFigs(float64(parseInt64(atomStr)) / 1e8)
 	}
 	return threeSigFigs(skaCoinValue(atomStr))
+}
+
+// MempoolCoinRow is an ordered per-coin row for mempool template rendering.
+// VAR (CoinType=0) is always present; SKA-n rows follow ascending and only
+// when the coin has at least one mempool tx.
+type MempoolCoinRow struct {
+	CoinType uint8
+	Symbol   string
+	Stats    types.MempoolCoinStats
+}
+
+// orderedMempoolCoinStats returns the per-coin rows for the mempool page in the
+// order required by wiki/specs/mempool/spec.md: VAR (always), then SKA-n
+// ascending with TxCount > 0. Per the mempool flow.compact.md "SKA → Regular
+// only" invariant, all per-type *Count fields on SKA rows are zero except
+// RegularCount, so callers can safely render only the Regular row in the SKA
+// section.
+func orderedMempoolCoinStats(stats map[uint8]types.MempoolCoinStats) []MempoolCoinRow {
+	varStats, ok := stats[0]
+	if !ok {
+		varStats = types.MempoolCoinStats{
+			Amount:        "0",
+			RegularAmount: "0",
+			TicketAmount:  "0",
+			VoteAmount:    "0",
+			RevokeAmount:  "0",
+		}
+	}
+	rows := []MempoolCoinRow{{
+		CoinType: 0,
+		Symbol:   coinSymbol(0),
+		Stats:    varStats,
+	}}
+	skaKeys := make([]int, 0, len(stats))
+	for k, v := range stats {
+		if k == 0 || v.TxCount == 0 {
+			continue
+		}
+		skaKeys = append(skaKeys, int(k))
+	}
+	sort.Ints(skaKeys)
+	for _, k := range skaKeys {
+		ct := uint8(k)
+		rows = append(rows, MempoolCoinRow{
+			CoinType: ct,
+			Symbol:   coinSymbol(ct),
+			Stats:    stats[ct],
+		})
+	}
+	return rows
+}
+
+// formatSKAAmountCell renders the aggregate SKA-amount table cell shared by
+// the Latest Blocks (home) and Blocks listing tables. The rule is:
+//
+//	subRowCount == 0   → "—"      (no SKA issued at all)
+//	subRowCount == 1   → formatted SKA1 amount (zero-value rows render "0")
+//	subRowCount >= 2   → "Σ N"    (count summary)
+//
+// skaAmount is the raw SKA atom string of the first SKA row and is only used
+// when subRowCount == 1. The Go (server-render) and JS (WebSocket live-update)
+// helpers must stay aligned — see public/js/helpers/coin_rows_helper.js.
+func formatSKAAmountCell(skaAmount string, subRowCount int) string {
+	switch {
+	case subRowCount >= 2:
+		return fmt.Sprintf("Σ %d", subRowCount)
+	case subRowCount == 1:
+		return formatCoinAtoms(skaAmount, 1)
+	default:
+		return "—"
+	}
 }
 
 type periodMap struct {
@@ -659,9 +756,27 @@ func makeTemplateFuncMap(params *chaincfg.Params) template.FuncMap {
 			return float64(parseInt64(atomStr)) / 1e8
 		},
 		"formatCoinAtoms":         formatCoinAtoms,
+		"formatSKAAmountCell":     formatSKAAmountCell,
 		"formatAtomsAsCoinString": formatAtomsAsCoinString,
+		"orderedMempoolCoinStats": orderedMempoolCoinStats,
+		"coinDecimalParts": func(atomStr string, coinType uint8, useCommas bool, boldNumPlaces ...int) []string {
+			return coinDecimalParts(atomStr, coinType, useCommas, boldNumPlaces...)
+		},
 		"skaDecimalParts": func(atomStr string, useCommas bool, boldNumPlaces ...int) []string {
 			return skaDecimalParts(atomStr, useCommas, boldNumPlaces...)
+		},
+		"jsonMarshal": func(v any) (string, error) {
+			// json.Marshal encodes []byte (alias of []uint8) as base64.
+			// Coerce []uint8 to []int so coin_type slices render as JSON arrays.
+			if u, ok := v.([]uint8); ok {
+				ints := make([]int, len(u))
+				for i, n := range u {
+					ints[i] = int(n)
+				}
+				v = ints
+			}
+			b, err := json.Marshal(v)
+			return string(b), err
 		},
 		"skaDecimalPartsNoTrailing": func(atomStr string, useCommas bool, boldNumPlaces ...int) []string {
 			return skaDecimalPartsNoTrailing(atomStr, useCommas, boldNumPlaces...)

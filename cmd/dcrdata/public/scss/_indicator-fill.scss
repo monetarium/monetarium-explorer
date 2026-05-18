@@ -40,7 +40,13 @@
     height: 1.25rem; // Matched to $progress-height
     border-radius: $border-radius;
     background-color: var(--indicator-track-bg);
-    overflow: visible; // allow marker/label to overflow above
+
+    // Clip segments horizontally so the overflow segment (which can be up to
+    // 100% wide and starts at the gq marker) cannot extend past the bar's
+    // right edge, while letting the gq marker stick out above/below the
+    // track for visibility. Without this, a "full" bar appears wider than
+    // the TOTAL bar, breaking spec §3.3.5 "all indicators have equal size".
+    clip-path: inset(-50% 0 -50% 0);
   }
 }
 
@@ -66,15 +72,22 @@
   background-color: var(--status-neutral, #{$mempool-neutral});
 }
 
+// Extra and overflow segments start at the GQ marker (the boundary of the
+// coin's guaranteed quota) and extend rightward, so they visually concatenate
+// with the gq segment instead of overlapping it. Without this, when a coin
+// borrows or overflows past its quota, the visible bar collapses to the
+// widest single segment and no longer matches the TOTAL bar's length.
 .extra-segment {
   @extend %segment-base;
 
+  left: calc(var(--gq-pos, 0) * 100%);
   background-color: var(--status-neutral, #{$mempool-neutral});
 }
 
 .overflow-segment {
   @extend %segment-base;
 
+  left: calc(var(--gq-pos, 0) * 100%);
   background-color: var(--status-neutral, #{$mempool-neutral});
 }
 
@@ -95,21 +108,11 @@
   }
 }
 
-// full — danger colour on GQ and overflow segments; hatch on overflow
+// full — danger colour on GQ and overflow segments (solid red, no hatch).
 [data-status="full"] {
   .gq-segment,
   .overflow-segment {
     background-color: var(--status-danger);
-  }
-
-  .overflow-segment.overflow-hatch {
-    background-image: repeating-linear-gradient(
-      45deg,
-      transparent,
-      transparent 3px,
-      rgb(0 0 0 / 25%) 3px,
-      rgb(0 0 0 / 25%) 6px
-    );
   }
 }
 
@@ -178,15 +181,14 @@
       background-color 0.3s ease;
   }
 
-  // Overflow appearance when total > 100%
+  // Empty mempool: drop the 4px-min nub so the TOTAL bar reads as truly empty
+  // until at least one transaction shows up (PO feedback).
+  &[data-empty="true"] .total-bar__fill {
+    width: 0;
+  }
+
+  // Overflow appearance when total > 100% — solid red, no hatch.
   &[data-overflow="true"] .total-bar__fill {
     background-color: var(--status-danger);
-    background-image: repeating-linear-gradient(
-      45deg,
-      transparent,
-      transparent 3px,
-      rgb(0 0 0 / 25%) 3px,
-      rgb(0 0 0 / 25%) 6px
-    );
   }
 }

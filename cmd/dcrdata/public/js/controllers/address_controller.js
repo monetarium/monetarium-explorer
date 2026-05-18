@@ -7,6 +7,7 @@ import { padPoints, sizedBarPlotter } from '../helpers/chart_helper'
 import { requestJSON } from '../helpers/http'
 import humanize from '../helpers/humanize_helper'
 import { getDefault } from '../helpers/module_helper'
+import { renderCoinType, splitSkaAtomsNoTrailing } from '../helpers/ska_helper'
 import TurboQuery from '../helpers/turbolinks_helper'
 import Zoom from '../helpers/zoom_helper'
 import globalEventBus from '../services/event_bus_service'
@@ -27,20 +28,51 @@ function txTypesFunc(d, binSize) {
   return p
 }
 
-function amountFlowProcessor(d, binSize) {
+function amountFlowProcessor(d, binSize, coinType, atomsByTime) {
   const flowData = []
   const balanceData = []
-  let balance = 0
+  atomsByTime.clear()
+  const isVAR = coinType === 0
 
   d.time.forEach((n, i) => {
-    const v = d.net[i]
-    let netReceived = 0
-    let netSent = 0
-
-    v > 0 ? (netReceived = v) : (netSent = v * -1)
-    flowData.push([new Date(n), d.received[i], d.sent[i], netReceived, netSent])
-    balance += v
-    balanceData.push([new Date(n), balance])
+    const time = new Date(n)
+    if (isVAR) {
+      const v = d.net[i]
+      let netReceived = 0
+      let netSent = 0
+      v > 0 ? (netReceived = v) : (netSent = v * -1)
+      flowData.push([time, d.received[i], d.sent[i], netReceived, netSent])
+      // Server precomputes the cumulative VAR balance per bin (`*big.Int`
+      // accumulator at db/dcrpg/queries.go); reading it here removes the
+      // JS-side Number accumulator that lost precision at high balances.
+      balanceData.push([time, d.balance[i]])
+    } else {
+      const receivedStr = (d.received_atoms && d.received_atoms[i]) || '0'
+      const sentStr = (d.sent_atoms && d.sent_atoms[i]) || '0'
+      const netStr = (d.net_atoms && d.net_atoms[i]) || '0'
+      const balStr = (d.balance_atoms && d.balance_atoms[i]) || '0'
+      // Sign split happens on the string — no BigInt arithmetic.
+      const isNeg = netStr.charAt(0) === '-'
+      const netReceivedStr = isNeg ? '0' : netStr
+      const netSentStr = isNeg ? netStr.slice(1) : '0'
+      // Number() conversion is lossy at 18 decimals but acceptable for
+      // pixel positioning. Legend reads the original atom strings below.
+      flowData.push([
+        time,
+        Number(receivedStr),
+        Number(sentStr),
+        Number(netReceivedStr),
+        Number(netSentStr)
+      ])
+      balanceData.push([time, Number(balStr)])
+      atomsByTime.set(time.getTime(), {
+        Received: receivedStr,
+        Spent: sentStr,
+        'Net Received': netReceivedStr,
+        'Net Spent': netSentStr,
+        Balance: balStr
+      })
+    }
   })
 
   padPoints(flowData, binSize)
@@ -69,21 +101,46 @@ function formatter(data) {
   return html
 }
 
-function customizedFormatter(data) {
-  let xHTML = ''
-  if (data.xHTML !== undefined) {
-    xHTML = humanize.date(data.x, false, true)
+function formatSkaAtoms(atomStr) {
+  const parts = splitSkaAtomsNoTrailing(atomStr)
+  let frac = `${parts.bold}${parts.rest}`
+  // Drop trailing zeros from the bold prefix only when rest is empty so the
+  // legend never shows a stray ".00" tail.
+  if (parts.rest === '') frac = frac.replace(/0+$/, '')
+  return frac.length === 0 ? parts.intPart : `${parts.intPart}.${frac}`
+}
+
+function makeAmountFormatter(coinType, atomsByTime) {
+  const isVAR = coinType === 0
+  const coinLabel = renderCoinType(coinType)
+  return function (data) {
+    let xHTML = ''
+    if (data.xHTML !== undefined) {
+      xHTML = humanize.date(data.x, false, true)
+    }
+    let html = `${this.getLabels()[0]}: ${xHTML}`
+    const atoms = isVAR ? null : atomsByTime.get(data.x)
+    data.series.forEach((series) => {
+      if (series.color === undefined) return
+      if (series.y === 0) return
+      const l = `<span style="color: ${series.color};"> ${series.labelHTML}`
+      html = `<span style="color:#2d2d2d;">${html}</span>`
+      let valueStr = ''
+      if (isVAR) {
+        valueStr = isNaN(series.y) ? '' : `${series.y} ${coinLabel}`
+      } else {
+        const atomStr = atoms ? atoms[series.labelHTML] : null
+        if (atomStr) {
+          valueStr = `${formatSkaAtoms(atomStr)} ${coinLabel}`
+        } else if (!isNaN(series.y)) {
+          // Fall back for padPoints synthetic boundary points (no atoms map entry).
+          valueStr = `${series.y} ${coinLabel}`
+        }
+      }
+      html += `<br>${series.dashHTML}${l}: ${valueStr}</span> `
+    })
+    return html
   }
-  let html = `${this.getLabels()[0]}: ${xHTML}`
-  data.series.forEach((series) => {
-    if (series.color === undefined) return
-    // Skip display of zeros
-    if (series.y === 0) return
-    const l = `<span style="color: ${series.color};"> ${series.labelHTML}`
-    html = `<span style="color:#2d2d2d;">${html}</span>`
-    html += `<br>${series.dashHTML}${l}: ${isNaN(series.y) ? '' : `${series.y} DCR`}</span> `
-  })
-  return html
 }
 
 function setTxnCountText(el, count) {
@@ -124,12 +181,11 @@ function createOptions() {
     fillGraph: false
   }
 
+  // ylabel and legendFormatter are coin-dependent; built per-fetch in popChartCache.
   amountFlowGraphOptions = {
     labels: ['Date', 'Received', 'Spent', 'Net Received', 'Net Spent'],
     colors: ['#2971FF', '#2ED6A1', '#41BF53', '#FF0090'],
-    ylabel: 'Total (DCR)',
     visibility: [true, false, false, false],
-    legendFormatter: customizedFormatter,
     stackedGraph: true,
     fillGraph: false
   }
@@ -137,13 +193,26 @@ function createOptions() {
   balanceGraphOptions = {
     labels: ['Date', 'Balance'],
     colors: ['#41BF53'],
-    ylabel: 'Balance (DCR)',
     plotter: [Dygraph.Plotters.linePlotter, Dygraph.Plotters.fillPlotter],
-    legendFormatter: customizedFormatter,
     stackedGraph: false,
     visibility: [true],
     fillGraph: true,
     stepPlot: true
+  }
+}
+
+// Map an amount-flow bitmap to a Dygraph visibility object.
+// Flow bits: 1 = Received, 2 = Sent, 4 = Net. The amountflow chart has four
+// series — Dygraph indices 0 received, 1 sent, 2 & 3 net — so the single Net
+// bit drives both net series. Values are real booleans: Dygraph's object-form
+// setVisibility assigns them verbatim, and other range-selector code paths
+// expect booleans, not raw bitmask numbers.
+export function flowVisibility(bitmap) {
+  return {
+    0: (bitmap & 1) !== 0,
+    1: (bitmap & 2) !== 0,
+    2: (bitmap & 4) !== 0,
+    3: (bitmap & 4) !== 0
   }
 }
 
@@ -154,7 +223,6 @@ export default class extends Controller {
     return [
       'options',
       'addr',
-      'balance',
       'flow',
       'zoom',
       'interval',
@@ -187,13 +255,16 @@ export default class extends Controller {
       'bigchart',
       'fullscreen',
       'tablePagination',
-      'paginationheader'
+      'paginationheader',
+      'coinFilter',
+      'coin'
     ]
   }
 
   async connect() {
     ctrl = this
     ctrl.retrievedData = {}
+    ctrl.skaAtomsByTime = new Map()
     ctrl.ajaxing = false
     ctrl.qrCode = false
     ctrl.requestedChart = false
@@ -215,7 +286,8 @@ export default class extends Controller {
       'flow',
       'n',
       'start',
-      'txntype'
+      'txntype',
+      'coin'
     ]))
 
     ctrl.state = Object.assign({}, settings)
@@ -227,10 +299,18 @@ export default class extends Controller {
       offset: parseInt(cdata.get('offset')),
       count: parseInt(cdata.get('txnCount'))
     }
-    ctrl.balance = cdata.get('balance')
+
+    const rawActiveCoins = ctrl.element.getAttribute('data-active-coins') || '[]'
+    try {
+      ctrl.activeCoins = JSON.parse(rawActiveCoins)
+    } catch {
+      ctrl.activeCoins = []
+    }
+    if (!Array.isArray(ctrl.activeCoins)) ctrl.activeCoins = []
 
     // Get initial view settings from the url
     ctrl.query.update(settings)
+    ctrl.normalizeCoinSetting()
     ctrl.setChartType()
     if (settings.flow) ctrl.setFlowChecks()
     if (settings.zoom !== null) {
@@ -319,7 +399,55 @@ export default class extends Controller {
   makeTableUrl(txType, count, offset) {
     const root =
       this.dcrAddress === 'treasury' ? 'treasurytable' : `addresstable/${this.dcrAddress}`
-    return `/${root}?txntype=${txType}&n=${count}&start=${offset}`
+    return `/${root}?txntype=${txType}&n=${count}&start=${offset}${this.coinUrlSegment()}`
+  }
+
+  coinUrlSegment() {
+    const coin = this.settings.coin
+    return coin === null || coin === undefined || coin === '' ? '' : `&coin=${coin}`
+  }
+
+  normalizeCoinSetting() {
+    const settings = this.settings
+    if (settings.coin !== null && settings.coin !== undefined && settings.coin !== '') {
+      const n = parseInt(settings.coin, 10)
+      if (!Number.isInteger(n) || !this.activeCoins.includes(n)) {
+        settings.coin = null
+        this.query.replace(settings)
+      } else {
+        // Canonicalize string form for downstream URL building.
+        settings.coin = String(n)
+      }
+    }
+    if (this.hasCoinFilterTarget) {
+      this.coinFilterTarget.value =
+        settings.coin === null || settings.coin === undefined ? '' : String(settings.coin)
+    }
+    // The chart selector is always pinned to a single coin (no "All" option):
+    // when settings.coin is unset, show the effective default coin.
+    if (this.hasCoinTarget) {
+      const effective =
+        settings.coin === null || settings.coin === undefined
+          ? String(this.effectiveCoin())
+          : String(settings.coin)
+      if (this.coinTarget.querySelector(`option[value="${effective}"]`)) {
+        this.coinTarget.value = effective
+      }
+    }
+  }
+
+  // effectiveCoin returns the integer coin actually used for chart fetches.
+  // Mirrors the backend's CoinTypeAll → 0 collapse for chart endpoints.
+  effectiveCoin() {
+    const raw = this.settings.coin
+    if (raw !== null && raw !== undefined && raw !== '') {
+      const n = parseInt(raw, 10)
+      if (Number.isInteger(n)) return n
+    }
+    if (Array.isArray(this.activeCoins) && this.activeCoins.length > 0) {
+      return this.activeCoins[0]
+    }
+    return 0
   }
 
   changePageSize() {
@@ -328,6 +456,19 @@ export default class extends Controller {
 
   changeTxType() {
     this.fetchTable(this.txnType, this.pageSize, 0)
+  }
+
+  changeCoin(e) {
+    const v = e.target.value
+    this.settings.coin = v === '' ? null : v
+    // Keep both selectors (chart + table) in sync regardless of which one fired.
+    this.normalizeCoinSetting()
+    // Pagination loses meaning when scope changes — fetchTable writes
+    // settings.start = 0 and runs query.replace, persisting the new coin to URL.
+    this.fetchTable(this.txnType, this.pageSize, 0)
+    // Invalidate the drawGraph short-circuit so a coin change refetches the chart.
+    this.state.coin = '__force_refetch__'
+    this.drawGraph()
   }
 
   nextPage() {
@@ -445,10 +586,11 @@ export default class extends Controller {
     let links = ''
 
     const root = this.dcrAddress === 'treasury' ? 'treasury' : `address/${this.dcrAddress}`
+    const coinSeg = this.coinUrlSegment()
 
     if (typeof offset !== 'undefined' && offset > 0) {
       links =
-        `<a href="/${root}?start=${offset - pageSize}&n=${pageSize}&txntype=${txnType}" ` +
+        `<a href="/${root}?start=${offset - pageSize}&n=${pageSize}&txntype=${txnType}${coinSeg}" ` +
         'class="d-inline-block monicon-arrow-left m-1 fz20" data-action="click->address#pageNumberLink"></a>' +
         '\n'
     }
@@ -463,7 +605,7 @@ export default class extends Controller {
     if (txCount - offset > pageSize) {
       links +=
         '\n' +
-        `<a href="/${root}?start=${offset + pageSize}&n=${pageSize}&txntype=${txnType}" ` +
+        `<a href="/${root}?start=${offset + pageSize}&n=${pageSize}&txntype=${txnType}${coinSeg}" ` +
         'class="d-inline-block monicon-arrow-right m-1 fs20" data-action="click->address#pageNumberLink"></a>'
     }
 
@@ -479,7 +621,11 @@ export default class extends Controller {
     // Check for invalid view parameters
     if (!ctrl.validChartType(settings.chart) || !ctrl.validGraphInterval()) return
 
-    if (settings.chart === ctrl.state.chart && settings.bin === ctrl.state.bin) {
+    if (
+      settings.chart === ctrl.state.chart &&
+      settings.bin === ctrl.state.bin &&
+      settings.coin === ctrl.state.coin
+    ) {
       // Only the zoom has changed.
       const zoom = Zoom.decode(settings.zoom)
       if (zoom) {
@@ -494,7 +640,8 @@ export default class extends Controller {
   }
 
   async fetchGraphData(chart, bin) {
-    const cacheKey = `${chart}-${bin}`
+    const coin = ctrl.effectiveCoin()
+    const cacheKey = `${chart}-${bin}-${coin}`
     if (ctrl.ajaxing === cacheKey) {
       return
     }
@@ -517,7 +664,7 @@ export default class extends Controller {
     let url = `/api/treasury/io/${bin}`
     if (this.dcrAddress !== 'treasury') {
       const chartKey = chart === 'balance' ? 'amountflow' : chart
-      url = `/api/address/${ctrl.dcrAddress}/${chartKey}/${bin}`
+      url = `/api/address/${ctrl.dcrAddress}/${chartKey}/${bin}?coin=${coin}`
     }
 
     const graphDataResponse = await requestJSON(url)
@@ -532,13 +679,14 @@ export default class extends Controller {
       return
     }
 
+    const coin = ctrl.effectiveCoin()
     const binSize = Zoom.mapValue(bin) || blockDuration
     if (chart === 'types') {
-      ctrl.retrievedData[`types-${bin}`] = txTypesFunc(data, binSize)
+      ctrl.retrievedData[`types-${bin}-${coin}`] = txTypesFunc(data, binSize)
     } else if (chart === 'amountflow' || chart === 'balance') {
-      const processed = amountFlowProcessor(data, binSize)
-      ctrl.retrievedData[`amountflow-${bin}`] = processed.flow
-      ctrl.retrievedData[`balance-${bin}`] = processed.balance
+      const processed = amountFlowProcessor(data, binSize, coin, ctrl.skaAtomsByTime)
+      ctrl.retrievedData[`amountflow-${bin}-${coin}`] = processed.flow
+      ctrl.retrievedData[`balance-${bin}-${coin}`] = processed.balance
     } else return
     setTimeout(() => {
       ctrl.popChartCache(chart, bin)
@@ -546,28 +694,43 @@ export default class extends Controller {
   }
 
   popChartCache(chart, bin) {
-    const cacheKey = `${chart}-${bin}`
+    const coin = ctrl.effectiveCoin()
+    const cacheKey = `${chart}-${bin}-${coin}`
     const binSize = Zoom.mapValue(bin) || blockDuration
     if (!ctrl.retrievedData[cacheKey] || ctrl.requestedChart !== cacheKey) {
       return
     }
     const data = ctrl.retrievedData[cacheKey]
     let options = null
+    const coinLabel = renderCoinType(coin)
+    const amountFormatter = makeAmountFormatter(coin, ctrl.skaAtomsByTime)
     ctrl.flowTarget.classList.add('d-hide')
     switch (chart) {
       case 'types':
-        options = typesGraphOptions
-        options.plotter = sizedBarPlotter(binSize)
+        options = {
+          ...typesGraphOptions,
+          ylabel: 'Tx Count',
+          legendFormatter: formatter,
+          plotter: sizedBarPlotter(binSize)
+        }
         break
 
       case 'amountflow':
-        options = amountFlowGraphOptions
-        options.plotter = sizedBarPlotter(binSize)
+        options = {
+          ...amountFlowGraphOptions,
+          ylabel: `Total (${coinLabel})`,
+          legendFormatter: amountFormatter,
+          plotter: sizedBarPlotter(binSize)
+        }
         ctrl.flowTarget.classList.remove('d-hide')
         break
 
       case 'balance':
-        options = balanceGraphOptions
+        options = {
+          ...balanceGraphOptions,
+          ylabel: `Balance (${coinLabel})`,
+          legendFormatter: amountFormatter
+        }
         break
     }
     options.zoomCallback = null
@@ -637,23 +800,21 @@ export default class extends Controller {
   }
 
   updateFlow() {
-    const bitmap = ctrl.flow
+    const bitmap = this.flow
     if (bitmap === 0) {
       // If all boxes are unchecked, just leave the last view
-      // in place to prevent chart errors with zero visible datasets
+      // in place to prevent chart errors with zero visible datasets.
       return
     }
-    ctrl.settings.flow = bitmap
-    ctrl.setGraphQuery()
-    // Set the graph dataset visibility based on the bitmap
-    // Dygraph dataset indices: 0 received, 1 sent, 2 & 3 net
-    const visibility = {}
-    visibility[0] = bitmap & 1
-    visibility[1] = bitmap & 2
-    visibility[2] = visibility[3] = bitmap & 4
-    Object.keys(visibility).forEach((idx) => {
-      ctrl.graph.setVisibility(idx, visibility[idx])
-    })
+    this.settings.flow = bitmap
+    this.setGraphQuery()
+    // Apply the whole visibility map in a single setVisibility call. Dygraph
+    // runs predraw_ on every setVisibility, so toggling indices one at a time
+    // can leave the chart transiently with zero visible series, which crashes
+    // the range selector (computeCombinedSeriesAndLimits_ dereferences an
+    // empty array). The object form applies all indices, then redraws once;
+    // bitmap is non-zero here, so at least one series is always visible.
+    this.graph.setVisibility(flowVisibility(bitmap))
   }
 
   setFlowChecks() {
@@ -788,16 +949,22 @@ export default class extends Controller {
           const count = this.txnCountTarget
           count.dataset.txnCount++
           setTxnCountText(count, count.dataset.txnCount)
-          this.numUnconfirmedTargets.forEach((tr, _i) => {
-            const td = tr.querySelector('td.addr-unconfirmed-count')
+          // Decrement only the unconfirmed counter whose coin matches the
+          // confirmed transaction. The coin type comes from the SSR-rendered
+          // data-coin-type attribute on the row's Coin column.
+          const rowCoinType = row.querySelector('[data-coin-type]')?.dataset.coinType
+          this.numUnconfirmedTargets.forEach((tr) => {
+            if (rowCoinType !== undefined && tr.dataset.coinType !== rowCoinType) return
+            const countSpan = tr.querySelector('.addr-unconfirmed-count')
             let unconfirmedCount = parseInt(tr.dataset.count)
-            if (unconfirmedCount) unconfirmedCount--
+            if (isNaN(unconfirmedCount)) unconfirmedCount = 0
+            if (unconfirmedCount > 0) unconfirmedCount--
             tr.dataset.count = unconfirmedCount
             if (unconfirmedCount === 0) {
-              tr.classList.add('.d-hide')
+              tr.classList.add('d-hide')
               delete tr.dataset.addressTarget
-            } else {
-              td.textContent = unconfirmedCount
+            } else if (countSpan) {
+              countSpan.textContent = unconfirmedCount.toLocaleString()
             }
           })
         }

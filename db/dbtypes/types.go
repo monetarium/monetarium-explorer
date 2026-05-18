@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/big"
 	"sort"
 	"strconv"
 	"strings"
@@ -42,6 +43,10 @@ type CoinStat struct {
 	Amount  string `json:"amount"`
 	Size    uint32 `json:"size"`
 }
+
+// CoinTypeAll is the sentinel value meaning "no coin filter — show all coins".
+// It is used as the default when ?coin= is absent from a request.
+const CoinTypeAll = uint8(255)
 
 // VoteTicketData holds data for a single vote and its associated ticket purchase.
 type VoteTicketData struct {
@@ -1306,6 +1311,8 @@ type AddressRowCompact struct {
 	ValidMainChain bool
 	IsFunding      bool
 	Value          uint64
+	CoinType       uint8
+	SKAValue       string
 }
 
 // AddressRowMerged is like AddressRow for efficient in-memory storage of merged
@@ -1317,29 +1324,89 @@ type AddressRowCompact struct {
 // as needed. Also node that MergedCount is of type int32 since that is big
 // enough and it allows using the padding with TxType and ValidMainChain.
 type AddressRowMerged struct {
-	Address        string
-	TxBlockTime    int64
-	TxHash         ChainHash
-	AtomsCredit    uint64
-	AtomsDebit     uint64
+	Address     string
+	TxBlockTime int64
+	TxHash      ChainHash
+	AtomsCredit uint64
+	AtomsDebit  uint64
+	// SKAAtomsCredit/SKAAtomsDebit accumulate SKA atoms (CoinType != 0). They
+	// are nil for VAR rows. SKA atoms exceed uint64, so they cannot share the
+	// AtomsCredit/AtomsDebit fields and must accumulate as *big.Int.
+	SKAAtomsCredit *big.Int
+	SKAAtomsDebit  *big.Int
 	MergedCount    int32
 	TxType         int16
 	ValidMainChain bool
+	// CoinType is the coin type of the merged transaction. A transaction is
+	// always single-coin, so every row merged under one tx hash shares it.
+	CoinType uint8
 }
 
-// IsFunding indicates the the transaction is "net funding", meaning that
-// AtomsCredit > AtomsDebit.
+// add folds a single non-merged constituent row into the merged row, keeping
+// VAR (uint64) and SKA (*big.Int) accumulators separate by coin type.
+func (arm *AddressRowMerged) add(coinType uint8, isFunding bool, value uint64, skaValue string) {
+	arm.CoinType = coinType
+	if coinType == 0 {
+		if isFunding {
+			arm.AtomsCredit += value
+		} else {
+			arm.AtomsDebit += value
+		}
+		return
+	}
+	if isFunding {
+		if arm.SKAAtomsCredit == nil {
+			arm.SKAAtomsCredit = new(big.Int)
+		}
+		BigAddSKA(arm.SKAAtomsCredit, skaValue)
+	} else {
+		if arm.SKAAtomsDebit == nil {
+			arm.SKAAtomsDebit = new(big.Int)
+		}
+		BigAddSKA(arm.SKAAtomsDebit, skaValue)
+	}
+}
+
+// skaNet returns SKAAtomsCredit - SKAAtomsDebit (signed), treating nil as zero.
+func (arm *AddressRowMerged) skaNet() *big.Int {
+	credit := arm.SKAAtomsCredit
+	if credit == nil {
+		credit = new(big.Int)
+	}
+	debit := arm.SKAAtomsDebit
+	if debit == nil {
+		debit = new(big.Int)
+	}
+	return new(big.Int).Sub(credit, debit)
+}
+
+// IsFunding indicates the transaction is "net funding": for VAR, AtomsCredit >
+// AtomsDebit; for SKA, the net SKA atom balance is positive.
 func (arm *AddressRowMerged) IsFunding() bool {
+	if arm.CoinType != 0 {
+		return arm.skaNet().Sign() > 0
+	}
 	return arm.AtomsCredit > arm.AtomsDebit
 }
 
-// Value returns the absolute (non-negative) net value of the transaction as
-// abs(AtomsCredit - AtomsDebit).
+// Value returns the absolute (non-negative) net VAR value of the transaction as
+// abs(AtomsCredit - AtomsDebit). It is meaningful only for VAR (CoinType == 0);
+// SKA values are reported via SKAValueStr.
 func (arm *AddressRowMerged) Value() uint64 {
 	if arm.AtomsCredit > arm.AtomsDebit {
 		return arm.AtomsCredit - arm.AtomsDebit
 	}
 	return arm.AtomsDebit - arm.AtomsCredit
+}
+
+// SKAValueStr returns the absolute net SKA atom value as a decimal string for
+// SKA rows (CoinType != 0), or "" for VAR rows.
+func (arm *AddressRowMerged) SKAValueStr() string {
+	if arm.CoinType == 0 {
+		return ""
+	}
+	net := arm.skaNet()
+	return net.Abs(net).String()
 }
 
 // SliceAddressRows selects a subset of the elements of the AddressRow slice
@@ -1652,11 +1719,7 @@ func MergeRows(rows []*AddressRow) ([]*AddressRowMerged, error) {
 				ValidMainChain: r.ValidMainChain,
 			}
 
-			if r.IsFunding {
-				mr.AtomsCredit = r.Value
-			} else {
-				mr.AtomsDebit = r.Value
-			}
+			mr.add(r.CoinType, r.IsFunding, r.Value, r.SKAValue)
 
 			hashMap[r.TxHash] = &mr
 			mergedRows = append(mergedRows, &mr)
@@ -1665,11 +1728,7 @@ func MergeRows(rows []*AddressRow) ([]*AddressRowMerged, error) {
 
 		// Update existing transaction in the mergedRows slice.
 		row.MergedCount++
-		if r.IsFunding {
-			row.AtomsCredit += r.Value
-		} else {
-			row.AtomsDebit += r.Value
-		}
+		row.add(r.CoinType, r.IsFunding, r.Value, r.SKAValue)
 	}
 
 	//fmt.Printf("MergeRows: guess = %d, actual = %d\n", numUniqueHashesGuess, len(mergedRows))
@@ -1758,11 +1817,7 @@ func MergeRowsRange(rows []*AddressRow, N, offset int, txnView AddrTxnViewType) 
 				ValidMainChain: r.ValidMainChain,
 			}
 
-			if r.IsFunding {
-				mr.AtomsCredit = r.Value
-			} else {
-				mr.AtomsDebit = r.Value
-			}
+			mr.add(r.CoinType, r.IsFunding, r.Value, r.SKAValue)
 
 			hashMap[r.TxHash] = &mr
 			mergedRows = append(mergedRows, &mr)
@@ -1771,11 +1826,7 @@ func MergeRowsRange(rows []*AddressRow, N, offset int, txnView AddrTxnViewType) 
 
 		// Update existing transaction in the mergedRows slice.
 		row.MergedCount++
-		if r.IsFunding {
-			row.AtomsCredit += r.Value
-		} else {
-			row.AtomsDebit += r.Value
-		}
+		row.add(r.CoinType, r.IsFunding, r.Value, r.SKAValue)
 	}
 
 	return mergedRows, nil
@@ -1808,11 +1859,7 @@ func MergeRowsCompact(rows []*AddressRowCompact) []*AddressRowMerged {
 				ValidMainChain: r.ValidMainChain,
 			}
 
-			if r.IsFunding {
-				mr.AtomsCredit = r.Value
-			} else {
-				mr.AtomsDebit = r.Value
-			}
+			mr.add(r.CoinType, r.IsFunding, r.Value, r.SKAValue)
 
 			hashMap[r.TxHash] = &mr
 			mergedRows = append(mergedRows, &mr)
@@ -1821,11 +1868,7 @@ func MergeRowsCompact(rows []*AddressRowCompact) []*AddressRowMerged {
 
 		// Update existing transaction.
 		row.MergedCount++
-		if r.IsFunding {
-			row.AtomsCredit += r.Value
-		} else {
-			row.AtomsDebit += r.Value
-		}
+		row.add(r.CoinType, r.IsFunding, r.Value, r.SKAValue)
 	}
 
 	//fmt.Printf("MergeRowsCompact: guess = %d, actual = %d\n", numUniqueHashesGuess, len(mergedRows))
@@ -1909,11 +1952,7 @@ func MergeRowsCompactRange(rows []*AddressRowCompact, N, offset int, txnView Add
 				ValidMainChain: r.ValidMainChain,
 			}
 
-			if r.IsFunding {
-				mr.AtomsCredit = r.Value
-			} else {
-				mr.AtomsDebit = r.Value
-			}
+			mr.add(r.CoinType, r.IsFunding, r.Value, r.SKAValue)
 
 			hashMap[r.TxHash] = &mr
 			mergedRows = append(mergedRows, &mr)
@@ -1922,11 +1961,7 @@ func MergeRowsCompactRange(rows []*AddressRowCompact, N, offset int, txnView Add
 
 		// Update existing merged row.
 		row.MergedCount++
-		if r.IsFunding {
-			row.AtomsCredit += r.Value
-		} else {
-			row.AtomsDebit += r.Value
-		}
+		row.add(r.CoinType, r.IsFunding, r.Value, r.SKAValue)
 	}
 
 	return mergedRows
@@ -1946,6 +1981,8 @@ func CompactRows(rows []*AddressRow) []*AddressRowCompact {
 			ValidMainChain: r.ValidMainChain,
 			IsFunding:      r.IsFunding,
 			Value:          r.Value,
+			CoinType:       r.CoinType,
+			SKAValue:       r.SKAValue,
 		})
 	}
 	return compact
@@ -1969,6 +2006,8 @@ func UncompactRows(compact []*AddressRowCompact) []*AddressRow {
 			TxHash:         r.TxHash,
 			TxVinVoutIndex: r.TxVinVoutIndex,
 			Value:          r.Value,
+			CoinType:       r.CoinType,
+			SKAValue:       r.SKAValue,
 			// VinVoutDbID unknown. Do not use.
 			TxType: r.TxType,
 		})
@@ -1997,6 +2036,8 @@ func UncompactMergedRows(merged []*AddressRowMerged) []*AddressRow {
 			// no VinVoutDbID for merged
 			MergedCount: uint64(r.MergedCount),
 			TxType:      r.TxType,
+			CoinType:    r.CoinType,
+			SKAValue:    r.SKAValueStr(),
 		})
 	}
 	return rows
@@ -2037,6 +2078,12 @@ type ChartsData struct {
 	Received    []float64 `json:"received,omitempty"`
 	Sent        []float64 `json:"sent,omitempty"`
 	Net         []float64 `json:"net,omitempty"`
+	// Per-coin running balances (computed server-side via *big.Int for SKA)
+	Balance       []float64 `json:"balance,omitempty"`       // VAR running balance (float64, 8 decimals)
+	BalanceAtoms  []string  `json:"balance_atoms,omitempty"` // SKA running balance (string, 18 decimals)
+	ReceivedAtoms []string  `json:"received_atoms,omitempty"`
+	SentAtoms     []string  `json:"sent_atoms,omitempty"`
+	NetAtoms      []string  `json:"net_atoms,omitempty"`
 }
 
 // ScriptPubKeyData is part of the result of decodescript(ScriptPubKeyHex)
@@ -2234,23 +2281,25 @@ type SideChain struct {
 
 // AddressTx models data for transactions on the address page.
 type AddressTx struct {
-	TxID           ChainHash
-	TxType         string
-	InOutID        uint32
-	Size           uint32
-	FormattedSize  string
-	Total          float64
-	Confirmations  uint64
-	Time           TimeDef
-	ReceivedTotal  float64
-	SentTotal      float64
-	IsFunding      bool
-	MatchedTx      *ChainHash
-	MatchedTxIndex uint32
-	MergedTxnCount uint64 `json:",omitempty"`
-	BlockHeight    uint32
-	CoinType       uint8
-	SKAValue       string
+	TxID             ChainHash
+	TxType           string
+	InOutID          uint32
+	Size             uint32
+	FormattedSize    string
+	Total            float64
+	Confirmations    uint64
+	Time             TimeDef
+	ReceivedTotal    float64
+	SentTotal        float64
+	ReceivedTotalSKA string `json:"received_total_ska,omitempty"`
+	SentTotalSKA     string `json:"sent_total_ska,omitempty"`
+	IsFunding        bool
+	MatchedTx        *ChainHash
+	MatchedTxIndex   uint32
+	MergedTxnCount   uint64 `json:",omitempty"`
+	BlockHeight      uint32
+	CoinType         uint8
+	SKAValue         string
 }
 
 // Link formats a link for the transaction, with vin/vout index if the AddressTx
@@ -2321,8 +2370,10 @@ type AddressInfo struct {
 	IsMerged      bool
 
 	// NumUnconfirmed is the number of unconfirmed txns for the address
-	NumUnconfirmed  int64
-	UnconfirmedTxns *AddressTransactions
+	NumUnconfirmed int64
+	// NumUnconfirmedByCoin is the count of unconfirmed transactions per coin type.
+	NumUnconfirmedByCoin map[uint8]int64 `json:"num_unconfirmed_by_coin,omitempty"`
+	UnconfirmedTxns      *AddressTransactions
 
 	// Transactions on the current page
 	Transactions    []*AddressTx
@@ -2335,8 +2386,14 @@ type AddressInfo struct {
 	AmountSent      dcrutil.Amount
 	AmountUnspent   dcrutil.Amount
 
-	// Balance summarizes spend and unspent amounts for all known transactions.
+	// Balance holds the full per-coin balances for all ActiveCoins.
+	// The summary card reads this; it always contains all coins regardless of ?coin=.
 	Balance *AddressBalance
+
+	// ActiveCoins is the sorted list of coin types present at this address.
+	// VAR (0) is always present if any VAR transactions exist. SKA types are
+	// included only if they have activity at this address.
+	ActiveCoins []uint8 `json:"active_coins,omitempty"`
 
 	// KnownTransactions refers to the total transaction count in the DB, the
 	// sum of funding (crediting) and spending (debiting) txns.
@@ -2345,16 +2402,78 @@ type AddressInfo struct {
 	KnownSpendingTxns int64
 }
 
+// CoinBalance represents the balance for a specific coin type at an address.
+// For VAR (CoinType==0): use TotalSpent, TotalUnspent, TotalReceived (int64).
+// For SKA (CoinType>0): use TotalSpentSKA, TotalUnspentSKA, TotalReceivedSKA (string).
+// This is an invariant every read site must respect.
+type CoinBalance struct {
+	CoinType         uint8  `json:"coin_type"`
+	NumSpent         int64  `json:"num_spent"`
+	NumUnspent       int64  `json:"num_unspent"`
+	TotalSpent       int64  `json:"total_spent,omitempty"`        // VAR atoms (1e8) - meaningful when CoinType == 0
+	TotalUnspent     int64  `json:"total_unspent,omitempty"`      // VAR atoms (1e8) - meaningful when CoinType == 0
+	TotalSpentSKA    string `json:"total_spent_ska,omitempty"`    // SKA atoms as string (1e18) - meaningful when CoinType > 0
+	TotalUnspentSKA  string `json:"total_unspent_ska,omitempty"`  // SKA atoms as string (1e18) - meaningful when CoinType > 0
+	TotalReceived    int64  `json:"total_received,omitempty"`     // VAR atoms - precomputed: TotalSpent + TotalUnspent
+	TotalReceivedSKA string `json:"total_received_ska,omitempty"` // SKA atoms - precomputed: TotalSpentSKA + TotalUnspentSKA
+}
+
 // AddressBalance represents the number and value of spent and unspent outputs
 // for an address.
 type AddressBalance struct {
-	Address      string  `json:"address"`
-	NumSpent     int64   `json:"num_stxos"`
-	NumUnspent   int64   `json:"num_utxos"`
-	TotalSpent   int64   `json:"amount_spent"`
-	TotalUnspent int64   `json:"amount_unspent"`
-	FromStake    float64 `json:"from_stake"`
-	ToStake      float64 `json:"to_stake"`
+	Address      string                 `json:"address"`
+	Coins        map[uint8]*CoinBalance `json:"coins,omitempty"` // Per-coin balances keyed by coin_type
+	TotalOutputs int64                  `json:"total_outputs"`   // Σ(NumSpent + NumUnspent) across all coins
+	TotalInputs  int64                  `json:"total_inputs"`    // Σ(NumSpent) across all coins
+	FromStake    float64                `json:"from_stake"`      // VAR-only stake percentage
+	ToStake      float64                `json:"to_stake"`        // VAR-only stake percentage
+
+	// TODO: Remove these fields once frontend is updated for multi-coin support
+	TotalUnspent int64 `json:"total_unspent"`
+	TotalSpent   int64 `json:"total_spent"`
+	NumSpent     int64 `json:"num_spent"`
+	NumUnspent   int64 `json:"num_unspent"`
+}
+
+// NewCoinBalance creates a new CoinBalance for the given coin type.
+func NewCoinBalance(coinType uint8) *CoinBalance {
+	return &CoinBalance{CoinType: coinType}
+}
+
+// BigAddSKA adds a decimal-string SKA atom value into a *big.Int accumulator.
+func BigAddSKA(acc *big.Int, s string) {
+	if s == "" || s == "0" {
+		return
+	}
+	if v, ok := new(big.Int).SetString(s, 10); ok {
+		acc.Add(acc, v)
+	}
+}
+
+// bigAddSKA is the package-local alias.
+func bigAddSKA(acc *big.Int, s string) { BigAddSKA(acc, s) }
+
+// FormatSKACoins converts a SKA atom string to a bare decimal coin amount
+// (atoms ÷ 1e18), with no coin label and trailing zeros trimmed (e.g. "1.23",
+// "0.0000000000000005"). Invalid/empty input yields "0". This is the
+// machine-readable form used by the CSV export, where the coin is identified
+// by a separate column.
+//
+// Note: not to be confused with txhelpers.FormatSKAAtoms, which returns the
+// raw atom integer string unchanged (no ÷1e18).
+func FormatSKACoins(atomsStr string) string {
+	atoms, ok := new(big.Int).SetString(atomsStr, 10)
+	if !ok {
+		return "0"
+	}
+	denom := new(big.Int).Exp(big.NewInt(10), big.NewInt(18), nil)
+	coins := new(big.Float).Quo(new(big.Float).SetInt(atoms), new(big.Float).SetInt(denom))
+	s := coins.Text('f', 18)
+	if strings.Contains(s, ".") {
+		s = strings.TrimRight(s, "0")
+		s = strings.TrimRight(s, ".")
+	}
+	return s
 }
 
 // HasStakeOutputs checks whether any of the Address tx outputs were
@@ -2382,14 +2501,21 @@ func ReduceAddressHistory(addrHist []*AddressRow) (*AddressInfo, float64, float6
 		return nil, 0, 0
 	}
 
-	var received, sent, fromStake, toStake int64
+	var receivedVAR, sentVAR, fromStakeVAR, toStakeVAR int64
 	var creditTxns, debitTxns []*AddressTx
 	transactions := make([]*AddressTx, 0, len(addrHist))
+	coins := make(map[uint8]*CoinBalance)
+	receivedByCoin := make(map[uint8]int64)
+	sentByCoin := make(map[uint8]int64)
+	receivedSKAByCoin := make(map[uint8]*big.Int)
+	spentSKAByCoin := make(map[uint8]*big.Int)
+
 	for _, addrOut := range addrHist {
 		if !addrOut.ValidMainChain {
 			continue
 		}
-		coin := dcrutil.Amount(addrOut.Value).ToCoin()
+
+		coinType := addrOut.CoinType
 		txType := txhelpers.TxTypeToString(int(addrOut.TxType))
 		tx := AddressTx{
 			Time:           addrOut.TxBlockTime,
@@ -2399,33 +2525,48 @@ func ReduceAddressHistory(addrHist []*AddressRow) (*AddressInfo, float64, float6
 			MatchedTx:      addrOut.MatchingTxHash,
 			IsFunding:      addrOut.IsFunding,
 			MergedTxnCount: addrOut.MergedCount,
+			CoinType:       coinType,
+			SKAValue:       addrOut.SKAValue,
 		}
 
+		if coins[coinType] == nil {
+			coins[coinType] = NewCoinBalance(coinType)
+		}
+		coinBalance := coins[coinType]
+
 		if addrOut.IsFunding {
-			// Funding transaction
-			if addrOut.CoinType == 0 {
-				received += int64(addrOut.Value)
-				tx.ReceivedTotal = coin
+			if coinType == 0 {
+				receivedVAR += int64(addrOut.Value)
+				receivedByCoin[0] += int64(addrOut.Value)
+				tx.ReceivedTotal = dcrutil.Amount(addrOut.Value).ToCoin()
 				if txType != "Regular" {
-					fromStake += int64(addrOut.Value)
+					fromStakeVAR += int64(addrOut.Value)
 				}
 			} else {
-				tx.SKAValue = addrOut.SKAValue
-				tx.CoinType = addrOut.CoinType
+				tx.ReceivedTotalSKA = addrOut.SKAValue
+				if receivedSKAByCoin[coinType] == nil {
+					receivedSKAByCoin[coinType] = new(big.Int)
+				}
+				bigAddSKA(receivedSKAByCoin[coinType], addrOut.SKAValue)
 			}
+			coinBalance.NumUnspent++
 			creditTxns = append(creditTxns, &tx)
 		} else {
-			// Spending transaction
-			if addrOut.CoinType == 0 {
-				sent += int64(addrOut.Value)
-				tx.SentTotal = coin
+			if coinType == 0 {
+				sentVAR += int64(addrOut.Value)
+				sentByCoin[0] += int64(addrOut.Value)
+				tx.SentTotal = dcrutil.Amount(addrOut.Value).ToCoin()
 				if txType != "Regular" {
-					toStake += int64(addrOut.Value)
+					toStakeVAR += int64(addrOut.Value)
 				}
 			} else {
-				tx.SKAValue = addrOut.SKAValue
-				tx.CoinType = addrOut.CoinType
+				tx.SentTotalSKA = addrOut.SKAValue
+				if spentSKAByCoin[coinType] == nil {
+					spentSKAByCoin[coinType] = new(big.Int)
+				}
+				bigAddSKA(spentSKAByCoin[coinType], addrOut.SKAValue)
 			}
+			coinBalance.NumSpent++
 			debitTxns = append(debitTxns, &tx)
 		}
 
@@ -2433,12 +2574,62 @@ func ReduceAddressHistory(addrHist []*AddressRow) (*AddressInfo, float64, float6
 	}
 
 	var fromStakeFraction, toStakeFraction float64
-	if sent > 0 {
-		toStakeFraction = float64(toStake) / float64(sent)
+	if sentVAR > 0 {
+		toStakeFraction = float64(toStakeVAR) / float64(sentVAR)
 	}
-	if received > 0 {
-		fromStakeFraction = float64(fromStake) / float64(received)
+	if receivedVAR > 0 {
+		fromStakeFraction = float64(fromStakeVAR) / float64(receivedVAR)
 	}
+
+	balance := &AddressBalance{
+		Address:      addrHist[0].Address,
+		Coins:        coins,
+		TotalInputs:  0,
+		TotalOutputs: 0,
+	}
+
+	// Populate mock fields for frontend backward compatibility (using VAR)
+	if varBal, ok := coins[0]; ok {
+		balance.TotalUnspent = varBal.TotalUnspent
+		balance.TotalSpent = varBal.TotalSpent
+		balance.NumSpent = varBal.NumSpent
+		balance.NumUnspent = varBal.NumUnspent
+	}
+
+	for ct, cb := range coins {
+		cb.TotalSpent = sentByCoin[ct]
+		cb.TotalUnspent = receivedByCoin[ct] - sentByCoin[ct]
+		cb.TotalReceived = receivedByCoin[ct]
+		if ct > 0 {
+			recv := receivedSKAByCoin[ct]
+			spent := spentSKAByCoin[ct]
+			if recv != nil {
+				cb.TotalReceivedSKA = recv.String()
+			}
+			if spent != nil {
+				cb.TotalSpentSKA = spent.String()
+			}
+			// TotalUnspentSKA = received - spent
+			var unspent big.Int
+			if recv != nil {
+				unspent.Set(recv)
+			}
+			if spent != nil {
+				unspent.Sub(&unspent, spent)
+			}
+			if unspent.Sign() != 0 {
+				cb.TotalUnspentSKA = unspent.String()
+			}
+		}
+		balance.TotalInputs += cb.NumSpent
+		balance.TotalOutputs += cb.NumSpent + cb.NumUnspent
+	}
+
+	sortedCoins := make([]uint8, 0, len(coins))
+	for ct := range coins {
+		sortedCoins = append(sortedCoins, ct)
+	}
+	sort.Slice(sortedCoins, func(i, j int) bool { return sortedCoins[i] < sortedCoins[j] })
 
 	ai := &AddressInfo{
 		Address:         addrHist[0].Address,
@@ -2447,9 +2638,11 @@ func ReduceAddressHistory(addrHist []*AddressRow) (*AddressInfo, float64, float6
 		TxnsSpending:    debitTxns,
 		NumFundingTxns:  int64(len(creditTxns)),
 		NumSpendingTxns: int64(len(debitTxns)),
-		AmountReceived:  dcrutil.Amount(received),
-		AmountSent:      dcrutil.Amount(sent),
-		AmountUnspent:   dcrutil.Amount(received - sent),
+		AmountReceived:  dcrutil.Amount(receivedVAR),
+		AmountSent:      dcrutil.Amount(sentVAR),
+		AmountUnspent:   dcrutil.Amount(receivedVAR - sentVAR),
+		Balance:         balance,
+		ActiveCoins:     sortedCoins,
 	}
 	return ai, fromStakeFraction, toStakeFraction
 }

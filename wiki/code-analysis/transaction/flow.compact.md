@@ -12,3 +12,6 @@
   - [ ] Did you update `explorertypes.MempoolTx` (Unconfirmed)?
   - [ ] Are changes reflected in `homepage_controller.js` extraction?
   - [ ] Are changes reflected in `cmd/dcrdata/views/tx.tmpl` Go templates?
+
+See also:
+- /wiki/code-analysis/address/flow.compact.md — the address page consumes the same `tx.tmpl` rendering and inherits the SKA template gap (address links upstream with `depends-on`).

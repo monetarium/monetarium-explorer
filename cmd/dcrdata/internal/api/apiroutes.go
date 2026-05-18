@@ -22,6 +22,14 @@ import (
 	"sync"
 	"time"
 
+	apitypes "github.com/monetarium/monetarium-explorer/api/types"
+	m "github.com/monetarium/monetarium-explorer/cmd/dcrdata/internal/middleware"
+	"github.com/monetarium/monetarium-explorer/db/cache"
+	"github.com/monetarium/monetarium-explorer/db/dbtypes"
+	"github.com/monetarium/monetarium-explorer/exchanges"
+	"github.com/monetarium/monetarium-explorer/gov/agendas"
+	"github.com/monetarium/monetarium-explorer/gov/politeia"
+	"github.com/monetarium/monetarium-explorer/txhelpers"
 	"github.com/monetarium/monetarium-node/blockchain/standalone"
 	"github.com/monetarium/monetarium-node/chaincfg"
 	"github.com/monetarium/monetarium-node/chaincfg/chainhash"
@@ -31,15 +39,6 @@ import (
 	"github.com/monetarium/monetarium-node/txscript/stdaddr"
 	"github.com/monetarium/monetarium-node/txscript/stdscript"
 	"github.com/monetarium/monetarium-node/wire"
-
-	apitypes "github.com/monetarium/monetarium-explorer/api/types"
-	m "github.com/monetarium/monetarium-explorer/cmd/dcrdata/internal/middleware"
-	"github.com/monetarium/monetarium-explorer/db/cache"
-	"github.com/monetarium/monetarium-explorer/db/dbtypes"
-	"github.com/monetarium/monetarium-explorer/exchanges"
-	"github.com/monetarium/monetarium-explorer/gov/agendas"
-	"github.com/monetarium/monetarium-explorer/gov/politeia"
-	"github.com/monetarium/monetarium-explorer/txhelpers"
 )
 
 // maxBlockRangeCount is the maximum number of blocks that can be requested at
@@ -56,20 +55,20 @@ type DataSource interface {
 	GetBlockByHash(context.Context, string) (*wire.MsgBlock, error)
 	SpendingTransaction(ctx context.Context, fundingTx string, vout uint32) (string, uint32, error)
 	SpendingTransactions(ctx context.Context, fundingTxID string) ([]string, []uint32, []uint32, error)
-	AddressHistory(ctx context.Context, address string, N, offset int64, txnType dbtypes.AddrTxnViewType) ([]*dbtypes.AddressRow, *dbtypes.AddressBalance, error)
+	AddressHistory(ctx context.Context, address string, N, offset int64, txnType dbtypes.AddrTxnViewType, coinType uint8) ([]*dbtypes.AddressRow, *dbtypes.AddressBalance, error)
 	FillAddressTransactions(ctx context.Context, addrInfo *dbtypes.AddressInfo) error
 	AddressTransactionDetails(ctx context.Context, addr string, count, skip int64,
 		txnType dbtypes.AddrTxnViewType) (*apitypes.Address, error)
 	AddressTotals(ctx context.Context, address string) (*apitypes.AddressTotals, error)
 	VotesInBlock(ctx context.Context, hash string) (int16, error)
 	TxHistoryData(ctx context.Context, address string, addrChart dbtypes.HistoryChart,
-		chartGroupings dbtypes.TimeBasedGrouping) (*dbtypes.ChartsData, error)
+		chartGroupings dbtypes.TimeBasedGrouping, coinType uint8) (*dbtypes.ChartsData, error)
 	TreasuryBalance(context.Context) (*dbtypes.TreasuryBalance, error)
 	BinnedTreasuryIO(ctx context.Context, chartGroupings dbtypes.TimeBasedGrouping) (*dbtypes.ChartsData, error)
 	TicketPoolVisualization(ctx context.Context, interval dbtypes.TimeBasedGrouping) (
 		*dbtypes.PoolTicketsData, *dbtypes.PoolTicketsData, *dbtypes.PoolTicketsData, int64, error)
 	AgendaVotes(ctx context.Context, agendaID string, chartType int) (*dbtypes.AgendaVoteChoices, error)
-	AddressRowsCompact(ctx context.Context, address string) ([]*dbtypes.AddressRowCompact, error)
+	AddressRowsCompact(ctx context.Context, address string, coinType uint8) ([]*dbtypes.AddressRowCompact, error)
 	Height() int64
 	IsDCP0010Active(height int64) bool
 	IsDCP0011Active(height int64) bool
@@ -112,6 +111,7 @@ type DataSource interface {
 	GetMempoolSSTxDetails(N int) *apitypes.MempoolTicketDetails
 	GetAddressTransactionsRawWithSkip(ctx context.Context, addr string, count, skip int) []*apitypes.AddressTxRaw
 	GetMempoolPriceCountTime() *apitypes.PriceCountTime
+	LoadSKASupplyForCoin(ctx context.Context, charts *cache.ChartData, coinType uint8) error
 }
 
 // dcrdata application context used by all route handlers
@@ -581,7 +581,54 @@ func (c *appContext) getBlockVerbose(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, blockVerbose, m.GetIndentCtx(r))
+	// Get summary for multi-coin data
+	summary := c.DataSource.GetSummaryByHash(ctx, hash, false)
+
+	// Build response struct with embedded verbose result
+	type verboseResponse struct {
+		*chainjson.GetBlockVerboseResult
+		TotalSent map[string]string `json:"total_sent,omitempty"`
+		Fees      map[string]string `json:"fees,omitempty"`
+	}
+
+	response := verboseResponse{
+		GetBlockVerboseResult: blockVerbose,
+	}
+
+	// Add total_sent map (coin type key -> amount string)
+	if summary != nil && summary.CoinAmounts != nil {
+		response.TotalSent = make(map[string]string)
+		for ct, amt := range summary.CoinAmounts {
+			if amt != "0" && amt != "" {
+				response.TotalSent[fmt.Sprintf("%d", ct)] = amt
+			}
+		}
+
+		// Add fees map (coin type key -> fee string)
+		// VAR fees from MiningFee (total VAR tx fees in block); SKA fees from SSFeeTotalsByCoin
+		response.Fees = make(map[string]string)
+
+		// VAR fees from MiningFee
+		if summary.MiningFee != nil && *summary.MiningFee != 0 {
+			response.Fees["0"] = fmt.Sprintf("%d", *summary.MiningFee)
+		}
+
+		// SKA fees from SSFeeTotalsByCoin (stake fee distribution)
+		if summary.SSFeeTotalsByCoin != nil {
+			for ct, fee := range summary.SSFeeTotalsByCoin {
+				if fee != "0" && fee != "" {
+					response.Fees[fmt.Sprintf("%d", ct)] = fee
+				}
+			}
+		}
+
+		// Remove empty fees map
+		if len(response.Fees) == 0 {
+			response.Fees = nil
+		}
+	}
+
+	writeJSON(w, response, m.GetIndentCtx(r))
 }
 
 func (c *appContext) getVoteInfo(w http.ResponseWriter, r *http.Request) {
@@ -1710,11 +1757,8 @@ func (c *appContext) addressIoCsv(crlf bool, w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	// TODO: Improve the DB component also to avoid retrieving all row data
-	// and/or put a hard limit on the number of rows that can be retrieved.
-	// However it is a slice of pointers, and they are are also in the address
-	// cache and thus shared across calls to the same address.
-	rows, err := c.DataSource.AddressRowsCompact(ctx, address)
+	coinType := m.GetCoinCtx(r)
+	rows, err := c.DataSource.AddressRowsCompact(ctx, address, coinType)
 	if err != nil {
 		log.Errorf("Failed to fetch AddressTxIoCsv: %v", err)
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
@@ -1730,7 +1774,7 @@ func (c *appContext) addressIoCsv(crlf bool, w http.ResponseWriter, r *http.Requ
 	writer.UseCRLF = crlf
 
 	err = writer.Write([]string{"tx_hash", "direction", "io_index",
-		"valid_mainchain", "value", "time_stamp", "tx_type", "matching_tx_hash"})
+		"valid_mainchain", "coin_type", "amount", "time_stamp", "tx_type", "matching_tx_hash"})
 	if err != nil {
 		return // too late to write an error code
 	}
@@ -1755,12 +1799,20 @@ func (c *appContext) addressIoCsv(crlf bool, w http.ResponseWriter, r *http.Requ
 			matchingTx = r.MatchingTxHash.String()
 		}
 
+		var amount string
+		if r.CoinType == 0 {
+			amount = strconv.FormatFloat(dcrutil.Amount(r.Value).ToCoin(), 'f', 8, 64)
+		} else {
+			amount = dbtypes.FormatSKACoins(r.SKAValue)
+		}
+
 		err = writer.Write([]string{
 			r.TxHash.String(),
 			strDirection,
 			strconv.FormatUint(uint64(r.TxVinVoutIndex), 10),
 			strValidMainchain,
-			strconv.FormatFloat(dcrutil.Amount(r.Value).ToCoin(), 'f', -1, 64),
+			strconv.FormatUint(uint64(r.CoinType), 10),
+			amount,
 			strconv.FormatInt(r.TxBlockTime, 10),
 			txhelpers.TxTypeToString(int(r.TxType)),
 			matchingTx,
@@ -1769,7 +1821,6 @@ func (c *appContext) addressIoCsv(crlf bool, w http.ResponseWriter, r *http.Requ
 			return // too late to write an error code
 		}
 		writer.Flush()
-		wf.Flush()
 	}
 }
 
@@ -1794,7 +1845,8 @@ func (c *appContext) getAddressTxTypesData(w http.ResponseWriter, r *http.Reques
 		http.Error(w, http.StatusText(http.StatusUnprocessableEntity), http.StatusUnprocessableEntity)
 		return
 	}
-	data, err := c.DataSource.TxHistoryData(ctx, address, dbtypes.TxsType, interval)
+	coinType := m.GetCoinCtx(r)
+	data, err := c.DataSource.TxHistoryData(ctx, address, dbtypes.TxsType, interval, coinType)
 	if dbtypes.IsTimeoutErr(err) {
 		apiLog.Errorf("TxHistoryData: %v", err)
 		http.Error(w, "Database timeout.", http.StatusServiceUnavailable)
@@ -1824,12 +1876,14 @@ func (c *appContext) getAddressTxAmountFlowData(w http.ResponseWriter, r *http.R
 		http.Error(w, http.StatusText(http.StatusUnprocessableEntity), http.StatusUnprocessableEntity)
 		return
 	}
+
 	interval := dbtypes.TimeGroupingFromStr(chartGrouping)
 	if interval == dbtypes.UnknownGrouping {
 		http.Error(w, http.StatusText(http.StatusUnprocessableEntity), http.StatusUnprocessableEntity)
 		return
 	}
-	data, err := c.DataSource.TxHistoryData(ctx, address, dbtypes.AmountFlow, interval)
+	coinType := m.GetCoinCtx(r)
+	data, err := c.DataSource.TxHistoryData(ctx, address, dbtypes.AmountFlow, interval, coinType)
 	if dbtypes.IsTimeoutErr(err) {
 		apiLog.Errorf("TxHistoryData: %v", err)
 		http.Error(w, "Database timeout.", http.StatusServiceUnavailable)
@@ -1888,15 +1942,34 @@ func (c *appContext) getTreasuryIO(w http.ResponseWriter, r *http.Request) {
 func (c *appContext) ChartTypeData(w http.ResponseWriter, r *http.Request) {
 	chartType := m.GetChartTypeCtx(r)
 	bin := r.URL.Query().Get("bin")
-	// Support the deprecated URL parameter "zoom".
 	if bin == "" {
 		bin = r.URL.Query().Get("zoom")
 	}
 	axis := r.URL.Query().Get("axis")
+
+	// Check if this is an SKA supply chart and if data needs to be loaded
+	if c.charts != nil && cache.IsSKASupplyChart(chartType) {
+		coinType := cache.SkaCoinType(chartType)
+		if coinType > 0 && !c.charts.SKASupplyExists(coinType) {
+			if err := c.DataSource.LoadSKASupplyForCoin(r.Context(), c.charts, coinType); err != nil {
+				log.Warnf("ChartTypeData: failed to load SKA supply for coin type %d: %v", coinType, err)
+			}
+		}
+	}
+
+	if c.charts == nil {
+		http.Error(w, "chart data not available", http.StatusServiceUnavailable)
+		return
+	}
+
 	chartData, err := c.charts.Chart(chartType, bin, axis)
 	if err != nil {
-		http.NotFound(w, r)
 		log.Warnf(`Error fetching chart %q at bin level '%s': %v`, chartType, bin, err)
+		if strings.Contains(err.Error(), "not initialized") || strings.Contains(err.Error(), "no SKA supply data found") {
+			http.Error(w, "chart data not available", http.StatusServiceUnavailable)
+			return
+		}
+		http.NotFound(w, r)
 		return
 	}
 	writeJSONBytes(w, chartData)

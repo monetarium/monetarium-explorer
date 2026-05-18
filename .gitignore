@@ -9,6 +9,7 @@ __debug_bin*
 debug
 *.cert
 *.key
+cmd/dcrdata/dcrdata
 cmd/dcrdata/monetarium-explorer
 dcrdata.conf
 /vendor/
@@ -69,3 +70,5 @@ sqlite_*.sql
 db/dcrpg/chkdcrpg/chkdcrpg
 go.work
 go.work.sum
+.claude/settings.local.json
+.github/scripts/tasks.json

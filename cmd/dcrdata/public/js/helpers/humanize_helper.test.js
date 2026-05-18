@@ -18,6 +18,33 @@ describe('humanize.formatCoinAtoms', () => {
 })
 
 describe('humanize.threeSigFigs', () => {
+  // >= 1e17 - integer quadrillions
+  it('formats 1e17 as "100Q"', () => expect(humanize.threeSigFigs(1e17)).toBe('100Q'))
+  it('formats 2.5e17 as "250Q"', () => expect(humanize.threeSigFigs(2.5e17)).toBe('250Q'))
+
+  // >= 1e16 - one-decimal quadrillions
+  it('formats 1e16 as "10.0Q"', () => expect(humanize.threeSigFigs(1e16)).toBe('10.0Q'))
+  it('formats 1.55e16 as "15.5Q"', () => expect(humanize.threeSigFigs(1.55e16)).toBe('15.5Q'))
+
+  // >= 1e15 - two-decimal quadrillions
+  it('formats 1e15 as "1.00Q"', () => expect(humanize.threeSigFigs(1e15)).toBe('1.00Q'))
+  it('formats 1.235e15 as "1.24Q"', () => expect(humanize.threeSigFigs(1.235e15)).toBe('1.24Q'))
+
+  // >= 1e14 - integer trillions
+  it('formats 1e14 as "100T"', () => expect(humanize.threeSigFigs(1e14)).toBe('100T'))
+  it('formats 2.5e14 as "250T"', () => expect(humanize.threeSigFigs(2.5e14)).toBe('250T'))
+  // regression: ~9e14 must format as "900T", not "900000B"
+  it('formats ~9e14 (real-world SKA supply) as "900T"', () =>
+    expect(humanize.threeSigFigs(8.9999999998687e14)).toBe('900T'))
+
+  // >= 1e13 - one-decimal trillions
+  it('formats 1e13 as "10.0T"', () => expect(humanize.threeSigFigs(1e13)).toBe('10.0T'))
+  it('formats 1.55e13 as "15.5T"', () => expect(humanize.threeSigFigs(1.55e13)).toBe('15.5T'))
+
+  // >= 1e12 - two-decimal trillions
+  it('formats 1e12 as "1.00T"', () => expect(humanize.threeSigFigs(1e12)).toBe('1.00T'))
+  it('formats 1.235e12 as "1.24T"', () => expect(humanize.threeSigFigs(1.235e12)).toBe('1.24T'))
+
   // >= 1e11 - integer billions
   it('formats 1e11 as "100B"', () => expect(humanize.threeSigFigs(1e11)).toBe('100B'))
   it('formats 2.5e11 as "250B"', () => expect(humanize.threeSigFigs(2.5e11)).toBe('250B'))

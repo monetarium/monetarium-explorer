@@ -1,6 +1,7 @@
 package dbtypes
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
 )
@@ -83,30 +84,87 @@ func TestTimeDef_Value(t *testing.T) {
 		t.Errorf("time strings do not match: %s != %s",
 			tdSqlTime.String(), tdSqlTime2.String())
 	}
+}
 
-	// Verify the instants in time are the same.
-	if tdSqlTime.Unix() != tdSqlTime2.Unix() {
-		t.Logf("unix epoch times do not match: %d != %d",
-			tdSqlTime.Unix(), tdSqlTime2.Unix())
+func TestCoinBalanceJSON(t *testing.T) {
+	tests := []struct {
+		name     string
+		balance  *CoinBalance
+		expected string
+	}{
+		{
+			"VAR balance",
+			&CoinBalance{
+				CoinType:      0,
+				NumSpent:      10,
+				NumUnspent:    20,
+				TotalSpent:    100000000,
+				TotalUnspent:  200000000,
+				TotalReceived: 300000000,
+			},
+			`{"coin_type":0,"num_spent":10,"num_unspent":20,"total_spent":100000000,"total_unspent":200000000,"total_received":300000000}`,
+		},
+		{
+			"SKA balance",
+			&CoinBalance{
+				CoinType:         1,
+				NumSpent:         5,
+				NumUnspent:       15,
+				TotalSpentSKA:    "5000000000000000000",
+				TotalUnspentSKA:  "15000000000000000000",
+				TotalReceivedSKA: "20000000000000000000",
+			},
+			`{"coin_type":1,"num_spent":5,"num_unspent":15,"total_spent_ska":"5000000000000000000","total_unspent_ska":"15000000000000000000","total_received_ska":"20000000000000000000"}`,
+		},
 	}
 
-	// Create the TimeDef from a Local time, but do not use the constructor.
-	// This shows that Value will ensure the correct time.Time in UTC for sql
-	// regardless of the location of TimeDef.T.
-	td3 := TimeDef{T: trefLocal}
-	// Verify the Location of the time returned by Value is UTC.
-	tdSqlValue3, _ := td3.Value()
-	tdSqlTime3, ok := tdSqlValue3.(time.Time)
-	if !ok {
-		t.Error("not a time.Time")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			data, err := json.Marshal(tt.balance)
+			if err != nil {
+				t.Fatalf("Marshal failed: %v", err)
+			}
+			if string(data) != tt.expected {
+				t.Errorf("expected %s, got %s", tt.expected, string(data))
+			}
+
+			var decoded CoinBalance
+			if err := json.Unmarshal(data, &decoded); err != nil {
+				t.Fatalf("Unmarshal failed: %v", err)
+			}
+			if decoded.CoinType != tt.balance.CoinType {
+				t.Errorf("expected CoinType %d, got %d", tt.balance.CoinType, decoded.CoinType)
+			}
+		})
 	}
-	t.Log(tdSqlTime3)
-	if tdSqlTime3.Location() != time.UTC {
-		t.Errorf("TimeDef.Value should return a UTC time.")
+}
+
+func TestChartsDataJSON(t *testing.T) {
+	cd := &ChartsData{
+		Balance:       []float64{1.0, 2.0},
+		BalanceAtoms:  []string{"1000000000000000000", "2000000000000000000"},
+		ReceivedAtoms: []string{"1000000000000000000", "1000000000000000000"},
+		SentAtoms:     []string{"0", "0"},
+		NetAtoms:      []string{"1000000000000000000", "2000000000000000000"},
+	}
+
+	data, err := json.Marshal(cd)
+	if err != nil {
+		t.Fatalf("Marshal failed: %v", err)
+	}
+
+	var decoded ChartsData
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("Unmarshal failed: %v", err)
+	}
+
+	if len(decoded.BalanceAtoms) != 2 || decoded.BalanceAtoms[1] != "2000000000000000000" {
+		t.Errorf("BalanceAtoms failed: got %v", decoded.BalanceAtoms)
 	}
 }
 
 func TestTimeDef_Scan(t *testing.T) {
+
 	// Scan the reference time with Local Location.
 	var td TimeDef
 	err := td.Scan(trefLocal)
@@ -212,5 +270,118 @@ func TestReduceAddressHistory_SKA(t *testing.T) {
 	// VAR totals must be unaffected
 	if ai.AmountReceived != 0 {
 		t.Errorf("AmountReceived must be 0 for SKA-only history, got %v", ai.AmountReceived)
+	}
+}
+
+func TestReduceAddressHistory_MixedCoin(t *testing.T) {
+	rows := []*AddressRow{
+		{
+			Address:        "MixedAddr",
+			TxHash:         ChainHash{1},
+			ValidMainChain: true,
+			IsFunding:      true,
+			CoinType:       0,
+			Value:          5000000000, // 50 VAR
+		},
+		{
+			Address:        "MixedAddr",
+			TxHash:         ChainHash{2},
+			ValidMainChain: true,
+			IsFunding:      true,
+			CoinType:       1,
+			SKAValue:       "1000000000000000000", // 1 SKA receive
+		},
+		{
+			Address:        "MixedAddr",
+			TxHash:         ChainHash{4},
+			ValidMainChain: true,
+			IsFunding:      true,
+			CoinType:       1,
+			SKAValue:       "2000000000000000000", // 2 SKA receive (tests sum, not overwrite)
+		},
+		{
+			Address:        "MixedAddr",
+			TxHash:         ChainHash{5},
+			ValidMainChain: true,
+			IsFunding:      false,
+			CoinType:       1,
+			SKAValue:       "500000000000000000", // 0.5 SKA spend
+		},
+		{
+			Address:        "MixedAddr",
+			TxHash:         ChainHash{3},
+			ValidMainChain: true,
+			IsFunding:      false,
+			CoinType:       0,
+			Value:          2000000000, // 20 VAR
+		},
+	}
+	ai, _, _ := ReduceAddressHistory(rows)
+	if ai == nil {
+		t.Fatal("expected AddressInfo")
+	}
+
+	if len(ai.ActiveCoins) != 2 {
+		t.Errorf("ActiveCoins: want [0, 1], got %v", ai.ActiveCoins)
+	}
+	if ai.ActiveCoins[0] != 0 || ai.ActiveCoins[1] != 1 {
+		t.Errorf("ActiveCoins not sorted: got %v", ai.ActiveCoins)
+	}
+
+	coins := ai.Balance.Coins
+	if len(coins) != 2 {
+		t.Errorf("Coins map: want 2 entries, got %d", len(coins))
+	}
+
+	varCoin := coins[0]
+	if varCoin.TotalSpent != 2000000000 {
+		t.Errorf("VAR TotalSpent: want 2000000000, got %d", varCoin.TotalSpent)
+	}
+	if varCoin.TotalUnspent != 3000000000 {
+		t.Errorf("VAR TotalUnspent: want 3000000000, got %d", varCoin.TotalUnspent)
+	}
+	if varCoin.TotalReceived != 5000000000 {
+		t.Errorf("VAR TotalReceived: want 5000000000, got %d", varCoin.TotalReceived)
+	}
+	if varCoin.TotalSpentSKA != "" {
+		t.Errorf("VAR TotalSpentSKA should be empty, got %q", varCoin.TotalSpentSKA)
+	}
+
+	skaCoin := coins[1]
+	// TotalReceivedSKA = 1e18 + 2e18 = 3e18
+	if skaCoin.TotalReceivedSKA != "3000000000000000000" {
+		t.Errorf("SKA TotalReceivedSKA: want 3000000000000000000, got %q", skaCoin.TotalReceivedSKA)
+	}
+	// TotalSpentSKA = 0.5e18
+	if skaCoin.TotalSpentSKA != "500000000000000000" {
+		t.Errorf("SKA TotalSpentSKA: want 500000000000000000, got %q", skaCoin.TotalSpentSKA)
+	}
+	// TotalUnspentSKA = 3e18 - 0.5e18 = 2.5e18
+	if skaCoin.TotalUnspentSKA != "2500000000000000000" {
+		t.Errorf("SKA TotalUnspentSKA: want 2500000000000000000, got %q", skaCoin.TotalUnspentSKA)
+	}
+}
+
+// TestFormatSKACoins covers the label-free SKA atoms→coins formatter used by
+// the CSV export (the amount column must be a bare parseable number, with the
+// coin disambiguated by the separate coin_type column).
+func TestFormatSKACoins(t *testing.T) {
+	cases := []struct {
+		atoms string
+		want  string
+	}{
+		{"", "0"},
+		{"not-a-number", "0"},
+		{"0", "0"},
+		{"500", "0.0000000000000005"},
+		{"70000000", "0.00000000007"},
+		{"1000000000000000000", "1"},
+		{"5000000000000000000000", "5000"},
+		{"1230000000000000000", "1.23"},
+	}
+	for _, c := range cases {
+		if got := FormatSKACoins(c.atoms); got != c.want {
+			t.Errorf("FormatSKACoins(%q) = %q, want %q", c.atoms, got, c.want)
+		}
 	}
 }

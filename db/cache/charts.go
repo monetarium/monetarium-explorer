@@ -9,7 +9,10 @@ import (
 	"encoding/gob"
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"os"
+	"sort"
+	"strconv"
 	"sync"
 	"time"
 
@@ -56,6 +59,9 @@ const (
 	durationKey     = "duration"
 	workKey         = "work"
 	rateKey         = "rate"
+
+	// SKA coin supply chart prefix (coin-supply/N where N is coin type)
+	SKASupplyPrefix = "coin-supply/"
 )
 
 // binLevel specifies the granularity of data.
@@ -81,6 +87,25 @@ func isWindowBin(chart string) bool {
 		return true
 	}
 	return false
+}
+
+// IsSKASupplyChart checks if the chart ID is an SKA supply chart (coin-supply/N).
+func IsSKASupplyChart(chartID string) bool {
+	return len(chartID) > len(SKASupplyPrefix) && chartID[:len(SKASupplyPrefix)] == SKASupplyPrefix
+}
+
+// SkaCoinType extracts the coin type number from an SKA supply chart ID.
+// Returns 0 if the chart ID is invalid.
+func SkaCoinType(chartID string) uint8 {
+	if !IsSKASupplyChart(chartID) {
+		return 0
+	}
+	var coinType uint8
+	_, err := fmt.Sscanf(chartID[len(SKASupplyPrefix):], "%d", &coinType)
+	if err != nil {
+		return 0
+	}
+	return coinType
 }
 
 // DefaultBinLevel will be used if a bin level is not specified to
@@ -273,6 +298,15 @@ type zoomSet struct {
 	AnonymitySet ChartUints
 }
 
+type SKASupplyChartData struct {
+	Heights    []int64
+	Timestamps []int64
+	Values     []string
+}
+
+// SKASupplyData stores per-coin-type cumulative supply data (strings for precision).
+type SKASupplyData map[uint8]SKASupplyChartData
+
 // Snip truncates the zoomSet to a provided length.
 func (set *zoomSet) Snip(length int) {
 	if length < 0 {
@@ -424,6 +458,7 @@ type ChartData struct {
 	cache        map[string]*cachedChart
 	updateMtx    sync.Mutex
 	updaters     []ChartUpdater
+	SKASupply    SKASupplyData
 }
 
 // ValidateLengths checks that the length of all arguments is equal.
@@ -829,6 +864,20 @@ func (charts *ChartData) TicketPriceTip() int32 {
 	return int32(len(charts.Windows.TicketPrice))*charts.DiffInterval - 1
 }
 
+// SKASupplyExists checks if SKA supply data exists for the given coin type.
+func (charts *ChartData) SKASupplyExists(coinType uint8) bool {
+	if charts == nil {
+		return false
+	}
+	charts.mtx.RLock()
+	defer charts.mtx.RUnlock()
+	if charts.SKASupply == nil {
+		return false
+	}
+	data, ok := charts.SKASupply[coinType]
+	return ok && len(data.Timestamps) > 0
+}
+
 // PoolSizeTip is the height of the PoolSize data.
 func (charts *ChartData) PoolSizeTip() int32 {
 	charts.mtx.RLock()
@@ -924,6 +973,7 @@ func NewChartData(ctx context.Context, height uint32, chainParams *chaincfg.Para
 		Days:         newDaySet(days),
 		cache:        make(map[string]*cachedChart),
 		updaters:     make([]ChartUpdater, 0),
+		SKASupply:    make(SKASupplyData),
 	}
 }
 
@@ -1009,6 +1059,10 @@ func (charts *ChartData) Chart(chartID, binString, axisString string) ([]byte, e
 	}
 	maker, hasMaker := chartMakers[chartID]
 	if !hasMaker {
+		// Check if it's an SKA supply chart
+		if IsSKASupplyChart(chartID) {
+			return charts.skaSupplyChart(chartID, bin, axis)
+		}
 		return nil, UnknownChartErr
 	}
 	// Do the locking here, rather than in encode, so that the helper functions
@@ -1630,4 +1684,173 @@ func stakedCoinsChart(charts *ChartData, bin binLevel, axis axisType) ([]byte, e
 		}
 	}
 	return nil, InvalidBinErr
+}
+
+// skaSupplyChart generates chart data for an SKA coin type supply.
+// The data is fetched per-request via the registered chartSource SKASupplyChart.
+// Values are returned as exact-precision strings to preserve 18 decimal places.
+func (charts *ChartData) skaSupplyChart(chartID string, bin binLevel, axis axisType) ([]byte, error) {
+	coinType := SkaCoinType(chartID)
+	if !IsSKASupplyChart(chartID) {
+		return nil, fmt.Errorf("invalid SKA supply chart: %s", chartID)
+	}
+
+	// coinType 0 uses the existing VAR coin supply chart
+	if coinType == 0 {
+		return coinSupplyChart(charts, bin, axis)
+	}
+
+	// SKA supply data should already be pre-loaded in SKASupply map
+	charts.mtx.RLock()
+	if charts.SKASupply == nil {
+		charts.mtx.RUnlock()
+		return nil, fmt.Errorf("SKA supply data not initialized for coin type %d", coinType)
+	}
+	data, ok := charts.SKASupply[coinType]
+	charts.mtx.RUnlock()
+	if !ok || len(data.Timestamps) == 0 {
+		return nil, fmt.Errorf("no SKA supply data found for coin type %d", coinType)
+	}
+
+	// Return exact-precision strings directly
+	switch bin {
+	case BlockBin:
+		switch axis {
+		case HeightAxis:
+			resp := struct {
+				Bin    string   `json:"bin"`
+				Axis   string   `json:"axis"`
+				H      []int64  `json:"h"`
+				Supply []string `json:"supply"`
+			}{
+				Bin:    string(bin),
+				Axis:   string(axis),
+				H:      data.Heights,
+				Supply: data.Values,
+			}
+			return json.Marshal(resp)
+		default:
+			resp := struct {
+				Bin    string   `json:"bin"`
+				Axis   string   `json:"axis"`
+				H      []int64  `json:"h"`
+				T      []int64  `json:"t"`
+				Supply []string `json:"supply"`
+			}{
+				Bin:    string(bin),
+				Axis:   string(axis),
+				H:      data.Heights,
+				T:      data.Timestamps,
+				Supply: data.Values,
+			}
+			return json.Marshal(resp)
+		}
+	case DayBin:
+		timestamps, heights, values := aggregateSKASupply(data.Timestamps, data.Heights, data.Values)
+		switch axis {
+		case HeightAxis:
+			resp := struct {
+				Bin    string   `json:"bin"`
+				Axis   string   `json:"axis"`
+				H      []int64  `json:"h"`
+				Supply []string `json:"supply"`
+			}{
+				Bin:    string(bin),
+				Axis:   string(axis),
+				H:      heights,
+				Supply: values,
+			}
+			return json.Marshal(resp)
+		default:
+			resp := struct {
+				Bin    string   `json:"bin"`
+				Axis   string   `json:"axis"`
+				H      []int64  `json:"h"`
+				T      []int64  `json:"t"`
+				Supply []string `json:"supply"`
+			}{
+				Bin:    string(bin),
+				Axis:   string(axis),
+				H:      heights,
+				T:      timestamps,
+				Supply: values,
+			}
+			return json.Marshal(resp)
+		}
+	}
+
+	return nil, InvalidBinErr
+}
+
+// skaSupplyChartData holds raw SKA supply data from the database.
+type skaSupplyChartData struct {
+	Heights []int64
+	Values  []string
+}
+
+// ChartUintsFromInt64 converts []int64 to ChartUints.
+func ChartUintsFromInt64(data []int64) ChartUints {
+	result := make(ChartUints, len(data))
+	for i, v := range data {
+		result[i] = uint64(v)
+	}
+	return result
+}
+
+// ChartUintsFromStrings converts []string (exact precision) to ChartUints.
+// This is a best-effort conversion; for display, use the original strings.
+func ChartUintsFromStrings(data []string) ChartUints {
+	result := make(ChartUints, len(data))
+	for i, s := range data {
+		if v, err := strconv.ParseUint(s, 10, 64); err == nil {
+			result[i] = v
+		}
+	}
+	return result
+}
+
+// aggregateSKASupply aggregates block-level SKA supply data to daily bins.
+// Returns timestamps (Unix time seconds), block heights, and values for each day.
+func aggregateSKASupply(timestamps []int64, heights []int64, values []string) ([]int64, []int64, []string) {
+	if len(timestamps) == 0 {
+		return nil, nil, nil
+	}
+
+	type dailyData struct {
+		timestamp int64
+		height    int64
+		value     *big.Int
+	}
+	dailyMap := make(map[int64]dailyData)
+
+	for i, t := range timestamps {
+		dayKey := t / 86400
+		if i < len(values) && i < len(heights) {
+			if v, ok := new(big.Int).SetString(values[i], 10); ok {
+				dailyMap[dayKey] = dailyData{
+					timestamp: t,
+					height:    heights[i],
+					value:     v,
+				}
+			}
+		}
+	}
+
+	dayKeys := make([]int64, 0, len(dailyMap))
+	for day := range dailyMap {
+		dayKeys = append(dayKeys, day)
+	}
+	sort.Slice(dayKeys, func(i, j int) bool { return dayKeys[i] < dayKeys[j] })
+
+	dayTimestamps := make([]int64, 0, len(dailyMap))
+	dayHeights := make([]int64, 0, len(dailyMap))
+	dayValues := make([]string, 0, len(dailyMap))
+	for _, day := range dayKeys {
+		d := dailyMap[day]
+		dayTimestamps = append(dayTimestamps, day*86400)
+		dayHeights = append(dayHeights, d.height)
+		dayValues = append(dayValues, d.value.String())
+	}
+
+	return dayTimestamps, dayHeights, dayValues
 }

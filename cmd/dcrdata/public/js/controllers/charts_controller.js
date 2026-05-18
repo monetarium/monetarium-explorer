@@ -6,6 +6,7 @@ import { isEqual } from '../helpers/chart_helper'
 import { requestJSON } from '../helpers/http'
 import humanize from '../helpers/humanize_helper'
 import { getDefault } from '../helpers/module_helper'
+import { renderCoinType, splitSkaAtomsNoTrailing } from '../helpers/ska_helper'
 import TurboQuery from '../helpers/turbolinks_helper'
 import Zoom from '../helpers/zoom_helper'
 import globalEventBus from '../services/event_bus_service'
@@ -54,6 +55,25 @@ function hasMultipleVisibility(chart) {
 function intComma(amount) {
   if (!amount) return ''
   return amount.toLocaleString(undefined, { maximumFractionDigits: 0 })
+}
+
+function skaCoinTypeFromChart(name) {
+  if (typeof name !== 'string' || !name.startsWith('coin-supply/')) return 0
+  const n = parseInt(name.slice('coin-supply/'.length), 10)
+  return Number.isInteger(n) && n >= 1 && n <= 255 ? n : 0
+}
+
+function isSKASupplyChart(name) {
+  return skaCoinTypeFromChart(name) > 0
+}
+
+function isCoinSupplyChart(name) {
+  return name === 'coin-supply' || (typeof name === 'string' && name.startsWith('coin-supply/'))
+}
+
+function formatSkaAtomsExact(atomStr) {
+  const p = splitSkaAtomsNoTrailing(atomStr, true, 0)
+  return p.rest ? `${p.intPart}.${p.rest}` : p.intPart
 }
 
 function axesToRestoreYRange(chartName, origYRange, newYRange) {
@@ -289,7 +309,6 @@ function circulationFunc(chartData) {
   const heights = chartData.h
   const times = chartData.t
   const supplies = chartData.supply
-  const anonymitySet = chartData.anonymitySet
   const isHeightAxis = chartData.axis === 'height'
   let xFunc, hFunc
   if (chartData.bin === 'day') {
@@ -305,7 +324,7 @@ function circulationFunc(chartData) {
     const height = hFunc(i)
     addDough(height)
     inflation.push(yMax)
-    return [xFunc(i), supplies[i] * atomsToDCR, null, anonymitySet[i] * atomsToDCR]
+    return [xFunc(i), supplies[i] * atomsToDCR, null]
   })
 
   const dailyBlocks = aDay / avgBlockTime
@@ -325,7 +344,7 @@ function circulationFunc(chartData) {
   for (let i = 1; i <= projection; i++) {
     addDough(h + dailyBlocks)
     x += xIncrement
-    data.push([xFunc(x), null, yMax, null])
+    data.push([xFunc(x), null, yMax])
   }
   return { data, inflation }
 }
@@ -364,7 +383,6 @@ export default class extends Controller {
       'scaleSelector',
       'ticketsPurchase',
       'ticketsPrice',
-      'anonymitySet',
       'vSelectorItem',
       'vSelector',
       'binSize',
@@ -504,7 +522,12 @@ export default class extends Controller {
     yFormatter = defaultYFormatter
     const xlabel = data.t ? 'Date' : 'Block Height'
 
-    switch (chartName) {
+    const isSKA = isSKASupplyChart(chartName)
+    const coinType = skaCoinTypeFromChart(chartName)
+    const coinLabel = isSKA ? renderCoinType(coinType) : 'VAR'
+    const switchKey = isCoinSupplyChart(chartName) ? 'coin-supply' : chartName
+
+    switch (switchKey) {
       case 'ticket-price': // price graph
         d = ticketPriceFunc(data)
         assign(
@@ -635,52 +658,62 @@ export default class extends Controller {
         )
         break
 
-      case 'coin-supply': // supply graph
+      case 'coin-supply':
+        if (isSKA) {
+          this._skaSupplyRaw = data.supply
+          const ys = data.supply.map((s) => Number(s) * 1e-18)
+          d = zip2D(data, ys)
+          assign(
+            gOptions,
+            mapDygraphOptions(
+              d,
+              [xlabel, 'Coin Supply'],
+              true,
+              `Coin Supply (${coinLabel})`,
+              true,
+              false
+            )
+          )
+          yFormatter = (div, data, i) => {
+            const raw = this._skaSupplyRaw && this._skaSupplyRaw[i]
+            const exact = raw != null ? formatSkaAtomsExact(raw) : data.series[0].y.toString()
+            div.appendChild(
+              legendEntry(
+                `${data.series[0].dashHTML} ${data.series[0].labelHTML}: ${exact} ${coinLabel}`
+              )
+            )
+          }
+          break
+        }
         d = circulationFunc(data)
         assign(
           gOptions,
           mapDygraphOptions(
             d.data,
-            [xlabel, 'Coin Supply', 'Inflation Limit', 'Mix Rate'],
+            [xlabel, 'Coin Supply', 'Inflation Limit'],
             true,
-            'Coin Supply (DCR)',
+            'Coin Supply (VAR)',
             true,
             false
           )
         )
         gOptions.y2label = 'Inflation Limit'
-        gOptions.y3label = 'Mix Rate'
-        gOptions.series = { 'Inflation Limit': { axis: 'y2' }, 'Mix Rate': { axis: 'y3' } }
-        this.visibility = [true, true, this.anonymitySetTarget.checked]
-        gOptions.visibility = this.visibility
         gOptions.series = {
           'Inflation Limit': {
             strokePattern: [5, 5],
             color: '#888',
             strokeWidth: 1.5
-          },
-          'Mix Rate': {
-            color: '#2dd8a3'
           }
         }
         gOptions.inflation = d.inflation
         yFormatter = (div, data, i) => {
-          addLegendEntryFmt(div, data.series[0], (y) => `${intComma(y)} DCR`)
-          let change = 0
+          addLegendEntryFmt(div, data.series[0], (y) => `${intComma(y)} VAR`)
           if (i < d.inflation.length) {
-            const supply = data.series[0].y
-            if (this.anonymitySetTarget.checked) {
-              const mixed = data.series[2].y
-              const mixedPercentage = ((mixed / supply) * 100).toFixed(2)
-              div.appendChild(
-                legendEntry(`${legendMarker()} Mixed: ${intComma(mixed)} DCR (${mixedPercentage}%)`)
-              )
-            }
             const predicted = d.inflation[i]
             const unminted = predicted - data.series[0].y
-            change = ((unminted / predicted) * 100).toFixed(2)
+            const change = ((unminted / predicted) * 100).toFixed(2)
             div.appendChild(
-              legendEntry(`${legendMarker()} Unminted: ${intComma(unminted)} DCR (${change}%)`)
+              legendEntry(`${legendMarker()} Unminted: ${intComma(unminted)} VAR (${change}%)`)
             )
           }
         }
@@ -769,6 +802,9 @@ export default class extends Controller {
             false
           )
         )
+        break
+      default:
+        console.warn(`plotGraph: unknown chart "${chartName}"`)
         break
     }
 
@@ -1004,18 +1040,6 @@ export default class extends Controller {
         this.ticketsPriceTarget.checked = this.visibility[0]
         this.ticketsPurchaseTarget.checked = this.visibility[1]
         break
-      case 'coin-supply':
-        if (this.visibility.length !== 3) {
-          this.visibility = [true, true, this.anonymitySetTarget.checked]
-        }
-        this.anonymitySetTarget.checked = this.visibility[2]
-        break
-      case 'privacy-participation':
-        if (this.visibility.length !== 2) {
-          this.visibility = [true, this.anonymitySetTarget.checked]
-        }
-        this.anonymitySetTarget.checked = this.visibility[1]
-        break
       default:
         return
     }
@@ -1031,12 +1055,6 @@ export default class extends Controller {
           return
         }
         this.visibility = [this.ticketsPriceTarget.checked, this.ticketsPurchaseTarget.checked]
-        break
-      case 'coin-supply':
-        this.visibility = [true, true, this.anonymitySetTarget.checked]
-        break
-      case 'privacy-participation':
-        this.visibility = [true, this.anonymitySetTarget.checked]
         break
       default:
         return

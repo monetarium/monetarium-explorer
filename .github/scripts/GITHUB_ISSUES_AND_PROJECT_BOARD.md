@@ -108,6 +108,7 @@ To improve readability and board navigation, sub-issues must use prefixes:
 - `[UI]`
 - `[WS]`
 - `[DATA]`
+- `[DOCS]`
 
 **Example:**
 
@@ -115,6 +116,7 @@ To improve readability and board navigation, sub-issues must use prefixes:
 [API] Blocks list endpoint
 [UI] Blocks table rendering
 [DB] Optimize blocks query
+[DOCS] Document blocks list page in wiki
 ```
 
 ---
@@ -143,6 +145,7 @@ Select the prefix based on the **initiator of the change**:
 - `[UI]` — rendering, templates, interaction
 - `[WS]` — WebSocket / real-time updates
 - `[DATA]` — aggregation, transformation, internal logic
+- `[DOCS]` — documentation (wiki, README, CLAUDE.md, in-repo guides)
 
 ---
 
@@ -185,6 +188,7 @@ Assignments should be guided by the **issue prefix**, but also balanced across t
 
 - `[DB]`, `[DATA]`, `[WS]`, `[API]` → preferably assign to **yanchenko-igor**
 - `[UI]` → preferably assign to **edshav**
+- `[DOCS]` → assign to whichever developer has the most context on the area being documented (no fixed default)
 
 ---
 

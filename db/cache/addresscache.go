@@ -375,8 +375,8 @@ func AllDebitAddressRows(rows []*dbtypes.AddressRow) []*dbtypes.AddressRow {
 // TxHistory contains ChartsData for different chart types (tx type and amount
 // flow), each with data at known time intervals (TimeBasedGrouping).
 type TxHistory struct {
-	TypeByInterval    [dbtypes.NumIntervals]*dbtypes.ChartsData
-	AmtFlowByInterval [dbtypes.NumIntervals]*dbtypes.ChartsData
+	TypeByInterval    [dbtypes.NumIntervals]map[uint8]*dbtypes.ChartsData
+	AmtFlowByInterval [dbtypes.NumIntervals]map[uint8]*dbtypes.ChartsData
 }
 
 // Clear sets each *ChartsData to nil, effectively clearing the TxHistory.
@@ -458,7 +458,7 @@ func (d *AddressCacheItem) UTXOs() ([]*dbtypes.AddressTxnOutput, *BlockID) {
 }
 
 // HistoryChart is a thread-safe accessor for the TxHistory.
-func (d *AddressCacheItem) HistoryChart(addrChart dbtypes.HistoryChart, chartGrouping dbtypes.TimeBasedGrouping) (*dbtypes.ChartsData, *BlockID) {
+func (d *AddressCacheItem) HistoryChart(addrChart dbtypes.HistoryChart, chartGrouping dbtypes.TimeBasedGrouping, coinType uint8) (*dbtypes.ChartsData, *BlockID) {
 	d.mtx.RLock()
 	defer d.mtx.RUnlock()
 
@@ -470,9 +470,13 @@ func (d *AddressCacheItem) HistoryChart(addrChart dbtypes.HistoryChart, chartGro
 	var cd *dbtypes.ChartsData
 	switch addrChart {
 	case dbtypes.TxsType:
-		cd = d.history.TypeByInterval[chartGrouping]
+		if m := d.history.TypeByInterval[chartGrouping]; m != nil {
+			cd = m[coinType]
+		}
 	case dbtypes.AmountFlow:
-		cd = d.history.AmtFlowByInterval[chartGrouping]
+		if m := d.history.AmtFlowByInterval[chartGrouping]; m != nil {
+			cd = m[coinType]
+		}
 	}
 
 	if cd == nil {
@@ -533,8 +537,16 @@ func (d *AddressCacheItem) Transactions(N, offset int, txnView dbtypes.AddrTxnVi
 		return []*dbtypes.AddressRowCompact(nil), nil, nil
 	}
 
+	// Filter by ValidMainChain before slicing.
+	filteredRows := make([]*dbtypes.AddressRowCompact, 0, len(d.rows))
+	for _, r := range d.rows {
+		if r.ValidMainChain {
+			filteredRows = append(filteredRows, r)
+		}
+	}
+
 	blockID := d.blockID()
-	numRows := len(d.rows)
+	numRows := len(filteredRows)
 
 	if N == 0 || numRows == 0 || offset >= numRows {
 		// Not a cache miss, just no requested or matching data.
@@ -547,16 +559,16 @@ func (d *AddressCacheItem) Transactions(N, offset int, txnView dbtypes.AddrTxnVi
 	switch txnView {
 	case dbtypes.AddrTxnAll:
 		// []*dbtypes.AddressRowCompact
-		return addressRows(d.rows, N, offset), blockID, nil
+		return addressRows(filteredRows, N, offset), blockID, nil
 	case dbtypes.AddrTxnCredit:
-		return creditAddressRows(d.rows, N, offset), blockID, nil
+		return creditAddressRows(filteredRows, N, offset), blockID, nil
 	case dbtypes.AddrTxnDebit:
-		return debitAddressRows(d.rows, N, offset), blockID, nil
+		return debitAddressRows(filteredRows, N, offset), blockID, nil
 	case dbtypes.AddrMergedTxn, dbtypes.AddrMergedTxnCredit, dbtypes.AddrMergedTxnDebit:
 		// []*dbtypes.AddressRowMerged
-		return dbtypes.MergeRowsCompactRange(d.rows, N, offset, txnView), blockID, nil
+		return dbtypes.MergeRowsCompactRange(filteredRows, N, offset, txnView), blockID, nil
 	case dbtypes.AddrUnspentTxn:
-		return unspentCreditAddressRows(d.rows, N, offset), blockID, nil
+		return unspentCreditAddressRows(filteredRows, N, offset), blockID, nil
 	default:
 		// This should already be caught by IsMerged err check.
 		return nil, nil, fmt.Errorf("unrecognized address transaction view: %v", txnView)
@@ -856,14 +868,14 @@ func (ac *AddressCache) UTXOs(addr string) ([]*dbtypes.AddressTxnOutput, *BlockI
 // data is valid is also returned. In the event of a cache miss, both returned
 // pointers will be nil.
 func (ac *AddressCache) HistoryChart(addr string, addrChart dbtypes.HistoryChart,
-	chartGrouping dbtypes.TimeBasedGrouping) (*dbtypes.ChartsData, *BlockID) {
+	chartGrouping dbtypes.TimeBasedGrouping, coinType uint8) (*dbtypes.ChartsData, *BlockID) {
 	aci := ac.addressCacheItem(addr)
 	if aci == nil {
 		ac.cacheMetrics.historyMiss()
 		return nil, nil
 	}
 
-	cd, blockID := aci.HistoryChart(addrChart, chartGrouping)
+	cd, blockID := aci.HistoryChart(addrChart, chartGrouping, coinType)
 	if cd == nil || blockID == nil {
 		ac.cacheMetrics.historyMiss()
 		return nil, nil
@@ -876,14 +888,28 @@ func (ac *AddressCache) HistoryChart(addr string, addrChart dbtypes.HistoryChart
 // Rows attempts to retrieve an []*AddressRow for the given address. The BlockID
 // for the block at which the cached data is valid is also returned. In the
 // event of a cache miss, the slice and the *BlockID will be nil.
-func (ac *AddressCache) Rows(addr string) ([]*dbtypes.AddressRowCompact, *BlockID) {
+func (ac *AddressCache) Rows(addr string, coinType uint8) ([]*dbtypes.AddressRowCompact, *BlockID) {
 	aci := ac.addressCacheItem(addr)
 	if aci == nil {
 		ac.cacheMetrics.rowMiss()
 		return nil, nil
 	}
+	rows, _ := aci.Rows()
+	if rows == nil {
+		ac.cacheMetrics.rowMiss()
+		return nil, nil
+	}
 	ac.cacheMetrics.rowHit()
-	return aci.Rows()
+	if coinType == dbtypes.CoinTypeAll {
+		return rows, aci.blockID()
+	}
+	var filtered []*dbtypes.AddressRowCompact
+	for _, r := range rows {
+		if r.CoinType == coinType {
+			filtered = append(filtered, r)
+		}
+	}
+	return filtered, aci.blockID()
 }
 
 // NumRows returns the number of non-merged rows. If the rows are not cached, a
@@ -1120,7 +1146,7 @@ func (ac *AddressCache) StoreRows(addr string, rows []*dbtypes.AddressRow, block
 // StoreHistoryChart stores the charts data for the given address in cache. The
 // current best block data is required to determine cache freshness.
 func (ac *AddressCache) StoreHistoryChart(addr string, addrChart dbtypes.HistoryChart,
-	chartGrouping dbtypes.TimeBasedGrouping, cd *dbtypes.ChartsData, block *BlockID) bool {
+	chartGrouping dbtypes.TimeBasedGrouping, coinType uint8, cd *dbtypes.ChartsData, block *BlockID) bool {
 	if block == nil || ac.cap < 1 || ac.capAddr < 1 {
 		return false
 	}
@@ -1155,9 +1181,15 @@ func (ac *AddressCache) StoreHistoryChart(addr string, addrChart dbtypes.History
 
 	switch addrChart {
 	case dbtypes.TxsType:
-		aci.history.TypeByInterval[chartGrouping] = cd
+		if aci.history.TypeByInterval[chartGrouping] == nil {
+			aci.history.TypeByInterval[chartGrouping] = make(map[uint8]*dbtypes.ChartsData)
+		}
+		aci.history.TypeByInterval[chartGrouping][coinType] = cd
 	case dbtypes.AmountFlow:
-		aci.history.AmtFlowByInterval[chartGrouping] = cd
+		if aci.history.AmtFlowByInterval[chartGrouping] == nil {
+			aci.history.AmtFlowByInterval[chartGrouping] = make(map[uint8]*dbtypes.ChartsData)
+		}
+		aci.history.AmtFlowByInterval[chartGrouping][coinType] = cd
 	default:
 		return false
 	}

@@ -115,7 +115,7 @@ func TestSelectColumnCounts(t *testing.T) {
 		{"SelectVoutAddressesByTxOut", SelectVoutAddressesByTxOut, 6},                         // id,script_addresses,value,mixed,coin_type,ska_value
 		{"SelectFullTxByHash", SelectFullTxByHash, 24},                                        // id + 23 columns
 		{"addrsColumnNames", "SELECT " + addrsColumnNames + " FROM x", 13},                    // id,address,...,coin_type,ska_value
-		{"SelectAddressSpentUnspentCountAndValue", SelectAddressSpentUnspentCountAndValue, 6}, // is_regular,coin_type,count,sum,is_funding,all_empty_matching
+		{"SelectAddressSpentUnspentCountAndValue", SelectAddressSpentUnspentCountAndValue, 9}, // id,address,is_regular,coin_type,count,sum,ska_total,is_funding,all_empty_matching
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -138,5 +138,32 @@ func TestNumericCastOnTicketPrice(t *testing.T) {
 		if !strings.Contains(sql, "::NUMERIC") {
 			t.Errorf("ticket price query missing ::NUMERIC cast: %.60s", sql)
 		}
+	}
+}
+
+func TestSKACoinSupplyQueryExists(t *testing.T) {
+	if SelectSKACoinSupply == "" {
+		t.Fatal("SelectSKACoinSupply must be defined")
+	}
+	if !strings.Contains(SelectSKACoinSupply, "coin_type > 0") {
+		t.Error("SelectSKACoinSupply must filter coin_type > 0 (SKA only, not VAR)")
+	}
+	if !strings.Contains(SelectSKACoinSupply, "ska_value") {
+		t.Error("SelectSKACoinSupply must use ska_value for precision")
+	}
+}
+
+func TestSKACoinSupplyPerBlock(t *testing.T) {
+	if SelectSKACoinSupplyPerBlock == "" {
+		t.Fatal("SelectSKACoinSupplyPerBlock must be defined for chart timeline")
+	}
+	if !strings.Contains(SelectSKACoinSupplyPerBlock, "coin_type = $2") {
+		t.Error("SelectSKACoinSupplyPerBlock must filter by coin_type parameter ($2)")
+	}
+	if !strings.Contains(SelectSKACoinSupplyPerBlock, "block_height") {
+		t.Error("SelectSKACoinSupplyPerBlock must include block_height for time axis")
+	}
+	if !strings.Contains(SelectSKACoinSupplyPerBlock, "ska_value") {
+		t.Error("SelectSKACoinSupplyPerBlock must use ska_value for precision")
 	}
 }

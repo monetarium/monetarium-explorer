@@ -303,14 +303,16 @@ func (exp *explorerUI) RootWebsocket(w http.ResponseWriter, r *http.Request) {
 					inv := exp.MempoolInventory()
 					inv.RLock()
 					newTxsPayload := struct {
-						Txs            []*types.MempoolTx   `json:"txs"`
-						CoinFills      []types.CoinFillData `json:"coin_fills"`
-						TotalFillRatio float64              `json:"total_fill_ratio"`
-						ActiveSKACount int                  `json:"active_ska_count"`
+						Txs            []*types.MempoolTx               `json:"txs"`
+						CoinFills      []types.CoinFillData             `json:"coin_fills"`
+						TotalFillRatio float64                          `json:"total_fill_ratio"`
+						ActiveSKACount int                              `json:"active_ska_count"`
+						CoinStats      map[uint8]types.MempoolCoinStats `json:"coin_stats"`
 					}{
 						CoinFills:      inv.MempoolShort.CoinFills,
 						TotalFillRatio: inv.MempoolShort.TotalFillRatio,
 						ActiveSKACount: inv.MempoolShort.ActiveSKACount,
+						CoinStats:      inv.MempoolShort.CoinStats,
 					}
 					inv.RUnlock()
 					clientData.RLock()

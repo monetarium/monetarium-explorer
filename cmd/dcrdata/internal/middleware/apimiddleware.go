@@ -22,6 +22,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/docgen"
 	apitypes "github.com/monetarium/monetarium-explorer/api/types"
+	"github.com/monetarium/monetarium-explorer/db/dbtypes"
 	"github.com/monetarium/monetarium-node/chaincfg"
 	"github.com/monetarium/monetarium-node/chaincfg/chainhash"
 	chainjson "github.com/monetarium/monetarium-node/rpc/jsonrpc/types"
@@ -60,6 +61,7 @@ const (
 	ctxXcToken
 	ctxStickWidth
 	ctxIndent
+	ctxCoin
 )
 
 type DataSource interface {
@@ -409,31 +411,20 @@ func GetAddressCtx(r *http.Request, activeNetParams *chaincfg.Params) ([]string,
 		return nil, fmt.Errorf("type assertion failed")
 	}
 
-	strInSlice := func(sl []string, s string) bool {
-		for i := range sl {
-			if sl[i] == s {
-				return true
-			}
-		}
-		return false
-	}
-
 	// Allocate as if all addresses are unique.
 	addrStrs := make([]string, 0, len(addressStrs))
+	seen := make(map[string]bool)
 	for _, addrStr := range addressStrs {
-		if strInSlice(addrStrs, addrStr) {
-			continue
-		}
-		addrStrs = append(addrStrs, addrStr)
-	}
-
-	for _, addrStr := range addressStrs {
-		_, err := stdaddr.DecodeAddress(addrStr, activeNetParams)
-		if err != nil {
+		if _, err := stdaddr.DecodeAddress(addrStr, activeNetParams); err != nil {
 			return nil, fmt.Errorf("invalid address %q for this network: %w",
 				addrStr, err)
 		}
+		if !seen[addrStr] {
+			seen[addrStr] = true
+			addrStrs = append(addrStrs, addrStr)
+		}
 	}
+
 	return addrStrs, nil
 }
 
@@ -803,6 +794,17 @@ func ChartTypeCtx(next http.Handler) http.Handler {
 	})
 }
 
+// CoinSupplyChartTypeCtx returns a http.HandlerFunc that embeds "coin-supply/" + {charttype}
+// into the request context for handling coin-supply/N requests.
+func CoinSupplyChartTypeCtx(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		charttype := chi.URLParam(r, "charttype")
+		ctx := context.WithValue(r.Context(), ctxChartType,
+			"coin-supply/"+charttype)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
 // ChartGroupingCtx returns a http.HandlerFunc that embeds the value art the url
 // part {chartgrouping} into the request context.
 func ChartGroupingCtx(next http.Handler) http.Handler {
@@ -811,6 +813,32 @@ func ChartGroupingCtx(next http.Handler) http.Handler {
 			chi.URLParam(r, "chartgrouping"))
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+// CoinCtx is a middleware that parses the optional ?coin= query parameter as a
+// uint8 and stores it in the request context. If not provided or invalid, the
+// value is dbtypes.CoinTypeAll (255) meaning "no filter".
+func CoinCtx(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		coinType := dbtypes.CoinTypeAll
+		if coinStr := r.URL.Query().Get("coin"); coinStr != "" {
+			if parsed, err := strconv.ParseUint(coinStr, 10, 8); err == nil && uint8(parsed) != dbtypes.CoinTypeAll {
+				coinType = uint8(parsed)
+			}
+		}
+		ctx := context.WithValue(r.Context(), ctxCoin, coinType)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+// GetCoinCtx retrieves the ctxCoin data from the request context.
+// If not set, returns dbtypes.CoinTypeAll (255) meaning "no filter".
+func GetCoinCtx(r *http.Request) uint8 {
+	coin, ok := r.Context().Value(ctxCoin).(uint8)
+	if !ok {
+		return dbtypes.CoinTypeAll
+	}
+	return coin
 }
 
 // apiDocs generates a middleware with a "docs" in the context containing a map

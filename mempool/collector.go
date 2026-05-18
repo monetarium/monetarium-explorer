@@ -152,14 +152,15 @@ func (t *DataCollector) mempoolTxns() ([]exptypes.MempoolTx, txhelpers.MempoolAd
 			Vin:       t.populateMempoolInputs(context.TODO(), msgTx, txType, txnsStore),
 			// Coinbase:  txhelpers.IsCoinBaseTx(msgTx), // commented because coinbase is not in mempool
 
-			Hash:      hashStr, // dup of TxID!
-			Time:      tx.Time,
-			Size:      tx.Size,
-			TotalOut:  dcrutil.Amount(totalOut).ToCoin(),
-			Type:      txhelpers.TxTypeToString(int(txType)),
-			TypeID:    int(txType),
-			VoteInfo:  voteInfo,
-			SKATotals: txhelpers.SKATotalsFromMsgTx(msgTx),
+			Hash:        hashStr, // dup of TxID!
+			Time:        tx.Time,
+			Size:        tx.Size,
+			TotalOut:    dcrutil.Amount(totalOut).ToCoin(),
+			Type:        txhelpers.TxTypeToString(int(txType)),
+			TypeID:      int(txType),
+			VoteInfo:    voteInfo,
+			SKATotals:   txhelpers.SKATotalsFromMsgTx(msgTx),
+			SKAFeeRates: txhelpers.SKAFeeRateMapFromAtoms(tx.SKAFee, msgTx),
 		})
 	}
 
@@ -525,6 +526,12 @@ func ParseTxns(txs []exptypes.MempoolTx, params *chaincfg.Params, lastBlock *Blo
 		tixCount  int
 		voteCount int
 		revCount  int
+		// Per-type VAR atom amounts (only populated for outer ct=0).
+		varRegAmt, varTixAmt, varVoteAmt, varRevAmt int64
+		// Per-type SKA atom amounts. Keyed by outer ct to mirror skaAmt.
+		// By chain invariant SKA appears only in Regular txs, so the
+		// ticket/vote/revoke maps stay empty in practice.
+		skaRegAmt, skaTixAmt, skaVoteAmt, skaRevAmt map[uint8]*big.Int
 	}
 	accum := make(map[uint8]*coinAccum)
 	getAccum := func(ct uint8) *coinAccum {
@@ -533,21 +540,38 @@ func ParseTxns(txs []exptypes.MempoolTx, params *chaincfg.Params, lastBlock *Blo
 		}
 		return accum[ct]
 	}
+	addSkaPerType := func(m *map[uint8]*big.Int, ct uint8, v *big.Int) {
+		if v == nil {
+			return
+		}
+		if *m == nil {
+			*m = make(map[uint8]*big.Int)
+		}
+		if (*m)[ct] == nil {
+			(*m)[ct] = new(big.Int)
+		}
+		(*m)[ct].Add((*m)[ct], v)
+	}
 	for _, tx := range txs {
 		if len(tx.SKATotals) == 0 {
 			a := getAccum(0)
 			a.txCount++
 			a.size += tx.Size
-			a.varAmt += int64(tx.TotalOut * 1e8)
+			atoms := int64(tx.TotalOut * 1e8)
+			a.varAmt += atoms
 			switch tx.Type {
 			case "Regular":
 				a.regCount++
+				a.varRegAmt += atoms
 			case "Ticket":
 				a.tixCount++
+				a.varTixAmt += atoms
 			case "Vote":
 				a.voteCount++
+				a.varVoteAmt += atoms
 			case "Revocation":
 				a.revCount++
+				a.varRevAmt += atoms
 			}
 		} else {
 			for ct, amtStr := range tx.SKATotals {
@@ -567,15 +591,27 @@ func ParseTxns(txs []exptypes.MempoolTx, params *chaincfg.Params, lastBlock *Blo
 				switch tx.Type {
 				case "Regular":
 					a.regCount++
+					addSkaPerType(&a.skaRegAmt, ct, v)
 				case "Ticket":
 					a.tixCount++
+					addSkaPerType(&a.skaTixAmt, ct, v)
 				case "Vote":
 					a.voteCount++
+					addSkaPerType(&a.skaVoteAmt, ct, v)
 				case "Revocation":
 					a.revCount++
+					addSkaPerType(&a.skaRevAmt, ct, v)
 				}
 			}
 		}
+	}
+	skaPerTypeStr := func(m map[uint8]*big.Int, ct uint8) string {
+		if m != nil {
+			if v := m[ct]; v != nil {
+				return v.String()
+			}
+		}
+		return "0"
 	}
 	coinStats := make(map[uint8]exptypes.MempoolCoinStats, len(accum))
 	for ct, a := range accum {
@@ -589,10 +625,21 @@ func ParseTxns(txs []exptypes.MempoolTx, params *chaincfg.Params, lastBlock *Blo
 		}
 		if ct == 0 {
 			s.Amount = fmt.Sprintf("%d", a.varAmt)
-		} else if a.skaAmt != nil {
-			if v := a.skaAmt[ct]; v != nil {
-				s.Amount = v.String()
+			s.RegularAmount = fmt.Sprintf("%d", a.varRegAmt)
+			s.TicketAmount = fmt.Sprintf("%d", a.varTixAmt)
+			s.VoteAmount = fmt.Sprintf("%d", a.varVoteAmt)
+			s.RevokeAmount = fmt.Sprintf("%d", a.varRevAmt)
+		} else {
+			s.Amount = "0"
+			if a.skaAmt != nil {
+				if v := a.skaAmt[ct]; v != nil {
+					s.Amount = v.String()
+				}
 			}
+			s.RegularAmount = skaPerTypeStr(a.skaRegAmt, ct)
+			s.TicketAmount = skaPerTypeStr(a.skaTixAmt, ct)
+			s.VoteAmount = skaPerTypeStr(a.skaVoteAmt, ct)
+			s.RevokeAmount = skaPerTypeStr(a.skaRevAmt, ct)
 		}
 		coinStats[ct] = s
 	}

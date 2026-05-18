@@ -12,7 +12,7 @@
       data-address-offset="{{.Offset}}"
       data-address-dcraddress="{{.Address}}"
       data-address-txn-count="{{$TxnCount}}"
-      data-address-balance="{{toFloat64Amount .Balance.TotalUnspent}}"
+      data-active-coins='{{jsonMarshal .ActiveCoins}}'
     >
     <div class="fullscreen d-none" data-address-target="fullscreen" data-action="click->address#exitFullscreen">
       <div class="secondary-card d-inline-block w-100 h-100 p-4" data-address-target="bigchart"></div>
@@ -39,65 +39,101 @@
           <div class="text-start d-flex fs12 text-secondary pb-2 flex-wrap">
           {{.Type}}
           </div>
+          {{- $balance := .Balance -}}
+          {{- $active := .ActiveCoins -}}
+          {{- $varCB := index $balance.Coins 0 -}}
           <div class="position-relative d-flex justify-content-between align-items-center flex-wrap">
             <div class="d-inline-block text-start pe-2 pb-3">
               <span class="text-secondary fs13">Balance</span>
               <br>
-              <span class="lh1rem d-inline-block pt-1 fs18 fs14-decimal fw-bold">
-                {{- if .Balance}}
-                    {{template "decimalParts" (amountAsDecimalParts .Balance.TotalUnspent true)}}<span class="text-secondary fs14">DCR</span>
-                {{- else}}
-                <span class="fs18">0</span> <span class="text-secondary fs14">DCR</span>
+              {{- range $ct := $active}}
+                {{- $cb := index $balance.Coins $ct}}
+                {{- if $cb}}
+                  <span class="lh1rem d-block pt-1 fs18 fs14-decimal fw-bold">
+                    {{- if eq $ct 0 -}}
+                      {{template "decimalParts" (amountAsDecimalParts $cb.TotalUnspent true)}}
+                    {{- else -}}
+                      {{template "decimalParts" (skaDecimalParts $cb.TotalUnspentSKA true)}}
+                    {{- end -}}
+                    <span class="text-secondary fs14 ms-1">{{coinSymbol $ct}}</span>
+                  </span>
                 {{- end}}
-              </span>
-              <br>
-              {{- if $.FiatBalance}}
-                <span class="text-secondary fs16 lh1rem">{{threeSigFigs $.FiatBalance.Value}} <span class="fs14">{{$.FiatBalance.Index}}</span></span>
+              {{- else}}
+                <span class="lh1rem d-inline-block pt-1 fs18 fs14-decimal fw-bold">&mdash;</span>
               {{- end}}
             </div>
             <div class="d-inline-block text-start pe-2 pb-3">
               <span class="text-secondary fs13">Received</span>
+              <br>
+              {{- range $ct := $active}}
+                {{- $cb := index $balance.Coins $ct}}
+                {{- if $cb}}
+                  <span class="lh1rem d-block pt-1 fs18 fs14-decimal fw-bold">
+                    {{- if eq $ct 0 -}}
+                      {{template "decimalParts" (amountAsDecimalParts $cb.TotalReceived true)}}
+                    {{- else -}}
+                      {{template "decimalParts" (skaDecimalParts $cb.TotalReceivedSKA true)}}
+                    {{- end -}}
+                    <span class="text-secondary fs14 ms-1">{{coinSymbol $ct}}</span>
+                  </span>
+                {{- end}}
+              {{- else}}
+                <span class="lh1rem d-inline-block pt-1 fs18 fs14-decimal fw-bold">&mdash;</span>
+              {{- end}}
+              {{- if gt (len $active) 0}}
                 <br>
-                <span class="lh1rem d-inline-block pt-1 fs18 fs14-decimal fw-bold">
-                    {{- if .Balance}}
-                        {{- $received := add .Balance.TotalSpent .Balance.TotalUnspent}}
-                        {{- template "decimalParts" (amountAsDecimalParts $received true)}} <span class="text-secondary fs14">DCR</span>
-                    {{- else}}
-                        <span class="fs18">0</span> <span class="text-secondary fs14">DCR</span>
-                    {{- end}}
-                </span>
-                <br>
-                <span class="text-secondary fs16 lh1rem">{{intComma (add .Balance.NumSpent .Balance.NumUnspent)}} outputs</span>
+                <span class="text-secondary fs16 lh1rem">{{intComma $balance.TotalOutputs}} outputs</span>
+              {{- end}}
             </div>
             <div class="d-inline-block text-start pe-2 pb-3">
               <span class="text-secondary fs13">Spent</span>
               <br>
-                <span class="lh1rem d-inline-block pt-1 fs18 fs14-decimal fw-bold">
-                {{- if .Balance}}
-                    {{- template "decimalParts" (amountAsDecimalParts .Balance.TotalSpent true)}} <span class="text-secondary fs14">DCR</span>
-                {{- else}}
-                    <span class="fs18">0</span> <span class="text-secondary fs14">DCR</span>
+              {{- range $ct := $active}}
+                {{- $cb := index $balance.Coins $ct}}
+                {{- if $cb}}
+                  <span class="lh1rem d-block pt-1 fs18 fs14-decimal fw-bold">
+                    {{- if eq $ct 0 -}}
+                      {{template "decimalParts" (amountAsDecimalParts $cb.TotalSpent true)}}
+                    {{- else -}}
+                      {{template "decimalParts" (skaDecimalParts $cb.TotalSpentSKA true)}}
+                    {{- end -}}
+                    <span class="text-secondary fs14 ms-1">{{coinSymbol $ct}}</span>
+                  </span>
                 {{- end}}
-                </span>
+              {{- else}}
+                <span class="lh1rem d-inline-block pt-1 fs18 fs14-decimal fw-bold">&mdash;</span>
+              {{- end}}
+              {{- if gt (len $active) 0}}
                 <br>
-                <span class="text-secondary fs16 lh1rem">{{intComma .Balance.NumSpent}} inputs</span>
+                <span class="text-secondary fs16 lh1rem">{{intComma $balance.TotalInputs}} inputs</span>
+              {{- end}}
             </div>
             <span></span>
           </div>
           <div class="row pb-2">
               {{- if ne .NumUnconfirmed 0}}
-                <div class="col-12 pb-2 fs14 text-secondary text-start" data-address-target="numUnconfirmed">
-                    <span class="fw-bold">Unconfirmed</span>: <span class="addr-unconfirmed-count">{{.NumUnconfirmed}}</span>
+                {{- $unconf := .NumUnconfirmedByCoin}}
+                {{- range $ct := $active}}
+                  {{- $count := index $unconf $ct}}
+                  {{- if gt $count 0}}
+                    <div class="col-12 pb-2 fs14 text-secondary text-start"
+                         data-address-target="numUnconfirmed"
+                         data-coin-type="{{$ct}}"
+                         data-count="{{$count}}">
+                      <span class="fw-bold">Unconfirmed {{coinSymbol $ct}}</span>:
+                      <span class="addr-unconfirmed-count">{{intComma $count}}</span>
+                    </div>
+                  {{- end}}
+                {{- end}}
+              {{- end}}
+              {{- if and $varCB $balance.HasStakeOutputs}}
+                <div class="col-12 pb-2 fs14 text-secondary text-start">
+                    <span class="fw-bold">Stake spending</span>: {{printf "%.1f" (x100 $balance.FromStake)}}%
                 </div>
               {{- end}}
-              {{- if .Balance.HasStakeOutputs}}
+              {{- if and $varCB $balance.HasStakeInputs}}
                 <div class="col-12 pb-2 fs14 text-secondary text-start">
-                    <span class="fw-bold">Stake spending</span>: {{printf "%.1f" (x100 .Balance.FromStake)}}%
-                </div>
-              {{- end}}
-              {{- if .Balance.HasStakeInputs}}
-                <div class="col-12 pb-2 fs14 text-secondary text-start">
-                    <span class="fw-bold">Stake income</span>: {{printf "%.1f" (x100 .Balance.ToStake)}}%
+                    <span class="fw-bold">Stake income</span>: {{printf "%.1f" (x100 $balance.ToStake)}}%
                 </div>
               {{- end}}
           </div>
@@ -129,6 +165,44 @@
                     <option name="types" value="types">Tx Type</option>
                     <option name="amountflow" value="amountflow">Sent/Received</option>
                 </select>
+              </div>
+              <div class="btn-set secondary-card d-inline-flex flex-nowrap mx-2">
+                <label>Coin</label>
+                {{- if gt (len .ActiveCoins) 1}}
+                <select
+                    class="chart-box d-inline-flex dropdown"
+                    data-address-target="coin"
+                    data-action="change->address#changeCoin"
+                    name="coin"
+                >
+                    {{- range $i, $ct := .ActiveCoins}}
+                    <option value="{{$ct}}"{{if eq $i 0}} selected{{end}}>{{coinSymbol $ct}}</option>
+                    {{- end}}
+                </select>
+                {{- else if .ActiveCoins}}
+                {{- $onlyCoin := index .ActiveCoins 0}}
+                <span title="This address only has {{coinSymbol $onlyCoin}} transactions">
+                  <select
+                      class="chart-box d-inline-flex dropdown"
+                      data-address-target="coin"
+                      name="coin"
+                      disabled
+                  >
+                      <option value="{{$onlyCoin}}" selected>{{coinSymbol $onlyCoin}}</option>
+                  </select>
+                </span>
+                {{- else}}
+                <span title="This address has no transactions">
+                  <select
+                      class="chart-box d-inline-flex dropdown"
+                      data-address-target="coin"
+                      name="coin"
+                      disabled
+                  >
+                      <option value="" selected>-</option>
+                  </select>
+                </span>
+                {{- end}}
               </div>
               <div
                   class="btn-set secondary-card d-inline-flex flex-nowrap mx-2"
@@ -260,7 +334,8 @@
                 name="txntype"
                 data-address-target="txntype"
                 data-action="change->address#changeTxType"
-                class="form-control-sm mb-2 me-sm-2 mb-sm-0 dropwdown"
+                class="form-control-sm mb-2 me-sm-2 mb-sm-0 dropdown"
+                {{- if not .ActiveCoins}} disabled{{end}}
               >
                   <option {{if eq $txType "all"}}selected{{end}} value="all">All</option>
                   <option {{if eq $txType "unspent"}}selected{{end}} value="unspent">Unspent</option>
@@ -270,6 +345,43 @@
                   <option {{if eq $txType "merged_credit"}}selected{{end}} value="merged_credit">Merged Credits</option>
                   <option {{if eq $txType "merged_debit"}}selected{{end}} value="merged_debit">Merged Debits</option>
               </select>
+            </div>
+            <div class="d-inline-block text-end">
+              <label class="mb-0 me-1" for="coin">Coin</label>
+              {{- if gt (len .ActiveCoins) 1}}
+              <select
+                name="coin"
+                data-address-target="coinFilter"
+                data-action="change->address#changeCoin"
+                class="form-control-sm mb-2 me-sm-2 mb-sm-0 dropdown"
+              >
+                  <option value="">All</option>
+                  {{- range .ActiveCoins}}
+                  <option value="{{.}}">{{coinSymbol .}}</option>
+                  {{- end}}
+              </select>
+              {{- else if .ActiveCoins}}
+              {{- $onlyCoin := index .ActiveCoins 0}}
+              <span title="This address only has {{coinSymbol $onlyCoin}} transactions">
+                <select
+                  name="coin"
+                  class="form-control-sm mb-2 me-sm-2 mb-sm-0 dropdown"
+                  disabled
+                >
+                  <option value="{{$onlyCoin}}" selected>{{coinSymbol $onlyCoin}}</option>
+                </select>
+              </span>
+              {{- else}}
+              <span title="This address has no transactions">
+                <select
+                  name="coin"
+                  class="form-control-sm mb-2 me-sm-2 mb-sm-0 dropdown"
+                  disabled
+                >
+                  <option value="" selected>All</option>
+                </select>
+              </span>
+              {{- end}}
             </div>
             <div class="d-inline-block text-end">
               <label class="mb-0 me-1" for="pagesize">Page size</label>

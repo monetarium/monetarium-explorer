@@ -180,6 +180,12 @@ const humanize = {
     const sign = v >= 0 ? '' : '-'
     v = Math.abs(v)
     if (v === 0) return '0'
+    if (v >= 1e17) return `${sign}${Math.round(v / 1e15)}Q`
+    if (v >= 1e16) return `${sign}${(v / 1e15).toFixed(1)}Q`
+    if (v >= 1e15) return `${sign}${(v / 1e15).toFixed(2)}Q`
+    if (v >= 1e14) return `${sign}${Math.round(v / 1e12)}T`
+    if (v >= 1e13) return `${sign}${(v / 1e12).toFixed(1)}T`
+    if (v >= 1e12) return `${sign}${(v / 1e12).toFixed(2)}T`
     if (v >= 1e11) return `${sign}${Math.round(v / 1e9)}B`
     if (v >= 1e10) return `${sign}${(v / 1e9).toFixed(1)}B`
     if (v >= 1e9) return `${sign}${(v / 1e9).toFixed(2)}B`

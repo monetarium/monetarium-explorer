@@ -4,6 +4,7 @@ import (
 	"context"
 
 	apitypes "github.com/monetarium/monetarium-explorer/api/types"
+	"github.com/monetarium/monetarium-explorer/db/cache"
 	"github.com/monetarium/monetarium-explorer/db/dbtypes"
 	"github.com/monetarium/monetarium-node/chaincfg/chainhash"
 	chainjson "github.com/monetarium/monetarium-node/rpc/jsonrpc/types"
@@ -25,7 +26,7 @@ func (noopDS) SpendingTransaction(_ context.Context, _ string, _ uint32) (string
 func (noopDS) SpendingTransactions(_ context.Context, _ string) ([]string, []uint32, []uint32, error) {
 	return nil, nil, nil, nil
 }
-func (noopDS) AddressHistory(_ context.Context, _ string, _, _ int64, _ dbtypes.AddrTxnViewType) ([]*dbtypes.AddressRow, *dbtypes.AddressBalance, error) {
+func (noopDS) AddressHistory(_ context.Context, _ string, _, _ int64, _ dbtypes.AddrTxnViewType, _ uint8) ([]*dbtypes.AddressRow, *dbtypes.AddressBalance, error) {
 	return nil, nil, nil
 }
 func (noopDS) FillAddressTransactions(_ context.Context, _ *dbtypes.AddressInfo) error { return nil }
@@ -36,7 +37,7 @@ func (noopDS) AddressTotals(_ context.Context, _ string) (*apitypes.AddressTotal
 	return nil, nil
 }
 func (noopDS) VotesInBlock(_ context.Context, _ string) (int16, error) { return 0, nil }
-func (noopDS) TxHistoryData(_ context.Context, _ string, _ dbtypes.HistoryChart, _ dbtypes.TimeBasedGrouping) (*dbtypes.ChartsData, error) {
+func (noopDS) TxHistoryData(_ context.Context, _ string, _ dbtypes.HistoryChart, _ dbtypes.TimeBasedGrouping, _ uint8) (*dbtypes.ChartsData, error) {
 	return nil, nil
 }
 func (noopDS) TreasuryBalance(_ context.Context) (*dbtypes.TreasuryBalance, error) { return nil, nil }
@@ -49,7 +50,7 @@ func (noopDS) TicketPoolVisualization(_ context.Context, _ dbtypes.TimeBasedGrou
 func (noopDS) AgendaVotes(_ context.Context, _ string, _ int) (*dbtypes.AgendaVoteChoices, error) {
 	return nil, nil
 }
-func (noopDS) AddressRowsCompact(_ context.Context, _ string) ([]*dbtypes.AddressRowCompact, error) {
+func (noopDS) AddressRowsCompact(_ context.Context, _ string, _ uint8) ([]*dbtypes.AddressRowCompact, error) {
 	return nil, nil
 }
 func (noopDS) Height() int64                                     { return 0 }
@@ -127,3 +128,6 @@ func (noopDS) GetAddressTransactionsRawWithSkip(_ context.Context, _ string, _, 
 	return nil
 }
 func (noopDS) GetMempoolPriceCountTime() *apitypes.PriceCountTime { return nil }
+func (noopDS) LoadSKASupplyForCoin(_ context.Context, _ *cache.ChartData, _ uint8) error {
+	return nil
+}

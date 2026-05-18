@@ -696,6 +696,13 @@ func _main(ctx context.Context) error {
 	webMux.Get("/ws", explore.RootWebsocket)
 	webMux.Get("/ps", psHub.WebSocketHandler)
 
+	// Debug-only fixture page for the home-page mempool fill indicators.
+	// Only registered when --reload-html is set so the route never appears in
+	// production builds. Mirrors the gate used to load the template itself.
+	if cfg.ReloadHTML {
+		webMux.Get("/dev/indicators", explore.DevIndicators)
+	}
+
 	// Make the static assets available under a path with the given prefix.
 	mountAssetPaths := func(pathPrefix string) {
 		if !strings.HasSuffix(pathPrefix, "/") {
@@ -765,8 +772,8 @@ func _main(ctx context.Context) error {
 		r.With(explore.BlockHashPathOrIndexCtx).Get("/block/{blockhash}", explore.Block)
 		r.With(explorer.TransactionHashCtx).Get("/tx/{txid}", explore.TxPage)
 		r.With(explorer.TransactionHashCtx, explorer.TransactionIoIndexCtx).Get("/tx/{txid}/{inout}/{inoutid}", explore.TxPage)
-		r.With(explorer.AddressPathCtx).Get("/address/{address}", explore.AddressPage)
-		r.With(explorer.AddressPathCtx).Get("/addresstable/{address}", explore.AddressTable)
+		r.With(explorer.AddressPathCtx, mw.CoinCtx).Get("/address/{address}", explore.AddressPage)
+		r.With(explorer.AddressPathCtx, mw.CoinCtx).Get("/addresstable/{address}", explore.AddressTable)
 		r.Get("/proposals", func(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "proposals not available", http.StatusGone)
 		})

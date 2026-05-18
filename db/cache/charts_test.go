@@ -2,6 +2,7 @@ package cache
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -340,4 +341,106 @@ func TestChartReorg(t *testing.T) {
 	// All but one block.
 	resetCharts()
 	testReorg(2, 2, 1, 1, 2)
+}
+
+func TestSKASupplyData_ExactPrecision(t *testing.T) {
+	data := SKASupplyData{
+		1: SKASupplyChartData{
+			Timestamps: []int64{100, 200},
+			Values: []string{
+				"123456789012345678.123456789012345678",
+				"999999999999999999.999999999999999999",
+			},
+		},
+	}
+
+	b, err := json.Marshal(data)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+
+	var result SKASupplyData
+	if err := json.Unmarshal(b, &result); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	if len(result) != 1 {
+		t.Fatalf("expected 1 coin type, got %d", len(result))
+	}
+
+	if result[1].Values[0] != "123456789012345678.123456789012345678" {
+		t.Errorf("precision lost: got %s, want 123456789012345678.123456789012345678", result[1].Values[0])
+	}
+	if result[1].Values[1] != "999999999999999999.999999999999999999" {
+		t.Errorf("precision lost: got %s, want 999999999999999999.999999999999999999", result[1].Values[1])
+	}
+}
+
+func TestSKACoinType_Extraction(t *testing.T) {
+	tests := []struct {
+		chartID string
+		want    uint8
+	}{
+		{"coin-supply/1", 1},
+		{"coin-supply/2", 2},
+		{"coin-supply/255", 255},
+		{"coin-supply/10", 10},
+		{"coin-supply/0", 0},
+		{"coin-supply", 0},
+		{"invalid", 0},
+		{"", 0},
+	}
+	for _, tc := range tests {
+		t.Run(tc.chartID, func(t *testing.T) {
+			got := SkaCoinType(tc.chartID)
+			if got != tc.want {
+				t.Errorf("skaCoinType(%q): want %d, got %d", tc.chartID, tc.want, got)
+			}
+		})
+	}
+}
+
+func TestAggregateSKASupply_DailyBins(t *testing.T) {
+	// Use timestamps instead of heights
+	// Day 1: 0 to 86399
+	// Day 2: 86400 to 172799
+	timestamps := []int64{100, 200, 86300, 86400, 90000, 172700, 172800, 180000, 259100}
+	values := []string{
+		"100",
+		"200",
+		"300",
+		"400",
+		"500",
+		"600",
+		"700",
+		"800",
+		"900",
+	}
+	heights := []int64{10, 20, 30, 40, 50, 60, 70, 80, 90}
+
+	days, dayHeights, dayValues := aggregateSKASupply(timestamps, heights, values)
+
+	if len(days) != 3 {
+		t.Fatalf("expected 3 days, got %d", len(days))
+	}
+
+	// Verify sorting
+	for i := 0; i < len(days)-1; i++ {
+		if days[i] >= days[i+1] {
+			t.Errorf("days not sorted: %d >= %d", days[i], days[i+1])
+		}
+	}
+
+	// Verify last-value aggregation
+	expected := []string{"300", "600", "900"}
+	for i, v := range dayValues {
+		if v != expected[i] {
+			t.Errorf("day %d: want %s, got %s", i, expected[i], v)
+		}
+	}
+
+	// Verify heights are also returned
+	if len(dayHeights) != 3 {
+		t.Fatalf("expected 3 heights, got %d", len(dayHeights))
+	}
 }

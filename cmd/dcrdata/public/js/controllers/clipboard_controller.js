@@ -1,22 +1,5 @@
 import { Controller } from '@hotwired/stimulus'
 
-export const copyIcon = () => {
-  const copyIcon = document.createElement('span')
-  copyIcon.classList.add('monicon-copy')
-  copyIcon.classList.add('clickable')
-  copyIcon.dataset.controller = 'clipboard'
-  copyIcon.dataset.action = 'click->clipboard#copyTextToClipboard this'
-  return copyIcon.outerHTML
-}
-
-export const alertArea = () => {
-  const alertArea = document.createElement('span')
-  alertArea.classList.add('alert')
-  alertArea.classList.add('alert-success')
-  alertArea.classList.add('alert-copy')
-  return alertArea.outerHTML
-}
-
 export default class extends Controller {
   copyTextToClipboard(clickEvent) {
     const parentNode = clickEvent.srcElement.parentNode

@@ -5,7 +5,7 @@
 
 ## Overview
 
-Monetarium Explorer is a block explorer for the [Monetarium](https://monetarium.io) network, forked from [decred/dcrdata](https://github.com/decred/dcrdata). It supports the dual-coin model (VAR + SKA types) introduced by monetarium-node. The backend is written in Go with a PostgreSQL database. The frontend uses Webpack/SCSS.
+Monetarium Explorer is a block explorer for the [Monetarium](https://monetarium.io) network. The codebase originated from [decred/dcrdata](https://github.com/decred/dcrdata) — history was squashed into a single initial commit and there is no git upstream or ongoing sync, so it is maintained as a standalone codebase rather than a fork. It supports the multi-coin model introduced by monetarium-node: VAR plus up to 255 SKA-type coins (`SKA1`, `SKA2`, …). A single transaction is always single-coin — every input, output, and the fee belong to the same coin type — so explorer data structures carry per-coin-type maps and per-coin views rather than a single value. The backend is written in Go with a PostgreSQL database. The frontend uses Webpack/SCSS.
 
 - [Overview](#overview)
 - [Requirements](#requirements)
@@ -359,6 +359,5 @@ ISC License. See [LICENSE](LICENSE) for details.
 
 ---
 
-**Upstream Reference**
-Forked from [decred/dcrdata](https://github.com/decred/dcrdata).
-Base commit: `9c02e7116ede87b57ee6189c5dc3c22d48937a3a`
+**Origin**
+The codebase originated from [decred/dcrdata](https://github.com/decred/dcrdata) at commit `9c02e7116ede87b57ee6189c5dc3c22d48937a3a` and has since diverged. There is no git upstream and no ongoing sync.

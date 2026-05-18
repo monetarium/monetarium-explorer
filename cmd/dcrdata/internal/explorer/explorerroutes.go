@@ -26,6 +26,7 @@ import (
 	"github.com/monetarium/monetarium-node/txscript/stdscript"
 
 	ticketvotev1 "github.com/decred/politeia/politeiawww/api/ticketvote/v1"
+	"github.com/monetarium/monetarium-explorer/cmd/dcrdata/internal/middleware"
 	"github.com/monetarium/monetarium-explorer/db/dbtypes"
 	"github.com/monetarium/monetarium-explorer/exchanges"
 	"github.com/monetarium/monetarium-explorer/explorer/types"
@@ -1540,7 +1541,6 @@ func (exp *explorerUI) AddressPage(w http.ResponseWriter, r *http.Request) {
 		Data         *dbtypes.AddressInfo
 		Type         txhelpers.AddressType
 		CRLFDownload bool
-		FiatBalance  *exchanges.Conversion
 		Pages        []pageNumber
 	}
 
@@ -1601,7 +1601,7 @@ func (exp *explorerUI) AddressPage(w http.ResponseWriter, r *http.Request) {
 			UnconfirmedTxns: new(dbtypes.AddressTransactions),
 		}
 	} else {
-		addrData, err = exp.AddressListData(ctx, address, txnType, limitN, offsetAddrOuts)
+		addrData, err = exp.AddressListData(ctx, address, txnType, limitN, offsetAddrOuts, middleware.GetCoinCtx(r))
 		if exp.timeoutErrorPage(w, err, "TicketsPriceByHeight") {
 			return
 		} else if err != nil {
@@ -1613,9 +1613,6 @@ func (exp *explorerUI) AddressPage(w http.ResponseWriter, r *http.Request) {
 	// Set page parameters.
 	addrData.Path = r.URL.Path
 
-	// If exchange monitoring is active, prepare a fiat balance conversion
-	conversion := exp.xcBot.Conversion(dcrutil.Amount(addrData.Balance.TotalUnspent).ToCoin())
-
 	// For Windows clients only, link to downloads with CRLF (\r\n) line
 	// endings.
 	UseCRLF := strings.Contains(r.UserAgent(), "Windows")
@@ -1625,13 +1622,15 @@ func (exp *explorerUI) AddressPage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	linkTemplate := fmt.Sprintf("/address/%s?start=%%d&n=%d&txntype=%v", addrData.Address, limitN, txnType)
+	if coinType := middleware.GetCoinCtx(r); coinType != dbtypes.CoinTypeAll {
+		linkTemplate += fmt.Sprintf("&coin=%d", coinType)
+	}
 
 	// Execute the HTML template.
 	pageData := AddressPageData{
 		CommonPageData: exp.commonData(r),
 		Data:           addrData,
 		CRLFDownload:   UseCRLF,
-		FiatBalance:    conversion,
 		Pages:          calcPages(int(addrData.TxnCount), int(limitN), int(offsetAddrOuts), linkTemplate),
 	}
 	str, err := exp.templates.exec("address", pageData)
@@ -1662,7 +1661,7 @@ func (exp *explorerUI) AddressTable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	addrData, err := exp.AddressListData(ctx, address, txnType, limitN, offsetAddrOuts)
+	addrData, err := exp.AddressListData(ctx, address, txnType, limitN, offsetAddrOuts, middleware.GetCoinCtx(r))
 	if err != nil {
 		log.Errorf("AddressListData error: %v", err)
 		http.Error(w, http.StatusText(http.StatusInternalServerError),
@@ -1671,6 +1670,9 @@ func (exp *explorerUI) AddressTable(w http.ResponseWriter, r *http.Request) {
 	}
 
 	linkTemplate := "/address/" + addrData.Address + "?start=%d&n=" + strconv.FormatInt(limitN, 10) + "&txntype=" + fmt.Sprintf("%v", txnType)
+	if coinType := middleware.GetCoinCtx(r); coinType != dbtypes.CoinTypeAll {
+		linkTemplate += fmt.Sprintf("&coin=%d", coinType)
+	}
 
 	response := struct {
 		TxnCount int64        `json:"tx_count"`
@@ -1875,11 +1877,11 @@ func parsePaginationParams(r *http.Request) (txnType string, limitN, offset int6
 // AddressListData grabs a size-limited and type-filtered set of inputs/outputs
 // for a given address.
 func (exp *explorerUI) AddressListData(ctx context.Context, address string, txnType dbtypes.AddrTxnViewType, limitN,
-	offsetAddrOuts int64) (addrData *dbtypes.AddressInfo, err error) {
+	offsetAddrOuts int64, coinType uint8) (addrData *dbtypes.AddressInfo, err error) {
 
 	// Get addresses table rows for the address.
 	addrData, err = exp.dataSource.AddressData(ctx, address, limitN,
-		offsetAddrOuts, txnType)
+		offsetAddrOuts, txnType, coinType)
 	if dbtypes.IsTimeoutErr(err) { //exp.timeoutErrorPage(w, err, "TicketsPriceByHeight") {
 		return nil, err
 	} else if err != nil {
@@ -1912,16 +1914,24 @@ func (exp *explorerUI) DecodeTxPage(w http.ResponseWriter, r *http.Request) {
 func (exp *explorerUI) Charts(w http.ResponseWriter, r *http.Request) {
 	exp.pageData.RLock()
 	tpSize := exp.pageData.HomeInfo.PoolInfo.Target
+	skaSupply := exp.pageData.HomeInfo.SKACoinSupply
 	exp.pageData.RUnlock()
+
+	activeSKATypes := make([]uint8, len(skaSupply))
+	for i, entry := range skaSupply {
+		activeSKATypes[i] = entry.CoinType
+	}
 
 	str, err := exp.templates.exec("charts", struct {
 		*CommonPageData
 		Premine        int64
 		TargetPoolSize uint32
+		ActiveSKATypes []uint8
 	}{
 		CommonPageData: exp.commonData(r),
 		Premine:        exp.premine,
 		TargetPoolSize: tpSize,
+		ActiveSKATypes: activeSKATypes,
 	})
 	if err != nil {
 		log.Errorf("Template execute failure: %v", err)

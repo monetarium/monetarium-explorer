@@ -69,6 +69,27 @@ const (
 	testnetNetName = "Testnet"
 )
 
+// divideByTwoSKAFees divides each amount in the map by 2 (big.Int).
+// Used to get PoW portion from total fees (fees are split 50/50 between PoW and PoS).
+func divideByTwoSKAFees(fees map[uint8]string) map[uint8]string {
+	if len(fees) == 0 {
+		return nil
+	}
+	half := make(map[uint8]string, len(fees))
+	two := big.NewInt(2)
+	for ct, amountStr := range fees {
+		amount, ok := new(big.Int).SetString(amountStr, 10)
+		if !ok || amount.Sign() <= 0 {
+			continue
+		}
+		half[ct] = amount.Div(amount, two).String()
+	}
+	if len(half) == 0 {
+		return nil
+	}
+	return half
+}
+
 // explorerDataSource implements extra data retrieval functions that require a
 // faster solution than RPC, or additional functionality.
 type explorerDataSource interface {
@@ -81,8 +102,8 @@ type explorerDataSource interface {
 	PoolStatusForTicket(ctx context.Context, txid string) (dbtypes.TicketSpendType, dbtypes.TicketPoolStatus, error)
 	TreasuryBalance(context.Context) (*dbtypes.TreasuryBalance, error)
 	TreasuryTxns(ctx context.Context, n, offset int64, txType stake.TxType) ([]*dbtypes.TreasuryTx, error)
-	AddressHistory(ctx context.Context, address string, N, offset int64, txnType dbtypes.AddrTxnViewType) ([]*dbtypes.AddressRow, *dbtypes.AddressBalance, error)
-	AddressData(ctx context.Context, address string, N, offset int64, txnType dbtypes.AddrTxnViewType) (*dbtypes.AddressInfo, error)
+	AddressHistory(ctx context.Context, address string, N, offset int64, txnType dbtypes.AddrTxnViewType, coinType uint8) ([]*dbtypes.AddressRow, *dbtypes.AddressBalance, error)
+	AddressData(ctx context.Context, address string, N, offset int64, txnType dbtypes.AddrTxnViewType, coinType uint8) (*dbtypes.AddressInfo, error)
 	DevBalance(ctx context.Context) (*dbtypes.AddressBalance, error)
 	FillAddressTransactions(ctx context.Context, addrInfo *dbtypes.AddressInfo) error
 	BlockMissedVotes(ctx context.Context, blockHash string) ([]string, error)
@@ -401,6 +422,13 @@ func New(cfg *ExplorerConfig) *explorerUI {
 		"sidechains", "disapproved", "ticketpool", "visualblocks",
 		"windows", "timelisting", "addresstable", "proposals", "proposal",
 		"market", "insight_root", "attackcost", "treasury", "treasurytable", "verify_message"}
+
+	// Debug-only: load the dev_indicators template alongside the rest only when
+	// --reload-html is set. The corresponding route is registered in main.go
+	// under the same gate.
+	if cfg.ReloadHTML {
+		tmpls = append(tmpls, "dev_indicators")
+	}
 
 	for _, name := range tmpls {
 		if err := exp.templates.addTemplate(name); err != nil {
@@ -723,11 +751,13 @@ func (exp *explorerUI) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgB
 			// Find the latest block specifically for this coin type
 			if totalStr, ok := blockData.ExtraInfo.SSFeeTotalsByCoin[ct]; ok && totalStr != "" {
 				if total, parsed := new(big.Int).SetString(totalStr, 10); parsed && blockData.Header.Voters > 0 {
-					perVote := new(big.Int).Div(total, big.NewInt(int64(blockData.Header.Voters)))
+					// Divide by 2 first to get PoS portion (fees are split 50/50 between PoW and PoS)
+					halfTotal := new(big.Int).Div(total, big.NewInt(2))
+					perVote := new(big.Int).Div(halfTotal, big.NewInt(int64(blockData.Header.Voters)))
 					perBlock = txhelpers.FormatSKAAtoms(perVote)
 					blockHeight = int64(blockData.Header.Height)
 					blockHash = blockData.Header.Hash
-					totalReward = total
+					totalReward = halfTotal
 				}
 			}
 
@@ -738,11 +768,13 @@ func (exp *explorerUI) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgB
 						if total, parsed := new(big.Int).SetString(totalStr, 10); parsed {
 							bInfo := exp.dataSource.GetExplorerBlock(ctx, sum30[i].Hash)
 							if bInfo != nil && bInfo.BlockBasic.Voters > 0 {
-								perVote := new(big.Int).Div(total, big.NewInt(int64(bInfo.BlockBasic.Voters)))
+								// Divide by 2 first to get PoS portion (fees are split 50/50 between PoW and PoS)
+								halfTotal := new(big.Int).Div(total, big.NewInt(2))
+								perVote := new(big.Int).Div(halfTotal, big.NewInt(int64(bInfo.BlockBasic.Voters)))
 								perBlock = txhelpers.FormatSKAAtoms(perVote)
 								blockHeight = int64(sum30[i].Height)
 								blockHash = sum30[i].Hash
-								totalReward = total
+								totalReward = halfTotal
 								break
 							}
 						}
@@ -803,54 +835,58 @@ func (exp *explorerUI) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgB
 		p.HomeInfo.SKAVoteRewards = nil
 	}
 
-	// PoW SKA rewards: prioritize rewards from the current block (miner-centric),
-	// then fallback to previous blocks if current block is empty.
+	// PoW SKA rewards: Extract from current block's stake transactions by identifying
+	// coinbase spends with skaamountin in vin (PoW reward indicator). Fall back to
+	// searching previous blocks if current block has no PoW rewards.
 	var powRewardsBlockHeight int64
-	if len(newBlockData.SKAPoWRewards) > 0 {
-		powRewardsBlockHeight = newBlockData.Height
-		for i := range newBlockData.SKAPoWRewards {
-			newBlockData.SKAPoWRewards[i].BlockHeight = powRewardsBlockHeight
-		}
-		p.HomeInfo.PoWSKARewards = newBlockData.SKAPoWRewards
-	} else {
-		var powRewardsMap map[uint8]string
-		if len(blockData.ExtraInfo.SKAPoWRewards) > 0 {
-			powRewardsBlockHeight = newBlockData.Height
-			powRewardsMap = blockData.ExtraInfo.SKAPoWRewards
-		} else {
-			// Fallback: Search backwards from the current block height.
-			// Use RPC to compute SKA fees from block transaction data.
-			// NOTE: This loop makes up to 4320 RPC calls. Consider caching SKA fees
-			// in the DB to avoid repeated RPC overhead in production.
-			currentHeight := newBlockData.Height
-			for h := currentHeight - 1; h >= currentHeight-4320 && h >= 0; h-- {
-				skaFees, err := exp.dataSource.GetBlockSKAFees(ctx, h)
-				if err != nil {
-					continue
-				}
-				if len(skaFees) > 0 {
-					powRewardsBlockHeight = h
-					powRewardsMap = skaFees
-					break
-				}
-			}
-		}
+	var powRewardsMap map[uint8]string
 
+	// First, try to extract PoW rewards directly from current block's stake transactions
+	if msgBlock != nil {
+		powRewardsMap = blockdata.BlockSKAPoWRewardsFromSTx(msgBlock)
 		if len(powRewardsMap) > 0 {
-			powRewards := make([]types.PoWSKAReward, 0, len(powRewardsMap))
-			for ct, amountStr := range powRewardsMap {
-				powRewards = append(powRewards, types.PoWSKAReward{
-					CoinType:    ct,
-					Symbol:      fmt.Sprintf("SKA%d", ct),
-					Amount:      amountStr,
-					BlockHeight: powRewardsBlockHeight,
-				})
-			}
-			sort.Slice(powRewards, func(i, j int) bool { return powRewards[i].CoinType < powRewards[j].CoinType })
-			p.HomeInfo.PoWSKARewards = powRewards
-		} else {
-			p.HomeInfo.PoWSKARewards = nil
+			powRewardsBlockHeight = newBlockData.Height
 		}
+	}
+
+	// Fallback: use ExtraInfo SKAPoWRewards if current block has none.
+	// These are total fees from regular transactions - need to divide by 2 to get PoW portion.
+	if len(powRewardsMap) == 0 && len(blockData.ExtraInfo.SKAPoWRewards) > 0 {
+		powRewardsBlockHeight = newBlockData.Height
+		powRewardsMap = divideByTwoSKAFees(blockData.ExtraInfo.SKAPoWRewards)
+	}
+
+	// Fallback: search backwards from the current block height for blocks with SKA activity.
+	// These are total fees - need to divide by 2 to get PoW portion.
+	if len(powRewardsMap) == 0 {
+		currentHeight := newBlockData.Height
+		for h := currentHeight - 1; h >= currentHeight-4320 && h >= 0; h-- {
+			skaFees, err := exp.dataSource.GetBlockSKAFees(ctx, h)
+			if err != nil {
+				continue
+			}
+			if len(skaFees) > 0 {
+				powRewardsBlockHeight = h
+				powRewardsMap = divideByTwoSKAFees(skaFees)
+				break
+			}
+		}
+	}
+
+	if len(powRewardsMap) > 0 {
+		powRewards := make([]types.PoWSKAReward, 0, len(powRewardsMap))
+		for ct, amountStr := range powRewardsMap {
+			powRewards = append(powRewards, types.PoWSKAReward{
+				CoinType:    ct,
+				Symbol:      fmt.Sprintf("SKA%d", ct),
+				Amount:      amountStr,
+				BlockHeight: powRewardsBlockHeight,
+			})
+		}
+		sort.Slice(powRewards, func(i, j int) bool { return powRewards[i].CoinType < powRewards[j].CoinType })
+		p.HomeInfo.PoWSKARewards = powRewards
+	} else {
+		p.HomeInfo.PoWSKARewards = nil
 	}
 
 	// If exchange monitoring is enabled, set the exchange rate.
@@ -928,11 +964,8 @@ func (exp *explorerUI) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgB
 
 // ChartsUpdated should be called when a chart update completes.
 func (exp *explorerUI) ChartsUpdated() {
-	anonSet := exp.chartSource.AnonymitySet()
 	exp.pageData.Lock()
-	if exp.pageData.HomeInfo.CoinSupply > 0 {
-		exp.pageData.HomeInfo.MixedPercent = float64(anonSet) / float64(exp.pageData.HomeInfo.CoinSupply) * 100
-	}
+	// MixedPercent removed - was used for privacy mix tracking
 	exp.pageData.Unlock()
 }
 
@@ -1162,18 +1195,31 @@ func computeCoinFills(stats map[uint8]types.MempoolCoinStats, maxBlockSize float
 		return
 	}
 
+	// withDisplay populates PctOfTC and IsOverflow from the segment ratios.
+	// PctOfTC is the cumulative fill expressed as percent of total block
+	// capacity. It is NOT clamped — if a coin's mempool transactions exceed
+	// the block's max size (e.g. 115%), the indicator must surface that, per
+	// the PO. The bar's visual width is clipped at 100% via SCSS; the textual
+	// percentage and the IsOverflow flag tell the user the true magnitude.
+	withDisplay := func(d types.CoinFillData) types.CoinFillData {
+		raw := d.GQFillRatio*d.GQPositionRatio + d.ExtraFillRatio + d.OverflowFillRatio
+		d.PctOfTC = raw * 100.0
+		d.IsOverflow = raw > 1.0
+		return d
+	}
+
 	varStatus := fillStatus(varSize, varQuota)
 	varExtra, varOverflow := extraOrOverflow(varSize, varQuota, varStatus)
 
 	fills := make([]types.CoinFillData, 0, 1+numSKA)
-	fills = append(fills, types.CoinFillData{
+	fills = append(fills, withDisplay(types.CoinFillData{
 		Symbol:            "VAR",
 		GQFillRatio:       math.Min(varSize/varQuota, 1.0),
 		ExtraFillRatio:    varExtra,
 		OverflowFillRatio: varOverflow,
 		GQPositionRatio:   0.10,
 		Status:            varStatus,
-	})
+	}))
 
 	if numSKA == 0 {
 		return fills, totalFillRatio, 0
@@ -1187,14 +1233,14 @@ func computeCoinFills(stats map[uint8]types.MempoolCoinStats, maxBlockSize float
 		size := float64(s.Size)
 		status := fillStatus(size, perSKAQuota)
 		extra, overflow := extraOrOverflow(size, perSKAQuota, status)
-		fills = append(fills, types.CoinFillData{
+		fills = append(fills, withDisplay(types.CoinFillData{
 			Symbol:            fmt.Sprintf("SKA%d", ct),
 			GQFillRatio:       math.Min(size/perSKAQuota, 1.0),
 			ExtraFillRatio:    extra,
 			OverflowFillRatio: overflow,
 			GQPositionRatio:   gqPos,
 			Status:            status,
-		})
+		}))
 	}
 	return fills, totalFillRatio, numSKA
 }
