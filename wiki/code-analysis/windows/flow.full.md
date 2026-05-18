@@ -49,6 +49,7 @@ Failures:
 
 ### Section 8 — Evidence
 - **Query:** `db/dcrpg/internal/blockstmts.go:125` (`SelectWindowsByLimit`)
-- **Aggregation:** `db/dcrpg/queries.go:856` (`retrieveWindowBlocks`)
-- **Routing:** `cmd/dcrdata/internal/explorer/explorerroutes.go:377` (`StakeDiffWindows`)
+- **Entrypoint:** `db/dcrpg/pgblockchain.go:1806` (`(*ChainDB).PosIntervals`, the `dataSource` method the handler calls)
+- **Aggregation:** `db/dcrpg/queries.go:905` (`retrieveWindowBlocks`)
+- **Routing:** `cmd/dcrdata/internal/explorer/explorerroutes.go:386` (`StakeDiffWindows`)
 - **UI:** `cmd/dcrdata/views/windows.tmpl`

@@ -174,7 +174,7 @@ When modifying this page, check:
 See also:
 - /wiki/code-analysis/attack-cost/patterns.md (shares-pattern-with: VAR-only legacy snapshot, untyped `data-*`↔Stimulus contract, client-side-only math)
 - /wiki/code-analysis/attack-cost/impact.md (depends-on: shared `HomeInfo` struct, exchange-bot price, snapshot staleness)
-- /wiki/code-analysis/address/summary.impact.md (shares-pattern-with: legacy flat fields read while everything is labelled `DCR`)
+- /wiki/code-analysis/address/impact.md (shares-pattern-with: legacy flat-field shim / `DCR` labelling — attack-cost still reads its `HomeInfo` flat fields; address keeps the analogous back-compat VAR fields, now template-unread)
 - /wiki/code-analysis/visualblocks/patterns.md (shares-pattern-with: untyped Go→JS contract, vendored Dygraphs coupling)
 - /wiki/core/constraints.md (depends-on: C1 numeric precision — float64 VAR vs big.Int SKA)
 - /wiki/core/pages.md (depends-on: `/attack-cost` route registry entry)

@@ -91,3 +91,11 @@ Implication:
 
 - No shared transformation layer
 - High duplication risk
+
+---
+
+See also:
+
+- /wiki/code-analysis/page-rendering/impact.md (depends-on: "Saver Writer/Reader Drift" — `(*ChainDB).Store` is one of the fan-out `BlockDataSaver`s; a one-sided saver change desyncs HTML vs WebSocket).
+- /wiki/code-analysis/page-rendering/patterns.md (shares-pattern-with: out-of-band shared page state populated by the same block saver fan-out).
+- /wiki/core/constraints.md#C2 (depends-on: dual pipeline mutation — DB `MsgBlockToDBBlock` vs UI `BlockData` recompute independently), #C8 (shares-pattern-with: dual-transport shape asymmetry — REST `map[uint8]string` vs WS sorted arrays).

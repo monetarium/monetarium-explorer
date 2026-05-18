@@ -81,5 +81,5 @@ failure on this page is **silent** — the calculator renders but produces wrong
 See also:
 - /wiki/code-analysis/attack-cost/flow.full.md (depends-on)
 - /wiki/code-analysis/attack-cost/patterns.md (depends-on)
-- /wiki/code-analysis/address/summary.impact.md (shares-pattern-with: legacy flat fields, `DCR` labelling)
+- /wiki/code-analysis/address/impact.md (shares-pattern-with: legacy flat-field shim / `DCR` labelling — same back-compat VAR fields; address's are now template-unread, attack-cost's `HomeInfo` ones still read)
 - /wiki/core/constraints.md (depends-on: C1 numeric precision — float64 VAR vs big.Int SKA)

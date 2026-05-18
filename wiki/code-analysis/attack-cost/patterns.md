@@ -19,8 +19,10 @@ projected ticket price) runs in `attackcost_controller.js`.
 
 **Description:** Reads the legacy flat `HomeInfo.CoinSupply int64` / `TicketPoolInfo`
 (`explorertypes.go:811,1375`) and never the multi-coin `VARCoinSupply`/`SKACoinSupply`.
-All "DCR" labels are legacy VAR naming. Shared with `address/summary.impact.md`
-(template still reads legacy flat fields, labels everything `DCR`).
+All "DCR" labels are legacy VAR naming. Shared with `address/patterns.md`
+("Legacy flat-field shim (residual)") — the address page retains the same
+back-compat legacy flat VAR fields, though its template no longer reads them
+(attack-cost still does, for `HomeInfo`).
 
 **Constraints:**
 - Treat "coin supply" / "DCR" on this page as VAR-only; SKA is out of scope by design.
@@ -49,5 +51,5 @@ seen in the charts/visualblocks flows.
 See also:
 - /wiki/code-analysis/attack-cost/flow.full.md (shares-pattern-with)
 - /wiki/code-analysis/visualblocks/patterns.md (shares-pattern-with: untyped Go→JS contract, vendored Dygraphs)
-- /wiki/code-analysis/address/summary.impact.md (shares-pattern-with: legacy flat-field / `DCR` labelling)
+- /wiki/code-analysis/address/patterns.md (shares-pattern-with: legacy flat-field shim / `DCR` labelling — address keeps the same back-compat VAR fields, now template-unread)
 - /wiki/core/constraints.md (depends-on: C1 numeric precision)

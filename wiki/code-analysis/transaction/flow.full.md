@@ -16,7 +16,7 @@ A transaction is strictly single-coin.
 Node RPC (tx notification) → `mempoolmonitor` fetches raw hex → `txhelpers.MsgTxFromHex` (Go memory) → `txhelpers.SKATotalsFromMsgTx` (sums the transaction's single-coin outputs) → `explorertypes.MempoolTx.SKATotals` (map[uint8]string) → WebSocket → JS Controller clones `<template>` → Javascript formats `ska_totals` to UI.
 
 **Confirmed Flow:**
-Postgres block height update → UI requests `GetAPITransaction` → `pgblockchain` queries Node RPC `GetRawTransactionVerbose` → Node maps `CoinType` and `SKAValue` into `Vout` array → `apitypes.TxShort` wraps array → Server renders `tx.tmpl` → Template ignores coin data and hardcodes generic `Amount`.
+Postgres block height update → UI requests `GetAPITransaction` → `pgblockchain` queries Node RPC `GetRawTransactionVerbose` → Node maps `CoinType` and `SKAValue` into `Vout` array → `apitypes.TxShort` wraps array → Server renders `tx.tmpl`, which branches per `$.Data.CoinType` (VAR → `float64AsDecimalParts`; SKA → `skaDecimalParts .ValueRaw`) with `coinSymbol` for the unit. The confirmed page is server-rendered once; it does **not** live-update over WebSocket.
 
 ### 3. Per-Layer Breakdown
 
@@ -36,20 +36,20 @@ Postgres block height update → UI requests `GetAPITransaction` → `pgblockcha
 
 - **Location:** `cmd/dcrdata/views/home_mempool.tmpl`, `homepage_controller.js`, `cmd/dcrdata/views/tx.tmpl`
 - **Data Structures:** WebSocket JSON (`TrimmedMempoolTx`), Template Data (`explorertypes.TxInfo`)
-- **Transformations Applied:** The mempool relies on Javascript checking `if (tx.ska_totals)` and formatting it live. The confirmed view relies on Go templates iterating `range $i, $v := .Vout` and applying `float64AsDecimalParts .Amount`, completely discarding coin context.
+- **Transformations Applied:** The mempool relies on Javascript checking `if (tx.ska_totals)` and formatting it live. The confirmed view relies on Go templates iterating `range $i, $v := .Vout`; each amount cell branches on `$.Data.CoinType` — VAR renders via `float64AsDecimalParts .Amount` (8-dec, float64-safe per C1), SKA via `skaDecimalParts .ValueRaw` (decimal string, no float) — with `coinSymbol $.Data.CoinType` for the unit (`tx.tmpl:573`, mirrored at `:500`/`:60`/`:101`).
 
 ### 4. Cross-Layer Dependencies
 
 - The REST API and confirmed UI are heavily coupled to the underlying node's verbose JSON structure (`chainjson`). Changes to how the node exposes multi-coins immediately affect the explorer.
 - The mempool UI is directly coupled to `txhelpers.SKATotalsFromMsgTx`. It depends entirely on the Go backend replicating node decoding logic accurately in memory.
-- The Stimulus Javascript controllers expect a single-coin total for the SKA coin in the mempool but hold no logic for displaying confirmed SKA transactions (which fall back to static HTML arrays).
+- The Stimulus Javascript controllers handle the live mempool single-coin total (`ska_totals`); confirmed SKA transactions are rendered server-side by `tx.tmpl`'s `{{if eq $.Data.CoinType 0}}` branches, not by JS. The two render paths are independent and must be kept coin-consistent (C3).
 
 ### 5. Critical Constraints
 
 - **Precision Rules:** Multi-coin values use 18 decimal places. They must always traverse the stack as `*big.Int` or `string` (`SKAValue`, `SKATotals`), never as `float64`.
 - **Divergent Source of Truth:** Confirmed data trusts the node's RPC parsing. Mempool data trusts the `monetarium-explorer`'s internal `txhelpers` parsing.
 - **Missing WebSocket Events:** Confirmed transactions are not broadcast explicitly via WebSockets with full datasets; clients are only pinged a `sigNewBlock` signal.
-- **UI Template Flaw:** `tx.tmpl` does not use `.CoinType` or `.SKAValue` properties for the Outputs table, meaning confirmed SKA transactions are improperly rendered as base `Amount`.
+- **Per-coin render branch:** `tx.tmpl`'s amount cells branch on `$.Data.CoinType` — SKA uses the precise `.ValueRaw` decimal string via `skaDecimalParts`; only the VAR branch uses the float64 `.Amount` / `float64AsDecimalParts` path (safe for 8-dec VAR, C1). Breaking or bypassing this branch (rendering SKA through the VAR `.Amount` path) silently corrupts SKA precision.
 
 ### 6. Mutation Impact
 
@@ -58,7 +58,7 @@ When modifying **transaction data structures or multi-coin logic**, you MUST che
 - **Direct dependencies:** `apitypes.Vout`, `apitypes.TxShort`, `explorertypes.MempoolTx`
 - **Indirect dependencies:** `txhelpers.SKATotalsFromMsgTx`, the `dcrpg.GetRawTransactionVerbose` RPC wrapper.
 - **Serialization boundaries:** The `TrimmedMempoolTx` WebSocket schema.
-- **Rendering layers:** Support for rendering the transaction's specific CoinType must be explicitly added to `cmd/dcrdata/views/tx.tmpl`, mimicking logic found in `homepage_controller.js` or `home_mempool.tmpl`.
+- **Rendering layers:** `cmd/dcrdata/views/tx.tmpl` already renders per `$.Data.CoinType` (VAR `float64AsDecimalParts` vs SKA `skaDecimalParts .ValueRaw`, `coinSymbol`); a new coin-dependent field must extend **both** branches there. The live mempool path is separate (`homepage_controller.js` + `home_mempool.tmpl`) and must be updated in parallel.
 
 **Silently breaks:** Altering `.Amount` types or coin processing in `txhelpers` vs `dcrd` will cause silent data divergence.
 **Fails loudly:** Altering `apitypes.Vout` missing JSON tags will break downstream API clients instantly.
@@ -76,7 +76,7 @@ When modifying **transaction data structures or multi-coin logic**, you MUST che
 - **Mempool SKA extraction map:** `mempool/collector.go` (Line ~162) - `SKATotals: txhelpers.SKATotalsFromMsgTx(msgTx)`
 - **Confirmed API Node usage:** `db/dcrpg/pgblockchain.go` (Line ~5019) - `pgb.Client.GetRawTransactionVerbose`
 - **Confirmed Struct Binding:** `db/dcrpg/pgblockchain.go` (Line ~5058) - maps `Vout[i].CoinType` and `Vout[i].SKAValue` manually.
-- **Template Misrepresentation:** `cmd/dcrdata/views/tx.tmpl` (Line 561) loops over `.Vout` but exclusively renders `(float64AsDecimalParts .Amount)`.
+- **Per-coin output rendering:** `cmd/dcrdata/views/tx.tmpl:573` renders the Vout amount as `{{if eq $.Data.CoinType 0}}{{float64AsDecimalParts .Amount …}}{{else}}{{skaDecimalParts .ValueRaw …}}{{end}}` (same idiom at `:60`, `:101`, `:500`); unit via `coinSymbol $.Data.CoinType`.
 - **Mempool UI Logic:** `cmd/dcrdata/public/js/controllers/homepage_controller.js` handles `ska_totals` via DOM templates correctly.
 
 ### 9. Data Flow Priority Rule
@@ -84,5 +84,6 @@ When modifying **transaction data structures or multi-coin logic**, you MUST che
 The overriding flow concept is **aggregation vs. index-preservation**. Mempool flows squash output data immediately into maps. Confirmed flows proxy node-provided arrays verbatim. Any cross-cutting concern (like tracking a specific coin's movement) must reconcile these two formats.
 
 See also:
-- /wiki/code-analysis/address/flow.full.md — the address page lists per-tx rows via `FillAddressTransactions` and inherits the same SKA template-rendering gap (address links upstream with `depends-on`).
+- /wiki/code-analysis/address/flow.full.md — the address page lists per-tx rows via `FillAddressTransactions` and shares the multi-coin `{{if eq .CoinType 0}}` render idiom (address links upstream with `depends-on`).
 - /wiki/core/constraints.md (depends-on: C1 numeric precision & bifurcation; C2 dual pipeline mutation; C3 template + WebSocket parity; C4 perimeter flattening & array stability; shares-pattern-with: C8 dual-transport shape asymmetry — mempool `SKATotals` aggregation vs confirmed verbatim `Vout` array)
+- /wiki/code-analysis/mempool/impact.md (depends-on: "Dual collection path divergence (batch vs incremental)" — per-tx `SKATotals`/fee construction differs between `mempoolTxns` and `TxHandler`)

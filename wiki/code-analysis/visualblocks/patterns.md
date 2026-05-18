@@ -46,7 +46,7 @@ Both names appear in `visualblocks.tmpl`. JS uses the `||` fallback. Don't unify
 
 The 30-tile limit is enforced in three places that all reference the same logical N:
 
-1. **Go:** `homePageBlocksMaxCount = 30` ([cmd/dcrdata/internal/explorer/explorerroutes.go:134](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L134)) — passed to `GetExplorerFullBlocks(ctx, h, h-30)`.
+1. **Go:** `homePageBlocksMaxCount = 30` ([cmd/dcrdata/internal/explorer/explorerroutes.go:135](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L135)) — passed to `GetExplorerFullBlocks(ctx, h, h-30)`.
 2. **Template:** `clipSlice 30` applied **per-tile-internals** (tickets, txs) when `> 50`. Distinct from the outer 30-tile cap.
 3. **JS:** `box.removeChild(box.lastChild)` after each insert (controller line ~258) plus `splice(30)` for per-tile internals.
 
@@ -98,3 +98,5 @@ See also:
 
 - [core/constraints.md#C8](../../core/constraints.md#C8) — dual-transport shape asymmetry (the umbrella for patterns 1, 2, 3 here).
 - [code-analysis/block/patterns.md](../block/patterns.md) — the same fan-out / dual-pipeline pattern at the BlockData layer.
+- /wiki/code-analysis/page-rendering/patterns.md (shares-pattern-with: shared-state lock discipline / out-of-band `pageData`+`invs` — the unified lock map across pages this page's tiles depend on).
+- /wiki/code-analysis/page-rendering/impact.md (depends-on: "Saver Writer/Reader Drift" — the `/visualblocks` HTTP vs WS payload divergence is one manifestation).
