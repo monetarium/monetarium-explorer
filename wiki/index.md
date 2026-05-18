@@ -99,6 +99,15 @@ _The `/visualblocks` page: latest-N blocks plus mempool rendered as flex-grow ti
 - patterns: code-analysis/visualblocks/patterns.md — cross-pipeline tile rendering, JS-side server-filter mirror, Subsidy struct asymmetry, triple-enforced 30-cap, memoized BlockInfo, lock order, WS subsidy patch
 - impact: code-analysis/visualblocks/impact.md — mutation impact across HTTP/WS/JS/DB layers, loud and silent failure modes, safe-change checklist
 
+### Attack-Cost
+
+_The `/attack-cost` majority-attack calculator: a no-compute Go handler reads a shared VAR-only `HomeInfo` snapshot into `data-*` attributes; all PoW/PoS math runs client-side in `attackcost_controller.js`. VAR-only by construction (legacy flat `CoinSupply`/`DCR` labels); not portable to SKA without a BigInt rewrite._
+
+- flow (compact): code-analysis/attack-cost/flow.compact.md — high-level summary of the no-compute handler, VAR-only snapshot, untyped Go→JS contract, and client-side math
+- flow (full): code-analysis/attack-cost/flow.full.md — detailed trace: node→Store→HomeInfo→handler→template→Stimulus, exchange-bot price-zero trap, snapshot staleness, SKA precision boundary
+- patterns: code-analysis/attack-cost/patterns.md — no-compute handler, VAR-only legacy snapshot, untyped `data-*`↔Stimulus contract, vendored-Dygraphs private override
+- impact: code-analysis/attack-cost/impact.md — SKA-through-VAR-pipeline corruption, shared `HomeInfo` blast radius, silently-zero exchange price, stale snapshot, Go→JS drift; mostly silent failure modes
+
 ### Parameters
 
 _The `/parameters` page: active-network consensus config. ~95% static `chaincfg.Params` captured once at startup; only `MaximumBlockSize` is dynamic (tip-only RPC `GetBlockChainInfo`). Dual param injection (`commonData.ChainParams` + handler `ExtendedParams`), block-scoped ETag cache, VAR-only subsidy rows._
