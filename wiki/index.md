@@ -55,10 +55,8 @@ _Address page rendering: paginated transaction table, chart endpoints, CSV downl
 
 - flow (compact): code-analysis/address/flow.compact.md — current data path, `?coin=` contract, filter-before-paginate + confirmed-only-balance invariants, and a stale-claim delta table vs. the prior revision
 - flow (full): code-analysis/address/flow.full.md — current function trace: coin-filtered `AddressHistory`, rewritten mempool overlay, merged-view LIMIT-0 fix, per-coin templates, coin-aware controller, chart serialization
-- patterns: code-analysis/address/patterns.md — `CoinCtx` URL contract, coin-aware aggregation, per-coin caching, SKA decimal-string pipeline, TurboQuery URL ownership ⚠️ **stale (pre-#265/#266: dual-field shim) — reconcile via `Consolidate: address`**
-- impact (summary card): code-analysis/address/summary.impact.md ⚠️ **stale** — describes the now-completed VAR-only→multi-coin summary migration (`FiatBalance` removed, per-coin card shipped)
-- impact (transactions): code-analysis/address/transactions.impact.md ⚠️ **stale** — per-row coin fields are now read by the template (Coin column + SKA branches shipped)
-- impact (charts): code-analysis/address/charts.impact.md ⚠️ **partially stale** — frontend now emits `?coin=`; SKA SQL precision bug fixed (PR #263)
+- patterns: code-analysis/address/patterns.md — `CoinCtx` URL contract (backend + frontend), coin-aware aggregation (3 pipelines), per-coin caching, SKA decimal-string pipeline, dual VAR/SKA SUM, VAR-only stake metrics, legacy flat-field shim (residual), TurboQuery URL ownership
+- impact: code-analysis/address/impact.md — consolidated current-reality blast radius: coin-filter signature fan-out (+4 mocks), `CoinTypeAll=255` dual semantics, SKA-through-VAR precision (PR #263 class), coin-keyed cache staleness, `?coin=` server/client desync, legacy flat-field shim removal, CSV `value`→`amount` schema break (folds the former summary/transactions/charts sub-area notes)
 
 ### Windows
 
@@ -66,6 +64,8 @@ _Ticket price window intervals, calculating and displaying current and upcoming 
 
 - flow (compact): code-analysis/windows/flow.compact.md — high-level summary of ticket window calculations and database queries
 - flow (full): code-analysis/windows/flow.full.md — detailed, step-by-step function trace for deep debugging of window intervals
+- patterns: code-analysis/windows/patterns.md — ticket-price-window reusable behavior: Postgres integer-division GROUP BY grouping, mainchain-only filter, shared dbtypes.BlocksGroupedInfo pass-through, multi-coin coin_tx_stats reconciliation
+- impact: code-analysis/windows/impact.md — windows mutation blast radius: StakeDiffWindowSize/SQL-denominator desync, cross-domain BlocksGroupedInfo field changes, coin_tx_stats Scan mismatch, TicketPrice template-boundary type, pagination drift
 
 ### Time-Based Blocks
 
@@ -73,6 +73,8 @@ _Aggregation and grouping of blocks over specific time intervals (days, weeks, m
 
 - flow (compact): code-analysis/time-based-blocks/flow.compact.md — high-level summary of how blocks are grouped by time periods
 - flow (full): code-analysis/time-based-blocks/flow.full.md — detailed, step-by-step function trace for deep debugging of time aggregations
+- patterns: code-analysis/time-based-blocks/patterns.md — SQL date_trunc UTC aggregation, shared BlocksGroupedInfo struct (windows coupling), controller-level YTD mutation, genesis-anchored pagination, handler-level year fallback
+- impact: code-analysis/time-based-blocks/impact.md — UTC cast divergence, positional rows.Scan desync, cross-domain struct breakage, YTD mislabel, fallback removal, hard DB-timeout blanking
 
 ### Mempool
 
@@ -81,7 +83,7 @@ _Multi-coin aggregation (CoinStats + derived CoinFills), dual collection paths (
 - flow (compact): code-analysis/mempool/flow.compact.md — high-level summary of mempool state aggregation, fan-out, and WS delivery
 - flow (full): code-analysis/mempool/flow.full.md — detailed, step-by-step function trace covering monitor/collector, savers, CoinFills derivation, WS encoders, templates, and JS controller
 - patterns: code-analysis/mempool/patterns.md — batch+incremental aggregation, multi-saver fan-out, dual-transport WS, atom-string arithmetic, derived-view dual write, inventory locking, rAF indicator batching
-- impact: code-analysis/mempool/impact.md — precision, batch/incremental drift, CoinFills recompute gaps, saver nil-guard, DeepCopy/Trim omissions, WS schema drift, Go↔JS drift, mempool.tmpl SKA gap, lock-order inversion
+- impact: code-analysis/mempool/impact.md — precision, dual collection-path divergence (CoinStats + per-tx fees), CoinFills recompute gap, saver nil-guard, DeepCopy/Trim omissions, WS schema drift, Go↔JS drift, lock-order inversion
 
 ### Charts
 
@@ -89,6 +91,8 @@ _Historical data fetching, cache aggregation, and payload serialization for UI c
 
 - flow (compact): code-analysis/charts/flow.compact.md — high-level summary of both VAR and SKA chart pipelines
 - flow (full): code-analysis/charts/flow.full.md — detailed, step-by-step function trace covering RPC/SQL → cache → API → controller → Dygraphs for both pipelines
+- patterns: code-analysis/charts/patterns.md — reusable architecture: dual VAR/SKA coin-supply pipelines under one chart-ID namespace, string-precision SKA path, uint8↔string ID coupling, contractual `h` height field, cache-write asymmetry, lockless first-load, TurboQuery+Zoom projection
+- impact: code-analysis/charts/impact.md — mutation blast radius: `accumulate`/`uint64` misuse on SKA, legend `float64` precision loss, missing `h` on time-axis, `coinType==0` loader path, concurrent first-load race, `coin-supply`/`coin-supply/0` endpoint duality, `DataSource` mock fan-out, `ActiveSKATypes` dropdown drift
 
 ### VisualBlocks
 
@@ -114,6 +118,8 @@ _The `/parameters` page: active-network consensus config. ~95% static `chaincfg.
 
 - flow (compact): code-analysis/parameters/flow.compact.md — high-level summary of the static-vs-dynamic split, dual injection, and silent/hard failure modes
 - flow (full): code-analysis/parameters/flow.full.md — detailed, step-by-step trace from node config/RPC → pageData → handler → template, with cross-layer deps and mutation impact
+- patterns: code-analysis/parameters/patterns.md — near-static chaincfg.Params page: dual-source commonData/ExtendedParams split, hardcoded network-name prefix table, VAR-only subsidy rows, unchecked MaximumBlockSizes[0] fallback
+- impact: code-analysis/parameters/impact.md — commonData nil → .ChainParams deref crash, silent blank/misaligned address-prefix table on unknown network, stale/empty-slice MaximumBlockSize, unlocked pageData.BlockchainInfo race
 
 ### Page-Rendering (cross-domain consolidation)
 

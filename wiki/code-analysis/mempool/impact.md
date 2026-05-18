@@ -15,18 +15,28 @@ SKA uses 18 decimal places; an 18-decimal value > 10 already exceeds `float64`'s
 
 ---
 
-## Risk: Batch and incremental `CoinStats` paths drift
+## Risk: Dual collection path divergence (batch vs incremental)
+
+> Normalized from two prior narrow entries ("Batch and incremental `CoinStats` paths drift" + "Per-tx fee fields differ between batch and incremental construction"). Both are the same root cause — the `MempoolInfo` snapshot is produced by two non-shared code paths that must stay equivalent — and share one failure mode and propagation path. `shares-pattern-with`: [patterns.md → "Dual collection path: batch (block boundary) + incremental (per tx)"](patterns.md).
 
 **Trigger:**
-Adding a new aggregated field on `MempoolCoinStats` (or a new tx-type bucket) in only one of `ParseTxns` ([mempool/collector.go:519-644](../../../mempool/collector.go)) or `addTxToCoinStats` ([mempool/monitor.go:545-617](../../../mempool/monitor.go)).
+Any output that diverges between the two `MempoolInfo`-building paths. Two known manifestations:
+- **(A) Aggregate `CoinStats`** — adding a new aggregated field on `MempoolCoinStats` (or a new tx-type bucket) in only one of `ParseTxns` ([mempool/collector.go:519-644](../../../mempool/collector.go)) or `addTxToCoinStats` ([mempool/monitor.go:545-617](../../../mempool/monitor.go)).
+- **(B) Per-tx `MempoolTx` fields** — relying on `MempoolTx.Fees`/`SKAFeeRates` being identical regardless of which path built the tx, or adding a new per-tx field to only one of `mempoolTxns` ([mempool/collector.go:145-164](../../../mempool/collector.go)) / `TxHandler` ([mempool/monitor.go:257-275](../../../mempool/monitor.go)).
 
 **Affected flows:**
 - [/wiki/code-analysis/mempool/flow.full.md](flow.full.md)
+- [/wiki/code-analysis/transaction/flow.full.md](../transaction/flow.full.md) (depends-on: per-tx `SKATotals`/fee construction)
 
-**Failure mode:** silent until the next block boundary, then loud.
+**Failure mode:** silent within a block window, self-correcting (or "loud") at the next block boundary — flaky-by-load-timing.
 
 **Description:**
-Mempool state can come from either path. The incremental path (`TxHandler`) is what produces the snapshot between blocks; the batch path (`CollectAndStore`) overrides it at every new block. A field implemented only in the batch path will appear to "lag by one block": correct at block boundary, drifts back to default during the block window. A field implemented only in the incremental path resets on every new block. Both manifest as flaky data depending on when the user loads the page. Tests in [mempool/monitor_test.go](../../../mempool/monitor_test.go) only cover the incremental path; the batch path is currently uncovered.
+The incremental path (`TxHandler`) produces the snapshot *between* blocks; the batch path (`CollectAndStore` → `ParseTxns`) overrides it at *every* new block. Anything implemented or sourced differently across the two paths will appear correct at one phase and wrong at the other:
+
+- **(A)** A `CoinStats` field present only in the batch path "lags by one block" (drifts to default during the block window); present only in the incremental path it resets on every new block.
+- **(B)** The two `MempoolTx` constructors derive fees from **different upstream sources**: batch trusts the node's `GetRawMempoolVerbose` result (`Fees = tx.Fee`, `SKAFeeRates = SKAFeeRateMapFromAtoms(tx.SKAFee, msgTx)`); incremental recomputes from the decoded `msgTx` (`Fees = TxFeeRate(msgTx).fee.ToCoin()`, which depends on `valsIn` being back-filled onto `msgTx.TxIn` at `monitor.go:252-254`; `SKAFeeRates = SKAFeeRateMapFromVerboseVin(rawTx.Vin, msgTx)`). A missing prev-out value makes the incremental `Fees` disagree with the node-authoritative value until the next batch refresh corrects it. `FeeRate` is **not** affected — both paths use `txhelpers.TxFeeRate(msgTx)`. This is where the SKA-fee modelling gap (flow.full Pitfall 7) and the dual-source divergence (Pitfall 8) intersect.
+
+Tests in [mempool/monitor_test.go](../../../mempool/monitor_test.go) cover only the incremental path; the batch path and the per-tx fee-source equivalence are currently uncovered.
 
 ---
 

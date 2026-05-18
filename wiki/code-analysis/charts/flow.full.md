@@ -38,10 +38,10 @@ PostgreSQL `vins.value_in` deltas → `pgb.coinSupply` fetcher (registered as a 
   - **Transformations:**
     - `(*ChartData).Chart` (line 1050) — looks up `chartMakers[chartID]`; if absent and `IsSKASupplyChart(chartID)`, dispatches to `skaSupplyChart(...)` **without consulting or writing the JSON cache** (`cacheChart` is only called for `chartMakers` hits). VAR continues to be cached.
     - `coinSupplyChart` (line 1262) — VAR-only; uses `accumulate(charts.Blocks.NewAtoms)` (line 1269) for `BlockBin` and `accumulate(charts.Days.NewAtoms)` (line 1284) for `DayBin`; emits `{h, supply}` or `{h, t, supply}` via `encode`.
-    - `skaSupplyChart` (line 1689) — coinType-0 short-circuits to `coinSupplyChart`. Otherwise reads `charts.SKASupply[coinType]` under `RLock`. For `BlockBin` it returns the per-block series verbatim; for `DayBin` it calls `aggregateSKASupply(timestamps, heights, values)` (line 1814), which buckets by `t / 86400`, keeps the **last** sample per day, and re-emits `(timestamp, height, value)` triples sorted ascending by day. The block-bin response always carries `h`; the day-bin time-axis response also carries `h` per fix `a9db4b3b`.
+    - `skaSupplyChart` (line 1692) — coinType-0 short-circuits to `coinSupplyChart`. Otherwise reads `charts.SKASupply[coinType]` under `RLock`. For `BlockBin` it returns the per-block series verbatim; for `DayBin` it calls `aggregateSKASupply(timestamps, heights, values)` (line 1814), which buckets by `t / 86400`, keeps the **last** sample per day, and re-emits `(timestamp, height, value)` triples sorted ascending by day. The block-bin response always carries `h`; the day-bin time-axis response also carries `h` per fix `a9db4b3b`.
     - `accumulate` (line 1105) is **VAR-only**: `uint64` accumulator overflows for SKA atoms.
 
-- **Location:** `cmd/dcrdata/internal/api/apiroutes.go:1889-1923` (`ChartTypeData`), router at `cmd/dcrdata/internal/api/apirouter.go:240-243` and middleware at `cmd/dcrdata/internal/middleware/apimiddleware.go:796-815`.
+- **Location:** `cmd/dcrdata/internal/api/apiroutes.go:1942-1975` (`ChartTypeData`), router at `cmd/dcrdata/internal/api/apirouter.go:240-243` and middleware at `cmd/dcrdata/internal/middleware/apimiddleware.go:796-815`.
   - **Data Structures:** `c.charts *cache.ChartData`, `c.DataSource.LoadSKASupplyForCoin(...)`.
   - **Transformations:**
     - `r.With(m.CoinSupplyChartTypeCtx).Get("/coin-supply/{charttype}", app.ChartTypeData)` — for `coin-supply/N`, the middleware re-prefixes the URL param, putting `"coin-supply/" + charttype` into `ctxChartType`. The fallthrough `r.With(m.ChartTypeCtx).Get("/{charttype}", app.ChartTypeData)` covers everything else.
@@ -105,7 +105,7 @@ When modifying chart data structures or pipelines, check ALL of:
   - Forgetting `h` on a SKA time-axis response leaves the frontend with no per-point block alignment, breaking `xFunc(i) = heights[i]` for the day bin.
   - Stale `?zoom=` after switching between VAR and SKA charts — the `charts` controller calls `Zoom.project(...)` across data-range changes (line 901), unlike the address controller; behavior is OK but worth understanding before changing.
 - **Hard failures:**
-  - `LoadSKASupplyForCoin` with `coinType == 0` would `Scan(&h, &t, &v)` against a 2-column query (`SelectVARCoinSupplyPerBlock`) and panic. Currently unreachable because the API handler short-circuits coinType=0; reachable if a refactor removes that guard.
+  - `LoadSKASupplyForCoin` with `coinType == 0` issues the 2-column `SelectVARCoinSupplyPerBlock` but `Scan(&h, &t, &v)` expects 3 targets. This does **not** panic: the per-row scan error is logged and `continue`d ([db/dcrpg/pgblockchain.go:1103-1106](../../../db/dcrpg/pgblockchain.go#L1103-L1106)), so **every** row is skipped and the result is empty → downstream "no data" → HTTP 503 (loud but degraded, not a crash). Currently unreachable because the API handler short-circuits coinType=0; reachable if a refactor removes that guard.
   - `uint64` overflow if a future change pushes SKA values into `ChartUints`.
   - 503 response for `coin-supply/{N}` when no rows exist — handler returns `"chart data not available"`; chart UI shows the loading spinner indefinitely if not handled in JS.
 
@@ -125,11 +125,11 @@ When modifying chart data structures or pipelines, check ALL of:
 - **Cache types:** `db/cache/charts.go:301-308` (`SKASupplyChartData`, `SKASupplyData`); `:461` (`charts.SKASupply` field).
 - **Chart entry:** `db/cache/charts.go:1050-1078` (`(*ChartData).Chart`); SKA dispatch at `:1063-1064`.
 - **VAR chart maker:** `db/cache/charts.go:1262` (`coinSupplyChart`), accumulator at `:1269` and `:1284`.
-- **SKA chart maker:** `db/cache/charts.go:1689-1783` (`skaSupplyChart`, height/time emit, day aggregation).
+- **SKA chart maker:** `db/cache/charts.go:1692-1783` (`skaSupplyChart`, height/time emit, day aggregation).
 - **Day aggregator:** `db/cache/charts.go:1812-1855+` (`aggregateSKASupply`).
 - **DB loader:** `db/dcrpg/pgblockchain.go:1078-1138` (`LoadSKASupplyForCoin`); `*big.Int` cumulation at `:1117-1133`.
 - **SQL:** `db/dcrpg/internal/vinoutstmts.go:130-138` (`SelectCoinSupply`), `:251-259` (`SelectSKACoinSupplyPerBlock`), `:261-269` (`SelectVARCoinSupplyPerBlock`).
-- **API handler & routing:** `cmd/dcrdata/internal/api/apiroutes.go:1889-1923` (`ChartTypeData`); `cmd/dcrdata/internal/api/apirouter.go:240-243`; `cmd/dcrdata/internal/middleware/apimiddleware.go:796-815`.
+- **API handler & routing:** `cmd/dcrdata/internal/api/apiroutes.go:1942-1975` (`ChartTypeData`); `cmd/dcrdata/internal/api/apirouter.go:240-243`; `cmd/dcrdata/internal/middleware/apimiddleware.go:796-815`.
 - **Page handler & template:** `cmd/dcrdata/internal/explorer/explorerroutes.go:1911-1943` (`Charts`); `cmd/dcrdata/views/charts.tmpl:40-41` (dropdown).
 - **Frontend controller:** `cmd/dcrdata/public/js/controllers/charts_controller.js:60-77` (`skaCoinTypeFromChart`, `isCoinSupplyChart`, `formatSkaAtomsExact`); `:285-293` (`percentStakedFunc`); `:300-350` (`circulationFunc`); `:506-720` (`plotGraph`, with the `coin-supply` switch arm at `:661-720`); `:806-808` (default branch).
 - **JS helpers:** `cmd/dcrdata/public/js/helpers/ska_helper.js:16` (`renderCoinType`), `:38` (`splitSkaAtoms`), `:78` (`splitSkaAtomsNoTrailing`).

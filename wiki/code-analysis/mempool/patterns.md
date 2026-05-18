@@ -15,6 +15,9 @@ Both paths normalise per-type `*Amount` fields to `"0"` when no tx of that type 
 - Any new aggregated field on `MempoolCoinStats` (or any other batch output) MUST be added in both `ParseTxns` and `addTxToCoinStats`.
 - The incremental path uses `addAtomStrings` with explicit `isBig` flag; the batch path uses native accumulators. Mixing the two within one path (e.g. adding a string-based accumulator inside `ParseTxns`) risks precision loss.
 - Unit tests covering the incremental path live in [mempool/monitor_test.go](../../../mempool/monitor_test.go); add new field assertions there when extending `MempoolCoinStats`.
+- Equivalence applies not only to aggregates but to **per-tx `MempoolTx` fields**. The two paths build `MempoolTx` from different upstream fee sources today: batch uses the node's GRM verbose result (`tx.Fee`, `SKAFeeRateMapFromAtoms`); incremental recomputes from `msgTx` (`TxFeeRate`, `SKAFeeRateMapFromVerboseVin`). Any new per-tx field MUST be populated in both `mempoolTxns` and `TxHandler`, and prefer a single shared source over re-deriving differently per path.
+
+**depends-on:** [impact.md → "Dual collection path divergence (batch vs incremental)"](impact.md) — the consolidated risk this pattern's constraints exist to prevent (manifestations A: `CoinStats` aggregates, B: per-tx fee fields).
 
 ---
 
@@ -136,3 +139,12 @@ Standard access pattern in `TxHandler`: `p.mtx.RLock()` (pin the pointer) → `p
 - New indicator update paths must go through `updateIndicators`, not write DOM directly.
 - The `[data-coin="SKA{n}"]` attribute is the identity key; rename and you break re-targeting.
 - The `<template id="fill-bar-template">` element in [home_mempool.tmpl](../../../cmd/dcrdata/views/home_mempool.tmpl) is the source of truth for new SKA bar markup. Editing the inline `<div class="fill-bar">` without also editing the template causes dynamically-injected bars to differ from server-rendered ones.
+
+---
+
+See also:
+
+- /wiki/core/constraints.md#C2 (depends-on: dual pipeline mutation — batch `ParseTxns` vs incremental `addTxToCoinStats`/`TxHandler` must stay equivalent; see [impact.md](impact.md) "Dual collection path divergence").
+- /wiki/code-analysis/page-rendering/impact.md (depends-on: "Saver Writer/Reader Drift" — `(*explorerUI).StoreMPData` is one of the fan-out `MempoolDataSaver`s).
+- /wiki/code-analysis/page-rendering/patterns.md (shares-pattern-with: out-of-band shared page state / shared-state lock discipline — `exp.invs` swap + `CoinFills` recompute on the saver path).
+- /wiki/code-analysis/address/patterns.md (shares-pattern-with: SKA decimal-atom-string pipeline — mempool `addAtomStrings(…, isBig)` is the same precision discipline as `dbtypes.BigAddSKA`).

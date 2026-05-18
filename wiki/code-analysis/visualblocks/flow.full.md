@@ -108,7 +108,7 @@ When modifying `/visualblocks` data:
 
 ### Section 8 — Evidence
 - `cmd/dcrdata/main.go:694` — route registration `r.Get("/visualblocks", explore.VisualBlocks)`.
-- `cmd/dcrdata/internal/explorer/explorerroutes.go:134` — `homePageBlocksMaxCount = 30`.
+- `cmd/dcrdata/internal/explorer/explorerroutes.go:135` — `homePageBlocksMaxCount = 30`.
 - `cmd/dcrdata/internal/explorer/explorerroutes.go:320-382` — `VisualBlocks` handler (height → 30 full blocks → trim → mempool trim → template).
 - `cmd/dcrdata/internal/explorer/explorerroutes.go:336-351` — explicit field projection into `TrimmedBlockInfo` (Treasury/StakeFees dropped, `FilterRegularTx(block.Tx)` for `Transactions`).
 - `db/dcrpg/pgblockchain.go:7172-7188` — `GetExplorerFullBlocks` sequential loop.

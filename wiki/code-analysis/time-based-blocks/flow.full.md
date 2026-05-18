@@ -28,7 +28,7 @@ Postgres DB (blocks) → ChainDB (pgblockchain) → Explorer Handler (explorerro
 ### Section 5 — Critical Constraints
 - **Time Zones:** The Postgres aggregation query `SelectBlocksTimeListingByLimit` forces `time at time zone 'utc'`.
 - **Offset Bounds:** The `maxOffset` math relies on the genesis block timestamp (`oldestBlockTime`). It uses a +1 buffer for unaligned partial months/days.
-- **Silent Defaults:** `TimeGroupingFromStr` defaults to `YearGrouping` instead of returning errors for unhandled grouping intervals.
+- **Silent Defaults:** `TimeGroupingFromStr` ([db/dbtypes/types.go:841](../../../db/dbtypes/types.go#L841)) returns the sentinel `UnknownGrouping` for unhandled names — it does **not** default to `YearGrouping`. The year fallback lives one layer up: the `timeBasedBlocksListing` handler ([cmd/dcrdata/internal/explorer/explorerroutes.go](../../../cmd/dcrdata/internal/explorer/explorerroutes.go)) catches the `UnknownGrouping` interval error and reassigns `grouping = dbtypes.YearGrouping`; `ChainDB.TimeBasedIntervals` also hard-rejects `>= NumIntervals`. The four production routes pass fixed literals, so real routes never hit this path.
 
 ### Section 6 — Mutation Impact
 When modifying time-based block groupings, check:
