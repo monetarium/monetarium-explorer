@@ -2298,6 +2298,9 @@ func (pgb *ChainDB) AddressRowsCompact(ctx context.Context, address string, coin
 
 	// We have a result.
 	compact := dbtypes.CompactRows(rows)
+	if coinType == dbtypes.CoinTypeAll {
+		return compact, err
+	}
 	var filtered []*dbtypes.AddressRowCompact
 	for _, r := range compact {
 		if r.CoinType == coinType {

@@ -1,0 +1,100 @@
+{
+  "skill_name": "mutation-analyzer",
+  "evals": [
+    {
+      "id": "interview-block-flow",
+      "prompt": "Start interview for: Trace how block data flows from RPC to frontend rendering.",
+      "expected_output": "8-12 targeted questions focused on data flow, transformations, and cross-layer dependencies. No generic architecture questions."
+    },
+    {
+      "id": "explore-block-origin",
+      "prompt": "Explore: Where is block data initially constructed and what structures represent it?",
+      "expected_output": "Code-grounded answer with file paths and references to blockdata or RPC-related structures. Must include where data originates and how it is represented."
+    },
+    {
+      "id": "explore-block-usage",
+      "prompt": "Explore: Where is block data used in API responses and explorer rendering?",
+      "expected_output": "Answer must include multiple usage points (API handlers, explorer handlers, templates). Must show cross-layer usage, not just a single file."
+    },
+    {
+      "id": "synthesize-block-flow",
+      "prompt": "Synthesize: Trace how block data flows from RPC to frontend rendering.",
+      "expected_output": "Structured markdown document following the 10-section template. Must include end-to-end flow, per-layer breakdown, mutation impact, and evidence with file paths. Must include Compact Knowledge section."
+    },
+    {
+      "id": "interview-mutation-block-table",
+      "prompt": "Start interview for: I want to add SKA-related fields to the block table.",
+      "expected_output": "Questions must focus on data flow, UI rendering, precision handling, and where SKA data is introduced. Must avoid generic questions."
+    },
+    {
+      "id": "explore-ska-handling",
+      "prompt": "Explore: How are SKA token amounts handled and formatted across the system?",
+      "expected_output": "Must identify precision handling, data structures, and formatting logic. Must include references to relevant code and highlight high-risk areas."
+    },
+    {
+      "id": "synthesize-mutation-impact",
+      "prompt": "Synthesize: I want to add SKA-related fields to the block table. What do I need to check?",
+      "expected_output": "Structured document focused on mutation impact. Must explicitly list backend, DB, API, template, and frontend dependencies, plus potential breakage scenarios. Must include the 10-section template."
+    },
+    {
+      "id": "explore-api-impact",
+      "prompt": "Explore: If block data structure changes, which API responses depend on it?",
+      "expected_output": "Must identify API types, handlers, and serialization boundaries. Must include multiple dependency points and not stop at a single file."
+    },
+    {
+      "id": "synthesize-api-breakage",
+      "prompt": "Synthesize: If I change the structure of block data, what API responses and frontend parts will break?",
+      "expected_output": "Structured output emphasizing cross-layer dependencies and mutation risks. Must include both direct and indirect breakage."
+    },
+    {
+      "id": "lint-wiki-entire",
+      "prompt": "Lint: entire wiki",
+      "expected_output": "Issues Found section with Type, Location, Description, Severity, and Action. Suggested Fixes section. Critical Observations section. Must identify contradictions or missing links in the wiki."
+    },
+    {
+      "id": "interview-mempool-flow",
+      "prompt": "Start interview for: Trace how mempool transactions flow from RPC ingestion to live frontend updates.",
+      "expected_output": "Targeted questions about WebSocket vs HTTP paths, PubSubHub involvement, and how the frontend (Stimulus controllers) receives updates."
+    },
+    {
+      "id": "explore-mempool-bifurcation",
+      "prompt": "Explore: How does the system distinguish and separate mempool transactions from on-chain block transactions in the codebase?",
+      "expected_output": "Must identify specific flags, separate processing queues, or database tables. Must show the branching point in the backend logic."
+    },
+    {
+      "id": "explore-precision-enforcement",
+      "prompt": "Explore: Where exactly is the 18-decimal precision for SKA tokens enforced? Check DB schema, API serialization, and UI formatting.",
+      "expected_output": "Must identify exact code lines in SQL/Postgres, Go API structs, and JS formatting helpers. Must flag where precision loss could occur."
+    },
+    {
+      "id": "synthesize-mempool-impact",
+      "prompt": "Synthesize: I want to change how mempool transactions are aggregated before being sent to the UI. What is the impact?",
+      "expected_output": "10-section synthesis document. Must focus on the PubSub/WebSocket layer as a critical dependency and potential for UI lag or out-of-order updates."
+    },
+    {
+      "id": "synthesize-writes-correct-path",
+      "prompt": "Synthesize: Trace how the visualblocks page renders tiles from HTTP and WebSocket.",
+      "expected_output": "Synthesis must write files under wiki/code-analysis/visualblocks/ (NOT wiki/visualblocks/). Section 10 export and reported paths must use the wiki/code-analysis/<domain>/ prefix, and the run must update wiki/index.md."
+    },
+    {
+      "id": "synthesize-single-domain-patterns-impact",
+      "prompt": "Synthesize: Trace the attack-cost calculator from HomeInfo snapshot to client-side math.",
+      "expected_output": "Must produce per-domain patterns.md and impact.md for attack-cost even though only one flow exists (single-domain creation is allowed). Must NOT defer patterns/impact creation to Consolidate or claim a 2+ flow requirement."
+    },
+    {
+      "id": "explore-auto-chains-to-synthesize",
+      "prompt": "Explore: How does address page chart data flow from the DB per-coin Coins map to Dygraphs?",
+      "expected_output": "After the mandatory Explore checklist is satisfied, the run must automatically continue into Synthesize and write the wiki files in the same turn without the user issuing a separate Synthesize: trigger. Stopping is only acceptable if the checklist is INCOMPLETE or the user asked to explore only."
+    },
+    {
+      "id": "synthesize-links-core-constraints",
+      "prompt": "Synthesize: Trace how SKA atom amounts move from DB to the transaction template.",
+      "expected_output": "Critical Constraints section and See also block must reference wiki/core/constraints.md by C-number (e.g. depends-on: core/constraints.md C1) rather than re-deriving the float64/big.Int precision rule from scratch."
+    },
+    {
+      "id": "synthesize-multiple-impact-files",
+      "prompt": "Synthesize: Trace the address page across its summary card, transactions table, and charts sub-areas.",
+      "expected_output": "Must support multiple sub-area impact files (e.g. summary.impact.md, transactions.impact.md, charts.impact.md) under wiki/code-analysis/address/ when sub-areas have distinct blast radii, and update wiki/index.md for each."
+    }
+  ]
+}

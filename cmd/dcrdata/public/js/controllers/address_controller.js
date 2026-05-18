@@ -201,6 +201,21 @@ function createOptions() {
   }
 }
 
+// Map an amount-flow bitmap to a Dygraph visibility object.
+// Flow bits: 1 = Received, 2 = Sent, 4 = Net. The amountflow chart has four
+// series — Dygraph indices 0 received, 1 sent, 2 & 3 net — so the single Net
+// bit drives both net series. Values are real booleans: Dygraph's object-form
+// setVisibility assigns them verbatim, and other range-selector code paths
+// expect booleans, not raw bitmask numbers.
+export function flowVisibility(bitmap) {
+  return {
+    0: (bitmap & 1) !== 0,
+    1: (bitmap & 2) !== 0,
+    2: (bitmap & 4) !== 0,
+    3: (bitmap & 4) !== 0
+  }
+}
+
 let ctrl = null
 
 export default class extends Controller {
@@ -785,23 +800,21 @@ export default class extends Controller {
   }
 
   updateFlow() {
-    const bitmap = ctrl.flow
+    const bitmap = this.flow
     if (bitmap === 0) {
       // If all boxes are unchecked, just leave the last view
-      // in place to prevent chart errors with zero visible datasets
+      // in place to prevent chart errors with zero visible datasets.
       return
     }
-    ctrl.settings.flow = bitmap
-    ctrl.setGraphQuery()
-    // Set the graph dataset visibility based on the bitmap
-    // Dygraph dataset indices: 0 received, 1 sent, 2 & 3 net
-    const visibility = {}
-    visibility[0] = bitmap & 1
-    visibility[1] = bitmap & 2
-    visibility[2] = visibility[3] = bitmap & 4
-    Object.keys(visibility).forEach((idx) => {
-      ctrl.graph.setVisibility(idx, visibility[idx])
-    })
+    this.settings.flow = bitmap
+    this.setGraphQuery()
+    // Apply the whole visibility map in a single setVisibility call. Dygraph
+    // runs predraw_ on every setVisibility, so toggling indices one at a time
+    // can leave the chart transiently with zero visible series, which crashes
+    // the range selector (computeCombinedSeriesAndLimits_ dereferences an
+    // empty array). The object form applies all indices, then redraws once;
+    // bitmap is non-zero here, so at least one series is always visible.
+    this.graph.setVisibility(flowVisibility(bitmap))
   }
 
   setFlowChecks() {

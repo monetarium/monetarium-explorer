@@ -134,6 +134,8 @@ When modifying `/visualblocks` data:
 - `cmd/dcrdata/public/scss/visualblocks.scss` and `cmd/dcrdata/public/scss/application.scss:49`.
 
 See also:
+- /wiki/code-analysis/page-rendering/patterns.md (shares-pattern-with: out-of-band shared page state; shared-state lock discipline; `*CommonPageData` embedding)
+- /wiki/code-analysis/page-rendering/impact.md (depends-on: saver writer/reader drift; lock-order inversion against `Store`; `commonData` nil render crash)
 - /wiki/code-analysis/visualblocks/patterns.md — domain patterns (cross-pipeline tile rendering, JS-side server-filter mirror, Subsidy struct asymmetry, triple-enforced 30-cap, memoized BlockInfo, shared page state, WS subsidy patch).
 - /wiki/code-analysis/visualblocks/impact.md — mutation impact, loud/silent failure modes, safe-change checklist.
 - /wiki/code-analysis/block/flow.full.md (shares-pattern-with: fan-out BlockDataSaver, dual transport shape REST vs WebSocket, multi-coin big.Int→string precision)

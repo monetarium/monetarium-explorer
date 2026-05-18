@@ -82,4 +82,6 @@ When modifying **`BlockData` (or Multi-Coin Extraction logic)**, you MUST check 
 - **Presentation State Duplication:** `cmd/dcrdata/internal/explorer/explorer.go` (~line 750) and `pubsub/pubsubhub.go` (~line 650) both run identical loops transforming `map[uint8]string` into sorted `[]PoWSKAReward`.
 
 See also:
+- /wiki/code-analysis/page-rendering/patterns.md (shares-pattern-with: out-of-band shared page state via `BlockDataSaver` fan-out; shared-state lock discipline)
+- /wiki/code-analysis/page-rendering/impact.md (depends-on: saver writer/reader drift — HTML flashes stale data before WS overwrite)
 - /wiki/core/constraints.md (depends-on: C1 numeric precision & bifurcation; C2 dual pipeline mutation; C3 template + WebSocket parity; C4 perimeter flattening & array stability; shares-pattern-with: C8 dual-transport shape asymmetry — REST `map[uint8]string` vs WebSocket sorted-array form for multi-coin amounts)

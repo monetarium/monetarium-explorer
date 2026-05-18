@@ -137,5 +137,7 @@ When modifying chart data structures or pipelines, check ALL of:
 - **Key commits:** `538d5cd1` initial SKA chart support; `3e6d14cf` per-SKA endpoints; `19a114c1` cumulative + height alignment; `a9db4b3b` `h` field on time-axis; `ddf17358` frontend integration & default-case logging; `4af1009f` test/mock additions.
 
 See also:
+- /wiki/code-analysis/page-rendering/patterns.md (shares-pattern-with: out-of-band shared page state — handler reads `pageData.HomeInfo.SKACoinSupply`; `*CommonPageData` embedding)
+- /wiki/code-analysis/page-rendering/impact.md (depends-on: `commonData` nil render crash)
 - /wiki/core/constraints.md (depends-on: C1 numeric precision & bifurcation — applies to the SKA pipeline `string`-end-to-end rule; C2 dual pipeline — VAR delta+`accumulate` vs SKA `*big.Int` cumulation; C7 centralized coin-type label rendering — `renderCoinType` / `coinSymbol`)
 - /wiki/code-analysis/address/flow.full.md (shares-pattern-with: TurboQuery URL state, `Zoom` validation; the address chart endpoint reuses the same controller patterns. Note: charts controller calls `Zoom.project` across data-range changes (line 901); the address controller does not — see address/flow.full.md §5.)

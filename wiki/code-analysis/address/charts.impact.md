@@ -178,7 +178,8 @@ Group-By buttons:
 Flow checkboxes (only relevant for `amountflow`):
 - `:160-174` `<div data-address-target="flow" data-action="change->address#updateFlow">` — initially `d-hide`-friendly (Bootstrap `d-hide` toggled by `popChartCache`).
 - Checkbox values are bitmask flags: `Sent=2`, `Received=1` (default checked), `Net=4`. Encoded as a base-10 bitmap in URL (`?flow=`).
-- `updateFlow` (line 639) maps the bitmap to Dygraph series visibility for indices 0/1/2/3.
+- `updateFlow` maps the bitmap to Dygraph series visibility for indices 0/1/2/3 via the pure `flowVisibility(bitmap)` export (Net bit 4 drives both net series 2 & 3).
+- **Invariant — apply visibility atomically.** Dygraph runs `predraw_` on *every* `setVisibility` call, and the range selector's `computeCombinedSeriesAndLimits_` dereferences `d[0].length` over the *visible* series only. Toggling indices one at a time can leave a transient all-invisible state that throws `Cannot read properties of undefined (reading 'length')`. `updateFlow` must pass the full map in a single `setVisibility(object)` call (one redraw), and its `bitmap === 0` early-return guarantees ≥1 visible series. Regression covered by `address_controller.test.js`.
 
 Chart canvas + loader:
 - `:176-180` chart wrapper div with the `address_chart` class.
