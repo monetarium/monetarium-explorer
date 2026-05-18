@@ -725,11 +725,10 @@ func (psh *PubSubHub) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgBl
 
 	// Calculate Vote VAR Reward (most recent)
 	// Compute fresh from the current block's transactions instead of using potentially stale DB data
-	ssGenTxs := txhelpers.ComputeTxFeeData(msgBlock)
-	ssFeeTotals := txhelpers.BlockSSFeeTotals(ssGenTxs, msgBlock.STransactions)
+	ssFeeTotals := txhelpers.BlockSSFeeTotals(msgBlock.STransactions)
 
 	var latestVarFee float64
-	if split, ok := ssFeeTotals[0]; ok && split.PoS != nil {
+	if split, ok := ssFeeTotals[0]; ok {
 		latestVarFee = txhelpers.RewardAtomsToCoins(split.PoS, 8)
 	}
 
@@ -882,18 +881,23 @@ func (psh *PubSubHub) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgBl
 		p.GeneralInfo.SKAVoteRewards = nil
 	}
 
-	// PoW SKA rewards: per-SKA-type mining reward amounts from the coinbase.
-	if len(blockData.ExtraInfo.SKAPoWRewards) > 0 {
-		powRewardsBlockHeight := int64(blockData.Header.Height)
-		powRewards := make([]exptypes.PoWSKAReward, 0, len(blockData.ExtraInfo.SKAPoWRewards))
-		for ct, amountStr := range blockData.ExtraInfo.SKAPoWRewards {
-			powRewards = append(powRewards, exptypes.PoWSKAReward{
-				CoinType:    ct,
-				Symbol:      fmt.Sprintf("SKA%d", ct),
-				Amount:      amountStr,
-				BlockHeight: powRewardsBlockHeight,
-			})
+	// PoW SKA Fee Reward: the miner's portion of redistributed SKA tx fees
+	// from the authoritative "MF"-marked SSFee split (issue #273). Mirrors the
+	// explorer (HTTP) derivation so the two paths cannot drift.
+	powRewardsBlockHeight := int64(blockData.Header.Height)
+	powRewards := make([]exptypes.PoWSKAReward, 0)
+	for ct, split := range blockData.ExtraInfo.SSFeeTotalsByCoin {
+		if ct == 0 || split.PoW == nil || split.PoW.Sign() <= 0 {
+			continue
 		}
+		powRewards = append(powRewards, exptypes.PoWSKAReward{
+			CoinType:    ct,
+			Symbol:      fmt.Sprintf("SKA%d", ct),
+			Amount:      txhelpers.FormatSKAAtoms(split.PoW),
+			BlockHeight: powRewardsBlockHeight,
+		})
+	}
+	if len(powRewards) > 0 {
 		sort.Slice(powRewards, func(i, j int) bool { return powRewards[i].CoinType < powRewards[j].CoinType })
 		p.GeneralInfo.PoWSKARewards = powRewards
 	} else {

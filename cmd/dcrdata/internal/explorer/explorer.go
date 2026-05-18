@@ -69,6 +69,7 @@ const (
 )
 
 // explorerDataSource implements extra data retrieval functions that require a
+
 // faster solution than RPC, or additional functionality.
 type explorerDataSource interface {
 	BlockHeight(ctx context.Context, hash string) (int64, error)
@@ -648,11 +649,10 @@ func (exp *explorerUI) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgB
 
 	// Calculate Vote VAR Reward (most recent)
 	// Compute fresh from the current block's transactions instead of using potentially stale DB data
-	ssGenTxs := txhelpers.ComputeTxFeeData(msgBlock)
-	ssFeeTotals := txhelpers.BlockSSFeeTotals(ssGenTxs, msgBlock.STransactions)
+	ssFeeTotals := txhelpers.BlockSSFeeTotals(msgBlock.STransactions)
 
 	var latestVarFee float64
-	if split, ok := ssFeeTotals[0]; ok && split.PoS != nil {
+	if split, ok := ssFeeTotals[0]; ok {
 		latestVarFee = txhelpers.RewardAtomsToCoins(split.PoS, 8)
 	}
 
@@ -805,46 +805,33 @@ func (exp *explorerUI) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgB
 		p.HomeInfo.SKAVoteRewards = nil
 	}
 
-	// PoW SKA rewards: Extract from current block's stake transactions by identifying
-	// coinbase spends with skaamountin in vin (PoW reward indicator). Fall back to
-	// searching previous blocks if current block has no PoW rewards.
+	// PoW SKA Fee Reward: the miner's portion of redistributed SKA tx fees,
+	// taken from the authoritative "MF"-marked SSFee split (issue #273). This
+	// mirrors the "Vote SKA Fee Reward" (PoS) derivation above so the HTTP and
+	// WebSocket paths stay consistent and no heuristic /2 or 100% guess is used.
 	var powRewardsBlockHeight int64
-	var powRewardsMap map[uint8]string
+	powRewardsMap := make(map[uint8]string)
 
-	// First, try to extract PoW rewards directly from current block's stake transactions
-	if msgBlock != nil {
-		powRewardsMap = blockdata.BlockSKAPoWRewardsFromSTx(msgBlock)
-		if len(powRewardsMap) > 0 {
-			powRewardsBlockHeight = newBlockData.Height
+	// Prefer the current block; otherwise fall back to the most recent block
+	// in the last 30 days that carried an MF SSFee for that coin.
+	for ct, split := range blockData.ExtraInfo.SSFeeTotalsByCoin {
+		if ct == 0 || split.PoW == nil || split.PoW.Sign() <= 0 {
+			continue
 		}
-	}
-
-	// Fallback: use ExtraInfo SKAPoWRewards if current block has none.
-	// These are total fees from regular transactions - only the PoW portion is used.
-	if len(powRewardsMap) == 0 && len(blockData.ExtraInfo.SKAPoWRewards) > 0 {
+		powRewardsMap[ct] = txhelpers.FormatSKAAtoms(split.PoW)
 		powRewardsBlockHeight = newBlockData.Height
-		powRewardsMap = make(map[uint8]string)
-		for ct, amountStr := range blockData.ExtraInfo.SKAPoWRewards {
-			powRewardsMap[ct] = amountStr
-		}
 	}
-
-	// Fallback: search backwards from the current block height for blocks with SKA activity.
-	// These are total fees - treated as 100% PoW.
-	if len(powRewardsMap) == 0 {
-		currentHeight := newBlockData.Height
-		for h := currentHeight - 1; h >= currentHeight-4320 && h >= 0; h-- {
-			skaFees, err := exp.dataSource.GetBlockSKAFees(ctx, h)
-			if err != nil {
+	for i := len(sum30) - 1; i >= 0; i-- {
+		for ct, split := range sum30[i].SSFeeTotalsByCoin {
+			if ct == 0 || split.PoW == nil || split.PoW.Sign() <= 0 {
 				continue
 			}
-			if len(skaFees) > 0 {
-				powRewardsBlockHeight = h
-				powRewardsMap = make(map[uint8]string)
-				for ct, totalStr := range skaFees {
-					powRewardsMap[ct] = totalStr
-				}
-				break
+			if _, seen := powRewardsMap[ct]; seen {
+				continue
+			}
+			powRewardsMap[ct] = txhelpers.FormatSKAAtoms(split.PoW)
+			if powRewardsBlockHeight == 0 {
+				powRewardsBlockHeight = int64(sum30[i].Height)
 			}
 		}
 	}

@@ -245,6 +245,9 @@ func TestComputeVoteVARReward(t *testing.T) {
 	}
 
 	t.Run("Block 36354 reproduction", func(t *testing.T) {
+		// latestVarFee is now the isolated SF-marked SSFee VAR staker payout
+		// (positive), no longer the lumped SSGen/SSRtx/SSFee net that the
+		// consolidation made ≤ 0. The fee must flow through.
 		latestVarFee := 3.19483536
 		voters := int64(5)
 		subsidy := 16.0
@@ -257,134 +260,181 @@ func TestComputeVoteVARReward(t *testing.T) {
 			t.Errorf("Incorrect fee calculation: got %.8f, want %.8f", res.Fee, expectedFee)
 		}
 	})
+
+	t.Run("negative fee is no longer capped to zero", func(t *testing.T) {
+		// Replaces the old TestComputeVoteVARReward_NegativeFee, with the
+		// expectation flipped: per the spec the 0-cap is removed, so a
+		// negative net redistribution propagates instead of being zeroed.
+		latestVarFee := -0.00614520
+		voters := int64(5)
+		subsidy := 16.0
+		res := ComputeVoteVARReward(latestVarFee, []VoteTicketData{}, params, voters, subsidy)
+		wantFee := latestVarFee / float64(voters)
+		if math.Abs(res.Fee-wantFee) > 1e-12 {
+			t.Errorf("Fee got %.10f, want %.10f (must not be capped to 0)", res.Fee, wantFee)
+		}
+		if math.Abs(res.PerBlock-(subsidy/float64(voters)+wantFee)) > 1e-9 {
+			t.Errorf("PerBlock got %.10f, want %.10f", res.PerBlock, subsidy/float64(voters)+wantFee)
+		}
+	})
 }
 
 // ---------------------------------------------------------------------------
 // BlockSSFeeTotals
 // ---------------------------------------------------------------------------
 
+// ssfeeStakegenScript is a realistic OP_SSGEN-tagged P2PKH script so the
+// (stubbed) tx is shaped like a real SSFee payout output.
+var ssfeeStakegenScript = []byte{0xbb, 0x76, 0xa9, 0x14, 0x16, 0xed, 0x35, 0x0c, 0x59, 0xde, 0x7a, 0x50, 0x35, 0x95, 0x2d, 0x19, 0x49, 0xae, 0x15, 0xca, 0xba, 0x18, 0xf0, 0x81, 0x88, 0xac}
+
+func mfMarker() []byte { return []byte{0x6a, 0x06, 0x4d, 0x46, 0x06, 0x12, 0x00, 0x00} }
+func sfMarker() []byte {
+	return []byte{0x6a, 0x08, 0x53, 0x46, 0x06, 0x12, 0x00, 0x00, 0x00, 0x00}
+}
+
+// makeSSFeeTx builds a single-input SSFee-shaped tx. For SKA coin types the
+// per-output big amount is set on SKAValue; for VAR it is set on Value only
+// (SKAValue left nil) so a test can prove the correct value field is read.
+func makeSSFeeTx(ct uint8, in int64, outs []int64, scripts [][]byte) *wire.MsgTx {
+	isSKA := cointype.CoinType(ct).IsSKA()
+	tx := &wire.MsgTx{}
+	vin := &wire.TxIn{ValueIn: in}
+	if isSKA {
+		vin.SKAValueIn = big.NewInt(in)
+	}
+	tx.TxIn = append(tx.TxIn, vin)
+	for j, ov := range outs {
+		out := &wire.TxOut{Value: ov, PkScript: scripts[j], CoinType: cointype.CoinType(ct)}
+		if isSKA {
+			out.SKAValue = big.NewInt(ov)
+		}
+		tx.TxOut = append(tx.TxOut, out)
+	}
+	return tx
+}
+
+func ssfeeAll(_ *wire.MsgTx) stake.TxType { return stake.TxTypeSSFee }
+
 func TestBlockSSFeeTotals(t *testing.T) {
 	t.Run("empty block returns nil", func(t *testing.T) {
-		// Using an empty slice of MsgTx to satisfy the type
-		got := BlockSSFeeTotals(nil, []*wire.MsgTx{})
-		if got != nil {
+		if got := BlockSSFeeTotals([]*wire.MsgTx{}); got != nil {
 			t.Errorf("expected nil, got %v", got)
 		}
 	})
-	t.Run("SSGen block with fees", func(t *testing.T) {
-		ssGenTxs := []TxFeeData{
-			{
-				TotalVAROutputs: 1602300000,
-				TotalInputs:     1600000000,
-				IsSSGen:         true,
-				TxType:          int(stake.TxTypeSSGen),
-			},
-		}
-		sTxs := []*wire.MsgTx{}
-		got := BlockSSFeeTotals(ssGenTxs, sTxs)
+
+	t.Run("non-SSFee stake txs are ignored (no false VAR fee)", func(t *testing.T) {
+		// Only TxTypeSSFee contributes now; SSGen/SSRtx are subsidy/principal
+		// movement and must not be counted as fee.
+		tx := makeSSFeeTx(0, 1600000000, []int64{1602300000}, [][]byte{ssfeeStakegenScript})
+		got := blockSSFeeTotalsInternal([]*wire.MsgTx{tx}, func(*wire.MsgTx) stake.TxType {
+			return stake.TxTypeSSGen
+		})
 		if got != nil {
-			// In our new logic, we ONLY sum type=7 in sTxs.
-			// ssGenTxs are used for VAR net, but if sTxs is empty,
-			// we only have VAR reward.
-			if split, ok := got[0]; ok {
-				if split.PoS.Cmp(big.NewInt(2300000)) != 0 {
-					t.Errorf("expected VAR fee 2300000, got %v", split.PoS)
-				}
-			} else {
-				t.Errorf("expected VAR fee to be present")
-			}
+			t.Errorf("expected nil (no SSFee tx), got %v", got)
 		}
 	})
-	t.Run("Marker-based attribution", func(t *testing.T) {
-		// A realistic stakegen script to help stake.DetermineTxType recognize this as an SSFee tx
-		stakegenScript := []byte{0xbb, 0x76, 0xa9, 0x14, 0x16, 0xed, 0x35, 0x0c, 0x59, 0xde, 0x7a, 0x50, 0x35, 0x95, 0x2d, 0x19, 0x49, 0xae, 0x15, 0xca, 0xba, 0x18, 0xf0, 0x81, 0x88, 0xac}
 
+	t.Run("marker-based attribution", func(t *testing.T) {
 		tests := []struct {
 			name     string
 			coinType uint8
-			inputs   []int64
-			outputs  []int64
+			in       int64
+			outs     []int64
 			scripts  [][]byte
 			wantPoW  *big.Int
 			wantPoS  *big.Int
 		}{
 			{
-				name:     "Miner marker (MF)",
-				coinType: 1,
-				inputs:   []int64{1844000000000000000},
-				outputs:  []int64{2394000000000000000, 0},
-				scripts: [][]byte{
-					stakegenScript,
-					{0x6a, 0x06, 0x4d, 0x46, 0x06, 0x12, 0x00, 0x00}, // OP_RETURN MF...
-				},
-				wantPoW: big.NewInt(550000000000000000),
-				wantPoS: nil,
+				name: "SKA miner marker (MF) -> PoW", coinType: 1,
+				in: 1844000000000000000, outs: []int64{2394000000000000000, 0},
+				scripts: [][]byte{ssfeeStakegenScript, mfMarker()},
+				wantPoW: big.NewInt(550000000000000000), wantPoS: nil,
 			},
 			{
-				name:     "Staker marker (SF)",
-				coinType: 1,
-				inputs:   []int64{1128000000000000000},
-				outputs:  []int64{1568000000000000000, 0},
-				scripts: [][]byte{
-					stakegenScript,
-					{0x6a, 0x08, 0x53, 0x46, 0x06, 0x12, 0x00, 0x00, 0x00, 0x00}, // OP_RETURN SF...
-				},
-				wantPoW: nil,
-				wantPoS: big.NewInt(440000000000000000),
+				name: "SKA staker marker (SF) -> PoS", coinType: 1,
+				in: 1128000000000000000, outs: []int64{1568000000000000000, 0},
+				scripts: [][]byte{ssfeeStakegenScript, sfMarker()},
+				wantPoW: nil, wantPoS: big.NewInt(440000000000000000),
 			},
 			{
-				name:     "No valid marker",
-				coinType: 1,
-				inputs:   []int64{1000},
-				outputs:  []int64{2000, 0},
-				scripts: [][]byte{
-					stakegenScript,
-					{0x6a, 0x01, 0x00}, // Invalid marker
-				},
-				wantPoW: nil,
-				wantPoS: nil,
+				name: "no valid marker -> neither", coinType: 1,
+				in: 1000, outs: []int64{2000, 0},
+				scripts: [][]byte{ssfeeStakegenScript, {0x6a, 0x01, 0x00}},
+				wantPoW: nil, wantPoS: nil,
+			},
+			{
+				// Spec: VAR staker fees are delivered via SF SSFee. This is
+				// the isolation that the old lumped SSGen net masked.
+				name: "VAR staker marker (SF) -> PoS (isolated)", coinType: 0,
+				in: 6128216, outs: []int64{6773796, 0},
+				scripts: [][]byte{ssfeeStakegenScript, sfMarker()},
+				wantPoW: nil, wantPoS: big.NewInt(645580),
+			},
+			{
+				// Negative net (consolidation input > outputs) still flows
+				// through — no clamping at this layer.
+				name: "SF with negative net is not clamped", coinType: 1,
+				in: 1000000000000000000, outs: []int64{400000000000000000, 0},
+				scripts: [][]byte{ssfeeStakegenScript, sfMarker()},
+				wantPoW: nil, wantPoS: big.NewInt(-600000000000000000),
 			},
 		}
-
 		for _, tc := range tests {
 			t.Run(tc.name, func(t *testing.T) {
-				var txs []*wire.MsgTx
-				tx := &wire.MsgTx{}
-				for _, inVal := range tc.inputs {
-					tx.TxIn = append(tx.TxIn, &wire.TxIn{
-						ValueIn:    inVal,
-						SKAValueIn: big.NewInt(inVal),
-					})
-				}
-				for j, outVal := range tc.outputs {
-					tx.TxOut = append(tx.TxOut, &wire.TxOut{
-						Value:    outVal,
-						PkScript: tc.scripts[j],
-						CoinType: cointype.CoinType(tc.coinType),
-						SKAValue: big.NewInt(outVal),
-					})
-				}
-				txs = append(txs, tx)
-
-				got := blockSSFeeTotalsInternal(nil, txs, func(tx *wire.MsgTx) stake.TxType {
-					return stake.TxTypeSSFee
-				})
+				tx := makeSSFeeTx(tc.coinType, tc.in, tc.outs, tc.scripts)
+				got := blockSSFeeTotalsInternal([]*wire.MsgTx{tx}, ssfeeAll)
 				if got == nil {
-					t.Fatalf("expected non-nil result, got nil")
+					t.Fatal("expected non-nil result")
 				}
-
 				split, ok := got[tc.coinType]
 				if !ok {
-					t.Fatalf("expected coin type %d to be present", tc.coinType)
+					t.Fatalf("expected coin type %d present", tc.coinType)
 				}
-
 				if (split.PoW == nil) != (tc.wantPoW == nil) || (split.PoW != nil && split.PoW.Cmp(tc.wantPoW) != 0) {
-					t.Errorf("PoW reward = %v, want %v", split.PoW, tc.wantPoW)
+					t.Errorf("PoW = %v, want %v", split.PoW, tc.wantPoW)
 				}
 				if (split.PoS == nil) != (tc.wantPoS == nil) || (split.PoS != nil && split.PoS.Cmp(tc.wantPoS) != 0) {
-					t.Errorf("PoS reward = %v, want %v", split.PoS, tc.wantPoS)
+					t.Errorf("PoS = %v, want %v", split.PoS, tc.wantPoS)
 				}
 			})
+		}
+	})
+
+	t.Run("VAR reads Value, not SKAValue", func(t *testing.T) {
+		// VAR coin type: SKAValue is intentionally left nil by makeSSFeeTx;
+		// the result must come from the int64 Value field.
+		tx := makeSSFeeTx(0, 100000000, []int64{150000000, 0},
+			[][]byte{ssfeeStakegenScript, sfMarker()})
+		got := blockSSFeeTotalsInternal([]*wire.MsgTx{tx}, ssfeeAll)
+		split, ok := got[0]
+		if !ok || split.PoS == nil {
+			t.Fatalf("expected VAR PoS present, got %v", got)
+		}
+		if split.PoS.Cmp(big.NewInt(50000000)) != 0 {
+			t.Errorf("VAR PoS = %v, want 50000000", split.PoS)
+		}
+	})
+
+	t.Run("multiple SSFee txs aggregate per coin and marker", func(t *testing.T) {
+		txs := []*wire.MsgTx{
+			makeSSFeeTx(1, 1000000000000000000, []int64{1300000000000000000, 0},
+				[][]byte{ssfeeStakegenScript, sfMarker()}), // SKA1 PoS +3e17
+			makeSSFeeTx(1, 2000000000000000000, []int64{2500000000000000000, 0},
+				[][]byte{ssfeeStakegenScript, sfMarker()}), // SKA1 PoS +5e17
+			makeSSFeeTx(1, 1000000000000000000, []int64{1100000000000000000, 0},
+				[][]byte{ssfeeStakegenScript, mfMarker()}), // SKA1 PoW +1e17
+			makeSSFeeTx(2, 500000000000000000, []int64{900000000000000000, 0},
+				[][]byte{ssfeeStakegenScript, sfMarker()}), // SKA2 PoS +4e17
+		}
+		got := blockSSFeeTotalsInternal(txs, ssfeeAll)
+		if got[1].PoS.Cmp(big.NewInt(800000000000000000)) != 0 {
+			t.Errorf("SKA1 PoS = %v, want 8e17", got[1].PoS)
+		}
+		if got[1].PoW.Cmp(big.NewInt(100000000000000000)) != 0 {
+			t.Errorf("SKA1 PoW = %v, want 1e17", got[1].PoW)
+		}
+		if got[2].PoS.Cmp(big.NewInt(400000000000000000)) != 0 {
+			t.Errorf("SKA2 PoS = %v, want 4e17", got[2].PoS)
 		}
 	})
 }

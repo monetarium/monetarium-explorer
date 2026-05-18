@@ -115,6 +115,12 @@ const (
 	RetrieveBestBlockHeight = `SELECT id, hash, height FROM blocks
 		WHERE is_mainchain = true ORDER BY height DESC LIMIT 1;`
 
+	// UpdateBlockSSFeeTotals overwrites the ssfee_totals JSONB for the
+	// main-chain block at a given height. Used by the maintenance upgrade that
+	// recomputes the marker-based PoW/PoS split.
+	UpdateBlockSSFeeTotals = `UPDATE blocks SET ssfee_totals = $1
+		WHERE height = $2 AND is_mainchain = true;`
+
 	// SelectBlocksTicketsPrice selects the ticket price and difficulty for the
 	// first block in a stake difficulty window.
 	SelectBlocksTicketsPrice = `SELECT sbits, time, difficulty, height, fresh_stake
