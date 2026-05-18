@@ -366,9 +366,11 @@ func TestBlockSSFeeTotals(t *testing.T) {
 				}
 				txs = append(txs, tx)
 
-				got := BlockSSFeeTotals(nil, txs)
+				got := blockSSFeeTotalsInternal(nil, txs, func(tx *wire.MsgTx) stake.TxType {
+					return stake.TxTypeSSFee
+				})
 				if got == nil {
-					t.Fatalf("expected non-nil result, got nil. This suggests stake.DetermineTxType did not recognize the tx as SSFee.")
+					t.Fatalf("expected non-nil result, got nil")
 				}
 
 				split, ok := got[tc.coinType]

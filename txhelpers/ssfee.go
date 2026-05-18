@@ -172,6 +172,10 @@ func ComputeTxFeeData(msgBlock *wire.MsgBlock) []TxFeeData {
 // For VAR (cointype == 0), it continues to use the total net redistribution for all relevant stake txs.
 // Returns nil if no relevant transactions are present.
 func BlockSSFeeTotals(ssGenTxs []TxFeeData, sTxs []*wire.MsgTx) map[uint8]rewardtypes.SSFeeSplit {
+	return blockSSFeeTotalsInternal(ssGenTxs, sTxs, stake.DetermineTxType)
+}
+
+func blockSSFeeTotalsInternal(ssGenTxs []TxFeeData, sTxs []*wire.MsgTx, determineType func(*wire.MsgTx) stake.TxType) map[uint8]rewardtypes.SSFeeSplit {
 	totals := make(map[uint8]*rewardtypes.SSFeeSplit)
 
 	// 1. Handle VAR rewards (cointype == 0)
@@ -193,7 +197,7 @@ func BlockSSFeeTotals(ssGenTxs []TxFeeData, sTxs []*wire.MsgTx) map[uint8]reward
 
 	// 2. Handle SKA rewards (cointype > 0) using markers
 	for _, tx := range sTxs {
-		if stake.DetermineTxType(tx) != stake.TxTypeSSFee {
+		if determineType(tx) != stake.TxTypeSSFee {
 			continue
 		}
 
@@ -232,16 +236,19 @@ func BlockSSFeeTotals(ssGenTxs []TxFeeData, sTxs []*wire.MsgTx) map[uint8]reward
 
 		ct := uint8(coinType)
 		if totals[ct] == nil {
-			totals[ct] = &rewardtypes.SSFeeSplit{
-				PoW: big.NewInt(0),
-				PoS: big.NewInt(0),
-			}
+			totals[ct] = &rewardtypes.SSFeeSplit{}
 		}
 
 		if isPoS {
+			if totals[ct].PoS == nil {
+				totals[ct].PoS = big.NewInt(0)
+			}
 			totals[ct].PoS.Add(totals[ct].PoS, netReward)
 		}
 		if isPoW {
+			if totals[ct].PoW == nil {
+				totals[ct].PoW = big.NewInt(0)
+			}
 			totals[ct].PoW.Add(totals[ct].PoW, netReward)
 		}
 	}
