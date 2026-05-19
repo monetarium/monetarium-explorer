@@ -437,4 +437,40 @@ func TestBlockSSFeeTotals(t *testing.T) {
 			t.Errorf("SKA2 PoS = %v, want 4e17", got[2].PoS)
 		}
 	})
+
+	t.Run("User Scenario Verification", func(t *testing.T) {
+		txs := []*wire.MsgTx{
+			// TX 1: VAR SF marker, net +16925
+			makeSSFeeTx(0, 0, []int64{16925, 0}, [][]byte{ssfeeStakegenScript, sfMarker()}),
+			// TX 2: SKA1 SF marker, net +5.5e17
+			makeSSFeeTx(1, 1568000000000000000, []int64{2118000000000000000, 0}, [][]byte{ssfeeStakegenScript, sfMarker()}),
+			// TX 3: SKA1 MF marker, net +5.5e17
+			makeSSFeeTx(1, 3884000000000000000, []int64{4434000000000000000, 0}, [][]byte{ssfeeStakegenScript, mfMarker()}),
+		}
+		got := blockSSFeeTotalsInternal(txs, ssfeeAll)
+		if got == nil {
+			t.Fatal("expected non-nil result")
+		}
+
+		// VAR PoS
+		if split0, ok := got[0]; ok {
+			if split0.PoS == nil || split0.PoS.Cmp(big.NewInt(16925)) != 0 {
+				t.Errorf("VAR PoS = %v, want 16925", split0.PoS)
+			}
+		} else {
+			t.Error("expected VAR coin type 0 to be present")
+		}
+
+		// SKA1 PoS and PoW
+		if split1, ok := got[1]; ok {
+			if split1.PoS == nil || split1.PoS.Cmp(big.NewInt(550000000000000000)) != 0 {
+				t.Errorf("SKA1 PoS = %v, want 5.5e17", split1.PoS)
+			}
+			if split1.PoW == nil || split1.PoW.Cmp(big.NewInt(550000000000000000)) != 0 {
+				t.Errorf("SKA1 PoW = %v, want 5.5e17", split1.PoW)
+			}
+		} else {
+			t.Error("expected SKA1 coin type 1 to be present")
+		}
+	})
 }
