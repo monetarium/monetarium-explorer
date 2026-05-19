@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/monetarium/monetarium-explorer/api/rewardtypes"
 	"github.com/monetarium/monetarium-node/blockchain/stake"
 	"github.com/monetarium/monetarium-node/chaincfg"
-	"github.com/monetarium/monetarium-node/cointype"
 	"github.com/monetarium/monetarium-node/wire"
 )
 
@@ -34,13 +34,11 @@ func ComputeVoteVARReward(latestVarFee float64, voteData []VoteTicketData, param
 	if voters > 0 {
 		subsidyPerVote = subsidy / float64(voters)
 
-		// latestVarFee is the net redistribution (Inputs - Outputs) from BlockSSFeeTotals.
-		// Positive = net fee earned, Negative = net consolidation cost (cap to 0).
+		// latestVarFee is the isolated "SF"-marked SSFee VAR staker payout
+		// (BlockSSFeeTotals[0].PoS, atoms→coin). It is no longer the lumped
+		// SSGen/SSRtx/SSFee net, and is not capped at 0: SF staker payouts are
+		// legitimate even when other (consolidation) movement would net ≤ 0.
 		actualTotalFees = latestVarFee
-		if actualTotalFees < 0 {
-			log.Errorf("ComputeVoteVARReward: negative fee detected (%.8f), capping to 0", latestVarFee)
-			actualTotalFees = 0
-		}
 		feePerVote = actualTotalFees / float64(voters)
 	}
 
@@ -80,7 +78,7 @@ func ComputeVoteVARReward(latestVarFee float64, voteData []VoteTicketData, param
 
 // BlockSummary is a minimal interface for block summary data.
 type BlockSummary struct {
-	SSFeeTotalsByCoin map[uint8]string
+	SSFeeTotalsByCoin map[uint8]rewardtypes.SSFeeSplit
 	Voters            uint16
 	Hash              string
 	Height            int
@@ -122,133 +120,125 @@ func SumWinningTicketPrices(allTickets []VoteTicketData, winners []string) float
 	return total
 }
 
-// TxFeeData holds pre-computed totals for a transaction to calculate its fee.
-type TxFeeData struct {
-	TotalVAROutputs int64
-	TotalInputs     int64
-	IsSSGen         bool
-	TxType          int
+// BlockSSFeeTotals sums SSFee reward distribution per coin type for a block,
+// splitting each into its PoW ("MF") and PoS ("SF") portions using the
+// authoritative on-chain SSFee OP_RETURN marker.
+//
+// Classification is centralized here (not pushed onto callers) so the HTTP and
+// WebSocket reward paths cannot drift. Both VAR (coin type 0) and SKA
+// (1..255) staker fees are delivered via "SF" SSFee transactions; only the
+// marked SSFee txs are counted — SSGen/SSRtx are subsidy/principal movement,
+// not fees. Returns nil if the block has no SSFee transactions.
+func BlockSSFeeTotals(sTxs []*wire.MsgTx) map[uint8]rewardtypes.SSFeeSplit {
+	return blockSSFeeTotalsInternal(sTxs, stake.DetermineTxType)
 }
 
-// ComputeTxFeeData computes a list of TxFeeData for all SSGen and SSRtx transactions in a block.
-// SSGen (type=2): Vote transactions
-// SSRtx (type=7): Ticket return transactions (when ticket misses vote)
-func ComputeTxFeeData(msgBlock *wire.MsgBlock) []TxFeeData {
-	var result []TxFeeData
-	for _, tx := range msgBlock.STransactions {
-		txType := stake.DetermineTxType(tx)
+func blockSSFeeTotalsInternal(sTxs []*wire.MsgTx, determineType func(*wire.MsgTx) stake.TxType) map[uint8]rewardtypes.SSFeeSplit {
+	totals := make(map[uint8]*rewardtypes.SSFeeSplit)
 
-		// Include: SSGen (2), SSRtx (3), SSFee (7 - SKA stake fee distribution)
-		// TODO(monetarium-node): After fixing SSRtx detection in staketx.go,
-		// remove stake.TxTypeSSFee from this check. SSRtx transactions with
-		// "SF" marker should be correctly classified as type=3, not type=7.
-		isSSGen := txType == stake.TxTypeSSGen
-		isSSRtx := txType == stake.TxTypeSSRtx
-		isTxSSFee := txType == stake.TxTypeSSFee
-
-		if !isSSGen && !isSSRtx && !isTxSSFee {
-			continue
-		}
-
-		var varOut, varIn int64
-		for _, out := range tx.TxOut {
-			if out.CoinType == cointype.CoinTypeVAR {
-				varOut += out.Value
-			}
-		}
-		for _, vin := range tx.TxIn {
-			varIn += vin.ValueIn
-		}
-		result = append(result, TxFeeData{
-			TotalVAROutputs: varOut,
-			TotalInputs:     varIn,
-			IsSSGen:         isSSGen,
-			TxType:          int(txType),
-		})
-	}
-	return result
-}
-
-// BlockSSFeeTotals sums TxTypeSSFee output SKAValues per coin type for a block.
-// For VAR, it computes the net redistribution (Outputs - Inputs) for both SSGen and SSRtx transactions.
-// Returns nil if no SSGen or SSRtx transactions are present.
-func BlockSSFeeTotals(ssGenTxs []TxFeeData, sTxs []*wire.MsgTx) map[uint8]string {
-	totals := make(map[uint8]*big.Int)
-
-	// 1. Calculate VAR fees from SSGen and SSRtx/SSFee transactions
-	// Net redistribution = Outputs - Inputs (positive = fee earned)
-	// Note: Some SSRtx transactions are misclassified as SSFee (type=7) by stake.DetermineTxType.
-	// TODO(monetarium-node): After fixing SSRtx detection in staketx.go, remove
-	// the isTxSSFee check below. Only SSRtx (type=3) should be needed.
-	var totalRedistributionNet int64
-	var ssGenFound bool
-
-	for _, tx := range ssGenTxs {
-		// Include: SSGen (2), SSRtx (3), SSFee (7 - SKA stake fee distribution)
-		isSSGen := tx.TxType == int(stake.TxTypeSSGen)
-		isSSRtx := tx.TxType == int(stake.TxTypeSSRtx)
-		isTxSSFee := tx.TxType == int(stake.TxTypeSSFee)
-
-		if !isSSGen && !isSSRtx && !isTxSSFee {
-			continue
-		}
-
-		ssGenFound = true
-		// Net = Outputs - Inputs (positive when output > input = fee earned)
-		redistributionNet := tx.TotalVAROutputs - tx.TotalInputs
-		totalRedistributionNet += redistributionNet
-	}
-
-	if ssGenFound {
-		feeVAR := totalRedistributionNet
-		totals[uint8(cointype.CoinTypeVAR)] = big.NewInt(feeVAR)
-	}
-
-	// 2. Calculate SKA fees from TxTypeSSFee transactions
 	for _, tx := range sTxs {
-		if stake.DetermineTxType(tx) != stake.TxTypeSSFee {
+		if determineType(tx) != stake.TxTypeSSFee {
+			continue
+		}
+		if len(tx.TxOut) == 0 {
 			continue
 		}
 
-		var inputTotal, outputTotal big.Int
-		var coinType uint8
-
-		// Sum all inputs for the primary coin type of this fee transaction
-		for _, vin := range tx.TxIn {
-			if vin.SKAValueIn != nil {
-				inputTotal.Add(&inputTotal, vin.SKAValueIn)
-			}
-		}
-
-		// Sum all outputs
+		// Determine the coin type from the first real SKA payout output.
+		// The zero-value OP_RETURN marker / consolidation outputs may default
+		// to coin type 0 (VAR), so keying off tx.TxOut[0] is unreliable; this
+		// mirrors the proven detection used before the split refactor. If no
+		// SKA payout output is present the tx distributes VAR (ct stays 0).
+		var ct uint8
+		isSKA := false
 		for _, out := range tx.TxOut {
 			if out.CoinType.IsSKA() && out.SKAValue != nil {
-				outputTotal.Add(&outputTotal, out.SKAValue)
-				if coinType == 0 {
-					coinType = uint8(out.CoinType)
-				}
+				ct = uint8(out.CoinType)
+				isSKA = true
+				break
 			}
 		}
 
-		// Calculate actual reward: output - input
-		if coinType != 0 {
-			reward := new(big.Int).Sub(&outputTotal, &inputTotal)
-			if reward.Sign() > 0 {
-				if totals[coinType] == nil {
-					totals[coinType] = new(big.Int)
+		// net = Σoutputs − input. Per node consensus (stake.CheckSSFee) an
+		// SSFee tx has exactly one input — null (value 0) or a real
+		// consolidation UTXO being augmented — so the net is the exact
+		// post-CalcFeeSplitByCoinType amount the node already wrote into the
+		// outputs. VAR amounts live in the int64 Value field; SKA amounts in
+		// the big.Int SKAValue field.
+		net := new(big.Int)
+		if isSKA {
+			for _, vin := range tx.TxIn {
+				if vin.SKAValueIn != nil {
+					net.Sub(net, vin.SKAValueIn)
 				}
-				totals[coinType].Add(totals[coinType], reward)
+			}
+			for _, out := range tx.TxOut {
+				if out.SKAValue != nil {
+					net.Add(net, out.SKAValue)
+				}
+			}
+		} else {
+			for _, vin := range tx.TxIn {
+				net.Sub(net, big.NewInt(vin.ValueIn))
+			}
+			for _, out := range tx.TxOut {
+				net.Add(net, big.NewInt(out.Value))
 			}
 		}
+
+		// An SSFee tx carries exactly one marker — "SF" (staker/PoS) or "MF"
+		// (miner/PoW), never both — in a single zero-value OP_RETURN output.
+		// Attribute the net wholesale to that marker's side. Stop at the first
+		// marker so a malformed multi-marker tx cannot double-count.
+		marker := stake.SSFeeMarkerNone
+		for _, out := range tx.TxOut {
+			if m := stake.HasSSFeeMarker(out.PkScript); m != stake.SSFeeMarkerNone {
+				marker = m
+				break
+			}
+		}
+
+		if totals[ct] == nil {
+			totals[ct] = &rewardtypes.SSFeeSplit{}
+		}
+		switch marker {
+		case stake.SSFeeMarkerStaker:
+			if totals[ct].PoS == nil {
+				totals[ct].PoS = big.NewInt(0)
+			}
+			totals[ct].PoS.Add(totals[ct].PoS, net)
+		case stake.SSFeeMarkerMiner:
+			if totals[ct].PoW == nil {
+				totals[ct].PoW = big.NewInt(0)
+			}
+			totals[ct].PoW.Add(totals[ct].PoW, net)
+		}
 	}
+
 	if len(totals) == 0 {
 		return nil
 	}
-	result := make(map[uint8]string, len(totals))
-	for ct, v := range totals {
-		result[ct] = v.String()
+
+	result := make(map[uint8]rewardtypes.SSFeeSplit, len(totals))
+	for ct, split := range totals {
+		result[ct] = *split
 	}
 	return result
+}
+
+// RewardAtomsToCoins converts a reward in atoms (big.Int) to coins (float64)
+// using the specified decimal precision. A nil amount yields 0. This is the
+// single conversion used by both the HTTP and WebSocket reward paths so they
+// cannot drift.
+func RewardAtomsToCoins(atoms *big.Int, decimals int) float64 {
+	if atoms == nil {
+		return 0
+	}
+	f := new(big.Float).SetInt(atoms)
+	div := new(big.Float).SetInt(new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(decimals)), nil))
+	f.Quo(f, div)
+	res, _ := f.Float64()
+	return res
 }
 
 // FormatSKAAtoms converts SKA atoms (1e18) to an atom string (integer string).
