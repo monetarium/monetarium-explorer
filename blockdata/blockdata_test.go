@@ -336,9 +336,24 @@ func TestExtractSKARewardsFromCoinbase_Summing(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// computeMiningFee tests
-// ---------------------------------------------------------------------------
+func TestComputeMiningFee_UserScenario(t *testing.T) {
+	// User's provided Coinbase TX: Total = 32.00016925 VAR = 3200016925 atoms
+	coinbase := wire.NewMsgTx()
+	coinbase.AddTxOut(wire.NewTxOut(0, nil))          // vout 0: 0
+	coinbase.AddTxOut(wire.NewTxOut(0, nil))          // vout 1: 0
+	coinbase.AddTxOut(wire.NewTxOut(3200016925, nil)) // vout 2: 32.00016925 VAR
+
+	block := &wire.MsgBlock{
+		Transactions: []*wire.MsgTx{coinbase},
+	}
+
+	// Subsidy = 32 VAR = 3200000000 atoms
+	got := computeMiningFee(block, 3200000000)
+	want := int64(16925)
+	if got != want {
+		t.Errorf("got %d, want %d", got, want)
+	}
+}
 
 // TestComputeMiningFee_CoinbaseEqualsSubsidy tests when coinbase equals the base subsidy.
 // This happens when there are no transaction fees in the block.

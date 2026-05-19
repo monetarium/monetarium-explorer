@@ -725,14 +725,11 @@ func (psh *PubSubHub) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgBl
 
 	// Calculate Vote VAR Reward (most recent)
 	// Compute fresh from the current block's transactions instead of using potentially stale DB data
-	ssGenTxs := txhelpers.ComputeTxFeeData(msgBlock)
-	ssFeeTotals := txhelpers.BlockSSFeeTotals(ssGenTxs, msgBlock.STransactions)
+	ssFeeTotals := txhelpers.BlockSSFeeTotals(msgBlock.STransactions)
 
 	var latestVarFee float64
-	if fStr, ok := ssFeeTotals[0]; ok && fStr != "" {
-		if f, err := strconv.ParseInt(fStr, 10, 64); err == nil {
-			latestVarFee = float64(f) / 1e8
-		}
+	if split, ok := ssFeeTotals[0]; ok {
+		latestVarFee = txhelpers.RewardAtomsToCoins(split.PoS, 8)
 	}
 
 	voteData, err := psh.sourceBase.GetVoteTicketDataByBlock(ctx, blockData.Header.Hash)
@@ -778,8 +775,8 @@ func (psh *PubSubHub) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgBl
 	// blocksPerYear is already computed in the Vote VAR Reward section.
 
 	coinTypes := make(map[uint8]struct{})
-	for ct, totals := range blockData.ExtraInfo.SSFeeTotalsByCoin {
-		if totals != "" {
+	for ct, split := range blockData.ExtraInfo.SSFeeTotalsByCoin {
+		if split.PoS != nil {
 			coinTypes[ct] = struct{}{}
 		}
 	}
@@ -803,9 +800,9 @@ func (psh *PubSubHub) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgBl
 			var blockHash string
 
 			// Find the latest block specifically for this coin type
-			if totalStr, ok := blockData.ExtraInfo.SSFeeTotalsByCoin[ct]; ok && totalStr != "" {
-				if total, parsed := new(big.Int).SetString(totalStr, 10); parsed && int64(blockData.Header.Voters) > 0 {
-					perVote := new(big.Int).Div(total, big.NewInt(int64(blockData.Header.Voters)))
+			if split, ok := blockData.ExtraInfo.SSFeeTotalsByCoin[ct]; ok && split.PoS != nil {
+				if int64(blockData.Header.Voters) > 0 {
+					perVote := new(big.Int).Div(split.PoS, big.NewInt(int64(blockData.Header.Voters)))
 					perBlock = txhelpers.FormatSKAAtoms(perVote)
 					blockHeight = int64(blockData.Header.Height)
 					blockHash = blockData.Header.Hash
@@ -815,16 +812,14 @@ func (psh *PubSubHub) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgBl
 			if perBlock == "" {
 				// Fallback: Search backwards through historical summaries for this coin
 				for i := len(sum30) - 1; i >= 0; i-- {
-					if totalStr, ok := sum30[i].SSFeeTotalsByCoin[ct]; ok && totalStr != "" {
-						if total, parsed := new(big.Int).SetString(totalStr, 10); parsed {
-							bInfo := psh.sourceBase.GetExplorerBlock(ctx, sum30[i].Hash)
-							if bInfo != nil && bInfo.BlockBasic.Voters > 0 {
-								perVote := new(big.Int).Div(total, big.NewInt(int64(bInfo.BlockBasic.Voters)))
-								perBlock = txhelpers.FormatSKAAtoms(perVote)
-								blockHeight = int64(sum30[i].Height)
-								blockHash = sum30[i].Hash
-								break
-							}
+					if split, ok := sum30[i].SSFeeTotalsByCoin[ct]; ok && split.PoS != nil {
+						bInfo := psh.sourceBase.GetExplorerBlock(ctx, sum30[i].Hash)
+						if bInfo != nil && bInfo.BlockBasic.Voters > 0 {
+							perVote := new(big.Int).Div(split.PoS, big.NewInt(int64(bInfo.BlockBasic.Voters)))
+							perBlock = txhelpers.FormatSKAAtoms(perVote)
+							blockHeight = int64(sum30[i].Height)
+							blockHash = sum30[i].Hash
+							break
 						}
 					}
 				}
@@ -835,13 +830,13 @@ func (psh *PubSubHub) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgBl
 				voteData, err := psh.sourceBase.GetVoteTicketDataByBlock(ctx, blockHash)
 				if err == nil && len(voteData) > 0 {
 					var totalReward *big.Int
-					if totalStr, ok := blockData.ExtraInfo.SSFeeTotalsByCoin[ct]; ok {
-						totalReward, _ = new(big.Int).SetString(totalStr, 10)
+					if split, ok := blockData.ExtraInfo.SSFeeTotalsByCoin[ct]; ok && split.PoS != nil {
+						totalReward = split.PoS
 					} else {
 						for _, s := range sum30 {
 							if int64(s.Height) == blockHeight {
-								if ts, ok := s.SSFeeTotalsByCoin[ct]; ok {
-									totalReward, _ = new(big.Int).SetString(ts, 10)
+								if split, ok := s.SSFeeTotalsByCoin[ct]; ok && split.PoS != nil {
+									totalReward = split.PoS
 								}
 								break
 							}
@@ -886,18 +881,23 @@ func (psh *PubSubHub) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgBl
 		p.GeneralInfo.SKAVoteRewards = nil
 	}
 
-	// PoW SKA rewards: per-SKA-type mining reward amounts from the coinbase.
-	if len(blockData.ExtraInfo.SKAPoWRewards) > 0 {
-		powRewardsBlockHeight := int64(blockData.Header.Height)
-		powRewards := make([]exptypes.PoWSKAReward, 0, len(blockData.ExtraInfo.SKAPoWRewards))
-		for ct, amountStr := range blockData.ExtraInfo.SKAPoWRewards {
-			powRewards = append(powRewards, exptypes.PoWSKAReward{
-				CoinType:    ct,
-				Symbol:      fmt.Sprintf("SKA%d", ct),
-				Amount:      amountStr,
-				BlockHeight: powRewardsBlockHeight,
-			})
+	// PoW SKA Fee Reward: the miner's portion of redistributed SKA tx fees
+	// from the authoritative "MF"-marked SSFee split (issue #273). Mirrors the
+	// explorer (HTTP) derivation so the two paths cannot drift.
+	powRewardsBlockHeight := int64(blockData.Header.Height)
+	powRewards := make([]exptypes.PoWSKAReward, 0)
+	for ct, split := range blockData.ExtraInfo.SSFeeTotalsByCoin {
+		if ct == 0 || split.PoW == nil || split.PoW.Sign() <= 0 {
+			continue
 		}
+		powRewards = append(powRewards, exptypes.PoWSKAReward{
+			CoinType:    ct,
+			Symbol:      fmt.Sprintf("SKA%d", ct),
+			Amount:      txhelpers.FormatSKAAtoms(split.PoW),
+			BlockHeight: powRewardsBlockHeight,
+		})
+	}
+	if len(powRewards) > 0 {
 		sort.Slice(powRewards, func(i, j int) bool { return powRewards[i].CoinType < powRewards[j].CoinType })
 		p.GeneralInfo.PoWSKARewards = powRewards
 	} else {

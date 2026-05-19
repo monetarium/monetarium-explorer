@@ -287,8 +287,7 @@ func (t *Collector) CollectBlockInfo(hash *chainhash.Hash) (*apitypes.BlockDataB
 	}
 
 	// Accumulate per-coin SSFee totals for SKA vote reward calculation.
-	ssGenTxs := txhelpers.ComputeTxFeeData(msgBlock)
-	if ssfee := txhelpers.BlockSSFeeTotals(ssGenTxs, msgBlock.STransactions); len(ssfee) > 0 {
+	if ssfee := txhelpers.BlockSSFeeTotals(msgBlock.STransactions); len(ssfee) > 0 {
 		extrainfo.SSFeeTotalsByCoin = ssfee
 	}
 

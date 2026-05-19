@@ -100,7 +100,7 @@ func MsgBlockToDBBlock(msgBlock *wire.MsgBlock, chainParams *chaincfg.Params, ch
 		Winners:           winners,
 		CoinAmounts:       blockCoinAmounts(msgBlock),
 		CoinTxStats:       blockCoinTxStats(msgBlock),
-		SSFeeTotalsByCoin: txhelpers.BlockSSFeeTotals(txhelpers.ComputeTxFeeData(msgBlock), msgBlock.STransactions),
+		SSFeeTotalsByCoin: txhelpers.BlockSSFeeTotals(msgBlock.STransactions),
 	}
 }
 

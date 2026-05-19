@@ -8,8 +8,10 @@ import (
 	"database/sql"
 	"fmt"
 
+	"github.com/monetarium/monetarium-explorer/db/dbtypes"
 	"github.com/monetarium/monetarium-explorer/db/dcrpg/internal"
 	"github.com/monetarium/monetarium-explorer/stakedb"
+	"github.com/monetarium/monetarium-explorer/txhelpers"
 	"github.com/monetarium/monetarium-node/chaincfg"
 )
 
@@ -33,7 +35,12 @@ const (
 	// include duplicate row check and removal, forced table analysis, patching
 	// or recomputation of data values, reindexing, or any other operations that
 	// do not create, delete or modify the definition of any database relation.
-	maintVersion = 0
+	//
+	// maint 1: recompute blocks.ssfee_totals as the marker-based {PoW,PoS}
+	// split (issue #273). The JSONB shape changed from map[uint8]string to
+	// map[uint8]rewardtypes.SSFeeSplit; rows written by earlier code are
+	// silently unreadable under the new type and must be recomputed.
+	maintVersion = 1
 )
 
 var (
@@ -242,7 +249,23 @@ func (u *Upgrader) compatVersion2Upgrades(current, target DatabaseVersion) (bool
 	// initSchema := current.schema
 	switch current.schema {
 	case 0:
-		return true, nil // nothing to do
+		// Schema v0 maintenance.
+		switch current.maint {
+		case 0:
+			log.Infof("Performing database maintenance upgrade 2.0.0 -> 2.0.1: " +
+				"recomputing blocks.ssfee_totals as marker-based PoW/PoS split")
+			if err := u.recomputeSSFeeTotals(); err != nil {
+				return false, fmt.Errorf("failed maintenance 2.0.0 -> 2.0.1: %v", err)
+			}
+			if err := updateMaintenanceVersion(u.db, 1); err != nil {
+				return false, fmt.Errorf("failed to update maintenance version: %v", err)
+			}
+			fallthrough
+		case 1:
+			return true, nil
+		default:
+			return false, fmt.Errorf("unsupported maint version %d", current.maint)
+		}
 
 	/* when there's an upgrade to define:
 	case 0:
@@ -415,6 +438,53 @@ func (u *Upgrader) compatVersion2Upgrades(current, target DatabaseVersion) (bool
 	default:
 		return false, fmt.Errorf("unsupported schema version %d", current.schema)
 	}
+}
+
+// recomputeSSFeeTotals re-derives blocks.ssfee_totals for every main-chain
+// block using the marker-based txhelpers.BlockSSFeeTotals. It is idempotent
+// and safe to re-run. Required because issue #273 changed the persisted JSONB
+// shape (map[uint8]string -> map[uint8]rewardtypes.SSFeeSplit); rows written by
+// earlier code are silently unreadable under the new type.
+func (u *Upgrader) recomputeSSFeeTotals() error {
+	var bestHeight int64
+	if err := u.db.QueryRow(
+		`SELECT COALESCE(max(height), -1) FROM blocks WHERE is_mainchain = true;`,
+	).Scan(&bestHeight); err != nil {
+		return fmt.Errorf("failed to get best block height: %w", err)
+	}
+	if bestHeight < 0 {
+		return nil // empty database; nothing to recompute
+	}
+
+	stmt, err := u.db.Prepare(internal.UpdateBlockSSFeeTotals)
+	if err != nil {
+		return fmt.Errorf("failed to prepare ssfee_totals update: %w", err)
+	}
+	defer stmt.Close()
+
+	log.Infof("Recomputing ssfee_totals for %d blocks (this runs once)...", bestHeight+1)
+	for h := int64(0); h <= bestHeight; h++ {
+		if err := u.ctx.Err(); err != nil {
+			return err
+		}
+		hash, err := u.bg.GetBlockHash(u.ctx, h)
+		if err != nil {
+			return fmt.Errorf("GetBlockHash(%d): %w", h, err)
+		}
+		msgBlock, err := u.bg.GetBlock(u.ctx, hash)
+		if err != nil {
+			return fmt.Errorf("GetBlock(%d): %w", h, err)
+		}
+		split := txhelpers.BlockSSFeeTotals(msgBlock.STransactions)
+		if _, err := stmt.Exec(dbtypes.ToJSONB(split), h); err != nil {
+			return fmt.Errorf("update ssfee_totals at height %d: %w", h, err)
+		}
+		if h > 0 && h%2000 == 0 {
+			log.Infof("  ...recomputed ssfee_totals through height %d/%d", h, bestHeight)
+		}
+	}
+	log.Infof("Finished recomputing ssfee_totals for %d blocks.", bestHeight+1)
+	return nil
 }
 
 func storeVers(db *sql.DB, dbVer *DatabaseVersion) error { //nolint:unused
