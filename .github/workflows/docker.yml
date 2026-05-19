@@ -22,11 +22,22 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Set Docker tags
+        id: tags
+        run: |
+          BRANCH="${{ github.ref_name }}"
+          TAGS="ghcr.io/${{ github.repository_owner }}/monetarium-explorer:${{ github.sha }}"
+          if [ "$BRANCH" = "main" ]; then
+            TAGS="$TAGS,ghcr.io/${{ github.repository_owner }}/monetarium-explorer:latest"
+          elif [[ "$BRANCH" == hotfix/* ]]; then
+            SAFE_BRANCH=$(echo "$BRANCH" | tr '/' '-')
+            TAGS="$TAGS,ghcr.io/${{ github.repository_owner }}/monetarium-explorer:$SAFE_BRANCH"
+          fi
+          echo "tags=$TAGS" >> $GITHUB_OUTPUT
+
       - name: Build and push
         uses: docker/build-push-action@v5
         with:
           context: .
-          push: ${{ github.ref == 'refs/heads/main' }}
-          tags: |
-            ghcr.io/${{ github.repository_owner }}/monetarium-explorer:latest
-            ghcr.io/${{ github.repository_owner }}/monetarium-explorer:${{ github.sha }}
+          push: ${{ github.ref == 'refs/heads/main' || startsWith(github.ref_name, 'hotfix/') }}
+          tags: ${{ steps.tags.outputs.tags }}
