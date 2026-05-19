@@ -277,6 +277,22 @@ const humanize = {
     }
     return `${pad(Math.floor(seconds))}s`
   },
+  // toUnixStamp parses a server-provided timestamp string into unix seconds,
+  // deterministically across JS engines. The server emits RFC3339 UTC
+  // (e.g. "2025-05-19T14:30:45Z"), which is well-supported, but Safari/WebKit
+  // rejects lenient forms (a space instead of "T", or a missing timezone) that
+  // V8 silently accepts as *local* time. We normalize before parsing so every
+  // engine agrees, and return NaN (rather than throwing or guessing) on garbage
+  // so callers can fall back gracefully.
+  toUnixStamp: function (timeStr) {
+    if (typeof timeStr !== 'string' || timeStr.trim() === '') return NaN
+    // "YYYY-MM-DD HH:MM:SS" -> "YYYY-MM-DDTHH:MM:SS"
+    const s = timeStr.trim().replace(' ', 'T')
+    // A datetime with no timezone designator is assumed UTC (server sends UTC).
+    const hasTz = /(?:[zZ]|[+-]\d{2}:?\d{2})$/.test(s)
+    const ms = Date.parse(s.includes('T') && !hasTz ? `${s}Z` : s)
+    return isNaN(ms) ? NaN : ms / 1000
+  },
   date: function (stamp, withTimezone, hideHisForMidnight) {
     const d = new Date(stamp)
     let dateStr = `${String(d.getUTCFullYear())}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`
