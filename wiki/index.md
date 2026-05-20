@@ -139,6 +139,15 @@ _The `/disapproved` page: read-only HTML table of every block with `is_valid=fal
 - flow (full): code-analysis/disapproved-blocks/flow.full.md — detailed handler → DataSource → SQL → Scan → template trace, `updateLastBlock` vote-bit invalidation cascade, `/rejects` 308 alias, and the `withCache` divergence vs `/side`
 - impact: code-analysis/disapproved-blocks/impact.md — `BlockStatus` 4-reader Scan blast, `IsValid` Scan-default trap, `updateLastBlock` as sole writer (cross-table is_valid coherence), ETag cache key coupling, real-time/amount-column re-import of C1/C3/C6/C7/C8
 
+### Decode/Broadcast Tx
+
+_The `/decodetx` page: a static HTML form whose handler carries no data; all interaction runs over `/ws` as request/response RPC-over-WebSocket (`decodetx` / `sendtx` → `decodetxResp` / `sendtxResp`). The only user-driven write path to the node in the page tier. The same RPCs are exposed on three transports — explorer `/ws`, pubsub `/ps`, and Insight `POST /insight/api/tx/send` — each with its own envelope, size limit, and error-string convention. SKA precision is preserved by accident of pass-through: `*chainjson.TxRawResult` is marshaled verbatim and dumped into `<pre>.textContent`, never parsed by the explorer._
+
+- flow (compact): code-analysis/decodetx/flow.compact.md — HTML-shell + WS-only data path, three-transport surface, pass-through multi-coin invariant, mutation checklist
+- flow (full): code-analysis/decodetx/flow.full.md — handler → template → Stimulus → `/ws` `switch` → `ChainDB.{Decode,Send}RawTransaction` → node RPC trace, with the pubsub `/ps` twin and Insight REST surface
+- patterns: code-analysis/decodetx/patterns.md — P1 form-shell over WS-RPC, P2 three-transport surface for the same node RPC, P3 multi-coin pass-through via opaque JSON
+- impact: code-analysis/decodetx/impact.md — R1 event-string drift across 5 sites, R2 oversize-request silent drop, R3 `/ws`/`/ps` dual-pipeline drift, R4 interface fan-out (+ mock), R5 latent SKA precision loss, R6 same-event success/error multiplexing, R7 shared receive loop, R8 legacy `/explorer/decodetx` redirect
+
 ### Page-Rendering (cross-domain consolidation)
 
 _Mode-4 consolidation of the shared mechanics behind every server-rendered HTML page (block, mempool, visualblocks, parameters, charts, address). Not a flow — read alongside the per-domain flows it links. Covers out-of-band shared `pageData`/`invs` state, the multi-lock discipline, `*CommonPageData` struct-embedding template injection, and block-scoped ETag caching._
