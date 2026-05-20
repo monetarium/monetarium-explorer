@@ -6,6 +6,7 @@ package explorer
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -167,51 +168,11 @@ func (exp *explorerUI) RootWebsocket(w http.ResponseWriter, r *http.Request) {
 					webData.Message = string(msg)
 
 				case "getticketpooldata":
-					// Retrieve chart data on the given interval.
-					interval := dbtypes.TimeGroupingFromStr(msg.Message)
-					// Chart height is returned since the cache may be stale,
-					// although it is automatically updated by the first caller
-					// who requests data from a stale cache.
-					timeChart, priceChart, outputsChart, chartHeight, err :=
-						exp.dataSource.TicketPoolVisualization(ctx, interval)
-					if dbtypes.IsTimeoutErr(err) {
-						log.Warnf("TicketPoolVisualization DB timeout: %v", err)
-						webData.Message = "Error: DB timeout"
+					data, errMsg := exp.buildTicketPoolChartsData(ctx, msg.Message)
+					if errMsg != "" {
+						webData.Message = errMsg
 						break
 					}
-					if err != nil {
-						if strings.HasPrefix(err.Error(), "unknown interval") {
-							log.Debugf("invalid ticket pool interval provided "+
-								"via TicketPoolVisualization: %s", msg.Message)
-							webData.Message = "Error: " + err.Error()
-							break
-						}
-						log.Errorf("TicketPoolVisualization error: %v", err)
-						webData.Message = "Error: failed to fetch ticketpool data"
-						break
-					}
-
-					mp := new(apitypes.PriceCountTime)
-
-					inv := exp.MempoolInventory()
-					inv.RLock()
-					if len(inv.Tickets) > 0 {
-						mp.Price = inv.Tickets[0].TotalOut
-						mp.Count = len(inv.Tickets)
-						mp.Time = dbtypes.NewTimeDefFromUNIX(inv.Tickets[0].Time)
-					} else {
-						log.Debug("No tickets exists in the mempool")
-					}
-					inv.RUnlock()
-
-					data := &apitypes.TicketPoolChartsData{
-						ChartHeight:  uint64(chartHeight),
-						TimeChart:    timeChart,
-						PriceChart:   priceChart,
-						OutputsChart: outputsChart,
-						Mempool:      mp,
-					}
-
 					msg, err := json.Marshal(data)
 					if err != nil {
 						log.Warn("Invalid JSON message: ", err)
@@ -367,4 +328,39 @@ func (exp *explorerUI) RootWebsocket(w http.ResponseWriter, r *http.Request) {
 	}) // wsHandler := websocket.Handler(func(ws *websocket.Conn) {
 
 	wsHandler.ServeHTTP(w, r)
+}
+
+// buildTicketPoolChartsData assembles the payload returned by the
+// "getticketpooldata" WebSocket request. It mirrors the REST handler
+// appContext.getTicketPoolCharts so both transports emit the same
+// apitypes.TicketPoolChartsData for a given chain/mempool state.
+//
+// On success it returns the chart payload and an empty error message; on
+// failure it returns nil and the user-facing message that the WebSocket
+// caller should report to the client.
+func (exp *explorerUI) buildTicketPoolChartsData(ctx context.Context, intervalStr string) (*apitypes.TicketPoolChartsData, string) {
+	interval := dbtypes.TimeGroupingFromStr(intervalStr)
+	timeChart, priceChart, outputsChart, chartHeight, err :=
+		exp.dataSource.TicketPoolVisualization(ctx, interval)
+	if dbtypes.IsTimeoutErr(err) {
+		log.Warnf("TicketPoolVisualization DB timeout: %v", err)
+		return nil, "Error: DB timeout"
+	}
+	if err != nil {
+		if strings.HasPrefix(err.Error(), "unknown interval") {
+			log.Debugf("invalid ticket pool interval provided "+
+				"via TicketPoolVisualization: %s", intervalStr)
+			return nil, "Error: " + err.Error()
+		}
+		log.Errorf("TicketPoolVisualization error: %v", err)
+		return nil, "Error: failed to fetch ticketpool data"
+	}
+
+	return &apitypes.TicketPoolChartsData{
+		ChartHeight:  uint64(chartHeight),
+		TimeChart:    timeChart,
+		PriceChart:   priceChart,
+		OutputsChart: outputsChart,
+		Mempool:      exp.dataSource.GetMempoolPriceCountTime(),
+	}, ""
 }

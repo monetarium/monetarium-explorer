@@ -33,15 +33,17 @@
 - The cache is process-global, not per-`ChainDB`. Multi-instance binaries would silently share. Single-instance today.
 - All three sub-charts must share one `height` (the inner retry loop enforces this). Removing the loop introduces inter-chart inconsistency on rapid tip advance.
 
-## P4: Dual-transport overlay with divergent semantics inside one field
+## P4: Single delegation helper consumed by both transports
 
-**What:** `apitypes.PriceCountTime` is sent on both the REST path (`GET /api/ticketpool/charts`) and the WS path (`getticketpooldataResp`). Both expose `Price float64` / `Count int` / `Time TimeDef`. **The two computations are different**: REST uses `DataCache.GetTicketPriceCountTime` → `stakeDiff.ToCoin() + feeAvg`; WS uses the head-of-list `inv.Tickets[0].TotalOut` and `len(inv.Tickets)`. Same JSON shape, different semantics — a C8 manifestation inside a single field rather than across struct shapes.
+**What:** `apitypes.PriceCountTime` is sent on both the REST path (`GET /api/ticketpool/charts`) and the WS path (`getticketpooldataResp`). Both producers delegate to the same DataSource method (`GetMempoolPriceCountTime`), so a given mempool/chain state yields the same `mempool.{price,count,time}` bytes regardless of which transport delivered the payload. The DataSource implementation locks its own cache (`mempool/mempoolcache.go`), so neither caller needs to take `MempoolInventory().RLock()` around the read.
 
-**Where:** [mempool/mempoolcache.go:192-214](../../../mempool/mempoolcache.go#L192-L214) (REST), [cmd/dcrdata/internal/explorer/websockethandlers.go:194-205](../../../cmd/dcrdata/internal/explorer/websockethandlers.go#L194-L205) (WS), `apitypes.PriceCountTime` at [api/types/apitypes.go:955-960](../../../api/types/apitypes.go#L955-L960).
+**Where:** REST — [cmd/dcrdata/internal/api/apiroutes.go:1274](../../../cmd/dcrdata/internal/api/apiroutes.go#L1274) (`c.DataSource.GetMempoolPriceCountTime()`); WS — `(*explorerUI).buildTicketPoolChartsData` in [cmd/dcrdata/internal/explorer/websockethandlers.go](../../../cmd/dcrdata/internal/explorer/websockethandlers.go); shared producer — [db/dcrpg/pgblockchain.go:6402-6406](../../../db/dcrpg/pgblockchain.go#L6402-L6406) → [mempool/mempoolcache.go:192-214](../../../mempool/mempoolcache.go#L192-L214); type — [api/types/apitypes.go:955-960](../../../api/types/apitypes.go#L955-L960).
 
 **Constraints:**
-- Treat REST and WS `Mempool.Price` as two *contracts* even though they share a struct. A fix to one path must consciously update the other.
-- The JS legend shows whatever value arrived last; values can shift after each `newblock` refresh as the client switches between the two formulas.
+- New top-level fields on `TicketPoolChartsData` still need updates at **both** producer sites (REST handler + `buildTicketPoolChartsData`), but the mempool overlay itself is single-sourced — do not reintroduce a parallel computation in either branch.
+- `(*explorerUI).buildTicketPoolChartsData` exists specifically to keep the WS switch arm a one-liner: any new logic for the `getticketpooldata` case belongs inside this helper, not inline in `RootWebsocket`'s `select`/`switch` block — both for testability and to keep the REST/WS parity obvious to readers.
+
+**History:** Prior to [#290](https://github.com/monetarium/monetarium-explorer/issues/290) the WS path reimplemented this overlay manually (`mp.Price = inv.Tickets[0].TotalOut`, `mp.Count = len(inv.Tickets)`, `mp.Time = NewTimeDefFromUNIX(inv.Tickets[0].Time)`). Same JSON shape, different semantics — the `/ticketpool` Dygraph dot visibly jumped between the initial HTTP load and every `newblock` refresh. The fix collapses both paths onto `DataSource.GetMempoolPriceCountTime`.
 
 ## P5: VAR-only float64 staking pipeline
 
@@ -59,4 +61,4 @@ See also:
 - /wiki/code-analysis/decodetx/patterns.md (shares-pattern-with: P1 form-shell over WS-RPC)
 - /wiki/code-analysis/time-based-blocks/patterns.md (shares-pattern-with: P2 positional-Scan + `formatGroupingQuery`)
 - /wiki/code-analysis/page-rendering/patterns.md (depends-on: commonData injection)
-- /wiki/core/constraints.md (depends-on: C1 VAR-only float64; C6 template-clone exception; C8 dual-transport semantic asymmetry)
+- /wiki/core/constraints.md (depends-on: C1 VAR-only float64; C3 REST/WS payload parity; C6 template-clone exception)

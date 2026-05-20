@@ -16,13 +16,15 @@
 **Failure mode:** silent
 **Description:** Initial page load uses HTTP `/api/ticketpool/charts` → new field renders. First `newblock` arrives, JS fires WS request, WS payload is missing the new field → JS reads `undefined` and either no-ops or zeroes out a series. The chart looks correct on first paint and silently degrades on update — the exact failure-mode signature flagged by C8 in [/wiki/core/constraints.md](../../core/constraints.md). A symmetric risk applies in reverse if the WS branch is updated first.
 
-## Risk: Mempool.Price semantic drift
+## Risk: Mempool.Price formula changes
 
-**Trigger:** modifying `DataCache.GetTicketPriceCountTime` (REST formula) or the WS branch's manual `mp.Price = inv.Tickets[0].TotalOut` ([websockethandlers.go:199](../../../cmd/dcrdata/internal/explorer/websockethandlers.go#L199)) — or simply not realizing they exist.
+**Trigger:** modifying `DataCache.GetTicketPriceCountTime` ([mempool/mempoolcache.go:192-214](../../../mempool/mempoolcache.go#L192-L214)) — the single producer of `mempool.{price,count,time}` for both REST and WS.
 **Affected flows:**
 - /wiki/code-analysis/ticketpool/flow.full.md §3.5
-**Failure mode:** silent
-**Description:** Same JSON field (`mempool.price`), same Go type (`float64`), two producers, two formulas. REST → `stakeDiff.ToCoin() + feeAvg` (predicted next ticket price). WS → first-ticket `TotalOut` (one specific mempool ticket's value). The JS controller has no way to tell which value it received; the legend silently flips on every `newblock` re-fetch. Until consolidated, **never claim to "fix the mempool ticket price" without auditing both formulas**.
+**Failure mode:** silent (numeric drift)
+**Description:** Since [#290](https://github.com/monetarium/monetarium-explorer/issues/290) both `appContext.getTicketPoolCharts` (REST) and `(*explorerUI).buildTicketPoolChartsData` (WS) delegate to `DataSource.GetMempoolPriceCountTime`, so a single edit reaches both consumers and the two transports cannot drift. Changing the numeric formula (e.g. tweaking the rolling-fee window or swapping `stakeDiff.ToCoin() + feeAvg` for another estimate) shifts the chart legend on every page that consumes this field; the change is invisible at compile time. Changing the return shape (e.g. promoting `Price float64` to a string) is **loud** — both consumers fail to compile.
+
+> **History:** Pre-[#290](https://github.com/monetarium/monetarium-explorer/issues/290), the WS branch reimplemented the overlay manually (`inv.Tickets[0].TotalOut` etc.) — same JSON shape, different semantics. The mempool dot on `/ticketpool` jumped between the initial HTTP load and every `newblock` WS refresh. Do not reintroduce a parallel computation in the WS handler.
 
 ## Risk: WS event-name drift
 

@@ -2,9 +2,11 @@ package explorer
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/big"
 	"testing"
+	"time"
 
 	"github.com/monetarium/monetarium-explorer/api/rewardtypes"
 	apitypes "github.com/monetarium/monetarium-explorer/api/types"
@@ -19,10 +21,14 @@ import (
 )
 
 type mockDataSource struct {
-	blocks  map[string]*explorerTypes.BlockInfo
-	heights map[int64]string
-	params  *chaincfg.Params
-	height  int64
+	blocks     map[string]*explorerTypes.BlockInfo
+	heights    map[int64]string
+	params     *chaincfg.Params
+	height     int64
+	mempoolPCT *apitypes.PriceCountTime
+	tpvCharts  [3]*dbtypes.PoolTicketsData
+	tpvHeight  int64
+	tpvErr     error
 }
 
 func (m *mockDataSource) BlockHeight(ctx context.Context, hash string) (int64, error) { return 0, nil }
@@ -83,7 +89,10 @@ func (m *mockDataSource) BlockFlags(ctx context.Context, hash string) (bool, boo
 	return false, false, nil
 }
 func (m *mockDataSource) TicketPoolVisualization(ctx context.Context, interval dbtypes.TimeBasedGrouping) (*dbtypes.PoolTicketsData, *dbtypes.PoolTicketsData, *dbtypes.PoolTicketsData, int64, error) {
-	return nil, nil, nil, 0, nil
+	return m.tpvCharts[0], m.tpvCharts[1], m.tpvCharts[2], m.tpvHeight, m.tpvErr
+}
+func (m *mockDataSource) GetMempoolPriceCountTime() *apitypes.PriceCountTime {
+	return m.mempoolPCT
 }
 func (m *mockDataSource) TransactionBlocks(ctx context.Context, hash string) ([]*dbtypes.BlockStatus, []uint32, error) {
 	return nil, nil, nil
@@ -406,4 +415,59 @@ func TestThreeSigFigs(t *testing.T) {
 			t.Errorf("threeSigFigs(%v) = %q, want %q", c.in, got, c.want)
 		}
 	}
+}
+
+// TestBuildTicketPoolChartsData_UsesDataSourceMempool guards the fix from
+// issue #290: the WS "getticketpooldata" handler must delegate the
+// mempool overlay to DataSource.GetMempoolPriceCountTime() so it matches
+// REST /api/ticketpool/charts byte-for-byte, instead of re-deriving it
+// from inv.Tickets[0].TotalOut.
+func TestBuildTicketPoolChartsData_UsesDataSourceMempool(t *testing.T) {
+	sentinel := &apitypes.PriceCountTime{
+		Price: 42.5,
+		Count: 7,
+		Time:  dbtypes.NewTimeDef(time.Unix(1700000000, 0).UTC()),
+	}
+	timeChart := &dbtypes.PoolTicketsData{}
+	priceChart := &dbtypes.PoolTicketsData{}
+	outputsChart := &dbtypes.PoolTicketsData{}
+
+	t.Run("success path returns Mempool from DataSource", func(t *testing.T) {
+		exp := &explorerUI{dataSource: &mockDataSource{
+			mempoolPCT: sentinel,
+			tpvCharts:  [3]*dbtypes.PoolTicketsData{timeChart, priceChart, outputsChart},
+			tpvHeight:  12345,
+		}}
+
+		data, errMsg := exp.buildTicketPoolChartsData(context.Background(), "all")
+		if errMsg != "" {
+			t.Fatalf("unexpected errMsg: %q", errMsg)
+		}
+		if data == nil {
+			t.Fatal("data is nil")
+		}
+		if data.Mempool != sentinel {
+			t.Errorf("Mempool = %+v, want pointer-equal to sentinel %+v", data.Mempool, sentinel)
+		}
+		if data.ChartHeight != 12345 {
+			t.Errorf("ChartHeight = %d, want 12345", data.ChartHeight)
+		}
+		if data.TimeChart != timeChart || data.PriceChart != priceChart || data.OutputsChart != outputsChart {
+			t.Errorf("chart pointers not propagated unchanged from DataSource")
+		}
+	})
+
+	t.Run("unknown-interval error is surfaced verbatim", func(t *testing.T) {
+		exp := &explorerUI{dataSource: &mockDataSource{
+			tpvErr: errors.New("unknown interval: nope"),
+		}}
+
+		data, errMsg := exp.buildTicketPoolChartsData(context.Background(), "nope")
+		if data != nil {
+			t.Errorf("data = %+v, want nil on error", data)
+		}
+		if errMsg != "Error: unknown interval: nope" {
+			t.Errorf("errMsg = %q, want %q", errMsg, "Error: unknown interval: nope")
+		}
+	})
 }

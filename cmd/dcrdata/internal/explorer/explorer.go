@@ -93,6 +93,7 @@ type explorerDataSource interface {
 	BlockStatuses(ctx context.Context, height int64) ([]*dbtypes.BlockStatus, error)
 	BlockFlags(ctx context.Context, hash string) (bool, bool, error)
 	TicketPoolVisualization(ctx context.Context, interval dbtypes.TimeBasedGrouping) (*dbtypes.PoolTicketsData, *dbtypes.PoolTicketsData, *dbtypes.PoolTicketsData, int64, error)
+	GetMempoolPriceCountTime() *apitypes.PriceCountTime
 	TransactionBlocks(ctx context.Context, hash string) ([]*dbtypes.BlockStatus, []uint32, error)
 	Transaction(ctx context.Context, txHash string) ([]*dbtypes.Tx, error)
 	VinsForTx(context.Context, *dbtypes.Tx) (vins []dbtypes.VinTxProperty, err error)
