@@ -148,6 +148,15 @@ _The `/decodetx` page: a static HTML form whose handler carries no data; all int
 - patterns: code-analysis/decodetx/patterns.md — P1 form-shell over WS-RPC, P2 three-transport surface for the same node RPC, P3 multi-coin pass-through via opaque JSON
 - impact: code-analysis/decodetx/impact.md — R1 event-string drift across 5 sites, R2 oversize-request silent drop, R3 `/ws`/`/ps` dual-pipeline drift, R4 interface fan-out (+ mock), R5 latent SKA precision loss, R6 same-event success/error multiplexing, R7 shared receive loop, R8 legacy `/explorer/decodetx` redirect
 
+### Ticketpool
+
+_The `/ticketpool` page: form-shell HTML + three live data channels (HTTP `/api/ticketpool/charts`, HTTP `/api/ticketpool/bydate/{tp}`, WS `getticketpooldata`→`Resp`). Server `Ticketpool` handler injects only `commonData`; `sigNewBlock` carries no ticket data, the JS controller re-requests on every `newblock`. One `PoolTicketsData` struct populated by three positional Scans; process-global stale-while-revalidate cache keyed `(interval, height)` with `trylock.Mutex` updater election and an inner retry loop to keep all three sub-charts at one block. VAR-only float64 pipeline (tickets are a VAR PoS instrument by chain design); same JSON field `mempool.price` carries two different semantics across REST vs WS — a C8 manifestation inside a single field._
+
+- flow (compact): code-analysis/ticketpool/flow.compact.md — high-level summary of the form-shell + three-channel data path, height-keyed cache, and dual-transport mempool divergence
+- flow (full): code-analysis/ticketpool/flow.full.md — detailed handler → API/WS → DB → cache → SQL → Scan → JS controller trace, with REST/WS semantic asymmetry
+- patterns: code-analysis/ticketpool/patterns.md — P1 form-shell over WS-RPC, P2 tri-modal struct with positional Scan, P3 process-global stale-while-revalidate cache, P4 dual-transport overlay with divergent semantics, P5 VAR-only float64 staking pipeline
+- impact: code-analysis/ticketpool/impact.md — column-Scan desync, REST/WS payload drift, `Mempool.Price` semantic drift, WS event-name drift, TimeGrouping enum drift, SKA-through-VAR pipeline corruption, cache-loop removal, process-global cache cross-talk, C6 violation surface, legacy `DCR` label leak, `/bydate` response asymmetry
+
 ### Page-Rendering (cross-domain consolidation)
 
 _Mode-4 consolidation of the shared mechanics behind every server-rendered HTML page (block, mempool, visualblocks, parameters, charts, address). Not a flow — read alongside the per-domain flows it links. Covers out-of-band shared `pageData`/`invs` state, the multi-lock discipline, `*CommonPageData` struct-embedding template injection, and block-scoped ETag caching._
