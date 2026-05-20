@@ -72,7 +72,7 @@ is a derived value that is *not* a `chaincfg.Params` field — it must live in
 
 ---
 
-## Hardcoded Network-Name Address-Prefix Table
+## Per-Net Address-Prefix Table With Magic-Byte Fallback
 
 **Appears in:**
 
@@ -80,63 +80,106 @@ is a derived value that is *not* a `chaincfg.Params` field — it must live in
 
 **Description:**
 `types.AddressPrefixes(params)`
-([explorer/types/explorertypes.go:1516-1559](../../../explorer/types/explorertypes.go#L1516)
-— flow.full.md cites `:1508-1549`; the function is actually at `:1516`,
-**+8 line drift**) builds the address-prefix table from **four parallel
-index-aligned slices**: `Descriptions` and `Name`
-([:1517-1534](../../../explorer/types/explorertypes.go#L1517)) plus one of
-three hardcoded prefix arrays — `MainnetPrefixes` / `TestnetPrefixes` /
-`SimnetPrefixes`
-([:1536-1538](../../../explorer/types/explorertypes.go#L1536)). Selection is a
-literal string switch on `params.Name`: `== "mainnet"`,
-`strings.HasPrefix(name, "testnet")`, `== "simnet"`, else **`return nil`**
-([:1540-1550](../../../explorer/types/explorertypes.go#L1540)). The only caller
-is `ParametersPage`
-([explorerroutes.go:2146](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L2146))
+([explorer/types/explorertypes.go](../../../explorer/types/explorertypes.go))
+returns a `[]AddrPrefix` literal in which each row is declared inline: name,
+description, and the textual base58 prefix for that address kind on the
+active network. The prefix string comes from one of four package-level
+`addrPrefixSet` constants — mainnet (`Mk Ms Me MS Mc Pm dprv dpub`), testnet
+(`Tk Ts Te TS Tc Pt tprv tpub`), simnet (`Sk Ss Se SS Sc Ps sprv spub`),
+regnet (`Rk Rs Re RS Rc Pr rprv rpub`) — selected by `params.Name` via
+`lookupAddrPrefixSet`. For an **unrecognised** `params.Name` the function
+falls back to a `0x` + hex.EncodeToString of the magic-byte field on
+`chaincfg.Params`, so the rendered table is never silently empty. The only
+caller is `ParametersPage` —
+[explorerroutes.go:2146](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L2146)
 — blast radius is one page.
 
 **Constraints:**
 
-- The four slices (`Descriptions`, `Name`, `<Net>Prefixes`) are zipped by
-  positional index in the build loop
-  ([:1552-1559](../../../explorer/types/explorertypes.go#L1552)). Adding/removing
-  an address kind requires editing **all four** slices at the same index, or
-  rows misalign (wrong prefix paired with wrong name) with no error.
-- A new network whose `params.Name` is not `mainnet`/`testnet*`/`simnet`
-  returns `nil` → the address section renders blank with HTTP 200 (see
-  `impact.md` → *Silent Blank Address-Prefix Table*).
+- Rows are an inline struct literal — no parallel slices to keep aligned.
+  Adding a new address kind = one row inline in `AddressPrefixes`. There is
+  no longer a bug class of misaligned rows.
+- Adding a new **recognised** network requires both a new `addrPrefixSet`
+  var with the documented per-net textual prefixes *and* a case in
+  `lookupAddrPrefixSet`. Forgetting either means the new net falls into the
+  magic-byte hex fallback — degraded display, but still non-empty.
+- The textual prefix strings cannot be derived deterministically from the
+  magic-byte fields alone: chaincfg's "starts with X" comments describe the
+  typical real-world hash160 outcome, not a guarantee for arbitrary
+  payloads. The hardcoded table is the source of truth.
+- The `NetworkAddressPrefix` row remains a direct `.ChainParams` template
+  read and is intentionally outside this function.
 
 ---
 
-## VAR-Only Consensus-Param Rows
+## VAR-Only Consensus-Param Rows + Dedicated SKA Section
 
 **Appears in:**
 
 - /wiki/code-analysis/parameters/flow.full.md (§5, §7)
 
 **Description:**
-The subsidy/reward rows — `BaseSubsidy`
-([parameters.tmpl:117-119](../../../cmd/dcrdata/views/parameters.tmpl)),
-`MulSubsidy`/`DivSubsidy`/`SubsidyReductionInterval` (`:126-136`),
-`WorkRewardProportion`/`StakeRewardProportion`/`BlockTaxProportion`
-(`:140-151`, rendered via `{{uint16Mul .ChainParams.X 10}}%`), and
-`MinimumStakeDiff` (`:167-168`, hardcoded `VAR` literal in the template) — are
-**scalar `chaincfg.Params` fields**, not per-coin maps. `BaseSubsidy` and
-`MinimumStakeDiff` go through `amountAsDecimalParts` (VAR's 8-decimal
-`float64` path). SKA coins are deliberately absent: these are VAR consensus
-constants, and the multi-coin reward model (see `REWARDS_LOGIC.md`) does not
-parameterize them per coin.
+The subsidy/stake rows — `BaseSubsidy`,
+`MulSubsidy`/`DivSubsidy`/`SubsidyReductionInterval`,
+`WorkRewardProportionV2`/`StakeRewardProportionV2` (rendered via
+`{{uint16Mul .ChainParams.X 10}}%` to produce the actual 50% / 50% Monetarium
+consensus split, not the legacy V1 60 / 30 fields), and `MinimumStakeDiff`
+(hardcoded `VAR` unit in the template) — are **scalar `chaincfg.Params`
+fields**, not per-coin maps. `BaseSubsidy` and `MinimumStakeDiff` go through
+`amountAsDecimalParts` (VAR's 8-decimal `float64` path). SKA coins live
+**only** in a dedicated section fed by `ExtendedParams.SKACoins`
+(`[]types.SKACoinParam`, pre-formatted via `buildSKACoinParams`); they do
+not parameterise the subsidy/stake rows. The legacy `BlockTaxProportion`
+row is **absent** — Monetarium has no treasury.
 
 **Constraints:**
 
-- Do not "multi-coin-ify" these rows into per-coin maps; they are not a
-  `map[uint8]...` anywhere in the param model. The page is intentionally
-  VAR-only.
-- Any new amount row sourced from `chaincfg.Params` is VAR and may use
-  `amountAsDecimalParts` (float64-safe at 8 decimals). A SKA-denominated value
-  would violate the precision split — see
-  [core/constraints.md#C1](../../core/constraints.md#C1) — and has no
-  `chaincfg.Params` source anyway.
+- Do not "multi-coin-ify" the subsidy/stake rows. They are not a
+  `map[uint8]...` in the param model, and Monetarium's per-coin behaviour
+  is captured by the consensus rule `SSVMonetarium` (see
+  `REWARDS_LOGIC.md`), not by per-coin subsidy parameters.
+- Subsidy/stake amount rows are VAR (8 decimals, `float64`-safe) and use
+  `amountAsDecimalParts`. SKA-denominated values do not appear in these
+  rows.
+- The SKA coin section is the page's only multi-coin content. Adding a new
+  per-coin field there means extending `types.SKACoinParam` *and*
+  `buildSKACoinParams` *and* the template — pre-format any SKA atom values
+  via `formatAtomsAsCoinString` (or `formatBigIntAsSKAString`) so the
+  template only sees plain strings (see
+  [core/constraints.md#C1](../../core/constraints.md#C1)).
+
+---
+
+## Pre-Formatted SKA View-Model In `ExtendedParams`
+
+**Appears in:**
+
+- /wiki/code-analysis/parameters/flow.full.md (§3, §5)
+
+**Description:**
+SKA atom values on `chaincfg.SKACoinConfig` are `*big.Int` (`MaxSupply`,
+`AtomsPerCoin`, `MinRelayTxFee`, `EmissionAmounts[]`) — they exceed
+`float64` precision and cannot survive the existing VAR `amountAsDecimalParts`
+path. `buildSKACoinParams`
+([cmd/dcrdata/internal/explorer/parameters.go](../../../cmd/dcrdata/internal/explorer/parameters.go))
+converts each `*big.Int` to a plain decimal string server-side, using
+`formatAtomsAsCoinString` (exact `big.Int` division, no rounding, no
+scientific notation, thousands commas) for coin amounts and a small
+`formatBigIntWithCommas` helper for the atomic-scale `AtomsPerCoin` field.
+The resulting `[]types.SKACoinParam` is consumed by the template as plain
+strings — no `*big.Int` crosses the template boundary.
+
+**Constraints:**
+
+- Every new SKA amount-shaped field added to `SKACoinParam` must be
+  formatted at the handler boundary; never expose a `*big.Int` or atom
+  integer to the template.
+- The `Label` field uses the canonical `SKA{n}` form (no dash), matching
+  [core/product.md](../../core/product.md). Do not introduce a `SKA-{n}`
+  variant — the `Symbol` field on `SKACoinConfig` is the dashed form for
+  display alongside the label, not in place of it.
+- The view-model must be a pure function of the startup-immutable
+  `exp.ChainParams`; the builder reads no shared state and needs no lock.
 
 ---
 

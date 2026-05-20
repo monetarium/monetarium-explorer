@@ -2159,6 +2159,7 @@ func (exp *explorerUI) ParametersPage(w http.ResponseWriter, r *http.Request) {
 		MaximumBlockSize     int64
 		ActualTicketPoolSize int64
 		AddressPrefix        []types.AddrPrefix
+		SKACoins             []types.SKACoinParam
 	}
 
 	str, err := exp.templates.exec("parameters", struct {
@@ -2170,6 +2171,7 @@ func (exp *explorerUI) ParametersPage(w http.ResponseWriter, r *http.Request) {
 			MaximumBlockSize:     maxBlockSize,
 			AddressPrefix:        addrPrefix,
 			ActualTicketPoolSize: actualTicketPoolSize,
+			SKACoins:             buildSKACoinParams(params),
 		},
 	})
 

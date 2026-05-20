@@ -5,6 +5,7 @@
 package types
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -1512,52 +1513,116 @@ type AddrPrefix struct {
 	Description string
 }
 
-// AddressPrefixes generates an array AddrPrefix by using chaincfg.Params
+// addrPrefixSet captures the textual base58 prefix that every address of each
+// type begins with on a given network. These are the values documented in
+// `monetarium-node/chaincfg/{mainnet,testnet,simnet,regnet}params.go` as the
+// "starts with X" comments next to each magic-byte field. We hardcode the
+// table per network because the textual prefix is a property of typical
+// real-world hash160 / BIP32 payloads, not a deterministic function of the
+// magic bytes alone (the leading base58 digit shifts with the payload).
+type addrPrefixSet struct {
+	pubKeyAddrID, pubKeyHashAddrID, pkhEdwardsAddrID, pkhSchnorrAddrID string
+	scriptHashAddrID, privateKeyID, hdPrivateKeyID, hdPublicKeyID      string
+}
+
+var (
+	mainnetAddrPrefixes = addrPrefixSet{
+		pubKeyAddrID: "Mk", pubKeyHashAddrID: "Ms", pkhEdwardsAddrID: "Me",
+		pkhSchnorrAddrID: "MS", scriptHashAddrID: "Mc", privateKeyID: "Pm",
+		hdPrivateKeyID: "dprv", hdPublicKeyID: "dpub",
+	}
+	testnetAddrPrefixes = addrPrefixSet{
+		pubKeyAddrID: "Tk", pubKeyHashAddrID: "Ts", pkhEdwardsAddrID: "Te",
+		pkhSchnorrAddrID: "TS", scriptHashAddrID: "Tc", privateKeyID: "Pt",
+		hdPrivateKeyID: "tprv", hdPublicKeyID: "tpub",
+	}
+	simnetAddrPrefixes = addrPrefixSet{
+		pubKeyAddrID: "Sk", pubKeyHashAddrID: "Ss", pkhEdwardsAddrID: "Se",
+		pkhSchnorrAddrID: "SS", scriptHashAddrID: "Sc", privateKeyID: "Ps",
+		hdPrivateKeyID: "sprv", hdPublicKeyID: "spub",
+	}
+	regnetAddrPrefixes = addrPrefixSet{
+		pubKeyAddrID: "Rk", pubKeyHashAddrID: "Rs", pkhEdwardsAddrID: "Re",
+		pkhSchnorrAddrID: "RS", scriptHashAddrID: "Rc", privateKeyID: "Pr",
+		hdPrivateKeyID: "rprv", hdPublicKeyID: "rpub",
+	}
+)
+
+// AddressPrefixes returns the textual address prefixes for the active network
+// on /parameters. Recognised nets (mainnet/testnet*/simnet/regnet) return the
+// documented textual prefixes; any other network falls back to the magic-byte
+// hex representation so the table is never silently empty.
 func AddressPrefixes(params *chaincfg.Params) []AddrPrefix {
-	Descriptions := []string{"P2PK address",
-		"P2PKH address prefix. Standard wallet address. 1 public key -> 1 private key",
-		"Ed25519 P2PKH address prefix",
-		"secp256k1 Schnorr P2PKH address prefix",
-		"P2SH address prefix",
-		"WIF private key prefix",
-		"HD extended private key prefix",
-		"HD extended public key prefix",
+	set, recognised := lookupAddrPrefixSet(params.Name)
+
+	prefix2 := func(known string, magic [2]byte) string {
+		if recognised {
+			return known
+		}
+		return "0x" + hex.EncodeToString(magic[:])
 	}
-	Name := []string{"PubKeyAddrID",
-		"PubKeyHashAddrID",
-		"PKHEdwardsAddrID",
-		"PKHSchnorrAddrID",
-		"ScriptHashAddrID",
-		"PrivateKeyID",
-		"HDPrivateKeyID",
-		"HDPublicKeyID",
+	prefix4 := func(known string, magic [4]byte) string {
+		if recognised {
+			return known
+		}
+		return "0x" + hex.EncodeToString(magic[:])
 	}
 
-	MainnetPrefixes := []string{"Dk", "Ds", "De", "DS", "Dc", "Pm", "dprv", "dpub"}
-	TestnetPrefixes := []string{"Tk", "Ts", "Te", "TS", "Tc", "Pt", "tprv", "tpub"}
-	SimnetPrefixes := []string{"Sk", "Ss", "Se", "SS", "Sc", "Ps", "sprv", "spub"}
-
-	name := params.Name
-	var netPrefixes []string
-	if name == "mainnet" {
-		netPrefixes = MainnetPrefixes
-	} else if strings.HasPrefix(name, "testnet") {
-		netPrefixes = TestnetPrefixes
-	} else if name == "simnet" {
-		netPrefixes = SimnetPrefixes
-	} else {
-		return nil
+	return []AddrPrefix{
+		{Name: "PubKeyAddrID", Prefix: prefix2(set.pubKeyAddrID, params.PubKeyAddrID),
+			Description: "P2PK address"},
+		{Name: "PubKeyHashAddrID", Prefix: prefix2(set.pubKeyHashAddrID, params.PubKeyHashAddrID),
+			Description: "P2PKH address prefix. Standard wallet address. 1 public key -> 1 private key"},
+		{Name: "PKHEdwardsAddrID", Prefix: prefix2(set.pkhEdwardsAddrID, params.PKHEdwardsAddrID),
+			Description: "Ed25519 P2PKH address prefix"},
+		{Name: "PKHSchnorrAddrID", Prefix: prefix2(set.pkhSchnorrAddrID, params.PKHSchnorrAddrID),
+			Description: "secp256k1 Schnorr P2PKH address prefix"},
+		{Name: "ScriptHashAddrID", Prefix: prefix2(set.scriptHashAddrID, params.ScriptHashAddrID),
+			Description: "P2SH address prefix"},
+		{Name: "PrivateKeyID", Prefix: prefix2(set.privateKeyID, params.PrivateKeyID),
+			Description: "WIF private key prefix"},
+		{Name: "HDPrivateKeyID", Prefix: prefix4(set.hdPrivateKeyID, params.HDPrivateKeyID),
+			Description: "HD extended private key prefix"},
+		{Name: "HDPublicKeyID", Prefix: prefix4(set.hdPublicKeyID, params.HDPublicKeyID),
+			Description: "HD extended public key prefix"},
 	}
+}
 
-	addrPrefix := make([]AddrPrefix, 0, len(Descriptions))
-	for i, desc := range Descriptions {
-		addrPrefix = append(addrPrefix, AddrPrefix{
-			Name:        Name[i],
-			Description: desc,
-			Prefix:      netPrefixes[i],
-		})
+func lookupAddrPrefixSet(netName string) (addrPrefixSet, bool) {
+	switch {
+	case netName == "mainnet":
+		return mainnetAddrPrefixes, true
+	case strings.HasPrefix(netName, "testnet"):
+		return testnetAddrPrefixes, true
+	case netName == "simnet":
+		return simnetAddrPrefixes, true
+	case netName == "regnet":
+		return regnetAddrPrefixes, true
+	default:
+		return addrPrefixSet{}, false
 	}
-	return addrPrefix
+}
+
+// SKACoinParam is the per-coin view-model for the SKA coin parameters table
+// on /parameters. All 18-decimal SKA amounts are pre-formatted to plain
+// decimal strings server-side; no *big.Int / atoms cross the template
+// boundary (see wiki/core/constraints.md#C1).
+type SKACoinParam struct {
+	CoinType          uint8
+	Label             string // "SKA1", "SKA2" — no dash, see wiki/core/product.md
+	Name              string
+	Symbol            string
+	Description       string
+	Active            bool // SKACoinConfig.Active
+	InitiallyActive   bool // present in chaincfg.Params.InitialSKATypes
+	MaxSupply         string
+	AtomsPerCoin      string
+	MinRelayTxFee     string
+	MaxFeeMultiplier  int64
+	EmissionHeight    int32
+	EmissionWindow    int32
+	EmissionAddresses []string
+	EmissionAmounts   []string // parallel to EmissionAddresses
 }
 
 // StatsInfo represents all of the data for the stats page.
