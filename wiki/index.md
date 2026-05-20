@@ -62,10 +62,10 @@ _Address page rendering: paginated transaction table, chart endpoints, CSV downl
 
 ### Windows
 
-_Ticket price window intervals, calculating and displaying current and upcoming ticket prices._
+_Ticket price window intervals: server-rendered `/ticketpricewindows` page; SQL-side integer-division bucketing of mainchain blocks into stake-difficulty windows; multi-coin `coin_tx_stats` JSONB reconciliation; shared `BlocksGroupedInfo` struct with time-based-blocks. Revised at `HEAD=3cdba1e7`._
 
-- flow (compact): code-analysis/windows/flow.compact.md — high-level summary of ticket window calculations and database queries
-- flow (full): code-analysis/windows/flow.full.md — detailed, step-by-step function trace for deep debugging of window intervals
+- flow (compact): code-analysis/windows/flow.compact.md — one-line flow, key patterns, constraints, and a copy-pasteable mutation checklist for `/ticketpricewindows`
+- flow (full): code-analysis/windows/flow.full.md — strict 1–10 trace from `blocks` table → SQL aggregation → `BlocksGroupedInfo` → `PosIntervals` → `StakeDiffWindows` handler → `windows.tmpl`, with all current file:line refs
 - patterns: code-analysis/windows/patterns.md — ticket-price-window reusable behavior: Postgres integer-division GROUP BY grouping, mainchain-only filter, shared dbtypes.BlocksGroupedInfo pass-through, multi-coin coin_tx_stats reconciliation
 - impact: code-analysis/windows/impact.md — windows mutation blast radius: StakeDiffWindowSize/SQL-denominator desync, cross-domain BlocksGroupedInfo field changes, coin_tx_stats Scan mismatch, TicketPrice template-boundary type, pagination drift
 

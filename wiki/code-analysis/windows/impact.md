@@ -19,9 +19,9 @@ window size at any of the three sites that must agree.
 
 **Description:**
 Three places must carry the same window size: the SQL bucket key
-`(height/$1)*$1` (`db/dcrpg/internal/blockstmts.go:125`); the value
+`(height/$1)*$1` (`db/dcrpg/internal/blockstmts.go:131`); the value
 `pgb.chainParams.StakeDiffWindowSize` passed into `retrieveWindowBlocks`
-(`db/dcrpg/pgblockchain.go:1806`, `db/dcrpg/queries.go:905`), which *also*
+(`db/dcrpg/pgblockchain.go:1810`, `db/dcrpg/queries.go:905`), which *also*
 recomputes `startHeight/endHeight` window boundaries from it; and
 `bestWindow := uint64(exp.Height() / exp.ChainParams.StakeDiffWindowSize)`
 plus `WindowSize: exp.ChainParams.StakeDiffWindowSize` in the handler
@@ -38,7 +38,7 @@ with no error and a plausible-looking table.
 ## Risk: `BlocksGroupedInfo` Field Removal / Rename (cross-domain)
 
 **Trigger:** Removing or renaming a field on
-`dbtypes.BlocksGroupedInfo` (`db/dbtypes/types.go:805`), or reordering the
+`dbtypes.BlocksGroupedInfo` (`db/dbtypes/types.go:806`), or reordering the
 `rows.Scan(...)` destination list in `retrieveWindowBlocks`.
 
 **Failure mode:** loud (template) / silent (cross-flow).
@@ -83,7 +83,7 @@ tags, or altering `parseCoinTxStats`.
 add/remove without a matching `Scan` change is a **hard failure**
 (`sql: expected N destination arguments`). More dangerous is the silent path:
 `parseCoinTxStats` (`db/dcrpg/queries.go:877`) unmarshals
-`[]map[string]dbtypes.CoinTxStats` (`db/dbtypes/types.go:2214`) and only
+`[]map[string]dbtypes.CoinTxStats` (`db/dbtypes/types.go:2215`) and only
 overrides the flat `SUM(num_rtx)` when the summed per-coin `TxCount` is
 larger; on empty/`\x00`-padded/short/unmarshal-error JSON it silently returns
 the flat `txs`. Renaming the `tx_count` JSON tag or breaking the
