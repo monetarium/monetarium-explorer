@@ -4,11 +4,95 @@
 package explorer
 
 import (
+	"math/big"
 	"strings"
 	"testing"
 
 	"github.com/monetarium/monetarium-node/chaincfg"
 )
+
+func TestFormatBigIntAsSKAString(t *testing.T) {
+	mustBig := func(s string) *big.Int {
+		n, ok := new(big.Int).SetString(s, 10)
+		if !ok {
+			t.Fatalf("bad bigint literal %q", s)
+		}
+		return n
+	}
+
+	cases := []struct {
+		name string
+		in   *big.Int
+		want string
+	}{
+		{"nil", nil, "0"},
+		{"zero", big.NewInt(0), "0"},
+		{"one atom (smallest unit)", big.NewInt(1), "0.000000000000000001"},
+		{"sub-coin", big.NewInt(500_000_000_000_000_000), "0.5"},
+		{"one whole coin", mustBig("1000000000000000000"), "1"},
+		{"four whole coins (MinRelayTxFee mainnet)", mustBig("4000000000000000000"), "4"},
+		{"five million coins (SKA-2 MaxSupply)", mustBig("5000000000000000000000000"), "5,000,000"},
+		{
+			"nine hundred trillion coins (SKA-1 MaxSupply)",
+			mustBig("900000000000000000000000000000000"),
+			"900,000,000,000,000",
+		},
+		{"non-integer coin amount", mustBig("1234500000000000000"), "1.2345"},
+		{"sub-coin with leading fractional zeros", mustBig("100000000000000"), "0.0001"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := formatBigIntAsSKAString(tc.in)
+			if got != tc.want {
+				t.Errorf("formatBigIntAsSKAString(%v) = %q, want %q", tc.in, got, tc.want)
+			}
+			// Anti-regression guards on the whole class of formatter glitches:
+			if strings.HasSuffix(got, ".") {
+				t.Errorf("trailing decimal point in %q", got)
+			}
+			if strings.HasPrefix(got, ".") {
+				t.Errorf("leading decimal point in %q", got)
+			}
+			if strings.ContainsAny(got, "eE") {
+				t.Errorf("scientific notation in %q", got)
+			}
+		})
+	}
+}
+
+func TestFormatBigIntWithCommas(t *testing.T) {
+	cases := []struct {
+		name string
+		in   *big.Int
+		want string
+	}{
+		{"nil", nil, "0"},
+		{"zero", big.NewInt(0), "0"},
+		{"single digit", big.NewInt(7), "7"},
+		{"three digits", big.NewInt(123), "123"},
+		{"four digits", big.NewInt(1234), "1,234"},
+		{"seven digits", big.NewInt(1_000_000), "1,000,000"},
+		{
+			"AtomsPerCoin (1e18)",
+			new(big.Int).Exp(big.NewInt(10), big.NewInt(18), nil),
+			"1,000,000,000,000,000,000",
+		},
+		{"negative", big.NewInt(-1234567), "-1,234,567"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := formatBigIntWithCommas(tc.in)
+			if got != tc.want {
+				t.Errorf("formatBigIntWithCommas(%v) = %q, want %q", tc.in, got, tc.want)
+			}
+			if strings.Contains(got, ".") {
+				t.Errorf("integer formatter emitted a decimal point in %q", got)
+			}
+		})
+	}
+}
 
 func TestBuildSKACoinParams_Mainnet(t *testing.T) {
 	got := buildSKACoinParams(chaincfg.MainNetParams())
