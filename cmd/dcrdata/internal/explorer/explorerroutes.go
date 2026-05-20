@@ -335,17 +335,41 @@ func (exp *explorerUI) VisualBlocks(w http.ResponseWriter, r *http.Request) {
 
 	// trim unwanted data in each block
 	trimmedBlocks := make([]*types.TrimmedBlockInfo, 0, len(blocks))
+
+	exp.pageData.RLock()
+	maxBlockSize := float64(exp.pageData.BlockchainInfo.MaxBlockSize)
+	issuedSKA := make([]uint8, 0, len(exp.pageData.HomeInfo.SKACoinSupply))
+	for _, entry := range exp.pageData.HomeInfo.SKACoinSupply {
+		issuedSKA = append(issuedSKA, entry.CoinType)
+	}
+	exp.pageData.RUnlock()
+
 	for _, block := range blocks {
+		// Convert CoinRowData to MempoolCoinStats for ComputeCoinFills
+		stats := make(map[uint8]types.MempoolCoinStats)
+		for _, row := range block.CoinRows {
+			stats[row.CoinType] = types.MempoolCoinStats{
+				Size: int32(row.Size),
+			}
+		}
+		fills, _, activeSKACount := types.ComputeCoinFills(stats, maxBlockSize, issuedSKA)
+
 		trimmedBlock := &types.TrimmedBlockInfo{
-			Time:         block.BlockTime,
-			Height:       block.Height,
-			Total:        block.TotalSent,
-			Fees:         block.MiningFee,
-			Subsidy:      block.Subsidy,
-			Votes:        block.Votes,
-			Tickets:      block.Tickets,
-			Revocations:  block.Revs,
-			Transactions: types.FilterRegularTx(block.Tx),
+			Time:              block.BlockTime,
+			Height:            block.Height,
+			Total:             block.TotalSent,
+			Fees:              block.MiningFee,
+			Subsidy:           block.Subsidy,
+			Votes:             block.Votes,
+			Tickets:           block.Tickets,
+			Revocations:       block.Revs,
+			Transactions:      types.FilterRegularTx(block.Tx),
+			Size:              block.BlockBasic.Size,
+			FormattedBytes:    block.BlockBasic.FormattedBytes,
+			CoinFills:         fills,
+			ActiveSKACount:    activeSKACount,
+			RegularCoinCounts: types.RegularCoinCountsFromCoinRows(block.CoinRows, block.BlockBasic.Voters, block.BlockBasic.FreshStake, block.BlockBasic.Revocations),
+			MaxBlockSize:      maxBlockSize,
 		}
 
 		trimmedBlocks = append(trimmedBlocks, trimmedBlock)
@@ -353,7 +377,7 @@ func (exp *explorerUI) VisualBlocks(w http.ResponseWriter, r *http.Request) {
 
 	// Construct the required TrimmedMempoolInfo from the shared inventory.
 	inv := exp.MempoolInventory()
-	mempoolInfo := inv.Trim() // Trim internally locks the MempoolInfo.
+	mempoolInfo := inv.Trim(maxBlockSize) // Trim internally locks the MempoolInfo.
 
 	exp.pageData.RLock()
 	mempoolInfo.Subsidy = exp.pageData.HomeInfo.NBlockSubsidy

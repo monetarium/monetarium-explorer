@@ -360,6 +360,7 @@ type TrimmedTxInfo struct {
 	VinCount     int
 	VoutCount    int
 	VoteValid    bool
+	Voted        bool
 	CoinType     uint8  // 0=VAR, 1-255=SKAn for stake fees; for revocations, set when processing
 	TicketStatus string // Pool status for revocations: "voted", "missed", "expired"
 }
@@ -701,17 +702,22 @@ type MempoolCoinStats struct {
 
 // TrimmedBlockInfo models data needed to display block info on the new home page
 type TrimmedBlockInfo struct {
-	Time         TimeDef
-	Height       int64
-	Total        float64
-	Fees         float64
-	Subsidy      *chainjson.GetBlockSubsidyResult
-	Votes        []*TrimmedTxInfo
-	Tickets      []*TrimmedTxInfo
-	Revocations  []*TrimmedTxInfo
-	Transactions []*TrimmedTxInfo
-	// CoinRows holds per-coin row data for the expandable blocks table.
-	CoinRows []CoinRowData
+	Time              TimeDef
+	Height            int64
+	Total             float64
+	Fees              float64
+	Subsidy           *chainjson.GetBlockSubsidyResult
+	Votes             []*TrimmedTxInfo
+	Tickets           []*TrimmedTxInfo
+	Revocations       []*TrimmedTxInfo
+	Transactions      []*TrimmedTxInfo
+	CoinRows          []CoinRowData
+	Size              int32          `json:"size"`
+	FormattedBytes    string         `json:"formatted_bytes"`
+	CoinFills         []CoinFillData `json:"coin_fills,omitempty"`
+	ActiveSKACount    int            `json:"active_ska_count"`
+	RegularCoinCounts []CoinCount    `json:"regular_coin_counts,omitempty"`
+	MaxBlockSize      float64        `json:"max_block_size"`
 }
 
 // BlockInfo models data for display on the block page
@@ -753,12 +759,15 @@ type BlockInfo struct {
 	TotalSentByCoin []CoinAmount `json:"-"`
 	// RegularCoinCounts is an ordered slice of regular transaction counts per coin type,
 	// for template rendering. Same ordering as TotalSentByCoin.
-	RegularCoinCounts []CoinCount `json:"-"`
+	RegularCoinCounts []CoinCount `json:"regular_coin_counts"`
 	// FeesByCoin is an ordered slice of fees per coin type, for template rendering.
 	// VAR fees are total transaction fees in the block; SKA fees are SSFee distribution amounts
 	// (total SKA atoms distributed via TxTypeSSFee per coin type, i.e., fees collected from SKA outputs).
 	// Same ordering as TotalSentByCoin.
-	FeesByCoin []CoinAmount `json:"-"`
+	FeesByCoin     []CoinAmount   `json:"-"`
+	CoinFills      []CoinFillData `json:"coin_fills,omitempty"`
+	ActiveSKACount int            `json:"active_ska_count"`
+	MaxBlockSize   float64        `json:"max_block_size"`
 }
 
 // CoinAmount represents an amount for a specific coin type.
@@ -860,6 +869,8 @@ type TrimmedMempoolInfo struct {
 	TotalFillRatio float64                    `json:"total_fill_ratio"`
 	ActiveSKACount int                        `json:"active_ska_count"`
 	CoinStats      map[uint8]MempoolCoinStats `json:"coin_stats,omitempty"`
+	MaxBlockSize   float64                    `json:"max_block_size"`
+	TotalSize      int32                      `json:"total_size"`
 }
 
 // MempoolInfo models data to update mempool info on the home page.
@@ -902,8 +913,9 @@ func (mpi *MempoolInfo) DeepCopy() *MempoolInfo {
 }
 
 // Trim converts the MempoolInfo to TrimmedMempoolInfo.
-func (mpi *MempoolInfo) Trim() *TrimmedMempoolInfo {
+func (mpi *MempoolInfo) Trim(maxBlockSize float64) *TrimmedMempoolInfo {
 	mpi.RLock()
+	defer mpi.RUnlock()
 
 	mempoolRegularTxs := TrimMempoolTxs(mpi.Transactions)
 	mempoolVotes := TrimMempoolTxs(mpi.Votes)
@@ -921,9 +933,9 @@ func (mpi *MempoolInfo) Trim() *TrimmedMempoolInfo {
 		TotalFillRatio: mpi.MempoolShort.TotalFillRatio,
 		ActiveSKACount: mpi.MempoolShort.ActiveSKACount,
 		CoinStats:      mpi.MempoolShort.CoinStats,
+		MaxBlockSize:   maxBlockSize,
+		TotalSize:      mpi.MempoolShort.TotalSize,
 	}
-
-	mpi.RUnlock()
 
 	// Calculate total fees for all mempool transactions.
 	getTotalFee := func(txs []*TrimmedTxInfo) dcrutil.Amount {
@@ -1093,6 +1105,7 @@ func TrimMempoolTx(tx *MempoolTx) (trimmedTx *TrimmedTxInfo) {
 		TxBasic:   txBasic,
 		Fees:      tx.Fees,
 		VoteValid: voteValid,
+		Voted:     tx.VoteInfo != nil,
 		VinCount:  tx.VinCount,
 		VoutCount: tx.VoutCount,
 	}
@@ -1449,6 +1462,106 @@ func CopyCoinFillSlice(s []CoinFillData) []CoinFillData {
 	out := make([]CoinFillData, len(s))
 	copy(out, s)
 	return out
+}
+
+// ComputeCoinFills derives per-coin fill bar data from the mempool CoinStats
+// map. VAR is always first in the returned slice; SKA types follow in ascending
+// coin-type order. When stats is empty or nil a single VAR entry with all
+// ratios at 0.0 and status "ok" is returned.
+// issuedSKA is the set of all SKA coin types that have ever been issued on-chain
+// (from SKACoinSupply). Coin types present in issuedSKA but absent from stats
+// are included as zero-fill entries so their indicators are always visible.
+func ComputeCoinFills(stats map[uint8]MempoolCoinStats, maxBlockSize float64, issuedSKA []uint8) ([]CoinFillData, float64, int) {
+	varQuota := maxBlockSize * 0.10
+	skaPool := maxBlockSize * 0.90
+
+	skaKeySet := make(map[int]struct{})
+	for ct := range stats {
+		if ct != 0 {
+			skaKeySet[int(ct)] = struct{}{}
+		}
+	}
+	for _, ct := range issuedSKA {
+		skaKeySet[int(ct)] = struct{}{}
+	}
+	var skaKeys []int
+	var totalSKASize float64
+	for k := range skaKeySet {
+		skaKeys = append(skaKeys, k)
+		totalSKASize += float64(stats[uint8(k)].Size)
+	}
+	sort.Ints(skaKeys)
+	numSKA := len(skaKeys)
+
+	varSize := float64(0)
+	if s, ok := stats[0]; ok {
+		varSize = float64(s.Size)
+	}
+	totalUsed := varSize + totalSKASize
+	totalFillRatio := totalUsed / maxBlockSize
+
+	fillStatus := func(size, quota float64) string {
+		switch {
+		case size <= quota:
+			return "ok"
+		case totalUsed <= maxBlockSize:
+			return "borrowing"
+		default:
+			return "full"
+		}
+	}
+
+	extraOrOverflow := func(size, quota float64, status string) (extra, overflow float64) {
+		if status == "borrowing" {
+			extra = math.Min((size-quota)/maxBlockSize, 1.0)
+		} else if status == "full" {
+			overflow = math.Min((size-quota)/maxBlockSize, 1.0)
+		}
+		return
+	}
+
+	withDisplay := func(d CoinFillData) CoinFillData {
+		raw := d.GQFillRatio*d.GQPositionRatio + d.ExtraFillRatio + d.OverflowFillRatio
+		d.PctOfTC = raw * 100.0
+		d.IsOverflow = raw > 1.0
+		return d
+	}
+
+	varStatus := fillStatus(varSize, varQuota)
+	varExtra, varOverflow := extraOrOverflow(varSize, varQuota, varStatus)
+
+	fills := make([]CoinFillData, 0, 1+numSKA)
+	fills = append(fills, withDisplay(CoinFillData{
+		Symbol:            "VAR",
+		GQFillRatio:       math.Min(varSize/varQuota, 1.0),
+		ExtraFillRatio:    varExtra,
+		OverflowFillRatio: varOverflow,
+		GQPositionRatio:   0.10,
+		Status:            varStatus,
+	}))
+
+	if numSKA == 0 {
+		return fills, totalFillRatio, 0
+	}
+
+	perSKAQuota := skaPool / float64(numSKA)
+	gqPos := 0.90 / float64(numSKA)
+
+	for _, ct := range skaKeys {
+		s := stats[uint8(ct)]
+		size := float64(s.Size)
+		status := fillStatus(size, perSKAQuota)
+		extra, overflow := extraOrOverflow(size, perSKAQuota, status)
+		fills = append(fills, withDisplay(CoinFillData{
+			Symbol:            fmt.Sprintf("SKA%d", ct),
+			GQFillRatio:       math.Min(size/perSKAQuota, 1.0),
+			ExtraFillRatio:    extra,
+			OverflowFillRatio: overflow,
+			GQPositionRatio:   gqPos,
+			Status:            status,
+		}))
+	}
+	return fills, totalFillRatio, numSKA
 }
 
 // NewMempoolTx models data sent from the notification handler

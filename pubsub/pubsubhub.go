@@ -319,7 +319,11 @@ func (psh *PubSubHub) receiveLoop(ctx context.Context, conn *connection) {
 		case "getmempooltxs": // TODO: maybe disable this case
 			// construct mempool object with properties required in template
 			inv := psh.MempoolInventory()
-			mempoolInfo := inv.Trim() // Trim locks the inventory.
+			psh.state.mtx.RLock()
+			maxBlockSize := float64(psh.state.BlockchainInfo.MaxBlockSize)
+			psh.state.mtx.RUnlock()
+
+			mempoolInfo := inv.Trim(maxBlockSize) // Trim locks the inventory.
 
 			psh.state.mtx.RLock()
 			mempoolInfo.Subsidy = psh.state.GeneralInfo.NBlockSubsidy
