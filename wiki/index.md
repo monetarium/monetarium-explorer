@@ -131,6 +131,14 @@ _The `/side` page: read-only HTML table of every block with `is_mainchain=false`
 - flow (full): code-analysis/sidechain/flow.full.md — detailed handler → DataSource → SQL → Scan → template trace, plus `ImportSideChains` and reorg writers
 - impact: code-analysis/sidechain/impact.md — `BlockStatus` 4-endpoint blast, positional Scan desync, uninitialized `IsMainchain`, `ImportSideChains=false` empty-page-is-correct, real-time-element imports C3/C8
 
+### Disapproved Blocks
+
+_The `/disapproved` page: read-only HTML table of every block with `is_valid=false` (regular tx tree invalidated by stakeholder votes on the next block). Structural twin of `/side` — same shared `BlockStatus` struct, same `blocks JOIN block_chain` query — but with a single, always-on writer (`updateLastBlock` inside the normal block-connect path, no flag, no reorg required) and ETag/Last-Modified caching (`withCache`) that `/side` lacks. Each list endpoint pre-trims its filter column from the SELECT, leaving a different `BlockStatus` field unwritten by Scan: `/disapproved` leaves `IsValid` zero; `/side` leaves `IsMainchain` zero._
+
+- flow (compact): code-analysis/disapproved-blocks/flow.compact.md — high-level summary of the writer cascade, ETag-wrapped read path, shared `BlockStatus` Scan invariant, and why C1/C2/C3/C6/C8 are out of scope today
+- flow (full): code-analysis/disapproved-blocks/flow.full.md — detailed handler → DataSource → SQL → Scan → template trace, `updateLastBlock` vote-bit invalidation cascade, `/rejects` 308 alias, and the `withCache` divergence vs `/side`
+- impact: code-analysis/disapproved-blocks/impact.md — `BlockStatus` 4-reader Scan blast, `IsValid` Scan-default trap, `updateLastBlock` as sole writer (cross-table is_valid coherence), ETag cache key coupling, real-time/amount-column re-import of C1/C3/C6/C7/C8
+
 ### Page-Rendering (cross-domain consolidation)
 
 _Mode-4 consolidation of the shared mechanics behind every server-rendered HTML page (block, mempool, visualblocks, parameters, charts, address). Not a flow — read alongside the per-domain flows it links. Covers out-of-band shared `pageData`/`invs` state, the multi-lock discipline, `*CommonPageData` struct-embedding template injection, and block-scoped ETag caching._

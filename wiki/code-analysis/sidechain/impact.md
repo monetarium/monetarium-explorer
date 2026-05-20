@@ -101,6 +101,8 @@ If the two paths are unified — for example by routing both through a single "m
 ## See also
 
 - [/wiki/code-analysis/sidechain/flow.full.md](flow.full.md) (companion full flow)
+- [/wiki/code-analysis/disapproved-blocks/impact.md](../disapproved-blocks/impact.md) (shares-pattern-with: `BlockStatus` 4-reader Scan blast; mirrored Scan-default trap on `IsValid` rather than `IsMainchain`; differs on writer — always-on `updateLastBlock` cascade vs `/side`'s opt-in startup import + reorg)
+- [/wiki/code-analysis/disapproved-blocks/flow.full.md](../disapproved-blocks/flow.full.md) (shares-pattern-with: structural twin read path; filter-skip-in-SELECT trick on a different column)
 - [/wiki/code-analysis/block/impact.md](../block/impact.md) (depends-on: block ingestion writes side rows too via `StoreBlock`)
 - [/wiki/code-analysis/time-based-blocks/impact.md](../time-based-blocks/impact.md) (shares-pattern-with: positional `rows.Scan` desync risk)
 - [/wiki/core/constraints.md](../../core/constraints.md) (C1 explicitly out of scope here; C3/C6/C8 become applicable the moment any real-time element is added)

@@ -222,6 +222,8 @@ When modifying anything in this flow, check:
 
 See also:
 
+- [/wiki/code-analysis/disapproved-blocks/flow.full.md](../disapproved-blocks/flow.full.md) (shares-pattern-with: structural twin — same `BlockStatus` shared struct, same 4-reader Scan invariant, mirrored filter-skip-in-SELECT trick; differs on writer semantics (`updateLastBlock` vote-bit cascade vs reorg + startup import) and on `withCache` ETag wrap (which `/disapproved` has and `/side` does not))
+- [/wiki/code-analysis/disapproved-blocks/impact.md](../disapproved-blocks/impact.md) (shares-pattern-with: `BlockStatus` 4-reader Scan blast; mirrored `IsValid` Scan-default trap vs this trace's `IsMainchain` Scan-default trap)
 - [/wiki/code-analysis/block/flow.full.md](../block/flow.full.md) (shares-pattern-with: `BlockStatus` is also consumed by block-detail status lookups)
 - [/wiki/code-analysis/block/impact.md](../block/impact.md) (depends-on: block-ingestion mutations are the writers for side-chain rows too)
 - [/wiki/code-analysis/time-based-blocks/impact.md](../time-based-blocks/impact.md) (shares-pattern-with: positional `rows.Scan` desync risk)
