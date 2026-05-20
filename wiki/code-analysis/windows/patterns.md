@@ -8,7 +8,7 @@
 **Description:**
 Stake-difficulty (ticket-price) windows are not computed in Go memory. The
 aggregation is pushed entirely into a single Postgres statement,
-`SelectWindowsByLimit` (`db/dcrpg/internal/blockstmts.go:125`), which buckets
+`SelectWindowsByLimit` (`db/dcrpg/internal/blockstmts.go:131`), which buckets
 blocks with `SELECT (height/$1)*$1 AS window_start ... GROUP BY window_start`.
 `$1` is the consensus window size (`chaincfg.Params.StakeDiffWindowSize`,
 default 144) supplied by the caller. The bucket key relies on Postgres integer
@@ -24,7 +24,7 @@ Go-side loop re-aggregates these.
   (`db/dcrpg/queries.go:905`, called from `ChainDB.PosIntervals`
   `db/dcrpg/pgblockchain.go:1806`) must both be the *same* consensus window
   size. There is no DB-level check that `$1` equals the chain's actual window
-  size — they are wired by convention only.
+  size — they are wired by convention only. (`pgblockchain.go:1810`.)
 - Window boundaries are constrained twice: the `GROUP BY` truncation forms the
   bucket, and `retrieveWindowBlocks` separately computes
   `startHeight = startWindow*windowSize` /
@@ -41,7 +41,7 @@ Go-side loop re-aggregates these.
 
 **Description:**
 `SelectWindowsByLimit` filters with a bare boolean predicate `AND is_mainchain`
-(`db/dcrpg/internal/blockstmts.go:138`) inside the same `WHERE` as the height
+(`db/dcrpg/internal/blockstmts.go:144`) inside the same `WHERE` as the height
 range. Orphaned / sidechain rows in the `blocks` table are excluded from every
 aggregate (`SUM`, `MAX(sbits)`, `COUNT(*)`), so a window's reported ticket
 price, block count, and tx totals reflect mainchain consensus state only. A
@@ -73,7 +73,7 @@ The handler does no transformation between DB and template. `StakeDiffWindows`
 ... })`. `windows.tmpl` ranges over `.Data` and reads struct fields directly
 (`.IndexVal`, `.EndBlock`, `.Transactions`, `.Voters`, `.FreshStake`,
 `.Revocations`, `.TxCount`, `.BlocksCount`, `.Difficulty`, `.TicketPrice`).
-`dbtypes.BlocksGroupedInfo` (`db/dbtypes/types.go:805`) is the **same struct**
+`dbtypes.BlocksGroupedInfo` (`db/dbtypes/types.go:806`) is the **same struct**
 used by the time-based-blocks listing (`retrieveTimeBasedBlockListing`,
 `db/dcrpg/queries.go:961`, via `ChainDB.TimeBasedIntervals`). The two flows
 populate disjoint subsets of its fields from different SQL: the windows path
@@ -98,10 +98,10 @@ path fills `IndexVal/EndBlock/StartTime/EndTime` from `DATE_TRUNC`.
 **Description:**
 `SUM(num_rtx)` alone is not trusted as the window transaction count. The query
 also emits `JSONB_AGG(coin_tx_stats) AS coin_tx_stats`
-(`db/dcrpg/internal/blockstmts.go:135`). `retrieveWindowBlocks` scans this raw
+(`db/dcrpg/internal/blockstmts.go:141`). `retrieveWindowBlocks` scans this raw
 JSON and passes it through `parseCoinTxStats(coinTxStats, txs)`
 (`db/dcrpg/queries.go:877`): it unmarshals `[]map[string]dbtypes.CoinTxStats`
-(`db/dbtypes/types.go:2214`), sums every per-coin `TxCount`, and **overrides**
+(`db/dbtypes/types.go:2215`), sums every per-coin `TxCount`, and **overrides**
 the `SUM(num_rtx)` value when the per-coin total is larger. The displayed
 `Transactions` / `TxCount` therefore folds in per-coin-type activity rather
 than a single flat count — the multi-coin analogue of the legacy single-value
