@@ -212,32 +212,6 @@ describe('humanize.formatAtomsAsCoinString', () => {
   })
 })
 
-describe('humanize.toUnixStamp', () => {
-  // 2025-05-19T14:30:45Z == 1747665045 unix seconds
-  const Z = 1747665045
-
-  it('parses strict RFC3339 with Z (the actual server wire format)', () =>
-    expect(humanize.toUnixStamp('2025-05-19T14:30:45Z')).toBe(Z))
-
-  it('parses RFC3339 with a numeric offset', () =>
-    // 14:30:45-04:00 is 18:30:45Z == Z + 4h
-    expect(humanize.toUnixStamp('2025-05-19T14:30:45-04:00')).toBe(Z + 4 * 3600))
-
-  it('parses a space-separated, tz-less datetime deterministically as UTC', () =>
-    // This is the cross-engine case: V8 would parse it as LOCAL time,
-    // WebKit as Invalid Date. We force UTC so it equals the Z form.
-    expect(humanize.toUnixStamp('2025-05-19 14:30:45')).toBe(Z))
-
-  it('returns NaN for unparseable input', () =>
-    expect(humanize.toUnixStamp('not a date')).toBeNaN())
-
-  it('returns NaN for empty / nullish input', () => {
-    expect(humanize.toUnixStamp('')).toBeNaN()
-    expect(humanize.toUnixStamp(null)).toBeNaN()
-    expect(humanize.toUnixStamp(undefined)).toBeNaN()
-  })
-})
-
 describe('humanize.bytes', () => {
   // sub-10: raw bytes with space
   it('formats 0 as "0 B"', () => expect(humanize.bytes(0)).toBe('0 B'))

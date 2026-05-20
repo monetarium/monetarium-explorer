@@ -5,7 +5,6 @@ import 'regenerator-runtime/runtime'
 import globalEventBus from './js/services/event_bus_service'
 import ws from './js/services/messagesocket_service'
 import { darkEnabled } from './js/services/theme_service'
-import humanize from './js/helpers/humanize_helper'
 
 import './scss/application.scss'
 
@@ -55,14 +54,7 @@ async function createWebSocket(loc) {
     if (window.loggingDebug) {
       console.log('Block received:', newBlock)
     }
-    // Parse deterministically across engines; iOS/WebKit rejects forms V8
-    // accepts. Fall back to "now" rather than render a NaN Age on a live row.
-    let unixStamp = humanize.toUnixStamp(newBlock.block.time)
-    if (isNaN(unixStamp)) {
-      console.warn('Unparseable block.time, using current time:', newBlock.block.time)
-      unixStamp = Date.now() / 1000
-    }
-    newBlock.block.unixStamp = unixStamp
+    newBlock.block.unixStamp = new Date(newBlock.block.time).getTime() / 1000
     globalEventBus.publish('BLOCK_RECEIVED', newBlock)
   }
   ws.registerEvtHandler('newblock', updateBlockData)
