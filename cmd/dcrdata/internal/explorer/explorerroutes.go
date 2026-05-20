@@ -345,33 +345,7 @@ func (exp *explorerUI) VisualBlocks(w http.ResponseWriter, r *http.Request) {
 	exp.pageData.RUnlock()
 
 	for _, block := range blocks {
-		// Convert CoinRowData to MempoolCoinStats for ComputeCoinFills
-		stats := make(map[uint8]types.MempoolCoinStats)
-		for _, row := range block.CoinRows {
-			stats[row.CoinType] = types.MempoolCoinStats{
-				Size: int32(row.Size),
-			}
-		}
-		fills, _, activeSKACount := types.ComputeCoinFills(stats, maxBlockSize, issuedSKA)
-
-		trimmedBlock := &types.TrimmedBlockInfo{
-			Time:              block.BlockTime,
-			Height:            block.Height,
-			Total:             block.TotalSent,
-			Fees:              block.MiningFee,
-			Subsidy:           block.Subsidy,
-			Votes:             block.Votes,
-			Tickets:           block.Tickets,
-			Revocations:       block.Revs,
-			Transactions:      types.FilterRegularTx(block.Tx),
-			Size:              block.BlockBasic.Size,
-			FormattedBytes:    block.BlockBasic.FormattedBytes,
-			CoinFills:         fills,
-			ActiveSKACount:    activeSKACount,
-			RegularCoinCounts: types.RegularCoinCountsFromCoinRows(block.CoinRows, block.BlockBasic.Voters, block.BlockBasic.FreshStake, block.BlockBasic.Revocations),
-			MaxBlockSize:      maxBlockSize,
-		}
-
+		trimmedBlock := block.Trim(maxBlockSize, issuedSKA)
 		trimmedBlocks = append(trimmedBlocks, trimmedBlock)
 	}
 

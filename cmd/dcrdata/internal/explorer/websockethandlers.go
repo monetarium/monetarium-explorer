@@ -151,15 +151,14 @@ func (exp *explorerUI) RootWebsocket(w http.ResponseWriter, r *http.Request) {
 					// TrimmedMempoolInfo. Used in visualblocks.
 					// construct mempool object with properties required in template
 					inv := exp.MempoolInventory()
+
 					exp.pageData.RLock()
 					maxBlockSize := float64(exp.pageData.BlockchainInfo.MaxBlockSize)
+					subsidy := exp.pageData.HomeInfo.NBlockSubsidy
 					exp.pageData.RUnlock()
 
 					mempoolInfo := inv.Trim(maxBlockSize) // Trim internally locks the MempoolInfo.
-
-					exp.pageData.RLock()
-					mempoolInfo.Subsidy = exp.pageData.HomeInfo.NBlockSubsidy
-					exp.pageData.RUnlock()
+					mempoolInfo.Subsidy = subsidy
 
 					msg, err := json.Marshal(mempoolInfo)
 
@@ -285,17 +284,10 @@ func (exp *explorerUI) RootWebsocket(w http.ResponseWriter, r *http.Request) {
 					}
 					maxBlockSize := float64(exp.pageData.BlockchainInfo.MaxBlockSize)
 
-					stats := make(map[uint8]types.MempoolCoinStats)
-					for _, row := range blockCopy.BlockBasic.CoinRows {
-						stats[row.CoinType] = types.MempoolCoinStats{
-							Size: int32(row.Size),
-						}
-					}
-					fills, _, activeSKACount := types.ComputeCoinFills(stats, maxBlockSize, issuedSKA)
-
-					blockCopy.CoinFills = fills
-					blockCopy.ActiveSKACount = activeSKACount
-					blockCopy.MaxBlockSize = maxBlockSize
+					trimmed := block.Trim(maxBlockSize, issuedSKA)
+					blockCopy.CoinFills = trimmed.CoinFills
+					blockCopy.ActiveSKACount = trimmed.ActiveSKACount
+					blockCopy.MaxBlockSize = trimmed.MaxBlockSize
 
 					err := enc.Encode(types.WebsocketBlock{
 						Block: &blockCopy,

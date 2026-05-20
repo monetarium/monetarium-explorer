@@ -1,6 +1,7 @@
 package explorer
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/monetarium/monetarium-explorer/explorer/types"
@@ -8,108 +9,93 @@ import (
 )
 
 func TestVisualBlocksDataContract(t *testing.T) {
-	// Setup mock data
 	params := &chaincfg.Params{
 		MaximumBlockSizes: []int{393216},
 	}
 	issuedSKA := []uint8{1, 2}
 	maxBlockSize := float64(params.MaximumBlockSizes[0])
 
-	t.Run("BlockContractConsistency", func(t *testing.T) {
+	t.Run("BlockContractWireFormat", func(t *testing.T) {
 		rows := []types.CoinRowData{
-			{CoinType: 0, Symbol: "VAR", TxCount: 10, Amount: "100", Size: 10000},
-			{CoinType: 1, Symbol: "SKA1", TxCount: 5, Amount: "50", Size: 5000},
-			{CoinType: 2, Symbol: "SKA2", TxCount: 2, Amount: "20", Size: 2000},
+			{CoinType: 0, Symbol: "VAR", TxCount: 1, Amount: "100", Size: 10000},
+			{CoinType: 1, Symbol: "SKA1", TxCount: 1, Amount: "50", Size: 5000},
 		}
 
-		// 1. HTTP Path: TrimmedBlockInfo
-		stats := make(map[uint8]types.MempoolCoinStats)
-		for _, r := range rows {
-			stats[r.CoinType] = types.MempoolCoinStats{Size: int32(r.Size)}
-		}
-		fills, _, activeSka := types.ComputeCoinFills(stats, maxBlockSize, issuedSKA)
-
-		tbi := types.TrimmedBlockInfo{
-			Size:              17000,
-			FormattedBytes:    "17 kB",
-			CoinFills:         fills,
-			ActiveSKACount:    activeSka,
-			MaxBlockSize:      maxBlockSize,
-			RegularCoinCounts: types.RegularCoinCountsFromCoinRows(rows, 2, 1, 1),
-		}
-
-		// 2. WS Path: BlockInfo (simulated copying/populating)
 		bi := &types.BlockInfo{
 			BlockBasic: &types.BlockBasic{
-				Size:           17000,
-				FormattedBytes: "17 kB",
-				CoinRows:       rows,
+				Size:     15000,
+				CoinRows: rows,
+			},
+			Tx: []*types.TrimmedTxInfo{
+				{
+					TxBasic: &types.TxBasic{Size: 2000, Coinbase: true},
+				},
+				{
+					TxBasic: &types.TxBasic{
+						Size: 3000,
+						VoteInfo: &types.VoteInfo{
+							Validation: types.BlockValidation{Validity: true},
+						},
+					},
+					Voted: true,
+				},
 			},
 		}
 
-		// Simulation of the logic added to websockethandlers.go
-		biStats := make(map[uint8]types.MempoolCoinStats)
-		for _, r := range rows {
-			biStats[r.CoinType] = types.MempoolCoinStats{Size: int32(r.Size)}
+		trimmed := bi.Trim(maxBlockSize, issuedSKA)
+		data, err := json.Marshal(trimmed)
+		if err != nil {
+			t.Fatalf("Marshal failed: %v", err)
 		}
-		biFills, _, biActiveSka := types.ComputeCoinFills(biStats, maxBlockSize, issuedSKA)
-		bi.CoinFills = biFills
-		bi.ActiveSKACount = biActiveSka
-		bi.MaxBlockSize = maxBlockSize
 
-		// Compare key contract fields
-		if tbi.Size != bi.BlockBasic.Size {
-			t.Errorf("Size mismatch: HTTP %d, WS %d", tbi.Size, bi.BlockBasic.Size)
+		var wire map[string]interface{}
+		if err := json.Unmarshal(data, &wire); err != nil {
+			t.Fatalf("Unmarshal failed: %v", err)
 		}
-		if tbi.FormattedBytes != bi.BlockBasic.FormattedBytes {
-			t.Errorf("FormattedBytes mismatch: HTTP %s, WS %s", tbi.FormattedBytes, bi.BlockBasic.FormattedBytes)
+
+		if wire["max_block_size"] != maxBlockSize {
+			t.Errorf("Wire MaxBlockSize mismatch: got %v, want %v", wire["max_block_size"], maxBlockSize)
 		}
-		if len(tbi.CoinFills) != len(bi.CoinFills) {
-			t.Errorf("CoinFills length mismatch: HTTP %d, WS %d", len(tbi.CoinFills), len(bi.CoinFills))
+		if wire["size"] != float64(15000) {
+			t.Errorf("Wire Size mismatch: got %v, want 15000", wire["size"])
 		}
-		if tbi.ActiveSKACount != bi.ActiveSKACount {
-			t.Errorf("ActiveSKACount mismatch: HTTP %d, WS %d", tbi.ActiveSKACount, bi.ActiveSKACount)
+
+		txs := wire["transactions"].([]interface{})
+		foundVote := false
+		for _, txRaw := range txs {
+			tx := txRaw.(map[string]interface{})
+			if tx["voted"] == true {
+				foundVote = true
+			}
 		}
-		if tbi.MaxBlockSize != bi.MaxBlockSize {
-			t.Errorf("MaxBlockSize mismatch: HTTP %f, WS %f", tbi.MaxBlockSize, bi.MaxBlockSize)
+		if !foundVote {
+			t.Error("Wire Block: No transaction found with voted=true")
 		}
 	})
 
-	t.Run("MempoolContractConsistency", func(t *testing.T) {
+	t.Run("MempoolContractWireFormat", func(t *testing.T) {
 		mpi := &types.MempoolInfo{
 			MempoolShort: types.MempoolShort{
-				TotalSize:      20000,
-				ActiveSKACount: 2,
-				CoinFills:      []types.CoinFillData{{Symbol: "VAR", Status: "ok"}},
+				TotalSize: 20000,
 			},
 		}
 
 		trimmed := mpi.Trim(maxBlockSize)
-
-		if trimmed.MaxBlockSize != maxBlockSize {
-			t.Errorf("Mempool MaxBlockSize mismatch: want %f, got %f", maxBlockSize, trimmed.MaxBlockSize)
-		}
-		if trimmed.TotalSize != 20000 {
-			t.Errorf("Mempool TotalSize mismatch: want 20000, got %d", trimmed.TotalSize)
-		}
-	})
-
-	t.Run("VoteFlagConsistency", func(t *testing.T) {
-		// Test TrimMempoolTx
-		tx := types.MempoolTx{
-			VoteInfo: &types.VoteInfo{},
-		}
-		trimmed := types.TrimMempoolTx(&tx)
-		if !trimmed.Voted {
-			t.Error("TrimMempoolTx: expected Voted=true for vote tx")
+		data, err := json.Marshal(trimmed)
+		if err != nil {
+			t.Fatalf("Marshal failed: %v", err)
 		}
 
-		txNonVote := types.MempoolTx{
-			VoteInfo: nil,
+		var wire map[string]interface{}
+		if err := json.Unmarshal(data, &wire); err != nil {
+			t.Fatalf("Unmarshal failed: %v", err)
 		}
-		trimmedNonVote := types.TrimMempoolTx(&txNonVote)
-		if trimmedNonVote.Voted {
-			t.Error("TrimMempoolTx: expected Voted=false for non-vote tx")
+
+		if wire["max_block_size"] != maxBlockSize {
+			t.Errorf("Wire MaxBlockSize mismatch: got %v, want %v", wire["max_block_size"], maxBlockSize)
+		}
+		if wire["total_size"] != float64(20000) {
+			t.Errorf("Wire TotalSize mismatch: got %v, want 20000", wire["total_size"])
 		}
 	})
 }

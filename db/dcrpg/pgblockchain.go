@@ -6558,6 +6558,7 @@ func trimmedTxInfoFromMsgTx(txraw *chainjson.TxRawResult, ticketPrice int64, msg
 		VinCount:  len(txraw.Vin),
 		VoutCount: len(txraw.Vout),
 		VoteValid: voteValid,
+		Voted:     txBasic.VoteInfo != nil,
 	}
 	return tx, txType
 }
