@@ -10,11 +10,12 @@ Explicitly identified risks for changing the `/attack-cost` page. Failure mode n
 
 **Failure mode:** silent.
 
-**Description:** `attackcost_controller.js:209` `parseInt(coinSupply)` and `:602`
-`coinSupply / 100000000` assume 8-decimal VAR fitting `float64`. SKA has 18 decimals,
-exceeding the `float64` significand — values are silently truncated/rounded, and the
-"Attack not possible" gate (`:601-611`) compares corrupted magnitudes. Requires a BigInt
-path, not this one. (See `wiki/core/constraints.md` C1.)
+**Description:** In `attackcost_controller.js`, `parseInt(this.data.get('coinSupply'))`
+in `connect()` and `coinSupply / 100000000` in `showPosCostWarning` assume 8-decimal
+VAR fitting `float64`. SKA has 18 decimals, exceeding the `float64` significand —
+values are silently truncated/rounded, and the "Attack not possible" gate compares
+corrupted magnitudes. Requires a BigInt path, not this one.
+(See `wiki/core/constraints.md` C1.)
 
 ## Risk: Shared `HomeInfo` / `TicketPoolInfo` type or units change
 
@@ -25,21 +26,9 @@ path, not this one. (See `wiki/core/constraints.md` C1.)
 
 **Description:** `explorertypes.go:811,1375` structs are JSON-tagged
 (`json:"coin_supply"`) and consumed by the HTTP API and home page in addition to
-`explorerroutes.go:2713-2731` and `attackcost_controller.js:203-209,602`. A units change
-breaks the JS `/1e8` divisor and `tpSize`/`tpValue` divisions with no error here and
-mis-serializes the API elsewhere.
-
-## Risk: Exchange-bot price is silently zero
-
-**Trigger:** Exchange bot present but no state yet (startup, upstream outage), or removing
-`xcBot`.
-
-**Failure mode:** silent.
-
-**Description:** `exchanges/bot.go:1045-1058` `Conversion` returns `nil` **only** when
-`bot == nil`; with the bot present and no state it returns `Value: 0`. The handler guard
-`if rate := exp.xcBot.Conversion(1.0); rate != nil` (`explorerroutes.go:2696-2700`) then
-sets `price = 0`, **not** the `24.42` literal — every USD figure renders `$0`.
+the `AttackCost` handler in `explorerroutes.go` and the `parseInt`/`÷1e8` reads in
+`attackcost_controller.js`. A units change breaks the JS `/1e8` divisor and
+`tpSize`/`tpValue` divisions with no error here and mis-serializes the API elsewhere.
 
 ## Risk: Stale / unpopulated snapshot
 
@@ -47,10 +36,9 @@ sets `price = 0`, **not** the `24.42` literal — every USD figure renders `$0`.
 
 **Failure mode:** silent.
 
-**Description:** Handler reads process-global `pageData` under `RLock`
-(`explorerroutes.go:2702-2711`). Zero-valued `tpSize` makes `val * tpSize`,
-`getRowForX`, and `DCRNeed / tpSize` produce `NaN`/`Infinity`; the page renders alive but
-with garbage numbers.
+**Description:** Handler reads process-global `pageData` under `RLock`. Zero-valued
+`tpSize` makes `val * tpSize`, `getRowForX`, and `varNeed / tpSize` produce
+`NaN`/`Infinity`; the page renders alive but with garbage numbers.
 
 ## Risk: Untyped Go→JS contract drift
 
@@ -68,18 +56,26 @@ killing the controller so the page shows static `0`s.
 
 **Failure mode:** loud (JS exception) or silent (Y-zoom re-enabled).
 
-**Description:** `attackcost_controller.js:252` overrides private
+**Description:** `attackcost_controller.js` overrides private
 `Dygraph.prototype.doZoomY_`; a renamed/removed private member silently restores Y-zoom or
 throws on assignment.
+
+## Resolved: Exchange-bot price silently zero (historical)
+
+Prior version of this handler seeded the USD/VAR rate from `exp.xcBot.Conversion(1.0)`
+with a `24.42` literal fallback; when the bot was present without state, every USD
+figure rendered `$0`. The current handler no longer touches `xcBot` and exposes no
+server-seeded rate — the page sources the rate exclusively from the user-edited
+"Exchange Rate" input (default `1`). Do not reintroduce a server-seeded rate.
 
 ## Loud-failure summary
 
 The only Go-side loud failure is a template execution error →
-`StatusPage(..., ExpStatusError)` (`explorerroutes.go:2733-2736`). Nearly every other
+`StatusPage(..., ExpStatusError)` in the `AttackCost` handler. Nearly every other
 failure on this page is **silent** — the calculator renders but produces wrong numbers.
 
 See also:
 - /wiki/code-analysis/attack-cost/flow.full.md (depends-on)
 - /wiki/code-analysis/attack-cost/patterns.md (depends-on)
-- /wiki/code-analysis/address/impact.md (shares-pattern-with: legacy flat-field shim / `DCR` labelling — same back-compat VAR fields; address's are now template-unread, attack-cost's `HomeInfo` ones still read)
+- /wiki/code-analysis/address/impact.md (shares-pattern-with: legacy flat-field shim — same back-compat VAR fields; address's are now template-unread, attack-cost's `HomeInfo` ones still read)
 - /wiki/core/constraints.md (depends-on: C1 numeric precision — float64 VAR vs big.Int SKA)

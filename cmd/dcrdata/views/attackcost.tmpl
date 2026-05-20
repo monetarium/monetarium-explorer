@@ -9,11 +9,10 @@
       data-controller="attackcost"
       data-attackcost-height="{{.Height}}"
       data-attackcost-hashrate="{{.HashRate}}"
-      data-attackcost-dcrprice="{{.DCRPrice}}"
       data-attackcost-ticket-price="{{.TicketPrice}}"
       data-attackcost-ticket-pool-value="{{.TicketPoolValue}}"
       data-attackcost-ticket-pool-size="{{.TicketPoolSize}}"
-     data-attackcost-coin-supply="{{.CoinSupply}}"
+      data-attackcost-coin-supply="{{.CoinSupply}}"
     >
     <div class="col-md-24 p-0">
       <div class="bg-white mb-1 py-2 px-3 my-0">
@@ -99,7 +98,7 @@
                   <span class="text-secondary fs13">Ticket Price</span>
                   <br>
                   <span class="h4" data-attackcost-target="ticketPrice">0</span>
-                  <span class="text-secondary">DCR</span>
+                  <span class="text-secondary">VAR</span>
                 </div>
               </div>
             </div>
@@ -162,15 +161,15 @@
                   <span class="h4">
                     <input
                       type="number"
-                      data-attackcost-target="priceDCR"
+                      data-attackcost-target="exchangeRate"
                       data-action="change->attackcost#updatePrice"
                       step="0.01"
                       min="0.01"
-                      value="20"
-                      max="1000"
+                      value="1"
+                      max="10000"
                       size="7"
                     >
-                  </span> <span class="text-secondary fs13">USD/DCR</span>
+                  </span> <span class="text-secondary fs13">USD/VAR</span>
                 </div>
               </div>
               <div class="col-12 text-center">
@@ -199,19 +198,51 @@
           </div>
           <div class="ms-4">
               <div class="mt-1 ms-2">
-                <div class="d-flex w-100">
-                  <span class="align-self-center me-1 text-nowrap">Mining Device:</span>
-                  <select
-                    class="form-control chart-form-control text-truncate min-w-0 dropdown"
-                    data-action="attackcost#chooseDevice"
-                    data-attackcost-target="device"
-                  >
-                    <option data-attackcost-target="deviceDesc" value="0">DCR5</option>
-                    <option data-attackcost-target="deviceDesc" value="1">D1</option>
-                  </select>
+                <div class="row gx-3">
+                  <div class="col-auto">
+                    <span class="text-secondary fs13 d-block">Device Hashrate</span>
+                    <input
+                      type="number"
+                      data-attackcost-target="deviceHashrate"
+                      data-action="change->attackcost#updateDeviceHashrate"
+                      step="0.01"
+                      min="0.01"
+                      max="100000"
+                      value="50"
+                      size="7"
+                    >
+                    <span class="text-secondary fs11">Th/s</span>
+                  </div>
+                  <div class="col-auto">
+                    <span class="text-secondary fs13 d-block">Device Power</span>
+                    <input
+                      type="number"
+                      data-attackcost-target="devicePower"
+                      data-action="change->attackcost#updateDevicePower"
+                      step="1"
+                      min="1"
+                      max="100000"
+                      value="1500"
+                      size="7"
+                    >
+                    <span class="text-secondary fs11">W</span>
+                  </div>
+                  <div class="col-auto">
+                    <span class="text-secondary fs13 d-block">Device Price</span>
+                    <input
+                      type="number"
+                      data-attackcost-target="devicePrice"
+                      data-action="change->attackcost#updateDevicePrice"
+                      step="1"
+                      min="1"
+                      max="10000000"
+                      value="1500"
+                      size="9"
+                    >
+                    <span class="text-secondary fs11">USD</span>
+                  </div>
                 </div>
               </div>
-            </row>
             <div class="mt-1 ms-2">
                 A
                 <input
@@ -244,13 +275,13 @@
               In order to acquire a <span class="fw-bold"><span data-attackcost-target="targetHashRate">0</span> <span class="fs11">Ph/s</span></span>
               hashrate, it would take
               <span class="fw-bold" data-attackcost-target="countDevice">0</span>
-              <span class="fs11" data-attackcost-target="deviceName">&mdash;</span>
+              device<span data-attackcost-target="deviceSuffix">(s)</span>
               at a cost of <span class="fw-bold">$<span data-attackcost-target="totalDeviceCost">0</span>
               <span class="fs11">USD</span></span> to buy <span data-attackcost-target="devicePronoun">them</span>.
             </div>
             <div class="mt-1 ms-2">
               Electricity consumed by <span class="fw-bold" data-attackcost-target="countDevice">0</span>
-              <span class="fs11" data-attackcost-target="deviceName">&mdash;</span> in
+              device<span data-attackcost-target="deviceSuffix">(s)</span> in
               <span data-attackcost-target="durationLongDesc">0</span> is
               <span class="position-relative fw-bold">
               <span class="fw-bold" data-attackcost-target="totalKwh">0</span> <span class="fs11">kWh</span></span>.
@@ -259,7 +290,7 @@
               Cost of <span data-attackcost-target="durationLongDesc">0</span>
               electricity consumption for
               <span class="fw-bold" data-attackcost-target="countDevice">0</span>
-              <span class="fs11" data-attackcost-target="deviceName">&mdash;</span> is
+              device<span data-attackcost-target="deviceSuffix">(s)</span> is
               <span class="position-relative fw-bold">
                 $<span class="fw-bold" data-attackcost-target="totalElectricity">0</span>
                 <span class="fs11">USD</span></span>.
@@ -275,7 +306,7 @@
                 max="100"
                 value="5"
                 size="3"
-              >% of the cost of the miner<span data-attackcost-target="deviceSuffix">(s)</span>.
+              >% of the cost of the device<span data-attackcost-target="deviceSuffix">(s)</span>.
             </div>
             <div class="mt-1 ms-2">
               The additional facility cost is <span class="fw-bold">$<span data-attackcost-target="otherCostsValue">0</span>
@@ -297,7 +328,7 @@
           <div class="ms-4 d-none" data-attackcost-target="internalAttackPosText">
             <div class="mt-1 ms-2">
               Current total staked is
-              <span class="fw-bold"><span data-attackcost-target="ticketPoolValue">0</span> <span class="fs11">DCR</span></span>.
+              <span class="fw-bold"><span data-attackcost-target="ticketPoolValue">0</span> <span class="fs11">VAR</span></span>.
             </div>
             <div class="mt-1 ms-2">
               An internal <input
@@ -319,10 +350,10 @@
             <div class="mt-1 ms-2">
               <span class="position-relative fw-bold">
                 <span class="fw-bold" data-attackcost-target="ticketPoolAttack">0</span>
-                <span class="fs11">DCR</span>
+                <span class="fs11">VAR</span>
               </span>
               is needed for the attack
-              (<span class="position-relative fw-bold"><span data-attackcost-target="ticketPoolValue">0</span> <span class="fs11">DCR</span>
+              (<span class="position-relative fw-bold"><span data-attackcost-target="ticketPoolValue">0</span> <span class="fs11">VAR</span>
                 <span data-attackcost-target="operatorSign"> * </span>
                 <span data-attackcost-target="attackPosPercentAmountLabel">0</span>%</span>).
             </div>
@@ -332,15 +363,15 @@
                 <span>$</span><span class="fw-bold" data-attackcost-target="totalPos">0</span>
                 <span class="fs11">USD</span>
               </span>
-              (<span class="position-relative fw-bold"><span data-attackcost-target="totalDCRPosLabel">0</span> <span class="fs11">DCR</span>
+              (<span class="position-relative fw-bold"><span data-attackcost-target="totalVarPosLabel">0</span> <span class="fs11">VAR</span>
                 <span> * </span>
-                $<span data-attackcost-target="dcrPriceLabel">0</span> <span class="fs11">USD/DCR</span></span>).
+                $<span data-attackcost-target="varPriceLabel">0</span> <span class="fs11">USD/VAR</span></span>).
             </div>
           </div>
           <div class="ms-4 d-none" data-attackcost-target="externalAttackPosText">
             <div class="mt-1 ms-2">
               Current total staked is
-              <span class="fw-bold"><span data-attackcost-target="ticketPoolValue">0</span> <span class="fs11">DCR</span></span>.
+              <span class="fw-bold"><span data-attackcost-target="ticketPoolValue">0</span> <span class="fs11">VAR</span></span>.
             </div>
             <div class="mt-1 ms-2">
               An external <input
@@ -354,23 +385,23 @@
                       size="4"
                       autofocus
               >% PoS attack would add
-              <span class="fw-bold"><span data-attackcost-target="additionalDcr">0</span> <span class="fs11">DCR</span></span>
+              <span class="fw-bold"><span data-attackcost-target="additionalVar">0</span> <span class="fs11">VAR</span></span>
               to the total staked.
             </div>
             <div class="mt-1 ms-2">
               New total staked will be
-              <span class="fw-bold"><span data-attackcost-target="newTicketPoolValue">0</span> <span class="fs11">DCR</span></span>.
+              <span class="fw-bold"><span data-attackcost-target="newTicketPoolValue">0</span> <span class="fs11">VAR</span></span>.
             </div>
         {{- /* CALCULATED PoS WARNING DISPLAY */ -}}
         <div data-attackcost-target="attackNotPossibleWrapperDiv" class="mt-1 ms-2 blink-container d-none" style="color: #f12222; margin-left: 8px; ">
             Attack not possible. Total coin supply is
-            <span class="fw-bold"><span data-attackcost-target="coinSupply">0</span> <span class="fs11">DCR</span></span>.
+            <span class="fw-bold"><span data-attackcost-target="coinSupply">0</span> <span class="fs11">VAR</span></span>.
         </div>
         <div class="mt-1 ms-2" data-attackcost-target="projectedPriceDiv" style="{display: block}">
             The projected ticket price is
             <span class="position-relative fw-bold">
             <span class="fw-bold" data-attackcost-target="projectedTicketPrice">0</span>
-              <span class="fs11">DCR</span>
+              <span class="fs11">VAR</span>
             </span>
             (A <span class="fw-bold"><span data-attackcost-target="projectedTicketPriceIncrease">0</span>%</span>
             <span data-attackcost-target="projectedTicketPriceSign">change</span>).
@@ -381,9 +412,12 @@
               <span>$</span><span class="fw-bold" data-attackcost-target="totalPos">0</span>
               <span class="fs11">USD</span>
             </span>
-            (<span class="position-relative fw-bold"><span data-attackcost-target="totalDCRPosLabel">0</span> <span class="fs11">DCR</span>
+            (<span class="position-relative fw-bold"><span data-attackcost-target="totalVarPosLabel">0</span> <span class="fs11">VAR</span>
               <span> * </span>
-              $<span data-attackcost-target="dcrPriceLabel">0</span> <span class="fs11">USD/DCR</span></span>).
+              $<span data-attackcost-target="varPriceLabel">0</span> <span class="fs11">USD/VAR</span></span>).
+        </div>
+        <div class="mt-2 ms-2 text-secondary fs13">
+            Based on the hybrid PoW + PoS deterrence model with a fixed 50/50 reward split.
         </div>
       </div>
       </div>
