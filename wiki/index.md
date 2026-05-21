@@ -7,6 +7,7 @@ _Human-curated rules, architecture, and constraints. Read these to understand th
 - product: core/product.md — what are we building, token limits
 - structure: core/structure.md — Go modules, folders boundaries
 - tech-stack: core/tech-stack.md — packages, node engines
+- cicd: core/cicd.md — CI/CD pipeline, automation and Docker distribution
 - staking-rewards: core/staking-rewards.md — mechanics of pow and pos yields and fee splits
 - constraints: core/constraints.md — cross-domain architectural constraints
 - pages: core/pages.md — registry of all HTML pages
