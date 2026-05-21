@@ -404,17 +404,18 @@ func TestAggregateSKASupply_DailyBins(t *testing.T) {
 	// Use timestamps instead of heights
 	// Day 1: 0 to 86399
 	// Day 2: 86400 to 172799
+	// Day 3: 172800 to 259199
 	timestamps := []int64{100, 200, 86300, 86400, 90000, 172700, 172800, 180000, 259100}
 	values := []string{
 		"100",
-		"200",
-		"300",
+		"300", // peak day 1
+		"200", // burn day 1
 		"400",
-		"500",
-		"600",
+		"500", // peak day 2
+		"300", // burn day 2
 		"700",
-		"800",
-		"900",
+		"800", // peak day 3
+		"600", // burn day 3
 	}
 	heights := []int64{10, 20, 30, 40, 50, 60, 70, 80, 90}
 
@@ -431,8 +432,8 @@ func TestAggregateSKASupply_DailyBins(t *testing.T) {
 		}
 	}
 
-	// Verify last-value aggregation
-	expected := []string{"300", "600", "900"}
+	// Verify max-value aggregation (preserves peaks)
+	expected := []string{"300", "500", "800"}
 	for i, v := range dayValues {
 		if v != expected[i] {
 			t.Errorf("day %d: want %s, got %s", i, expected[i], v)

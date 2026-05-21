@@ -878,6 +878,20 @@ func (charts *ChartData) SKASupplyExists(coinType uint8) bool {
 	return ok && len(data.Timestamps) > 0
 }
 
+// SKASupplyHeight returns the height of the last recorded block for the given coin type.
+func (charts *ChartData) SKASupplyHeight(coinType uint8) (int64, bool) {
+	charts.mtx.RLock()
+	defer charts.mtx.RUnlock()
+	if charts.SKASupply == nil {
+		return 0, false
+	}
+	data, ok := charts.SKASupply[coinType]
+	if !ok || len(data.Heights) == 0 {
+		return 0, false
+	}
+	return data.Heights[len(data.Heights)-1], true
+}
+
 // PoolSizeTip is the height of the PoolSize data.
 func (charts *ChartData) PoolSizeTip() int32 {
 	charts.mtx.RLock()
