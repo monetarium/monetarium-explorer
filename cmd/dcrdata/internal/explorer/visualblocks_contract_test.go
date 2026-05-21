@@ -30,7 +30,7 @@ func TestVisualBlocksDataContract(t *testing.T) {
 			Tx: []*types.TrimmedTxInfo{
 				{
 					TxBasic: &types.TxBasic{
-						Size: 3000,
+						Size:  3000,
 						Total: 1000000, // High total to be first in sort
 						VoteInfo: &types.VoteInfo{
 							Validation: types.BlockValidation{Validity: true},

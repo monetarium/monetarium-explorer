@@ -716,8 +716,8 @@ type TrimmedBlockInfo struct {
 	FormattedBytes    string                           `json:"formatted_bytes"`
 	CoinFills         []CoinFillData                   `json:"coin_fills,omitempty"`
 	ActiveSKACount    int                              `json:"active_ska_count"`
-	RegularCoinCounts []CoinCount `json:"regular_coin_counts,omitempty"`
-	MaxBlockSize      float64        `json:"max_block_size"`
+	RegularCoinCounts []CoinCount                      `json:"regular_coin_counts,omitempty"`
+	MaxBlockSize      float64                          `json:"max_block_size"`
 }
 
 // Trim converts BlockInfo to TrimmedBlockInfo.
