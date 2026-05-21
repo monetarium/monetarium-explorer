@@ -158,6 +158,15 @@ _The `/ticketpool` page: form-shell HTML + three live data channels (HTTP `/api/
 - patterns: code-analysis/ticketpool/patterns.md — P1 form-shell over WS-RPC, P2 tri-modal struct with positional Scan, P3 process-global stale-while-revalidate cache, P4 dual-transport overlay with divergent semantics, P5 VAR-only float64 staking pipeline
 - impact: code-analysis/ticketpool/impact.md — column-Scan desync, REST/WS payload drift, `Mempool.Price` semantic drift, WS event-name drift, TimeGrouping enum drift, SKA-through-VAR pipeline corruption, cache-loop removal, process-global cache cross-talk, C6 violation surface, legacy `DCR` label leak, `/bydate` response asymmetry
 
+### Market
+
+_The `/market` page: server-rendered shell + Stimulus chart controller fed by a single nullable `*exchanges.ExchangeBot` (Coinbase + Binance + Mexc + dex.decred.org polling, or optional DCRRates gRPC master). The bot snapshot is read three ways: HTML render via `MarketPage`/`getExchangeState`, WS pushes via `watchExchanges → "exchange" event → globalEventBus 'EXCHANGE_UPDATE'`, and lazily-encoded versioned chart bytes via `/api/chart/market/{token}/{candlestick|depth}`. The same bot also drives `xcBot.Conversion(float64)` fiat sidebars on home/tx/address (and the 410-gated treasury handler). Per [/wiki/core/pages.md](core/pages.md) this page is flagged "should be disabled" — no Monetarium asset trades anywhere; the entire surface is `float64` (VAR-safe, SKA-incompatible) and DCR-symbol-hard-coded across 5 layers. Network-name gate `Name != "mainnet"` is a no-op on Monetarium mainnet._
+
+- flow (compact): code-analysis/market/flow.compact.md — three-channel data path, dual collection mode (DCRRates gRPC vs HTTP poll), snapshot/stateCopy invariant, mutation checklist
+- flow (full): code-analysis/market/flow.full.md — detailed bot construction → updateState → MarketPage handler / watchExchanges / QuickSticks·QuickDepth → market.tmpl + market_controller.js trace, including cross-page `Conversion(...)` callsites
+- patterns: code-analysis/market/patterns.md — P1 globally-shared optional collector, P2 dual collection source (gRPC vs poll), P3 lock-free stateCopy read, P4 versioned lazy-encoded chart cache, P5 untyped WS bridge via globalEventBus
+- impact: code-analysis/market/impact.md — `float64`-only SKA precision trap, 5-layer DCR-symbol hard-coding, network-name gate no-op on Monetarium mainnet, cross-page conversion fan-out (~7 sites), WS event-id silent drift, C8 WS vs REST schema asymmetry, `IsFailed()` only honored by `/market` (cross-page conversions show stale fiat)
+
 ### Page-Rendering (cross-domain consolidation)
 
 _Mode-4 consolidation of the shared mechanics behind every server-rendered HTML page (block, mempool, visualblocks, parameters, charts, address). Not a flow — read alongside the per-domain flows it links. Covers out-of-band shared `pageData`/`invs` state, the multi-lock discipline, `*CommonPageData` struct-embedding template injection, and block-scoped ETag caching._
