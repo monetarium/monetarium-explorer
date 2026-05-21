@@ -29,7 +29,8 @@ ChainDB.ticketPoolVisualization  →  ticketPoolGraphsCache (per-interval, heigh
    │
    └─ WS path:
          explorerUI.RootWebsocket switch "getticketpooldata"
-            + inv.Tickets[0].TotalOut / len(inv.Tickets)   ← divergent mempool source
+            → (*explorerUI).buildTicketPoolChartsData
+               + DataSource.GetMempoolPriceCountTime()  →  apitypes.PriceCountTime  ← same source as REST
          ▼
          apitypes.TicketPoolChartsData (JSON, event "getticketpooldataResp")
 
@@ -109,7 +110,9 @@ type TicketPoolChartsData struct {
 
 The `/bydate/{tp}` response uses an anonymous struct `{ Height int64; TimeChart *PoolTicketsData }` ([cmd/dcrdata/internal/api/apiroutes.go:1316-1322](../../../cmd/dcrdata/internal/api/apiroutes.go#L1316-L1322)). **The JS controller relies on `data.time_chart` and never reads `data.height` from this response** (note: capitalization mismatch — Go field `Height` serializes to `"height"`, but the JS controller only reads `data.height` from the *charts* / WS payloads, not from `bydate`). The `bydate` response carries no mempool.
 
-### 3.5 Mempool overlay (two divergent paths for the same logical field)
+### 3.5 Mempool overlay (single source, both transports)
+
+Both REST and WS read the mempool overlay from the same DataSource helper, so the same `*apitypes.PriceCountTime` is emitted on either transport for a given chain/mempool state.
 
 REST `getTicketPoolCharts` ([cmd/dcrdata/internal/api/apiroutes.go:1274](../../../cmd/dcrdata/internal/api/apiroutes.go#L1274)):
 
@@ -117,7 +120,13 @@ REST `getTicketPoolCharts` ([cmd/dcrdata/internal/api/apiroutes.go:1274](../../.
 mp := c.DataSource.GetMempoolPriceCountTime()
 ```
 
-→ [db/dcrpg/pgblockchain.go:6402-6406](../../../db/dcrpg/pgblockchain.go#L6402-L6406) → [mempool/mempoolcache.go:192-214](../../../mempool/mempoolcache.go#L192-L214):
+WS `getticketpooldata` ([cmd/dcrdata/internal/explorer/websockethandlers.go](../../../cmd/dcrdata/internal/explorer/websockethandlers.go), inside `buildTicketPoolChartsData`):
+
+```go
+Mempool: exp.dataSource.GetMempoolPriceCountTime(),
+```
+
+Both calls dispatch to `*ChainDB.GetMempoolPriceCountTime` ([db/dcrpg/pgblockchain.go:6402-6406](../../../db/dcrpg/pgblockchain.go#L6402-L6406)) → [mempool/mempoolcache.go:192-214](../../../mempool/mempoolcache.go#L192-L214):
 
 ```go
 return &apitypes.PriceCountTime{
@@ -127,26 +136,15 @@ return &apitypes.PriceCountTime{
 }
 ```
 
-WS `getticketpooldata` ([cmd/dcrdata/internal/explorer/websockethandlers.go:194-205](../../../cmd/dcrdata/internal/explorer/websockethandlers.go#L194-L205)):
+`Price` is therefore always the **predicted next-block ticket price** (`stakeDiff + feeAvg`) regardless of which transport delivered it; `Count` is the number of fees averaged into the cache; `Time` is the cache update timestamp. The cache helper locks its own state, so neither caller takes `MempoolInventory().RLock()`.
 
-```go
-mp := new(apitypes.PriceCountTime)
-inv := exp.MempoolInventory(); inv.RLock()
-if len(inv.Tickets) > 0 {
-    mp.Price = inv.Tickets[0].TotalOut       // first ticket's *raw* total out
-    mp.Count = len(inv.Tickets)              // count of *all* tickets in inv
-    mp.Time  = dbtypes.NewTimeDefFromUNIX(inv.Tickets[0].Time)
-}
-inv.RUnlock()
-```
-
-**Same field name, same JSON shape, different semantics**: REST → cached `stakeDiff + feeAvg`; WS → the head-of-list ticket's `TotalOut` (a `txhelpers.TotalOutFromMsgTx(msgTx).ToCoin()` VAR float). On a quiet mempool, `inv.Tickets[0].TotalOut` can be price+fee for *that single* ticket. On the REST path, `Price` is the predicted next-block ticket price. This is a real C8-class dual-transport asymmetry inside one logical field.
+> **History note.** Pre-PR #290 the WS branch reimplemented this overlay manually as `mp.Price = inv.Tickets[0].TotalOut` / `mp.Count = len(inv.Tickets)` / `mp.Time = NewTimeDefFromUNIX(inv.Tickets[0].Time)`. Same JSON shape, different semantics: the `/ticketpool` Dygraph dot visibly jumped between the initial HTTP load (REST) and every `newblock` refresh (WS). Issue [#290](https://github.com/monetarium/monetarium-explorer/issues/290) collapsed both paths onto `DataSource.GetMempoolPriceCountTime` via the new package-local helper `(*explorerUI).buildTicketPoolChartsData`.
 
 ### 3.6 WebSocket request/response path
 
 **Location:** [cmd/dcrdata/internal/explorer/websockethandlers.go:169-221](../../../cmd/dcrdata/internal/explorer/websockethandlers.go#L169-L221).
 
-The explorer `/ws` handler is a request/response RPC-over-WebSocket switch (same shape as `decodetx` / `getmempooltxs` — see [/wiki/code-analysis/decodetx/patterns.md](../decodetx/patterns.md) P1). The client sends `WebSocketMessage{EventId: "getticketpooldata", Message: "<interval-string>"}`; the server replies with `EventId: "getticketpooldataResp"` (suffix appended at line 231: `webData.EventId = msg.EventId + "Resp"`). The reply payload is the JSON-marshaled `TicketPoolChartsData` (same struct as REST `/api/ticketpool/charts`, including the divergent `Mempool`).
+The explorer `/ws` handler is a request/response RPC-over-WebSocket switch (same shape as `decodetx` / `getmempooltxs` — see [/wiki/code-analysis/decodetx/patterns.md](../decodetx/patterns.md) P1). The client sends `WebSocketMessage{EventId: "getticketpooldata", Message: "<interval-string>"}`; the server replies with `EventId: "getticketpooldataResp"` (suffix appended at the bottom of the `select`: `webData.EventId = msg.EventId + "Resp"`). The case body delegates the payload assembly to `(*explorerUI).buildTicketPoolChartsData`, which mirrors the REST `getTicketPoolCharts` handler so both transports emit the same `TicketPoolChartsData` (including `Mempool`) for a given chain/mempool state.
 
 The `newblock` push on the *server* (`sigNewBlock`) does **not** deliver ticketpool data — it delivers a `WebsocketBlock{Block, Extra}` ([cmd/dcrdata/internal/explorer/websockethandlers.go:271-282](../../../cmd/dcrdata/internal/explorer/websockethandlers.go#L271-L282)). The *client* JS listens for the `newblock` event and reactively re-requests ticketpool data via `ws.send('getticketpooldata', this.bars)`. So `newblock` is a refresh **trigger**, not a payload carrier — and the server has zero knowledge of which `bars` setting each client holds.
 
@@ -194,14 +192,13 @@ Labels: `'A.v.g. Tickets Value (DCR)'` (purchases y2-axis) and `'Ticket Price (V
 | JS `processData` | `apitypes.TicketPoolChartsData` JSON tags | `data.time_chart`, `data.price_chart`, `data.outputs_chart`, `data.mempool`, `data.height` — read by name from the parsed JSON. | Renaming a JSON tag on the Go side without updating the JS reader silently drops a series. No type check. |
 | WS `getticketpooldata` `EventId` literal | `webData.EventId = msg.EventId + "Resp"` ([websockethandlers.go:231](../../../cmd/dcrdata/internal/explorer/websockethandlers.go#L231)) | JS hard-codes `'getticketpooldata'` and `'getticketpooldataResp'`. | Renaming the event on either side silently breaks live refresh — JS continues to render only the initial HTTP fetch. (Same R1-class drift as [/wiki/code-analysis/decodetx/impact.md](../decodetx/impact.md).) |
 | `ticketPoolGraphsCache` (package `var`) | `ChainDB` instance | Process-global, not per-instance. | A second `ChainDB` in the same binary (testing, multi-network) would silently share cache and serve cross-instance data. Single-instance today. |
-| Mempool `Price` semantics REST vs WS | `apitypes.PriceCountTime.Price float64` | One JSON field, two producer formulas (see §3.5). | The frontend cannot distinguish which value it received; chart legend can shift after a `newblock` refresh. C8-class. |
 | JS `processData` height gate | `this.tipHeight === data.height` | The "mempool overlay only when fresh" rule relies on the WS payload setting `data.height` and `data.mempool` together. | If WS ever returned `height` without `mempool` (or vice versa), the time chart could lock out future mempool merges (line 180). |
 
 ## Section 5 — Critical Constraints
 
 - **C1 (precision):** Tickets are a VAR-only PoS instrument (see [/wiki/core/staking-rewards.md](../../core/staking-rewards.md) §2 — ticket price, returned cost, and 1/5-of-50% subsidy share are all VAR-denominated). `PoolTicketsData.Price []float64`, `MempoolTx.TotalOut float64`, `toCoin() float64`, Dygraphs `digitsAfterDecimal: 8` — the entire pipeline is float64 VAR end-to-end. **This is intentional; safe under C1 *only* because tickets are VAR.** Any attempt to introduce a SKA-denominated ticket variant must rewrite the struct away from `[]float64` to `[]string` and replace `toCoin`/`*1e8` with `*big.Int` arithmetic.
-- **C2 (dual pipeline mutation):** Two collection paths feed the page — DB (Postgres `tickets` JOIN) and live mempool (`DataCache` + `MempoolInventory`). The mempool overlay further splits into two sub-paths (REST = avg-fee + stakeDiff, WS = first-ticket TotalOut). Any change to the ticket-row population (e.g. adding a new column to the SELECT for filtering) must update three `Scan` sites *and* the cache invariant that all three sub-charts share one `(height, interval)` key.
-- **C3 + C8 (template+WS parity, dual-transport asymmetry):** The HTML template carries **no** chart data — there is no SSR variant to keep in parity. But the two non-static data paths (REST and WS) carry the **same struct** with **different `Mempool.Price` semantics** (§3.5). This is a C8 manifestation that isn't currently catalogued in [/wiki/core/constraints.md](../../core/constraints.md) C8's three concrete examples — flag for consolidation.
+- **C2 (dual pipeline mutation):** Two collection paths feed the page — DB (Postgres `tickets` JOIN) and live mempool (`DataCache` via `GetMempoolPriceCountTime`). Any change to the ticket-row population (e.g. adding a new column to the SELECT for filtering) must update three `Scan` sites *and* the cache invariant that all three sub-charts share one `(height, interval)` key. The mempool overlay now has a single producer shared by REST and WS (§3.5); historically it was two divergent formulas (resolved in [#290](https://github.com/monetarium/monetarium-explorer/issues/290)).
+- **C3 (template+WS parity):** The HTML template carries **no** chart data — there is no SSR variant to keep in parity. The two non-static data paths (REST and WS) carry the **same struct** *and* (after [#290](https://github.com/monetarium/monetarium-explorer/issues/290)) the same producer for every field, so they cannot drift on the mempool overlay. Adding new top-level fields to `TicketPoolChartsData` still requires updating both producer sites — see Section 6.
 - **C6 (template cloning):** `populateOutputs` builds the donut table via `innerHTML` concatenation, not `<template>` cloning. Tolerated because all interpolated values are pre-coerced with `parseInt()` to integers. **Do not extend the function with any user-derived string** without converting to a `<template>` clone.
 - **C7 (coin-symbol helper):** Legacy `DCR` label survives in the purchases y2-axis (`'A.v.g. Tickets Value (DCR)'`, [ticketpool_controller.js:242](../../../cmd/dcrdata/public/js/controllers/ticketpool_controller.js#L242)). The x-axis on the price chart already says `(VAR)`. The two labels disagree on a single page.
 
@@ -215,19 +212,18 @@ When modifying `/ticketpool`, check:
 | Reorder columns in any of the three SQL statements | The matching `rows.Scan` call | Cache shape | **Silent** — values swap with no error (positional Scan). |
 | Add a new time-grouping (e.g. `"hr"`) | `dbtypes.TimeBasedGroupings` map, `TimeGroupingFromStr` switch, `NumIntervals` constant, `formatGroupingQuery` regex, JS bar button HTML, controller `bars` whitelist | Cache map size (`tpUpdatePermission` map is built from the same enum, so new entries get a lock automatically) | **Loud**: missing enum entry → `UnknownGrouping` → 422 on REST, "Error: unknown interval" on WS. **Silent**: missing JS button just means the user can't pick it. |
 | Add a new chart series (e.g. revoked-tickets buckets) | `PoolTicketsData` arrays, new SQL, new Scan, new cache field; **both** REST and WS payloads + JS `processData` branch | Bars-only `/bydate` response intentionally drops `price_chart` and `outputs_chart` — decide if the new field belongs there too | **Silent** drift between REST/WS if only one is updated (C3-shaped). |
-| Change `MempoolPriceCountTime.Price` semantics | `mempoolcache.GetTicketPriceCountTime` | Also need to update WS branch's manual computation in [websockethandlers.go:194-205](../../../cmd/dcrdata/internal/explorer/websockethandlers.go#L194-L205) or the WS overlay drifts further | **Silent** — the legend just shows a different number after a `newblock`. |
+| Change `MempoolPriceCountTime.Price` semantics | `mempoolcache.GetTicketPriceCountTime` | Both REST and WS read this through `DataSource.GetMempoolPriceCountTime` (since [#290](https://github.com/monetarium/monetarium-explorer/issues/290)), so a single edit reaches both consumers. | **Loud** if the return type changes (compile error in both consumers); **silent** if only the numeric formula changes (chart legend just shows a different value). |
 | Tune the cache invalidation key (e.g. add a fee-mix sub-key) | `TicketPoolData` and `UpdateTicketPoolData` signatures; `tpUpdatePermission` map type | Any test that asserts old behavior | **Silent** stale data; possibly **loud** if existing callers don't supply the new key. |
 | Rename the WS event | Both string literals in JS (`'newblock'`, `'getticketpooldata'`, `'getticketpooldataResp'`) and the server switch case + suffix append | JS `disconnect()` deregister call uses the same string | **Silent** — `newblock` refresh loop silently breaks; initial HTTP load still works. |
 | Promote tickets to SKA | Every `float64` in this trace becomes `*big.Int` or `string`; `digitsAfterDecimal: 8` becomes invalid; `populateOutputs` table is fine (integer counts); the `*1e8` round-trip in `retrieveTicketsByDate` becomes a precision-loss site | This is effectively a full rewrite of the pipeline; not a minor change | **Silent corruption** — exceeds float64 significand; see [/wiki/code-analysis/charts/impact.md](../charts/impact.md) for the analogous SKA-through-float trap. |
 
 ## Section 7 — Common Pitfalls
 
-- **Treating "mempool" identically across REST and WS.** Same struct, different formulas. A bug fix on the REST side does not reach the WS side unless explicitly mirrored (§3.5).
 - **Assuming `/ticketpool` is push-driven.** It is not. The server's `sigNewBlock` carries `WebsocketBlock`, not ticket data. The JS controller *re-requests* ticket data on every `newblock` — every connected client triggers a fresh `TicketPoolVisualization(ctx, <their-bars>)` per block. The cache absorbs the duplication (single updater wins via `TryLock`); without the cache, this would be N concurrent DB hits per block.
 - **Editing one of the three Scan calls and forgetting the others.** All three populate the same `PoolTicketsData` struct, but each fills a different field subset. A new SELECT column on one branch leaves zero values in the slices populated by the other two — and Dygraphs renders zero as a real value, not a gap.
 - **Adding SKA support in the wrong place.** Tickets are VAR by chain design. The temptation to "make this multi-coin" would corrupt SKA precision (C1) and produce nonsense data — tickets do not exist for SKA coins.
 - **Forgetting that `/api/ticketpool/bydate/{tp}` returns no `mempool` field.** A future refactor that unifies the two REST handlers via the same response struct must either backfill `Mempool` or leave it nil and document the asymmetry. The JS `onBarsChange` does *not* call `processData`; it goes straight to `purchasesGraph.updateOptions`, bypassing the mempool-overlay logic.
-- **Trusting `inv.Tickets[0].TotalOut` as "the mempool ticket price".** It is the *raw* total-out of whichever ticket happens to be first in the inventory slice. In a multi-ticket mempool it is not representative.
+- **Reintroducing a separate mempool overlay producer for WS.** The WS path must keep delegating to `DataSource.GetMempoolPriceCountTime` via `buildTicketPoolChartsData` — historically a hand-rolled `inv.Tickets[0].TotalOut` block at `websockethandlers.go` produced a different `mempool.{price,count,time}` than REST and caused the mempool dot to jump on every `newblock` refresh ([#290](https://github.com/monetarium/monetarium-explorer/issues/290)).
 - **Cache + height-changed-mid-query.** `ticketPoolVisualization` retries the three SQL queries if `pgb.Height()` advanced between first and last query; do not remove this retry loop ([db/dcrpg/pgblockchain.go:1909-1940](../../../db/dcrpg/pgblockchain.go#L1909-L1940)) — without it the three charts could disagree by one block on rapid reorgs / fast tip advance.
 
 ## Section 8 — Evidence
@@ -246,7 +242,7 @@ When modifying `/ticketpool`, check:
 - Types: [api/types/apitypes.go:931-960](../../../api/types/apitypes.go#L931-L960), [db/dbtypes/types.go:2118-2128](../../../db/dbtypes/types.go#L2118-L2128), [db/dbtypes/types.go:827-857](../../../db/dbtypes/types.go#L827-L857)
 
 See also:
-- /wiki/core/constraints.md (depends-on: C1 numeric precision — VAR-only float64 pipeline; C2 dual collection paths; C6 template-cloning exception in `populateOutputs`; C7 legacy `DCR` label leak; C8 mempool dual-transport semantic drift)
+- /wiki/core/constraints.md (depends-on: C1 numeric precision — VAR-only float64 pipeline; C2 dual collection paths; C3 REST/WS payload parity; C6 template-cloning exception in `populateOutputs`; C7 legacy `DCR` label leak)
 - /wiki/core/staking-rewards.md (depends-on: tickets are VAR-only by chain design)
 - /wiki/code-analysis/decodetx/patterns.md (shares-pattern-with: P1 form-shell over WS-RPC; the `getticketpooldata` switch is the same shape as `decodetx`/`sendtx`)
 - /wiki/code-analysis/parameters/flow.full.md (shares-pattern-with: no-compute Go handler that renders only `commonData`)

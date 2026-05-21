@@ -9,7 +9,7 @@
 - **P1 Form-shell over WS-RPC.** Same shape as `/decodetx`: HTML carries no data; JS holds the `getticketpooldata`/`getticketpooldataResp` request/response loop. Refresh trigger = client-side `newblock` listener, not a server push of ticket data.
 - **P2 Tri-modal struct with positional Scan.** One `dbtypes.PoolTicketsData` (`Time/Price/Mempool/Immature/Live/Outputs/Count` parallel slices) is populated by three different SQL Scans, each filling a different field subset. Column reordering swaps fields silently.
 - **P3 Stale-while-revalidate cache.** Package-`var` `ticketPoolGraphsCache` keyed `(interval, height)`. `TryLock` on `tpUpdatePermission[interval]` picks the updater; stale data is served immediately to non-updaters. Inner refresh retries on `pgb.Height()` advance to keep the three sub-charts consistent at one block.
-- **P4 Dual-transport overlay with divergent semantics.** Same JSON field `mempool.price` (`apitypes.PriceCountTime.Price float64`), two formulas: REST = `stakeDiff.ToCoin() + feeAvg`; WS = `inv.Tickets[0].TotalOut`. C8-class asymmetry inside one logical field.
+- **P4 Single delegation helper consumed by both transports.** Both REST `getTicketPoolCharts` and WS `(*explorerUI).buildTicketPoolChartsData` route `mempool.{price,count,time}` through `DataSource.GetMempoolPriceCountTime` → `stakeDiff.ToCoin() + feeAvg`. The two transports cannot drift. (Pre-[#290](https://github.com/monetarium/monetarium-explorer/issues/290) the WS path reimplemented the overlay as `inv.Tickets[0].TotalOut`; do not reintroduce.)
 
 ## Critical Constraints
 
@@ -21,7 +21,7 @@
 
 ## Mutation Checklist
 
-When changing `/ticketpool`: (1) align all three `rows.Scan` calls with their SELECT column order; (2) mirror any new field across REST `getTicketPoolCharts` and WS `getticketpooldata` payloads; (3) update mempool overlay on **both** sides if semantics change; (4) extend `dbtypes.TimeBasedGroupings` map + `TimeGroupingFromStr` switch + JS button HTML together; (5) never widen `PoolTicketsData.Price` to carry SKA without converting to a string/BigInt pipeline; (6) preserve the height-retry loop in `ticketPoolVisualization` to keep the three sub-charts at one block.
+When changing `/ticketpool`: (1) align all three `rows.Scan` calls with their SELECT column order; (2) mirror any new field across REST `getTicketPoolCharts` and WS `(*explorerUI).buildTicketPoolChartsData` payloads; (3) edit the mempool overlay only at `mempoolcache.GetTicketPriceCountTime` — both transports read it through `DataSource.GetMempoolPriceCountTime`, so do not reintroduce a parallel WS computation; (4) extend `dbtypes.TimeBasedGroupings` map + `TimeGroupingFromStr` switch + JS button HTML together; (5) never widen `PoolTicketsData.Price` to carry SKA without converting to a string/BigInt pipeline; (6) preserve the height-retry loop in `ticketPoolVisualization` to keep the three sub-charts at one block.
 
 See also:
 - [/wiki/code-analysis/ticketpool/flow.full.md](flow.full.md)
