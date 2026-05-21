@@ -4,13 +4,15 @@
 
 The `/attack-cost` page is a **51%-style majority-attack cost calculator** (PoW + PoS).
 It is unusual in this codebase: the Go side does **no computation** — the handler reads a
-process-global in-memory snapshot, renders six numbers into HTML `data-*` attributes, and
-**all attack math runs in the browser** (`attackcost_controller.js`). There is no DB query,
-no RPC call, and no XHR for this page.
+process-global in-memory snapshot, renders five chain scalars into HTML `data-*` attributes,
+and **all attack math runs in the browser** (`attackcost_controller.js`). There is no DB
+query, no RPC call, and no XHR for this page. The USD/VAR exchange rate and the mining
+device specs (hashrate, power, price) are entered by the user — there is no server-seeded
+rate and no hard-coded device list.
 
 Critical framing: the page is **single-coin / VAR-only by construction**. It consumes the
 legacy flat `HomeInfo.CoinSupply int64` and never touches `HomeInfo.VARCoinSupply` /
-`HomeInfo.SKACoinSupply`. Every "DCR" label in the template is legacy naming for VAR.
+`HomeInfo.SKACoinSupply`. All coin-amount labels on the rendered page are `VAR`.
 
 ## Section 2 — End-to-End Data Flow
 
@@ -26,7 +28,7 @@ monetarium-node RPC ──► blockdata collector ──► explorer.Store() ─
                                                                          │
                              attackcost_controller.connect(): parseInt / parseFloat
                                                                          │
-                             all PoW/PoS attack math in the browser (Dygraphs + Decred formula)
+                             all PoW/PoS attack math in the browser (Dygraphs + 50/50 hybrid formula)
 ```
 
 ## Section 3 — Per-Layer Breakdown
@@ -44,27 +46,26 @@ monetarium-node RPC ──► blockdata collector ──► explorer.Store() ─
 
 ### Layer B — HTTP handler
 
-- **Location:** `cmd/dcrdata/internal/explorer/explorerroutes.go:2693-2742`
-  (`(*explorerUI).AttackCost`); route registered `cmd/dcrdata/main.go:817`.
+- **Location:** `cmd/dcrdata/internal/explorer/explorerroutes.go` `(*explorerUI).AttackCost`;
+  route registered `cmd/dcrdata/main.go:817`.
 - **Data structures:** anonymous struct embedding `*CommonPageData` with
-  `HashRate float64`, `Height int64`, `DCRPrice float64`, `TicketPrice float64`,
-  `TicketPoolSize int64`, `TicketPoolValue float64`, `CoinSupply int64`.
+  `HashRate float64`, `Height int64`, `TicketPrice float64`, `TicketPoolSize int64`,
+  `TicketPoolValue float64`, `CoinSupply int64`. No `DCRPrice`/USD field — the rate is
+  user-entered in the browser.
 - **Transformations:**
-  - `price := 24.42`; overwritten whenever `exp.xcBot != nil` via
-    `exp.xcBot.Conversion(1.0)` (`exchanges/bot.go:1045`). `Conversion` returns `nil`
-    **only** when `bot == nil`; with the bot present but no exchange state yet it returns
-    `Value: 0` (`bot.go:1056-1057`) — so the effective price becomes **0, not 24.42**.
-  - Reads six fields from `exp.pageData` under `RLock`, no math performed.
+  - Reads five chain scalars (height, hashrate, ticket price, ticket pool size/value,
+    coin supply) from `exp.pageData` under `RLock`; no math, no exchange-bot call.
   - Renders via `execTemplateToString("attackcost", …)`; template error →
     `StatusPage(..., ExpStatusError)`.
 
 ### Layer C — Template (Go number → HTML string)
 
-- **Location:** `cmd/dcrdata/views/attackcost.tmpl:7-17` (the `data-attackcost-*` attribute
-  block); template registered in the set at `explorer.go:424`.
-- **Data structures:** `data-attackcost-height`, `-hashrate`, `-dcrprice`, `-ticket-price`,
+- **Location:** `cmd/dcrdata/views/attackcost.tmpl` (the `data-attackcost-*` attribute
+  block at the top of the controller container); template registered in the set at
+  `explorer.go:424`.
+- **Data structures:** `data-attackcost-height`, `-hashrate`, `-ticket-price`,
   `-ticket-pool-value`, `-ticket-pool-size`, `-coin-supply`. `CoinSupply int64` is emitted
-  as a raw VAR-atom integer string.
+  as a raw VAR-atom integer string. No `-dcrprice` attribute — the rate is user-entered.
 - **Transformations:** Go numeric → attribute string. ~90 `data-attackcost-target` hooks
   feed the controller; the attribute key set and the `targets` array are an **untyped
   contract**.
@@ -72,21 +73,26 @@ monetarium-node RPC ──► blockdata collector ──► explorer.Store() ─
 ### Layer D — Stimulus controller (string → Number → all math)
 
 - **Location:** `cmd/dcrdata/public/js/controllers/attackcost_controller.js`.
-- **Data structures / globals:** `height, dcrPrice, hashrate, tpSize, tpValue, tpPrice,
-  graphData, currentPoint, coinSupply` (module-level, line 47); `deviceList` (lines 63-80,
-  hardcoded `DCR5`/`D1` ASIC specs + a `medium.com/decred` citation).
+- **Data structures / globals:** `height, varPrice, hashrate, tpSize, tpValue, tpPrice,
+  graphData, currentPoint, coinSupply`, plus `deviceHashrate, devicePower, devicePrice`
+  (all module-level). Neutral defaults `defaultExchangeRate=1`, `defaultDeviceHashrate=50`,
+  `defaultDevicePower=1500`, `defaultDevicePrice=1500`.
 - **Transformations:**
-  - `connect()` lines 203-209: `parseInt(this.data.get('height'))`,
-    `parseFloat(this.data.get('ticketPrice'))`, `parseInt(this.data.get('coinSupply'))`, …
-  - `rateCalculation(y)` lines 49-61: Decred hybrid PoW/PoS deterrence formula
-    `(6x⁵−15x⁴+10x³)/(6y⁵−15y⁴+10y³)`.
-  - `calculate()` lines 503-579: device count, electricity, PoS DCR-need, projected ticket
-    price, totals.
-  - `showPosCostWarning()` lines 601-611: `coinSupply / 100000000` — hardcoded 1e8 divisor
-    (8-decimal assumption); if `DCRNeed > totalDCRInCirculation` it flags
+  - `connect()`: `parseInt(this.data.get('height'))`,
+    `parseFloat(this.data.get('ticketPrice'))`, `parseInt(this.data.get('coinSupply'))`,
+    etc. The USD/VAR rate is seeded from `defaultExchangeRate` and then overwritten by
+    either the `?price=` URL param or the manual input — never from a server attribute.
+    Device specs are seeded from the `default*` constants and overwritten by URL params
+    `device_hashrate`/`device_power`/`device_price` or the manual inputs.
+  - `rateCalculation(y)`: hybrid PoW/PoS deterrence formula
+    `(6x⁵−15x⁴+10x³)/(6y⁵−15y⁴+10y³)`, bit-exact across the Monetarium rework.
+  - `calculate()`: device count = `ceil(targetHashRate * 1000 / deviceHashrate)`,
+    electricity, PoS `varNeed`, projected ticket price, totals.
+  - `showPosCostWarning()`: `coinSupply / 100000000` — hardcoded 1e8 divisor
+    (8-decimal VAR assumption); if `varNeed > totalVarInCirculation` it flags
     "Attack not possible".
   - TurboQuery URL state: `attack_time, target_pow, kwh_rate, other_costs, target_pos,
-    price, device, attack_type` (lines 189-198, 324-331).
+    price, device_hashrate, device_power, device_price, attack_type`.
 
 ## Section 4 — Cross-Layer Dependencies
 
@@ -95,12 +101,13 @@ monetarium-node RPC ──► blockdata collector ──► explorer.Store() ─
   `explorertypes.go:812`) also serialized by the HTTP API and consumed by the home page —
   a field type/units change ripples far beyond this page.
 - **Template ↔ controller (brittle):** the `data-attackcost-*` attribute keys
-  (`this.data.get(...)`) and the `static targets` array (lines 121-185) form an exact,
-  untyped string contract. A renamed *data key* yields `parseInt(null) = NaN` silently; a
+  (`this.data.get(...)`) and the `static targets` array form an exact, untyped string
+  contract. A renamed *data key* yields `parseInt(null) = NaN` silently; a
   renamed/removed *target* throws in `connect()` and kills the controller.
-- **Price ↔ exchange bot:** `DCRPrice` depends on `exchanges` bot state at request time;
-  no state → `$0` everywhere, no error.
-- **Dygraphs:** `attackcost_controller.js:252` monkey-patches the private
+- **No exchange-bot coupling:** the handler does not call `exp.xcBot`; USD/VAR comes
+  from the manual input only. Past versions of this handler did seed the rate from
+  `xcBot.Conversion` — do not reintroduce that coupling.
+- **Dygraphs:** `attackcost_controller.js` monkey-patches the private
   `Dygraph.prototype.doZoomY_` — version-fragile coupling to the vendored Dygraphs build.
 
 ## Section 5 — Critical Constraints
@@ -114,67 +121,75 @@ monetarium-node RPC ──► blockdata collector ──► explorer.Store() ─
   client-side `Number` math model is not portable to SKA without a BigInt rewrite.
 - **Snapshot semantics:** process-global `pageData` guarded by an RWMutex; before the first
   `Store()` all fields are zero (`tpSize = 0` → divisions produce `NaN`/`Infinity`).
-- **Misleading price fallback:** the literal `24.42` is *not* the no-exchange value; with
-  the bot present and no state the effective price is `0`.
+- **No server-seeded exchange rate / device list:** USD/VAR and device specs are
+  scenario parameters the user enters. Monetarium has no listed market price; the
+  handler must not call `xcBot` or seed any rate from the server.
 
 ## Section 6 — Mutation Impact
 
 When modifying this page, check:
 
-- **Direct dependencies:** `explorerroutes.go:2713-2731` struct fields;
-  `attackcost.tmpl:7-17` attribute keys; `attackcost_controller.js:203-209` parse calls.
-- **Indirect dependencies:** `HomeInfo`/`TicketPoolInfo` shared with HTTP API + home page;
-  `explorer.go:574-649` `Store()` population; `exchanges` bot `Conversion`.
+- **Direct dependencies:** the `AttackCost` template-struct fields in
+  `explorerroutes.go`; the top-of-container `data-attackcost-*` block in
+  `attackcost.tmpl`; the `parseInt`/`parseFloat` reads in `attackcost_controller.js`
+  `connect()`.
+- **Indirect dependencies:** `HomeInfo`/`TicketPoolInfo` shared with HTTP API + home
+  page; `explorer.go:574-649` `Store()` population.
 - **Serialization boundary:** Go numeric → `data-*` string → JS `parseInt/parseFloat`
   (and the JSON-tagged shared struct used elsewhere).
 - **Rendering layers:** Dygraphs (`doZoomY_` patch), ~90 `data-attackcost-target` hooks.
 
 **Silent failures (no error, wrong output):**
-- Bot present, no exchange state → `price = 0` → all USD figures `$0`.
 - `pageData` not yet populated (startup) → `tpSize = 0` → `NaN`/`Infinity` outputs.
 - Routing SKA atoms through this path → `parseInt` precision loss, wrong `/1e8` divisor.
 - Mistyped/renamed `data-*` key → `NaN` propagation through every output.
 
 **Hard failures (visible):**
-- Template execution error → `StatusPage(..., ExpStatusError)`
-  (`explorerroutes.go:2733-2736`).
+- Template execution error → `StatusPage(..., ExpStatusError)` in the `AttackCost`
+  handler.
 - Renamed/removed Stimulus *target* → JS exception in `connect()`, controller dead, page
   shows static `0`s.
 
 ## Section 7 — Common Pitfalls
 
-1. Assuming "DCR"/`coin_supply` here means total network value — it is **VAR only**; SKA is
+1. Assuming `coin_supply` here means total network value — it is **VAR only**; SKA is
    silently excluded.
 2. Multi-coin-ifying the page by piping SKA atoms through the existing
    `data-*`/`parseInt`/`/1e8` path — violates the 18-decimal `big.Int` rule, corrupts
    values with no error.
-3. Treating `24.42` as the no-exchange fallback — the real no-data price is `0`.
-4. Assuming the handler fetches fresh chain data — it reads a possibly-stale shared
+3. Re-introducing a server-seeded exchange rate (e.g. via `xcBot.Conversion`) — the
+   page is a scenario calculator; Monetarium has no listed market price. Don't do it.
+4. Re-introducing a hard-coded device catalog — the user types the three numbers
+   (hashrate / power / price); past Decred-era model presets were removed by design.
+5. Assuming the handler fetches fresh chain data — it reads a possibly-stale shared
    snapshot under `RLock`.
-5. Refactoring `HomeInfo`/`TicketPoolInfo` field types "just for this page" — the structs
+6. Refactoring `HomeInfo`/`TicketPoolInfo` field types "just for this page" — the structs
    feed the API JSON and the home page.
-6. Renaming template attributes for cleanliness — the `data.get()` keys and `targets`
+7. Renaming template attributes for cleanliness — the `data.get()` keys and `targets`
    array are an exact, untyped contract; mismatches fail silently or kill the controller.
-7. Upgrading Dygraphs without re-checking the private `doZoomY_` override.
+8. Upgrading Dygraphs without re-checking the private `doZoomY_` override.
 
 ## Section 8 — Evidence
 
 - `cmd/dcrdata/main.go:817` — route registration.
-- `cmd/dcrdata/internal/explorer/explorerroutes.go:2693-2742` — `AttackCost` handler;
-  `:2696-2700` price logic; `:2733-2736` template-error path.
+- `cmd/dcrdata/internal/explorer/explorerroutes.go` `AttackCost` — handler; reads under
+  `RLock`, renders, no math.
 - `cmd/dcrdata/internal/explorer/explorer.go:562-564, 574-649` — `Store()` → `HomeInfo`.
 - `explorer/types/explorertypes.go:811-837` (`HomeInfo`), `:1375-1382` (`TicketPoolInfo`).
 - `blockdata/blockdata.go:207` — `GetCoinSupply`.
-- `exchanges/bot.go:1045-1058` — `Conversion` (nil only when bot nil; `Value:0` when no state).
-- `cmd/dcrdata/views/attackcost.tmpl:7-17` — `data-*` contract; `:2731`-equivalent int64 emit.
-- `cmd/dcrdata/public/js/controllers/attackcost_controller.js:47` (globals),
-  `:49-61` (formula), `:63-80` (devices), `:121-185` (targets), `:203-209` (data parse),
-  `:252` (Dygraph hack), `:503-579` (calculate), `:601-611` (supply gate).
+- `cmd/dcrdata/views/attackcost.tmpl` — `data-*` contract at the top of the controller
+  container; manual `Exchange Rate`, `Device Hashrate`, `Device Power`, `Device Price`
+  inputs in the "Adjustable Parameters" / "PoW Attack" blocks.
+- `cmd/dcrdata/public/js/controllers/attackcost_controller.js` — module globals
+  (`varPrice`, `deviceHashrate`, `devicePower`, `devicePrice`, `coinSupply`, …),
+  neutral `default*` constants, `rateCalculation` (formula), `static targets` (Stimulus
+  contract), `connect()` (data parse + URL state), `Dygraph.prototype.doZoomY_` override,
+  `calculate()` (PoW + PoS totals), `showPosCostWarning()` (supply gate).
 
 See also:
-- /wiki/code-analysis/attack-cost/patterns.md (shares-pattern-with: VAR-only legacy snapshot, untyped `data-*`↔Stimulus contract, client-side-only math)
-- /wiki/code-analysis/attack-cost/impact.md (depends-on: shared `HomeInfo` struct, exchange-bot price, snapshot staleness)
-- /wiki/code-analysis/address/impact.md (shares-pattern-with: legacy flat-field shim / `DCR` labelling — attack-cost still reads its `HomeInfo` flat fields; address keeps the analogous back-compat VAR fields, now template-unread)
+- /wiki/code-analysis/attack-cost/patterns.md (shares-pattern-with: VAR-only legacy snapshot, untyped `data-*`↔Stimulus contract, client-side-only math, manual-only scenario inputs)
+- /wiki/code-analysis/attack-cost/impact.md (depends-on: shared `HomeInfo` struct, snapshot staleness)
+- /wiki/code-analysis/address/impact.md (shares-pattern-with: legacy flat-field shim — attack-cost still reads its `HomeInfo` flat fields; address keeps the analogous back-compat VAR fields, now template-unread)
 - /wiki/code-analysis/visualblocks/patterns.md (shares-pattern-with: untyped Go→JS contract, vendored Dygraphs coupling)
 - /wiki/core/constraints.md (depends-on: C1 numeric precision — float64 VAR vs big.Int SKA)
 - /wiki/core/pages.md (depends-on: `/attack-cost` route registry entry)
