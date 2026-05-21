@@ -44,58 +44,66 @@ class.
 
 ---
 
-## Risk: Silent Blank Address-Prefix Table
+## Risk: Degraded (Hex) Address-Prefix Rows On Unrecognised Net
 
 **Trigger:**
 The active network's `params.Name` is not `"mainnet"`, does not start with
-`"testnet"`, and is not `"simnet"` (a new/renamed network, a custom regtest
-name).
+`"testnet"`, is not `"simnet"`, and is not `"regnet"` (a new/renamed
+network, a custom dev-net name).
 
-**Failure mode:** silent (HTTP 200, missing section).
+**Failure mode:** silent-but-visible (HTTP 200, rows present, prefixes
+shown as `0x` + hex magic bytes instead of the documented two-letter form).
 
 **Affected flows:**
 
-- /wiki/code-analysis/parameters/flow.full.md (§5 network-name coupling)
+- /wiki/code-analysis/parameters/flow.full.md (§3 AddressPrefixes transform)
 
 **Description:**
-`types.AddressPrefixes(params)` hits the final `else { return nil }`
-([explorer/types/explorertypes.go:1549](../../../explorer/types/explorertypes.go#L1549)).
-The handler assigns this `nil` straight into
-`ExtendedParams.AddressPrefix`
-([explorerroutes.go:2146,2171](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L2146))
-with no error check. The template ranges over an empty slice → the entire
-address-prefix table renders blank while the page returns 200 OK. A new
-network requires extending **all three** hardcoded prefix arrays
-([:1536-1538](../../../explorer/types/explorertypes.go#L1536)) and the
-selection switch ([:1540-1550](../../../explorer/types/explorertypes.go#L1540));
-forgetting any one silently drops the section. (Note: flow.full.md cites this
-function at `:1508-1549`; it is actually `:1516-1559`, **+8 line drift**, nil
-return still at `:1549`.)
+`types.AddressPrefixes(params)` calls `lookupAddrPrefixSet(params.Name)`,
+which returns `(zero, false)` for any unrecognised network name. The
+function then renders each row with `"0x" + hex.EncodeToString(magic[:])`
+as the `Prefix` cell. The rows are visible and informative (a custom net
+operator can read the magic bytes), but they are no longer the documented
+human-readable two-letter prefix. To restore the documented prefixes for a
+new net, add an `addrPrefixSet` package var (with the textual prefixes
+copied verbatim from the chaincfg comments) and a case in
+`lookupAddrPrefixSet`.
+
+**Eliminated risks (do not reintroduce):**
+
+- Previously, an unrecognised net produced a silent blank section — that
+  bug class is removed; the fallback ensures the rows are always present.
+- Previously, the function zipped four parallel slices by index, so adding
+  an address kind required four matching edits — that bug class is also
+  removed; rows are now declared as inline struct literals.
 
 ---
 
-## Risk: Misaligned Address-Prefix Rows
+## Risk: SKA `*big.Int` Crossing Template Boundary
 
 **Trigger:**
-Adding or removing an address kind by editing only some of the four parallel
-slices in `AddressPrefixes` (`Descriptions`, `Name`, and the three
-`<Net>Prefixes`).
+A new SKA amount field is added to the page without routing it through
+`buildSKACoinParams` / `formatBigIntAsSKAString` — e.g. exposing the
+`*big.Int` directly on `types.SKACoinParam`, or rendering an atom integer
+in the template.
 
-**Failure mode:** silent (HTTP 200, wrong prefix/name pairing).
+**Failure mode:** silent (HTTP 200, wrong-but-plausible amount text).
 
 **Affected flows:**
 
-- /wiki/code-analysis/parameters/flow.full.md (§6 direct dependencies)
+- /wiki/code-analysis/parameters/flow.full.md (§3 SKACoinParams transform,
+  §5 SKA precision boundary)
 
 **Description:**
-The build loop zips the slices by positional index:
-`AddrPrefix{Name: Name[i], Description: desc, Prefix: netPrefixes[i]}`
-([explorer/types/explorertypes.go:1552-1559](../../../explorer/types/explorertypes.go#L1552)).
-There is no length assertion across the four slices. An off-by-one (e.g.
-adding a description without the matching `Name` and prefix entries) silently
-pairs the wrong prefix string with the wrong field name; if the prefix slice
-is *shorter* than `Descriptions`, `netPrefixes[i]` panics at request time
-(loud) instead. All four slices must be edited at the same index.
+SKA atoms are 18-decimal values that routinely exceed `float64`'s 15-17
+significand digits. The existing VAR formatting path (`amountAsDecimalParts`
+→ `float64`) silently loses precision and can serialise in scientific
+notation for large values, both of which violate spec §9 ("show fully,
+without rounding and without exponential notation"). The fix is structural:
+`*big.Int` SKA values must be converted to plain decimal strings via
+`formatAtomsAsCoinString` (or `formatBigIntAsSKAString`) at the handler
+boundary, and the template must only see those pre-formatted strings.
+`buildSKACoinParams` is the chokepoint; bypassing it is the failure path.
 
 ---
 
@@ -186,17 +194,26 @@ Before committing changes that touch the `/parameters` data path:
       struct (edit both the `type` block and the literal), never `commonData`.
 - [ ] New raw-param row → `.ChainParams.X` in the template only; confirm `X`
       exists on `*chaincfg.Params`.
-- [ ] Touching `AddressPrefixes` → all four parallel slices
-      (`Descriptions`, `Name`, `Mainnet/Testnet/SimnetPrefixes`) edited at the
-      same index; selection switch covers any new `params.Name`.
+- [ ] Touching `AddressPrefixes` → new address kind = an inline struct
+      literal row inside the function; new recognised network = a new
+      `addrPrefixSet` var plus a case in `lookupAddrPrefixSet`.
 - [ ] `BlockchainInfo != nil` branch and the `MaximumBlockSizes[0]` fallback
       preserved together; new params variant populates `MaximumBlockSizes`.
 - [ ] Any new `pageData` field read is inside an `RLock()`/`RUnlock()` window;
       no code holds `invsMtx` then waits on `pageData.Lock` (deadlocks against
       `Store` — see page-rendering impact).
-- [ ] No SKA / per-coin value injected into the VAR-only subsidy rows; new
-      amount rows are VAR via `amountAsDecimalParts`
+- [ ] No SKA / per-coin value injected into the VAR-only subsidy/stake
+      rows; new SKA rows live only in the dedicated SKA coin section, with
+      atom values pre-formatted via `formatAtomsAsCoinString` (or
+      `formatBigIntAsSKAString`) at the handler boundary
       (see [core/constraints.md#C1](../../core/constraints.md#C1)).
+- [ ] No Treasury content reintroduced — Monetarium has no treasury,
+      `BlockTaxProportion` is always zero, the section was deliberately
+      removed (spec §4).
+- [ ] PoW/PoS subsidy rows continue to read
+      `WorkRewardProportionV2`/`StakeRewardProportionV2`, not the legacy V1
+      fields and not `WorkSubsidyProportion()`/`StakeSubsidyProportion()`
+      (both return V1 = legacy 60/30).
 - [ ] Handler stays a pure function of startup `ChainParams` + last-tick
       `pageData` (it is registered under `withCache`; per-request variation
       serves stale cached bytes).

@@ -171,7 +171,7 @@ var explorerLinks = &links{
 	InsightAPIDocs:  "https://github.com/decred/dcrdata/blob/master/docs/Insight_API_documentation.md",
 	Github:          "https://github.com/monetarium/monetarium-explorer",
 	License:         "https://github.com/monetarium/monetarium-explorer/blob/main/LICENSE",
-	NetParams:       "https://github.com/decred/dcrd/blob/master/chaincfg/params.go",
+	NetParams:       "https://github.com/monetarium/monetarium-node/blob/master/chaincfg/params.go",
 	DownloadLink:    "https://decred.org/wallets/",
 }
 
