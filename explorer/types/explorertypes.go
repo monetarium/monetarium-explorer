@@ -716,16 +716,19 @@ type TrimmedBlockInfo struct {
 	FormattedBytes    string                           `json:"formatted_bytes"`
 	CoinFills         []CoinFillData                   `json:"coin_fills,omitempty"`
 	ActiveSKACount    int                              `json:"active_ska_count"`
-	RegularCoinCounts []CoinCount                      `json:"regular_coin_counts,omitempty"`
-	MaxBlockSize      float64                          `json:"max_block_size"`
+	RegularCoinCounts []CoinCount `json:"regular_coin_counts,omitempty"`
+	MaxBlockSize      float64        `json:"max_block_size"`
 }
 
 // Trim converts BlockInfo to TrimmedBlockInfo.
 func (bi *BlockInfo) Trim(maxBlockSize float64, issuedSKA []uint8) *TrimmedBlockInfo {
 	// Exclude coinbase from VAR fill bar.
 	coinbaseSize := int32(0)
-	if len(bi.Tx) > 0 {
-		coinbaseSize = bi.Tx[0].TxBasic.Size
+	for _, tx := range bi.Tx {
+		if tx.TxBasic != nil && tx.TxBasic.Coinbase {
+			coinbaseSize = tx.TxBasic.Size
+			break
+		}
 	}
 	stats := StatsFromCoinRows(bi.BlockBasic.CoinRows, coinbaseSize)
 	fills, _, activeSKACount := ComputeCoinFills(stats, maxBlockSize, issuedSKA)
@@ -739,7 +742,7 @@ func (bi *BlockInfo) Trim(maxBlockSize float64, issuedSKA []uint8) *TrimmedBlock
 		Votes:             bi.Votes,
 		Tickets:           bi.Tickets,
 		Revocations:       bi.Revs,
-		Transactions:      bi.Tx,
+		Transactions:      FilterRegularTx(bi.Tx),
 		Size:              bi.BlockBasic.Size,
 		FormattedBytes:    bi.BlockBasic.FormattedBytes,
 		CoinFills:         fills,
@@ -788,7 +791,7 @@ type BlockInfo struct {
 	TotalSentByCoin []CoinAmount `json:"-"`
 	// RegularCoinCounts is an ordered slice of regular transaction counts per coin type,
 	// for template rendering. Same ordering as TotalSentByCoin.
-	RegularCoinCounts []CoinCount `json:"-"`
+	RegularCoinCounts []CoinCount `json:"regular_coin_counts,omitempty"`
 	// FeesByCoin is an ordered slice of fees per coin type, for template rendering.
 	// VAR fees are total transaction fees in the block; SKA fees are SSFee distribution amounts
 	// (total SKA atoms distributed via TxTypeSSFee per coin type, i.e., fees collected from SKA outputs).
