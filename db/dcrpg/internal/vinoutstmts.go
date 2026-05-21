@@ -253,28 +253,28 @@ const (
 	SelectSKACoinSupplyPerBlock = `SELECT 
 		t.block_height, 
 		t.block_time, 
-		(COALESCE(vout_sums.total, 0) - COALESCE(vin_sums.total, 0))::text AS total
+		(COALESCE(vout_sums.delta, 0) - COALESCE(vin_sums.delta, 0))::text AS delta
 	FROM (
-		SELECT block_height, MIN(block_time) as block_time 
-		FROM transactions 
-		WHERE is_mainchain AND is_valid 
-		AND block_height > $1 
-		GROUP BY block_height
+		SELECT height as block_height, time as block_time
+		FROM blocks
+		WHERE is_mainchain AND height > $1
 	) t
 	LEFT JOIN (
-		SELECT transactions.block_height, sum(vouts.ska_value::numeric) as total
+		SELECT transactions.block_height, sum(vouts.ska_value::numeric) as delta
 		FROM vouts 
 		JOIN transactions ON vouts.tx_hash = transactions.tx_hash
 		WHERE vouts.coin_type = $2
-		AND vouts.script_type != 'nulldata'
+		AND vouts.script_type IS DISTINCT FROM 'nulldata'
 		AND transactions.is_mainchain AND transactions.is_valid
 		GROUP BY transactions.block_height
 	) vout_sums ON t.block_height = vout_sums.block_height
 	LEFT JOIN (
-		SELECT transactions.block_height, sum(vins.ska_value::numeric) as total
+		SELECT transactions.block_height, sum(vins.ska_value::numeric) as delta
 		FROM vins 
 		JOIN transactions ON vins.tx_hash = transactions.tx_hash
 		WHERE vins.coin_type = $2
+		-- Invariant: issuance inputs are identified by a zero prev_tx_hash.
+		-- These are excluded from the subtraction to correctly calculate circulating supply.
 		AND vins.prev_tx_hash != '\x0000000000000000000000000000000000000000000000000000000000000000'::bytea
 		AND transactions.is_mainchain AND transactions.is_valid
 		GROUP BY transactions.block_height

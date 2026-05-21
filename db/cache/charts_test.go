@@ -409,13 +409,13 @@ func TestAggregateSKASupply_DailyBins(t *testing.T) {
 	values := []string{
 		"100",
 		"300", // peak day 1
-		"200", // burn day 1
+		"200", // burn day 1 (closing value)
 		"400",
 		"500", // peak day 2
-		"300", // burn day 2
+		"300", // burn day 2 (closing value)
 		"700",
 		"800", // peak day 3
-		"600", // burn day 3
+		"600", // burn day 3 (closing value)
 	}
 	heights := []int64{10, 20, 30, 40, 50, 60, 70, 80, 90}
 
@@ -432,8 +432,8 @@ func TestAggregateSKASupply_DailyBins(t *testing.T) {
 		}
 	}
 
-	// Verify max-value aggregation (preserves peaks)
-	expected := []string{"300", "500", "800"}
+	// Verify last-value aggregation (end-of-day supply)
+	expected := []string{"200", "300", "600"}
 	for i, v := range dayValues {
 		if v != expected[i] {
 			t.Errorf("day %d: want %s, got %s", i, expected[i], v)

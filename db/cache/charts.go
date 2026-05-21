@@ -1824,7 +1824,7 @@ func ChartUintsFromStrings(data []string) ChartUints {
 }
 
 // aggregateSKASupply aggregates block-level SKA supply data to daily bins.
-// Returns timestamps (Unix time seconds), block heights, and values for each day.
+// It takes the last recorded supply value of each day to reflect the end-of-day supply.
 func aggregateSKASupply(timestamps []int64, heights []int64, values []string) ([]int64, []int64, []string) {
 	if len(timestamps) == 0 {
 		return nil, nil, nil
@@ -1841,12 +1841,11 @@ func aggregateSKASupply(timestamps []int64, heights []int64, values []string) ([
 		dayKey := t / 86400
 		if i < len(values) && i < len(heights) {
 			if v, ok := new(big.Int).SetString(values[i], 10); ok {
-				if existing, found := dailyMap[dayKey]; !found || v.Cmp(existing.value) > 0 {
-					dailyMap[dayKey] = dailyData{
-						timestamp: t,
-						height:    heights[i],
-						value:     v,
-					}
+				// Overwrite with the latest value for the day to capture end-of-day supply.
+				dailyMap[dayKey] = dailyData{
+					timestamp: t,
+					height:    heights[i],
+					value:     v,
 				}
 			}
 		}
