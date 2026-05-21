@@ -158,6 +158,7 @@ const (
 		spend_tx_row_id INT8
 	);`
 
+
 	// insertVoutRow is the basis for several vout insert/upsert statements.
 	insertVoutRow = `INSERT INTO vouts (tx_hash, tx_index, tx_tree, value, coin_type,
 		version, script_type, script_addresses, mixed, ska_value)
@@ -266,6 +267,7 @@ const (
 		FROM vouts 
 		JOIN transactions ON vouts.tx_hash = transactions.tx_hash
 		WHERE vouts.coin_type = $2
+		AND vouts.script_type != 'nulldata'
 		AND transactions.is_mainchain AND transactions.is_valid
 		GROUP BY transactions.block_height
 	) vout_sums ON t.block_height = vout_sums.block_height
@@ -274,10 +276,10 @@ const (
 		FROM vins 
 		JOIN transactions ON vins.tx_hash = transactions.tx_hash
 		WHERE vins.coin_type = $2
+		AND vins.prev_tx_hash != '\x0000000000000000000000000000000000000000000000000000000000000000'::bytea
 		AND transactions.is_mainchain AND transactions.is_valid
 		GROUP BY transactions.block_height
 	) vin_sums ON t.block_height = vin_sums.block_height
-	WHERE (COALESCE(vout_sums.total, 0) - COALESCE(vin_sums.total, 0)) != 0
 	ORDER BY t.block_height;`
 
 	// SelectVARCoinSupplyPerBlock fetches the cumulative VAR supply per block.

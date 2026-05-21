@@ -1827,10 +1827,12 @@ func aggregateSKASupply(timestamps []int64, heights []int64, values []string) ([
 		dayKey := t / 86400
 		if i < len(values) && i < len(heights) {
 			if v, ok := new(big.Int).SetString(values[i], 10); ok {
-				dailyMap[dayKey] = dailyData{
-					timestamp: t,
-					height:    heights[i],
-					value:     v,
+				if existing, found := dailyMap[dayKey]; !found || v.Cmp(existing.value) > 0 {
+					dailyMap[dayKey] = dailyData{
+						timestamp: t,
+						height:    heights[i],
+						value:     v,
+					}
 				}
 			}
 		}
