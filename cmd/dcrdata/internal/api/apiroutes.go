@@ -1948,6 +1948,8 @@ func (c *appContext) getTreasuryIO(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, data, m.GetIndentCtx(r))
 }
 
+const skaSupplyStaleHeightThreshold = 10 // approx. 10-20 mins staleness budget
+
 func (c *appContext) ChartTypeData(w http.ResponseWriter, r *http.Request) {
 	chartType := m.GetChartTypeCtx(r)
 	bin := r.URL.Query().Get("bin")
@@ -1960,14 +1962,13 @@ func (c *appContext) ChartTypeData(w http.ResponseWriter, r *http.Request) {
 	if c.charts != nil && cache.IsSKASupplyChart(chartType) {
 		coinType := cache.SkaCoinType(chartType)
 		if coinType > 0 {
-			currHeight, err := c.DataSource.GetHeight(r.Context())
-			reload := false
-			if err != nil {
-				log.Warnf("ChartTypeData: failed to get current height: %v", err)
-			} else {
-				if cachedHeight, ok := c.charts.SKASupplyHeight(coinType); !ok || currHeight-cachedHeight > 10 {
+			reload := !c.charts.SKASupplyExists(coinType)
+			if currHeight, err := c.DataSource.GetHeight(r.Context()); err == nil {
+				if cachedHeight, ok := c.charts.SKASupplyHeight(coinType); !ok || currHeight-cachedHeight > skaSupplyStaleHeightThreshold {
 					reload = true
 				}
+			} else {
+				log.Warnf("ChartTypeData: failed to get current height: %v", err)
 			}
 
 			if reload {

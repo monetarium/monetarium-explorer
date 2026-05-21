@@ -459,6 +459,8 @@ type ChartData struct {
 	updateMtx    sync.Mutex
 	updaters     []ChartUpdater
 	SKASupply    SKASupplyData
+	// Lock() must be held when mutating SKASupply.
+	SKASupplyMtx sync.RWMutex
 }
 
 // ValidateLengths checks that the length of all arguments is equal.
@@ -869,8 +871,8 @@ func (charts *ChartData) SKASupplyExists(coinType uint8) bool {
 	if charts == nil {
 		return false
 	}
-	charts.mtx.RLock()
-	defer charts.mtx.RUnlock()
+	charts.SKASupplyMtx.RLock()
+	defer charts.SKASupplyMtx.RUnlock()
 	if charts.SKASupply == nil {
 		return false
 	}
@@ -880,8 +882,8 @@ func (charts *ChartData) SKASupplyExists(coinType uint8) bool {
 
 // SKASupplyHeight returns the height of the last recorded block for the given coin type.
 func (charts *ChartData) SKASupplyHeight(coinType uint8) (int64, bool) {
-	charts.mtx.RLock()
-	defer charts.mtx.RUnlock()
+	charts.SKASupplyMtx.RLock()
+	defer charts.SKASupplyMtx.RUnlock()
 	if charts.SKASupply == nil {
 		return 0, false
 	}

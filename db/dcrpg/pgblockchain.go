@@ -1065,11 +1065,13 @@ func (pgb *ChainDB) skaSupplyUpdater(charts *cache.ChartData) error {
 				cumulativeValues = append(cumulativeValues, runningTotal.String())
 			}
 
+			charts.SKASupplyMtx.Lock()
 			charts.SKASupply[coinType] = cache.SKASupplyChartData{
 				Heights:    blockHeights,
 				Timestamps: timestamps,
 				Values:     cumulativeValues,
 			}
+			charts.SKASupplyMtx.Unlock()
 		}
 	}
 
@@ -1127,11 +1129,13 @@ func (pgb *ChainDB) LoadSKASupplyForCoin(ctx context.Context, charts *cache.Char
 			cumulativeValues = append(cumulativeValues, runningTotal.String())
 		}
 
+		charts.SKASupplyMtx.Lock()
 		charts.SKASupply[coinType] = cache.SKASupplyChartData{
 			Heights:    blockHeights,
 			Timestamps: timestamps,
 			Values:     cumulativeValues,
 		}
+		charts.SKASupplyMtx.Unlock()
 		return nil
 	}
 
