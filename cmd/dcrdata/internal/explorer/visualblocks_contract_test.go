@@ -15,35 +15,38 @@ func TestVisualBlocksDataContract(t *testing.T) {
 	issuedSKA := []uint8{1, 2}
 	maxBlockSize := float64(params.MaximumBlockSizes[0])
 
-	t.Run("BlockContractWireFormat", func(t *testing.T) {
-		rows := []types.CoinRowData{
-			{CoinType: 0, Symbol: "VAR", TxCount: 1, Amount: "100", Size: 10000},
-			{CoinType: 1, Symbol: "SKA1", TxCount: 1, Amount: "50", Size: 5000},
-		}
-
-		// Create a block where coinbase is NOT the first transaction to test sorting/search.
-		bi := &types.BlockInfo{
-			BlockBasic: &types.BlockBasic{
-				Size:     15000,
-				CoinRows: rows,
-			},
-			Tx: []*types.TrimmedTxInfo{
-				{
-					TxBasic: &types.TxBasic{
-						Size:  3000,
-						Total: 1000000, // High total to be first in sort
-						VoteInfo: &types.VoteInfo{
-							Validation: types.BlockValidation{Validity: true},
-						},
+	// Robust shared fixture to verify both transports and the coinbase search logic.
+	rows := []types.CoinRowData{
+		{CoinType: 0, Symbol: "VAR", TxCount: 1, Amount: "100", Size: 10000},
+		{CoinType: 1, Symbol: "SKA1", TxCount: 1, Amount: "50", Size: 5000},
+	}
+	bi := &types.BlockInfo{
+		BlockBasic: &types.BlockBasic{
+			Size:     15000,
+			CoinRows: rows,
+		},
+		Tx: []*types.TrimmedTxInfo{
+			{
+				TxBasic: &types.TxBasic{
+					Size:  3000,
+					Total: 1000000, // High total ensures it's before coinbase in typical sort
+					VoteInfo: &types.VoteInfo{
+						Validation: types.BlockValidation{Validity: true},
 					},
-					Voted: true,
 				},
-				{
-					TxBasic: &types.TxBasic{Size: 2000, Coinbase: true, Total: 100},
-				},
+				Voted: true,
 			},
-		}
+			{
+				TxBasic: &types.TxBasic{Size: 2000, Coinbase: true, Total: 100},
+			},
+		},
+		RegularCoinCounts: []types.CoinCount{
+			{CoinType: 0, Symbol: "VAR", Count: 1},
+			{CoinType: 1, Symbol: "SKA1", Count: 1},
+		},
+	}
 
+	t.Run("BlockContractWireFormat", func(t *testing.T) {
 		trimmed := bi.Trim(maxBlockSize, issuedSKA)
 		data, err := json.Marshal(trimmed)
 		if err != nil {
@@ -81,45 +84,36 @@ func TestVisualBlocksDataContract(t *testing.T) {
 		}
 	})
 
-	t.Run("BlockWSWireFormat", func(t *testing.T) {
-		rows := []types.CoinRowData{
-			{CoinType: 0, Symbol: "VAR", TxCount: 1, Amount: "100", Size: 10000},
-		}
-		bi := &types.BlockInfo{
-			BlockBasic: &types.BlockBasic{
-				Size:     15000,
-				CoinRows: rows,
-			},
-			Tx: []*types.TrimmedTxInfo{
-				{TxBasic: &types.TxBasic{Size: 2000, Coinbase: true}},
-			},
-			RegularCoinCounts: []types.CoinCount{
-				{CoinType: 0, Symbol: "VAR", Count: 1},
-			},
-		}
-
-		// Simulate WS handler's patch sequence
+	t.Run("BlockWSWireFormatEquivalence", func(t *testing.T) {
+		// 1. Generate HTTP wire as the gold standard
 		trimmed := bi.Trim(maxBlockSize, issuedSKA)
+		httpData, _ := json.Marshal(trimmed)
+		var httpWire map[string]interface{}
+		json.Unmarshal(httpData, &httpWire)
+
+		// 2. Generate WS wire (simulate handler's patch sequence)
 		blockCopy := *bi
 		blockCopy.CoinFills = trimmed.CoinFills
 		blockCopy.ActiveSKACount = trimmed.ActiveSKACount
 		blockCopy.MaxBlockSize = trimmed.MaxBlockSize
 
-		data, err := json.Marshal(blockCopy)
+		wsData, err := json.Marshal(blockCopy)
 		if err != nil {
 			t.Fatalf("Marshal failed: %v", err)
 		}
-
-		var wire map[string]interface{}
-		if err := json.Unmarshal(data, &wire); err != nil {
+		var wsWire map[string]interface{}
+		if err := json.Unmarshal(wsData, &wsWire); err != nil {
 			t.Fatalf("Unmarshal failed: %v", err)
 		}
 
-		// Assert contract fields are present in WS JSON
-		fields := []string{"regular_coin_counts", "coin_fills", "active_ska_count", "max_block_size"}
-		for _, f := range fields {
-			if wire[f] == nil {
-				t.Errorf("Wire WS Block: field %s is missing", f)
+		// 3. Verify that the data contract fields are IDENTICAL across transports
+		contractFields := []string{"regular_coin_counts", "coin_fills", "active_ska_count", "max_block_size"}
+		for _, f := range contractFields {
+			// Use JSON marshaling to compare potentially complex types like slices
+			hVal, _ := json.Marshal(httpWire[f])
+			wVal, _ := json.Marshal(wsWire[f])
+			if string(hVal) != string(wVal) {
+				t.Errorf("Cross-transport mismatch for field %s: HTTP=%s, WS=%s", f, string(hVal), string(wVal))
 			}
 		}
 	})
