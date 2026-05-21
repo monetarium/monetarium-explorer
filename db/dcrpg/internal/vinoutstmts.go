@@ -158,7 +158,6 @@ const (
 		spend_tx_row_id INT8
 	);`
 
-
 	// insertVoutRow is the basis for several vout insert/upsert statements.
 	insertVoutRow = `INSERT INTO vouts (tx_hash, tx_index, tx_tree, value, coin_type,
 		version, script_type, script_addresses, mixed, ska_value)
