@@ -168,7 +168,7 @@ type links struct {
 var explorerLinks = &links{
 	CoinbaseComment: "https://github.com/decred/dcrd/blob/2a18beb4d56fe59d614a7309308d84891a0cba96/chaincfg/genesis.go#L17-L53",
 	POSExplanation:  "https://docs.decred.org/proof-of-stake/overview/",
-	APIDocs:         "https://github.com/decred/dcrdata#apis",
+	APIDocs:         "https://github.com/monetarium/monetarium-explorer#apis",
 	InsightAPIDocs:  "https://github.com/decred/dcrdata/blob/master/docs/Insight_API_documentation.md",
 	Github:          "https://github.com/monetarium/monetarium-explorer",
 	License:         "https://github.com/monetarium/monetarium-explorer/blob/main/LICENSE",
