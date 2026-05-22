@@ -18,59 +18,32 @@
                 class="no-underline title fw-bold"
                 href="/blocks"
                 data-visualBlocks-target="title"
-                href="/blocks"
             >Latest Blocks</a>
             <div
                 class="blocks-holder"
                 data-visualBlocks-target="box"
             >
-                <!-- add mempool element -->
+                <!-- Mempool tile -->
                 {{with .Mempool}}
                 <div class="block visible" data-visualBlocks-target="block">
                     <div class="block-info">
                         <a class="color-code" href="/mempool">Mempool</a>
                         <div class="mono amount" style="line-height: 1;">
-                                <span>{{template "decimalParts" (float64AsDecimalParts .Total 0 false)}}</span>
-                            <span class="unit"> DCR</span>
+                            <span class="size">{{formatBytes .TotalSize}}</span>
+                            {{if gt .MaxBlockSize 0.0}}
+                            <span class="size-pct">{{printf "%.0f" (mulf .TotalFillRatio 100.0)}}%</span>
+                            {{end}}
                         </div>
                         <span class="timespan">
                             <span data-time-target="age" data-age="{{.Time}}"></span>&nbsp;ago
                         </span>
                     </div>
                     <div class="block-rows">
-                        <div class="block-rewards" style="flex-grow: 1">
-                            <span class="pow" style="flex-grow: {{toFloat64Amount .Subsidy.PoW}}"
-                                title='{"object": "PoW Reward", "total": "{{toFloat64Amount .Subsidy.PoW}}"}'
-                                data-visualBlocks-target="tooltip">
-                                <a class="block-element-link" href="#">
-                                    <span class="paint" style="width: {{intMultiply (len .Votes) 20}}%"></span>
-                                </a>
-                            </span>
-                            <span class="pos" style="flex-grow: {{toFloat64Amount .Subsidy.PoS}}"
-                                title='{"object": "PoS Reward", "total": "{{toFloat64Amount .Subsidy.PoS}}"}'
-                                data-visualBlocks-target="tooltip">
-                                <a class="block-element-link" href="#">
-                                    <span class="paint" style="width: {{intMultiply (len .Votes) 20}}%"></span>
-                                </a>
-                            </span>
-                            <span class="fund" style="flex-grow: {{toFloat64Amount .Subsidy.Dev}}"
-                                title='{"object": "Project Fund", "total": "{{toFloat64Amount .Subsidy.Dev}}"}'
-                                data-visualBlocks-target="tooltip">
-                                <a class="block-element-link" href="#">
-                                    <span class="paint" style="width: {{intMultiply (len .Votes) 20}}%"></span>
-                                </a>
-                            </span>
-                            <span class="fees" style="flex-grow: {{.Fees}}"
-                                title='{"object": "Tx Fees", "total": "{{.Fees}}"}'
-                                data-visualBlocks-target="tooltip">
-                                <a class="block-element-link" href="#"></a>
-                            </span>
-                        </div>
-
                         <div class="block-votes" style="flex-grow: 1">
                         {{range .Votes}}
-                            <span style="background-color: {{if .VoteValid}}#2971ff{{else}}rgba(253, 113, 74, 0.8){{end}}"
-                                title='{"object": "Vote", "voteValid": "{{.VoteValid}}"}'>
+                            <span class="{{if .Voted}}{{if .VoteValid}}vote-yes{{else}}vote-no{{end}}{{else}}vote-skip{{end}}"
+                                title='{"object": "Vote", "coin": "VAR", "voted": "{{.Voted}}", "voteValid": "{{.VoteValid}}"}'
+                                data-visualBlocks-target="tooltip">
                                 <a class="block-element-link" href="/tx/{{.TxID}}"></a>
                             </span>
                         {{end}}
@@ -83,25 +56,25 @@
                         </div>
 
                         <div class="block-tickets" style="flex-grow: 1">
-                        <!-- show tickets before revs, if tickets are more than 50, truncate at 30 and show more tip -->
                         {{$tickets := .Tickets}}
                         {{$ticketsCount := len .Tickets}}
                         {{if gt $ticketsCount 50}} {{$tickets = clipSlice .Tickets 30}} {{end}}
                         {{range $tickets}}
                         <span class="block-ticket"
-                            title='{"object": "Ticket", "total": "{{.Total}}", "vout": "{{.VoutCount}}", "vin": "{{.VinCount}}"}'>
+                            title='{"object": "Ticket", "coin": "VAR", "total": "{{.Total}}", "vout": "{{.VoutCount}}", "vin": "{{.VinCount}}"}'
+                            data-visualBlocks-target="tooltip">
                             <a class="block-element-link" href="/tx/{{.TxID}}"></a>
                         </span>
                         {{end}}
                         {{if gt $ticketsCount 50}}
-                        <!-- show total number of tickets -->
                         <span class="block-ticket" style="flex-grow: 10; flex-basis: 50px;" title="Total of {{$ticketsCount}} tickets">
                             <a class="block-element-link" href="#">+ {{intSubtract $ticketsCount 30}}</a>
                         </span>
                         {{end}}
                         {{range .Revocations}}
                         <span class="block-rev"
-                            title='{"object": "Revocation", "total": "{{.Total}}", "vout": "{{.VoutCount}}", "vin": "{{.VinCount}}"}'>
+                            title='{"object": "Revocation", "coin": "VAR", "total": "{{.Total}}", "vout": "{{.VoutCount}}", "vin": "{{.VinCount}}"}'
+                            data-visualBlocks-target="tooltip">
                             <a class="block-element-link" href="/tx/{{.TxID}}"></a>
                         </span>
                         {{end}}
@@ -111,74 +84,82 @@
                         {{end}}
                         </div>
 
-                        <div class="block-transactions" style="flex-grow: 1">
-                        {{$txs := .Transactions}}
-                        {{$txCount := len .Transactions}}
-                        {{if gt $txCount 50}} {{$txs = clipSlice .Transactions 30}} {{end}}
-                        {{range $txs}}
-                        <span class="block-tx" style="flex-grow: {{.Total}}"
-                            title='{"object": "Transaction", "total": "{{.Total}}", "vout": "{{.VoutCount}}", "vin": "{{.VinCount}}"}'>
-                            <a class="block-element-link" href="/tx/{{.TxID}}"></a>
-                        </span>
-                        {{end}}
-                        {{if gt $txCount 50}}
-                        <!-- show total number of tickets -->
-                        <span class="block-ticket" style="flex-grow: 10; flex-basis: 50px;" title="Total of {{$txCount}} transactions">
-                            <a class="block-element-link" href="#">+ {{intSubtract $txCount 30}}</a>
-                        </span>
-                        {{end}}
+                        {{$stats := .CoinStats}}
+                        <div class="indicator-fill block-indicator-fill" data-visualBlocks-target="indicator">
+                            <div class="total-bar"
+                                role="meter"
+                                aria-valuemin="0"
+                                aria-valuemax="100"
+                                aria-valuenow="{{printf "%.0f" (mulf .TotalFillRatio 100.0)}}"
+                                aria-label="Total mempool fill"
+                                title='{"object": "FillBar", "coin": "TOTAL", "txCount": "{{sumMempoolRegularCounts $stats}}"}'
+                                data-visualBlocks-target="tooltip"
+                                {{if gt .TotalFillRatio 1.0}}data-overflow="true"{{end}}
+                                {{if eq .TotalFillRatio 0.0}}data-empty="true"{{end}}>
+                                <span class="total-bar__label">TOTAL</span>
+                                <div class="total-bar__track">
+                                    <div class="total-bar__fill"
+                                        style="--seg-w: {{printf "%.4f%%" (mulf (minf .TotalFillRatio 1.0) 100.0)}}"></div>
+                                </div>
+                                <span class="total-bar__pct">{{printf "%.1f" (mulf .TotalFillRatio 100.0)}}%</span>
+                            </div>
+                            {{range .CoinFills}}
+                            <div class="fill-bar"
+                                role="meter"
+                                aria-valuemin="0"
+                                aria-valuemax="100"
+                                aria-valuenow="{{printf "%.0f" .PctOfTC}}"
+                                aria-label="{{.Symbol}} — {{.Status}}"
+                                data-coin="{{.Symbol}}"
+                                title='{"object": "FillBar", "coin": "{{.Symbol}}", "txCount": "{{mempoolRegularCountForSymbol $stats .Symbol}}"}'
+                                data-visualBlocks-target="tooltip"
+                                {{if .IsOverflow}}data-overflow="true"{{end}}>
+                                <span class="fill-bar__label">{{.Symbol}}</span>
+                                <div class="fill-bar__track"
+                                    data-status="{{.Status}}"
+                                    style="--gq-pos: {{printf "%.6f" .GQPositionRatio}}">
+                                    <div class="gq-segment"
+                                        {{if eq .GQFillRatio 0.0}}hidden{{end}}
+                                        style="--seg-w: {{printf "%.4f%%" (mulf (mulf .GQFillRatio .GQPositionRatio) 100.0)}}"></div>
+                                    <div class="extra-segment"
+                                        {{if eq .ExtraFillRatio 0.0}}hidden{{end}}
+                                        style="--seg-w: {{printf "%.4f%%" (mulf .ExtraFillRatio 100.0)}}"></div>
+                                    <div class="overflow-segment overflow-hatch"
+                                        {{if eq .OverflowFillRatio 0.0}}hidden{{end}}
+                                        style="--seg-w: {{printf "%.4f%%" (mulf .OverflowFillRatio 100.0)}}"></div>
+                                    <div class="gq-marker" style="left: {{printf "%.4f" (mulf .GQPositionRatio 100.0)}}%">
+                                    </div>
+                                </div>
+                                <span class="fill-bar__pct">{{printf "%.1f" .PctOfTC}}%</span>
+                            </div>
+                            {{end}}
                         </div>
                     </div>
                 </div>
                 {{end}}
 
+                <!-- Block tiles -->
                 {{range $index, $block := .Blocks}}
                 <div class="{{if lt $index 10}}block visible{{else}}block{{end}}" data-visualBlocks-target="block">
                 {{with $block}}
                     <div class="block-info">
                         <a class="color-code" href="/block/{{.Height}}">{{.Height}}</a>
                         <div class="mono amount" style="line-height: 1;">
-                            <span>{{template "decimalParts" (float64AsDecimalParts .Total 0 false)}}</span>
-                            <span class="unit"> DCR</span>
+                            <span class="size">{{formatBytes .Size}}</span>
+                            {{if gt .MaxBlockSize 0.0}}
+                            <span class="size-pct">{{printf "%.0f" (mulf .TotalFillRatio 100.0)}}%</span>
+                            {{end}}
                         </div>
                         <span class="timespan">
                             <span data-time-target="age" data-age="{{.Time.UNIX}}"></span>&nbsp;ago
                         </span>
                     </div>
                     <div class="block-rows">
-                        <div class="block-rewards" style="flex-grow: 1">
-                            <span class="pow" style="flex-grow: {{toFloat64Amount .Subsidy.PoW}}"
-                                title='{"object": "PoW Reward", "total": "{{toFloat64Amount .Subsidy.PoW}}"}'
-                                data-visualBlocks-target="tooltip">
-                                <a class="block-element-link" href="#">
-                                    <span class="paint" style="width: {{intMultiply (len .Votes) 20}}%"></span>
-                                </a>
-                            </span>
-                            <span class="pos" style="flex-grow: {{toFloat64Amount .Subsidy.PoS}}"
-                                title='{"object": "PoS Reward", "total": "{{toFloat64Amount .Subsidy.PoS}}"}'
-                                data-visualBlocks-target="tooltip">
-                                <a class="block-element-link" href="#">
-                                    <span class="paint" style="width: {{intMultiply (len .Votes) 20}}%"></span>
-                                </a>
-                            </span>
-                            <span class="fund" style="flex-grow: {{toFloat64Amount .Subsidy.Developer}}"
-                                title='{"object": "Project Fund", "total": "{{toFloat64Amount .Subsidy.Developer}}"}'
-                                data-visualBlocks-target="tooltip">
-                                <a class="block-element-link" href="#">
-                                    <span class="paint" style="width: {{intMultiply (len .Votes) 20}}%"></span>
-                                </a>
-                            </span>
-                            <span class="fees" style="flex-grow: {{.Fees}}"
-                                title='{"object": "Tx Fees", "total": "{{.Fees}}"}'
-                                data-visualBlocks-target="tooltip">
-                                <a class="block-element-link" href="#"></a>
-                            </span>
-                        </div>
-
                         <div class="block-votes" style="flex-grow: 1">
                         {{range .Votes}}
-                            <span style="background-color: {{if .VoteValid}}#2971ff{{else}}rgba(253, 113, 74, 0.8){{end}}"
-                                title='{"object": "Vote", "voteValid": "{{.VoteValid}}"}'>
+                            <span class="{{if .Voted}}{{if .VoteValid}}vote-yes{{else}}vote-no{{end}}{{else}}vote-skip{{end}}"
+                                title='{"object": "Vote", "coin": "VAR", "voted": "{{.Voted}}", "voteValid": "{{.VoteValid}}"}'
+                                data-visualBlocks-target="tooltip">
                                 <a class="block-element-link" href="/tx/{{.TxID}}"></a>
                             </span>
                         {{end}}
@@ -191,25 +172,25 @@
                         </div>
 
                         <div class="block-tickets" style="flex-grow: 1">
-                        <!-- show tickets before revs, if tickets are more than 50, truncate at 30 and show more tip -->
                         {{$tickets := .Tickets}}
                         {{$ticketsCount := len .Tickets}}
                         {{if gt $ticketsCount 50}} {{$tickets = clipSlice .Tickets 30}} {{end}}
                         {{range $tickets}}
                         <span class="block-ticket"
-                            title='{"object": "Ticket", "total": "{{.Total}}", "vout": "{{.VoutCount}}", "vin": "{{.VinCount}}"}'>
+                            title='{"object": "Ticket", "coin": "VAR", "total": "{{.Total}}", "vout": "{{.VoutCount}}", "vin": "{{.VinCount}}"}'
+                            data-visualBlocks-target="tooltip">
                             <a class="block-element-link" href="/tx/{{.TxID}}"></a>
                         </span>
                         {{end}}
                         {{if gt $ticketsCount 50}}
-                        <!-- show total number of tickets -->
                         <span class="block-ticket" style="flex-grow: 10; flex-basis: 50px;" title="Total of {{$ticketsCount}} tickets">
                             <a class="block-element-link" href="#">+ {{intSubtract $ticketsCount 30}}</a>
                         </span>
                         {{end}}
                         {{range .Revocations}}
                         <span class="block-rev"
-                            title='{"object": "Revocation", "total": "{{.Total}}", "vout": "{{.VoutCount}}", "vin": "{{.VinCount}}"}'>
+                            title='{"object": "Revocation", "coin": "VAR", "total": "{{.Total}}", "vout": "{{.VoutCount}}", "vin": "{{.VinCount}}"}'
+                            data-visualBlocks-target="tooltip">
                             <a class="block-element-link" href="/tx/{{.TxID}}"></a>
                         </span>
                         {{end}}
@@ -219,22 +200,55 @@
                         {{end}}
                         </div>
 
-                        <div class="block-transactions" data-visualBlocks-target="txs" style="flex-grow: 1">
-                        {{$txs := .Transactions}}
-                        {{$txCount := len .Transactions}}
-                        {{if gt $txCount 50}} {{$txs = clipSlice .Transactions 30}} {{end}}
-                        {{range $txs}}
-                        <span class="block-tx" style="flex-grow: {{.Total}}"
-                            title='{"object": "Transaction", "total": "{{.Total}}", "vout": "{{.VoutCount}}", "vin": "{{.VinCount}}"}'>
-                            <a class="block-element-link" href="/tx/{{.TxID}}"></a>
-                        </span>
-                        {{end}}
-                        {{if gt $txCount 50}}
-                        <!-- show total number of tickets -->
-                        <span class="block-ticket" style="flex-grow: 10; flex-basis: 50px;" title="Total of {{$txCount}} transactions">
-                            <a class="block-element-link" href="#">+ {{intSubtract $txCount 30}}</a>
-                        </span>
-                        {{end}}
+                        {{$regCounts := .RegularCoinCounts}}
+                        <div class="indicator-fill block-indicator-fill" data-visualBlocks-target="indicator">
+                            <div class="total-bar"
+                                role="meter"
+                                aria-valuemin="0"
+                                aria-valuemax="100"
+                                aria-valuenow="{{printf "%.0f" (mulf .TotalFillRatio 100.0)}}"
+                                aria-label="Total block fill"
+                                title='{"object": "FillBar", "coin": "TOTAL", "txCount": "{{sumRegularCoinCounts $regCounts}}"}'
+                                data-visualBlocks-target="tooltip"
+                                {{if gt .TotalFillRatio 1.0}}data-overflow="true"{{end}}
+                                {{if eq .TotalFillRatio 0.0}}data-empty="true"{{end}}>
+                                <span class="total-bar__label">TOTAL</span>
+                                <div class="total-bar__track">
+                                    <div class="total-bar__fill"
+                                        style="--seg-w: {{printf "%.4f%%" (mulf (minf .TotalFillRatio 1.0) 100.0)}}"></div>
+                                </div>
+                                <span class="total-bar__pct">{{printf "%.1f" (mulf .TotalFillRatio 100.0)}}%</span>
+                            </div>
+                            {{range .CoinFills}}
+                            <div class="fill-bar"
+                                role="meter"
+                                aria-valuemin="0"
+                                aria-valuemax="100"
+                                aria-valuenow="{{printf "%.0f" .PctOfTC}}"
+                                aria-label="{{.Symbol}} — {{.Status}}"
+                                data-coin="{{.Symbol}}"
+                                title='{"object": "FillBar", "coin": "{{.Symbol}}", "txCount": "{{regularCountForSymbol $regCounts .Symbol}}"}'
+                                data-visualBlocks-target="tooltip"
+                                {{if .IsOverflow}}data-overflow="true"{{end}}>
+                                <span class="fill-bar__label">{{.Symbol}}</span>
+                                <div class="fill-bar__track"
+                                    data-status="{{.Status}}"
+                                    style="--gq-pos: {{printf "%.6f" .GQPositionRatio}}">
+                                    <div class="gq-segment"
+                                        {{if eq .GQFillRatio 0.0}}hidden{{end}}
+                                        style="--seg-w: {{printf "%.4f%%" (mulf (mulf .GQFillRatio .GQPositionRatio) 100.0)}}"></div>
+                                    <div class="extra-segment"
+                                        {{if eq .ExtraFillRatio 0.0}}hidden{{end}}
+                                        style="--seg-w: {{printf "%.4f%%" (mulf .ExtraFillRatio 100.0)}}"></div>
+                                    <div class="overflow-segment overflow-hatch"
+                                        {{if eq .OverflowFillRatio 0.0}}hidden{{end}}
+                                        style="--seg-w: {{printf "%.4f%%" (mulf .OverflowFillRatio 100.0)}}"></div>
+                                    <div class="gq-marker" style="left: {{printf "%.4f" (mulf .GQPositionRatio 100.0)}}%">
+                                    </div>
+                                </div>
+                                <span class="fill-bar__pct">{{printf "%.1f" .PctOfTC}}%</span>
+                            </div>
+                            {{end}}
                         </div>
                     </div>
                 {{end}}

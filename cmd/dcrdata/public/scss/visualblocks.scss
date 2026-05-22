@@ -59,6 +59,7 @@
   width: 100%;
   display: flex;
   justify-content: space-between;
+  align-items: baseline;
   padding: 0.2em 0.5em;
   transition: 0.2s ease-in-out;
   overflow: hidden;
@@ -69,6 +70,16 @@
 .block-info .amount {
   flex-grow: 1;
   text-align: center;
+}
+
+.block-info .amount .size {
+  font-weight: 600;
+}
+
+.block-info .amount .size-pct {
+  margin-left: 0.35em;
+  color: #8997a5;
+  font-size: 0.85em;
 }
 
 .block-info a.color-code {
@@ -92,16 +103,8 @@
   padding: 1px;
 }
 
-.block-rows .block-rewards > span {
-  position: relative;
-  flex-basis: 10px;
-  flex-grow: 1;
-}
-
-.block-rows .block-rewards,
 .block-rows .block-votes,
-.block-rows .block-tickets,
-.block-rows .block-transactions {
+.block-rows .block-tickets {
   flex-basis: 5px;
   flex-grow: 1;
   width: 100%;
@@ -111,53 +114,16 @@
   border-top: 1px solid white;
 }
 
-.block-rows .block-rewards {
-  border-top: none;
-}
-
-.block-rows .block-rewards > span,
 .block-rows .block-votes > span,
-.block-rows .block-tickets > span,
-.block-rows .block-transactions > span {
+.block-rows .block-tickets > span {
+  flex-basis: 5px;
+  flex-grow: 1;
   border-left: 1px solid white;
 }
 
-.block-rows .block-votes > span,
-.block-rows .block-tickets > span,
-.block-rows .block-transactions > span {
-  flex-basis: 5px;
-  flex-grow: 1;
-}
-
-.block-rows .block-rewards > span:first-child,
 .block-rows .block-votes > span:first-child,
-.block-rows .block-tickets > span:first-child,
-.block-rows .block-transactions > span:first-child {
+.block-rows .block-tickets > span:first-child {
   border-left: none;
-}
-
-.block-rows .block-rewards .paint {
-  position: absolute;
-  left: 0;
-  top: 0;
-  height: 100%;
-  background-color: #2ed6a1;
-}
-
-.block-rows .block-rewards .pow .paint {
-  opacity: 0.4;
-}
-
-.block-rows .block-rewards .pos .paint {
-  opacity: 0.6;
-}
-
-.block-rows .block-rewards .fund .paint {
-  opacity: 0.8;
-}
-
-.block-rows .block-rewards > .fees {
-  background-color: #2ed6a1;
 }
 
 .block-rows .block-element-link {
@@ -169,6 +135,24 @@
   color: #5a5a5a;
 }
 
+.block-rows .block-element-link,
+.block-rows .block-element-link:hover {
+  text-decoration: none;
+}
+
+// Three vote states (replaces inline background-color in legacy template).
+.block-rows .block-votes .vote-yes {
+  background-color: #2971ff;
+}
+
+.block-rows .block-votes .vote-no {
+  background-color: rgba(253 113 74 / 80%);
+}
+
+.block-rows .block-votes .vote-skip {
+  background-color: #c4cbd2;
+}
+
 .block-rows .block-tickets .block-ticket {
   background-color: #ffc84d;
 }
@@ -177,13 +161,41 @@
   background-color: #fd714a;
 }
 
-.block-rows .block-transactions .block-tx {
-  background-color: #c4cbd2;
-}
+// Indicator-fill bars (TOTAL + per-coin) replacing the legacy block-transactions row.
+// Reuses the shared `.indicator-fill` component from `_indicator-fill.scss`; the
+// rules below shrink it to fit the compact tile context on /visualblocks.
+// Weight `flex-grow: 2` so votes + tickets (each `flex-grow: 1`) keep their
+// original ~22px thickness while the indicator-fill row gets ~45px to host
+// three sub-bars (TOTAL + VAR + SKAn).
+.block-rows .block-indicator-fill {
+  flex-grow: 2;
+  flex-basis: 5px;
+  padding: 2px;
+  gap: 2px;
+  border-top: 1px solid white;
 
-.block-rows .block-element-link,
-.block-rows .block-element-link:hover {
-  text-decoration: none;
+  .fill-bar,
+  .total-bar {
+    gap: 0.25rem;
+  }
+
+  .fill-bar__label,
+  .total-bar__label {
+    flex: 0 0 2.25rem;
+    font-size: 0.65rem;
+    font-weight: 600;
+  }
+
+  .fill-bar__pct,
+  .total-bar__pct {
+    flex: 0 0 2.5rem;
+    font-size: 0.65rem;
+  }
+
+  .fill-bar__track,
+  .total-bar__track {
+    height: 0.75rem;
+  }
 }
 
 #mainContainer .decimal {
@@ -214,17 +226,13 @@ body.darkBG {
     color: rgba(148 255 202 / 75%) !important;
   }
 
-  .block-rows .block-rewards,
   .block-rows .block-votes,
-  .block-rows .block-tickets,
-  .block-rows .block-transactions {
+  .block-rows .block-tickets {
     border-top: 1px solid black;
   }
 
-  .block-rows .block-rewards > span,
   .block-rows .block-votes > span,
-  .block-rows .block-tickets > span,
-  .block-rows .block-transactions > span {
+  .block-rows .block-tickets > span {
     border-left: 1px solid black;
   }
 
@@ -233,8 +241,16 @@ body.darkBG {
     color: #bbb;
   }
 
+  .block-info .amount .size-pct {
+    color: #888;
+  }
+
   .block-info a.color-code:hover {
     color: $dark-link-hover-color;
+  }
+
+  .block-rows .block-votes .vote-skip {
+    background-color: #555;
   }
 }
 
@@ -335,5 +351,9 @@ body.darkBG {
 @media only screen and (max-width: 576px) {
   .blocks-section {
     padding: 0;
+  }
+
+  .block-info .amount .size-pct {
+    display: none;
   }
 }

@@ -286,6 +286,8 @@ loop:
 				blockCopy.CoinFills = trimmed.CoinFills
 				blockCopy.ActiveSKACount = trimmed.ActiveSKACount
 				blockCopy.MaxBlockSize = trimmed.MaxBlockSize
+				blockCopy.RegularCoinCounts = trimmed.RegularCoinCounts
+				blockCopy.TotalFillRatio = trimmed.TotalFillRatio
 
 				err := enc.Encode(types.WebsocketBlock{
 					Block: &blockCopy,

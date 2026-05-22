@@ -1014,7 +1014,61 @@ func makeTemplateFuncMap(params *chaincfg.Params) template.FuncMap {
 		"coinSymbol": func(ct uint8) string {
 			return coinSymbol(ct)
 		},
+		"formatBytes": func(size int32) string {
+			if size < 0 {
+				return "0 B"
+			}
+			return humanize.Bytes(uint64(size))
+		},
+		"regularCountForSymbol": func(counts []types.CoinCount, symbol string) int {
+			for _, c := range counts {
+				if c.Symbol == symbol {
+					return c.Count
+				}
+			}
+			return 0
+		},
+		"mempoolRegularCountForSymbol": func(stats map[uint8]types.MempoolCoinStats, symbol string) int {
+			ct, ok := coinTypeFromSymbol(symbol)
+			if !ok {
+				return 0
+			}
+			if s, ok := stats[ct]; ok {
+				return s.RegularCount
+			}
+			return 0
+		},
+		"sumRegularCoinCounts": func(counts []types.CoinCount) int {
+			total := 0
+			for _, c := range counts {
+				total += c.Count
+			}
+			return total
+		},
+		"sumMempoolRegularCounts": func(stats map[uint8]types.MempoolCoinStats) int {
+			total := 0
+			for _, s := range stats {
+				total += s.RegularCount
+			}
+			return total
+		},
 	}
+}
+
+// coinTypeFromSymbol inverts coinSymbol. "VAR" → 0, "SKA{n}" → n. Returns
+// false on unrecognised symbols.
+func coinTypeFromSymbol(symbol string) (uint8, bool) {
+	if symbol == "VAR" {
+		return 0, true
+	}
+	if !strings.HasPrefix(symbol, "SKA") {
+		return 0, false
+	}
+	n, err := strconv.ParseUint(symbol[3:], 10, 8)
+	if err != nil {
+		return 0, false
+	}
+	return uint8(n), true
 }
 
 type headData struct {
