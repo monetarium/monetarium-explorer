@@ -667,5 +667,14 @@ func computeMiningFee(msgBlock *wire.MsgBlock, powSubsidy int64) int64 {
 	}
 	miningFee := coinbaseOutput - powSubsidy
 
-	return miningFee
+	// Exclude stake fees (fees from vote transactions) from the mining fee
+	var voteFees int64
+	for _, tx := range msgBlock.Transactions {
+		if txhelpers.DetermineTxType(tx) == stake.TxTypeSSGen {
+			fee, _ := txhelpers.TxFeeRate(tx)
+			voteFees += int64(fee)
+		}
+	}
+
+	return miningFee - voteFees
 }

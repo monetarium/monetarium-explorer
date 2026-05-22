@@ -6757,6 +6757,9 @@ func (pgb *ChainDB) GetExplorerBlock(ctx context.Context, hash string) *exptypes
 				rate := new(big.Int).Mul(fee, big.NewInt(1000))
 				rate.Quo(rate, big.NewInt(txSize))
 				exptx.FeeRateRaw = rate.String()
+				if rate.IsInt64() {
+					exptx.FeeRate = dcrutil.Amount(rate.Int64())
+				}
 			}
 		}
 
@@ -6811,8 +6814,7 @@ func (pgb *ChainDB) GetExplorerBlock(ctx context.Context, hash string) *exptypes
 	}
 	block.TotalSent = (getTotalSent(block.Tx) + getTotalSent(block.Treasury) + getTotalSent(block.Revs) +
 		getTotalSent(block.Tickets) + getTotalSent(block.Votes) + getTotalSent(block.StakeFees)).ToCoin()
-	block.MiningFee = (getTotalFee(block.Tx) + getTotalFee(block.Treasury) + getTotalFee(block.Revs) +
-		getTotalFee(block.Tickets) + getTotalFee(block.Votes)).ToCoin()
+	block.MiningFee = (getTotalFee(block.Tx) + getTotalFee(block.Tickets)).ToCoin()
 
 	// Aggregate fees per coin type (VAR from MiningFee, SKA from SSFeeTotalsByCoin)
 	feesMap := make(map[uint8]string)
