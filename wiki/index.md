@@ -29,6 +29,7 @@ _Requirements and guidelines for specific features and pages._
 - address-transactions: specs/address-transactions/spec.md — bottom section: Coin column, coin filter, sstxcommitment gate, multi-coin CSV schema, server↔XHR parity
 - parameters: specs/parameters/spec.md — `/parameters` page Monetarium adjustment: drop Treasury section + treasury-share row, keep Rule change as reference, show actual 50/50 PoW/PoS split, fix Decred address prefixes, add SKA coin parameters section
 - attack-cost: specs/attack-cost/spec.md — `/attack-cost` page Monetarium adjustment: VAR-only domain (no SKA), `DCR`→`VAR` labels, manual-only exchange rate (no auto price), keep formula but drop Decred citation, replace hardcoded Decred miner list with manual hashrate/power/cost inputs
+- market-removal: specs/market-removal/spec.md — `/market` page Monetarium removal: page made unavailable (like `/treasury`, `/agendas`, `/proposals`), drop "Market" menu item and Home "Exchange Rate" card, remove USD equivalents on Home / `/tx` / `/address` / `/block`, turn off background exchange polling and the related service endpoints
 
 ## 🤖 Code Traces
 
