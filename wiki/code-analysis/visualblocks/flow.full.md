@@ -1,175 +1,280 @@
 ### Section 1 — Overview
-Tracing the data flow that drives `/visualblocks` — the latest-N-blocks-plus-mempool tile page rendered as horizontal bars (rewards / votes / tickets / regular txs). The page has **two independent pipelines** that feed the same DOM: an HTTP `GET` handler that server-renders 30 trimmed blocks, and a WebSocket push channel that re-renders individual tiles when new blocks arrive or the mempool changes.
+Tracing the data flow that drives `/visualblocks` — the latest-N-blocks-plus-mempool tile page rendered as a 3-row block-tile (votes / tickets / indicator-fill bars) plus a mempool tile of identical shape. The page has **two independent pipelines** that feed the same DOM: an HTTP `GET` handler that server-renders 30 trimmed blocks plus a mempool tile, and a WebSocket push channel that re-renders individual tiles when new blocks arrive or the mempool changes.
 
-**Revision tag:** `HEAD=386f2e12`. PR #284 (`feat/visualblocks-data-contract`) introduced an explicit cross-transport data contract: `CoinFills`, `ActiveSKACount`, `RegularCoinCounts`, `MaxBlockSize` (block side) and `MaxBlockSize`, `TotalSize` (mempool side) are now wire-symmetric across HTTP and `/ws`, asserted by [`visualblocks_contract_test.go`](../../../cmd/dcrdata/internal/explorer/visualblocks_contract_test.go). **The new contract fields are populated by the backend but not yet consumed by `visualblocks.tmpl` / `visualBlocks_controller.js`** — the page renders identically pre/post-PR; the frontend rewrite is staged separately.
+**Revision tag:** `HEAD=38636d52`. This is the post-rewrite snapshot for issue #270 on top of PR #284's data contract. The 386f2e12 revision documented the contract as "populated but not yet consumed by the UI"; commit `38636d52` is that UI rewrite plus one additional contract field (`TotalFillRatio`). Net page-surface changes vs the legacy state:
+
+- The hard-coded `DCR` label and aggregate amount are gone everywhere. The tile header now shows block size (humanize.Bytes) + an optional `% of maxBlockSize` next to it. The mempool tile shows the current mempool size with the same `%` semantics.
+- The rewards row (`block-rewards` with `.pow/.pos/.fund/.fees` segments) is deleted from both tile types in template + controller + SCSS. Project Fund/Treasury share is absent in Monetarium; PoW/PoS is fixed 50/50, so the bar carried no information.
+- The vote row supports three states: `vote-yes` (blue), `vote-no` (red), `vote-skip` (grey), derived from `(Voted, VoteValid)`. Empty slots up to 5 stay transparent.
+- The per-tx grey transactions row is deleted. In its place: an `.indicator-fill .block-indicator-fill` block containing one `.total-bar` (block-fill ratio) and one `.fill-bar` per `CoinFillData` entry (VAR + each active SKAn) — the same component used on the homepage, with compact-tile sizing overrides.
+- `TrimmedBlockInfo` gained `TotalFillRatio float64 \`json:"total_fill_ratio"\`` and the WS shallow-copy patch now copies five fields onto `blockCopy`: `CoinFills`, `ActiveSKACount`, `MaxBlockSize`, `RegularCoinCounts`, `TotalFillRatio`. The contract test (`TestVisualBlocksDataContract`) asserts all five.
+- A new vitest file `visualBlocks_controller.test.js` pins the new DOM shape (vote states, indicator-fill structure, ticket coin label, tooltip JSON, header layout, WS-shape regression).
 
 ### Section 2 — End-to-End Data Flow
 HTTP path (initial render):
-`monetarium-node JSON-RPC → blockdata.Collector → ChainDB.GetExplorerFullBlocks → ChainDB.GetExplorerBlock (memoized) → explorerUI.VisualBlocks (per-block (*BlockInfo).Trim(maxBlockSize, issuedSKA) → *TrimmedBlockInfo) + MempoolInventory().Trim(maxBlockSize) → templates.exec("visualblocks") → visualblocks.tmpl → visualBlocks_controller.js`
+`monetarium-node JSON-RPC → blockdata.Collector → ChainDB.GetExplorerFullBlocks → ChainDB.GetExplorerBlock (memoized) → explorerUI.VisualBlocks (per-block (*BlockInfo).Trim(maxBlockSize, issuedSKA) → *TrimmedBlockInfo) + MempoolInventory().Trim(maxBlockSize) → templates.exec("visualblocks") → visualblocks.tmpl (three-row tile + indicator-fill bars) → visualBlocks_controller.js (Stimulus hydration)`
 
 WebSocket new-block path:
-`blockdata.Collector → explorerUI.Store(blockData,msgBlock) → wsHub.HubRelay ← sigNewBlock → websockethandlers.go (shallow-copy *BlockInfo, patch CoinFills/ActiveSKACount/MaxBlockSize from block.Trim(...) onto the copy, encode types.WebsocketBlock{Block:&blockCopy, Extra:*HomeInfo}) → public/index.js (newblock → publish "BLOCK_RECEIVED") → visualBlocks_controller._handleVisualBlocksUpdate (filters Coinbase client-side) → prepends new DOM tile, trims to 30`
+`blockdata.Collector → explorerUI.Store(blockData,msgBlock) → wsHub.HubRelay ← sigNewBlock → websockethandlers.go (shallow-copy *BlockInfo, patch CoinFills / ActiveSKACount / MaxBlockSize / RegularCoinCounts / TotalFillRatio from block.Trim(...) onto the copy, encode types.WebsocketBlock{Block:&blockCopy, Extra:*HomeInfo}) → public/index.js (newblock → publish "BLOCK_RECEIVED") → visualBlocks_controller._handleVisualBlocksUpdate → normaliseWsBlock (mixed wire-shape → PascalCase tile) → newBlockHtmlElement → prepend tile, removeChild(lastChild) to keep ≤30`
 
 WebSocket mempool path:
-`mempool.MempoolMonitor → explorerUI.StoreMPData (recompute CoinFills via types.ComputeCoinFills) → exp.invs ; client sends "getmempooltrimmed" → snapshot maxBlockSize+subsidy under pageData.RLock → release → inv.Trim(maxBlockSize) → patch Subsidy → JSON → visualBlocks_controller.handleMempoolUpdate → replaces mempool tile`
+`mempool.MempoolMonitor → explorerUI.StoreMPData (recompute CoinFills via types.ComputeCoinFills) → exp.invs ; client sends "getmempooltrimmed" → snapshot maxBlockSize+subsidy under pageData.RLock → release → inv.Trim(maxBlockSize) → patch Subsidy → JSON → visualBlocks_controller.handleMempoolUpdate → normaliseMempool → makeMempoolBlock → replaces mempool tile`
 
 ### Section 3 — Per-Layer Breakdown
 - **Location:** `cmd/dcrdata/main.go:694`
   - **Data Structures:** chi router under `SyncStatusPageIntercept` group.
-  - **Transformations:** Registers `r.Get("/visualblocks", explore.VisualBlocks)`. The intercept hides the page during initial DB sync.
+  - **Transformations:** Registers `r.Get("/visualblocks", explore.VisualBlocks)`.
+
 - **Location:** `cmd/dcrdata/internal/explorer/explorerroutes.go:320-381` (`VisualBlocks` handler) and `:135` (`homePageBlocksMaxCount = 30`)
   - **Data Structures:** `[]*types.TrimmedBlockInfo`, `*types.TrimmedMempoolInfo`, `*types.HomeInfo`, anonymous struct embedding `*CommonPageData`.
-  - **Transformations:** Calls `GetHeight`, then `GetExplorerFullBlocks(ctx, h, h-30)`. **Snapshots `maxBlockSize` and `issuedSKA` from `pageData.HomeInfo.SKACoinSupply` under `pageData.RLock` first, then releases** ([:339-345](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L339-L345)). For each `*BlockInfo` calls `block.Trim(maxBlockSize, issuedSKA)` — the trim logic moved into `explorertypes.go`. Mempool: `inv.Trim(maxBlockSize)` then re-acquires `pageData.RLock` to patch `Subsidy = HomeInfo.NBlockSubsidy` and execute template inside that hold ([:354-371](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L354-L371)).
+  - **Transformations:** Calls `GetHeight`, then `GetExplorerFullBlocks(ctx, h, h-30)`. Snapshots `maxBlockSize` and `issuedSKA` from `pageData.HomeInfo.SKACoinSupply` under `pageData.RLock` first, then releases ([:339-345](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L339-L345)). For each `*BlockInfo` calls `block.Trim(maxBlockSize, issuedSKA)`. Mempool: `inv.Trim(maxBlockSize)` then re-acquires `pageData.RLock` to patch `Subsidy = HomeInfo.NBlockSubsidy` and execute the template inside that hold ([:354-371](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L354-L371)). **Note:** `Subsidy` is patched onto the mempool tile so the WS path keeps the same shape, but the template no longer renders subsidy anywhere (rewards row gone). The patch is currently kept for shape stability; it could be retired once the WS encoder is also confirmed to ignore it.
+
 - **Location:** `db/dcrpg/pgblockchain.go:7172-7188` (`GetExplorerFullBlocks`)
   - **Data Structures:** `[]*exptypes.BlockInfo`.
-  - **Transformations:** Loops `i := start; i > end; i--`, calls `getBlockVerbose(ctx, i, true)` then `GetExplorerBlock(ctx, data.Hash)`. Sequential — 30 calls per page load.
+  - **Transformations:** Loops `i := start; i > end; i--`, calls `getBlockVerbose(ctx, i, true)` then `GetExplorerBlock(ctx, data.Hash)`. Sequential — 30 calls per page load; only the most-recent hit benefits from the memo.
+
 - **Location:** `db/dcrpg/pgblockchain.go:6366-6633` (`GetExplorerBlock`)
   - **Data Structures:** `*exptypes.BlockInfo` (full), `pgb.lastExplorerBlock` (single-block memo).
-  - **Transformations:** Memoizes the last hash and returns the same pointer to concurrent callers (`lastExplorerBlock.Lock`). Builds `BlockBasic`, enriches with `BlockSubsidy`, `GetSummaryByHash` (→ `CoinAmounts`, `CoinRows`, `TotalSentByCoin`, `RegularCoinCounts`, `FeesByCoin`), then parses every `RawSTx`/`RawTx` via `trimmedTxInfoFromMsgTx`. **PR #284 adds `Voted: txBasic.VoteInfo != nil` to `TrimmedTxInfo`** ([:6561](../../../db/dcrpg/pgblockchain.go#L6561)) — populated for every parsed tx, used in the new contract test, not yet read by `.tmpl`/JS. For revocations, looks up `retrieveTicketStatusByHash`. For non-VAR regular txs (lines 6529-6553) recomputes `FeeRaw` from `Σ Vin[i].SKAAmountIn − TotalRaw`. `MiningFee` and `TotalSent` are summed via `dcrutil.Amount.ToCoin()` (VAR-precision float64).
-- **Location:** `explorer/types/explorertypes.go` (Go types — substantially reshaped by PR #284)
-  - `TrimmedTxInfo` at [`:357-367`](../../../explorer/types/explorertypes.go#L357-L367) — **now carries explicit `json:` snake_case tags** (`fees`, `vote_valid`, `voted`, `vin_count`, `vout_count`, `coin_type,omitempty`, `ticket_status,omitempty`). Field added: `Voted bool` (`json:"voted"`). **Wire-format break for any external consumer reading the old Go-name-keyed JSON.**
-  - `TrimmedBlockInfo` at [`:704-722`](../../../explorer/types/explorertypes.go#L704-L722) — widened with `Size int32`, `FormattedBytes string`, `CoinFills []CoinFillData`, `ActiveSKACount int`, `RegularCoinCounts []CoinCount`, `MaxBlockSize float64`. All fields have snake_case JSON tags.
-  - `(*BlockInfo).Trim(maxBlockSize, issuedSKA)` at [`:725-754`](../../../explorer/types/explorertypes.go#L725-L754) — **new method that replaces the inline trim block in `VisualBlocks`**. Internally: scans `bi.Tx` for the coinbase to extract `coinbaseSize`, calls `StatsFromCoinRows(bi.BlockBasic.CoinRows, coinbaseSize)` → `ComputeCoinFills(stats, maxBlockSize, issuedSKA)` to fill `CoinFills` + `ActiveSKACount`; pulls `RegularCoinCounts` from `RegularCoinCountsFromCoinRows(rows, Voters, FreshStake, Revocations)`; carries through `Size`/`FormattedBytes` from `BlockBasic`; still applies `FilterRegularTx(bi.Tx)` for `Transactions`.
-  - `BlockInfo` at [`:757-804`](../../../explorer/types/explorertypes.go#L757-L804) — was already on the WS wire as the full struct. **PR #284 promoted three fields from `json:"-"` to wire-visible:** `RegularCoinCounts` → `regular_coin_counts,omitempty`; added new `CoinFills`, `ActiveSKACount`, `MaxBlockSize` (all `omitempty`). `FeesByCoin` stays `json:"-"`. **These fields are zero-valued on the struct itself**; the WS handler patches them onto a shallow copy at encode time (see below).
-  - `TrimmedMempoolInfo` at [`:899-905`](../../../explorer/types/explorertypes.go#L899-L905) — added `MaxBlockSize float64` (`max_block_size`), `TotalSize int32` (`total_size`).
-  - `MempoolInfo.Trim(maxBlockSize)` at [`:949-987`](../../../explorer/types/explorertypes.go#L949-L987) — **signature change.** Switched to `defer mpi.RUnlock()` (lock held throughout, including fee summation — previously released before fee loop). Populates `MaxBlockSize` and `TotalSize` from the embedded `MempoolShort`.
-  - `(*BlockInfo).Trim` and `MempoolInfo.Trim` both call `types.ComputeCoinFills` — **moved from unexported `computeCoinFills` in `cmd/dcrdata/internal/explorer` to exported `types.ComputeCoinFills`** at [`:1735-1822`](../../../explorer/types/explorertypes.go#L1735-L1822). `StatsFromCoinRows` at [`:1720-1733`](../../../explorer/types/explorertypes.go#L1720-L1733) is the bridge from per-block `CoinRowData` to the mempool-shaped `MempoolCoinStats` map; subtracts `coinbaseSize` from VAR's row so the coinbase doesn't inflate the VAR fill bar.
-  - `BlockSubsidy` at [`:832-838`](../../../explorer/types/explorertypes.go#L832-L838) — unchanged (JSON tag `"dev"`).
-  - `WebsocketBlock` at [`:1354-1358`](../../../explorer/types/explorertypes.go#L1354-L1358) — unchanged (`{Block *BlockInfo, Extra *HomeInfo}`).
-  - `FilterRegularTx` at [`:1014-1023`](../../../explorer/types/explorertypes.go#L1014-L1023) — unchanged (still filters only `Coinbase`); the JS-side mirror still has to re-apply it because WS sends the full `BlockInfo`.
+  - **Transformations:** Memoizes the last hash and returns the same pointer to concurrent callers (`lastExplorerBlock.Lock`). `trimmedTxInfoFromMsgTx` sets `Voted: txBasic.VoteInfo != nil` per tx; this drives the three-state vote rendering in the new template. `MiningFee` and `TotalSent` are summed via `dcrutil.Amount.ToCoin()` (VAR-precision float64) — still surfaced on `BlockInfo`/`TrimmedBlockInfo` but **no longer read by the page** (header now shows size, not amount).
+
+- **Location:** `explorer/types/explorertypes.go` (Go types — extended by commit `38636d52` on top of PR #284 contract)
+  - `TrimmedTxInfo` at [`:357-367`](../../../explorer/types/explorertypes.go#L357-L367) — JSON tags from PR #284 unchanged (`fees`, `vote_valid`, `voted`, `vin_count`, `vout_count`, `coin_type,omitempty`, `ticket_status,omitempty`). `Voted bool` (`json:"voted"`) and `VoteValid bool` (`json:"vote_valid"`) drive the three-state class on the vote row.
+  - `TrimmedBlockInfo` at [`:704-723`](../../../explorer/types/explorertypes.go#L704-L723) — PR #284 shape plus new `TotalFillRatio float64 \`json:"total_fill_ratio"\`` ([`:722`](../../../explorer/types/explorertypes.go#L722)). All other fields unchanged.
+  - `(*BlockInfo).Trim(maxBlockSize, issuedSKA)` at [`:725-758`](../../../explorer/types/explorertypes.go#L725-L758) — extended to compute `totalFillRatio` as `float64(bi.BlockBasic.Size) / maxBlockSize` (guarded for `maxBlockSize > 0`) and populate it on the returned struct.
+  - `BlockInfo` at [`:757-805`](../../../explorer/types/explorertypes.go#L757-L805) — added `TotalFillRatio float64 \`json:"total_fill_ratio,omitempty"\`` next to the other contract fields. PR #284's promoted-to-wire fields (`RegularCoinCounts`, `CoinFills`, `ActiveSKACount`, `MaxBlockSize`) unchanged.
+  - `TrimmedMempoolInfo` at [`:898-915`](../../../explorer/types/explorertypes.go#L898-L915) — PR #284 shape unchanged; `TotalFillRatio` was already present (from the homepage indicator-fill work) and is now also read by the visualblocks mempool tile.
+  - `MempoolInfo.Trim(maxBlockSize)` at [`:957-989`](../../../explorer/types/explorertypes.go#L957-L989) — unchanged from PR #284.
+
+- **Location:** `cmd/dcrdata/internal/explorer/templates.go` (template helpers — five new registrations in `38636d52`)
+  - **Data Structures:** `template.FuncMap` extended in `makeTemplateFuncMap`.
+  - **Transformations / new helpers:**
+    - `formatBytes(size int32) string` — wraps `humanize.Bytes` with a negative-input guard; produces `"15 kB"`-style strings used in the tile header.
+    - `regularCountForSymbol(counts []types.CoinCount, symbol string) int` — block-tile lookup of tx count for a given coin symbol (drives the per-coin `.fill-bar` tooltip).
+    - `mempoolRegularCountForSymbol(stats map[uint8]types.MempoolCoinStats, symbol string) int` — mempool-tile equivalent; parses `"SKA{n}"` via the new `coinTypeFromSymbol` helper to index the `CoinStats` map.
+    - `sumRegularCoinCounts(counts []types.CoinCount) int` — TOTAL bar count on block tiles.
+    - `sumMempoolRegularCounts(stats map[uint8]types.MempoolCoinStats) int` — TOTAL bar count on the mempool tile.
+  - `coinTypeFromSymbol(symbol string) (uint8, bool)` is the inverse of `coinSymbol(ct)`; declared at file scope ([`:1019-1035`](../../../cmd/dcrdata/internal/explorer/templates.go#L1019-L1035)), used internally by `mempoolRegularCountForSymbol`.
+
 - **Location:** `cmd/dcrdata/internal/explorer/explorer.go`
-  - **Data Structures:** `pageData{BlockInfo, BlockchainInfo, HomeInfo}` at `:209-216`, `exp.invs *types.MempoolInfo` guarded by `invsMtx`.
-  - **Transformations:** `Store()` at `:514-934` is the `BlockDataSaver` hook — rewrites `pageData.BlockInfo = GetExplorerBlock(...)`, updates `HomeInfo`, recomputes `exp.invs.CoinFills` via **`types.ComputeCoinFills`** (was the unexported in-package `computeCoinFills` pre-PR), fires `sigNewBlock` and `sigMempoolUpdate`. `StoreMPData()` at `:483-512` is the `MempoolDataSaver` hook — derives issued SKA list from `HomeInfo.SKACoinSupply`, recomputes `CoinFills` via `types.ComputeCoinFills`, swaps `exp.invs`. See §4 for the full lock map.
+  - **Data Structures:** `pageData{BlockInfo, BlockchainInfo, HomeInfo}` at `:209-216`, `exp.invs *types.MempoolInfo` guarded by `invsMtx`. Unchanged.
+  - **Transformations:** `Store()` and `StoreMPData()` still call `types.ComputeCoinFills`. **Note:** `Store` writes through to the memoized `*BlockInfo` (lastExplorerBlock); see Section 4 for the cross-page implications.
+
 - **Location:** `cmd/dcrdata/internal/explorer/websockethandlers.go`
   - **Data Structures:** `types.WebsocketBlock`, `types.MempoolShort`, `types.TrimmedMempoolInfo`.
-  - **Transformations:** `sigNewBlock` case at [`:272-300`](../../../cmd/dcrdata/internal/explorer/websockethandlers.go#L272-L300) **was rewritten by PR #284** to shallow-copy `*pageData.BlockInfo` (`blockCopy := *block`), compute `trimmed := block.Trim(maxBlockSize, issuedSKA)`, then patch `blockCopy.CoinFills = trimmed.CoinFills; blockCopy.ActiveSKACount = trimmed.ActiveSKACount; blockCopy.MaxBlockSize = trimmed.MaxBlockSize` and encode `&blockCopy`. **This is load-bearing — without the shallow copy, writing those three fields onto the shared memoized `*BlockInfo` (from `pgb.lastExplorerBlock`) would corrupt every other consumer.** Client-initiated `getmempooltrimmed` at [`:189-209`](../../../cmd/dcrdata/internal/explorer/websockethandlers.go#L189-L209) was **lock-order-reshuffled**: snapshots `maxBlockSize` + `subsidy` under `pageData.RLock`, releases, *then* calls `inv.Trim(maxBlockSize)` (which acquires `MempoolInfo.RLock`), then patches `Subsidy`. Previously: `Trim` (took `MempoolInfo.RLock`) → then `pageData.RLock` (nested). New ordering eliminates that overlap.
+  - **Transformations:** `sigNewBlock` case at [`:272-300`](../../../cmd/dcrdata/internal/explorer/websockethandlers.go#L272-L300) — shallow-copy + patch sequence extended from three fields (PR #284) to **five fields** (commit `38636d52`):
+    ```go
+    blockCopy.CoinFills = trimmed.CoinFills
+    blockCopy.ActiveSKACount = trimmed.ActiveSKACount
+    blockCopy.MaxBlockSize = trimmed.MaxBlockSize
+    blockCopy.RegularCoinCounts = trimmed.RegularCoinCounts
+    blockCopy.TotalFillRatio = trimmed.TotalFillRatio
+    ```
+    `RegularCoinCounts` was already populated upstream by `pgblockchain.go` on the production code path, but the patch now explicitly mirrors `Trim`'s output to keep the contract independent of upstream callers. `getmempooltrimmed` at [`:189-209`](../../../cmd/dcrdata/internal/explorer/websockethandlers.go#L189-L209) unchanged from PR #284 (lock-order-reshuffled).
+
 - **Location:** `pubsub/pubsubhub.go`
-  - **Transformations:** `getmempooltxs` case at [`:319-340`](../../../pubsub/pubsubhub.go#L319-L340) got the same lock-order refactor — snapshot `maxBlockSize` + `subsidy` under `state.mtx.RLock`, release, then `inv.Trim(maxBlockSize)`. **`sigNewBlock` broadcast at [`:459-472`](../../../pubsub/pubsubhub.go#L459-L472) was NOT updated** — it still encodes `psh.state.BlockInfo` directly, so `/ps` clients receive a `BlockInfo` with `CoinFills` / `ActiveSKACount` / `MaxBlockSize` zero/nil. The explorer's `/ws` is the only path that populates the new contract fields on the block frame.
-- **Location:** `cmd/dcrdata/public/index.js:46-64`
-  - **Transformations:** Registers `ws.registerEvtHandler('newblock', ...)` → parses JSON, sets `newBlock.block.unixStamp`, publishes `BLOCK_RECEIVED` on `globalEventBus`. Also registers `'exchange'`.
-- **Location:** `cmd/dcrdata/public/js/controllers/visualBlocks_controller.js:1-371`
-  - **Data Structures:** DOM only; reads JSON shapes — `block.Tx`, `block.Votes`, `block.Revs`, `block.MiningFee`, `block.TotalSent`, `block.time`, `block.height`, `block.Subsidy` from the WS, and trimmed shape from `getmempooltrimmedResp`.
-  - **Transformations:** `_handleVisualBlocksUpdate` (`:235-260`) does the JS-side equivalent of `FilterRegularTx`: `block.Tx.filter(!Coinbase)`. **The new contract fields `block.CoinFills`/`active_ska_count`/`max_block_size`/`regular_coin_counts` and `tx.voted` are present on the wire but are not yet read by this controller** — they are reserved for the staged frontend rewrite. The contract test enforces that the fields are there; if a future controller change starts reading them, the test guarantees both transports deliver identical shapes.
-- **Location:** `cmd/dcrdata/views/visualblocks.tmpl`
+  - **Transformations:** **STILL not patched** — `sigNewBlock` broadcast at [`:459-472`](../../../pubsub/pubsubhub.go#L459-L472) encodes `psh.state.BlockInfo` directly. The PR #284 divergence carries forward unchanged for all five contract fields. `/ps` subscribers see `coin_fills`/`active_ska_count`/`max_block_size`/`regular_coin_counts`/`total_fill_ratio` as zero/nil/empty.
+
+- **Location:** `cmd/dcrdata/views/visualblocks.tmpl` (fully rewritten in `38636d52`)
   - **Data Structures:** `.Info` (`*types.HomeInfo`), `.Mempool` (`*types.TrimmedMempoolInfo`), `.Blocks` (`[]*types.TrimmedBlockInfo`).
-  - **Transformations:** Renders mempool tile + 30 block tiles. Uses `toFloat64Amount .Subsidy.PoW`/`.PoS`/`.Dev` for mempool (custom `BlockSubsidy`), `.Subsidy.Developer` for blocks (`chainjson.GetBlockSubsidyResult`). Hard caps via `clipSlice 30` when `> 50` (lines 89, 117, 197, 225). `flex-grow` driven by `.Total` / `.Fees` floats. Hardcoded label `DCR`. **The new fields on `TrimmedBlockInfo`/`TrimmedMempoolInfo` are not read here yet.**
-- **Location:** `cmd/dcrdata/internal/explorer/visualblocks_contract_test.go` (new)
-  - **Transformations:** Asserts wire-format equivalence: `regular_coin_counts`, `coin_fills`, `active_ska_count`, `max_block_size` produce identical JSON when serialized from a `TrimmedBlockInfo` (HTTP path) vs. a shallow-copy `BlockInfo` with the same three fields patched (WS path). Also asserts the coinbase is filtered out of `transactions` and that `voted=true` is present for vote-bearing txs. Also asserts `TrimmedMempoolInfo.max_block_size` / `total_size` round-trip correctly.
-- **Location:** `cmd/dcrdata/internal/explorer/dev_indicators.go` and `templates_test.go`
-  - Both updated to call `types.ComputeCoinFills(...)` (was the unexported in-package version). No behavior change.
-- **Location:** `cmd/dcrdata/public/scss/visualblocks.scss` (imported by `application.scss:49`).
+  - **Transformations / new structure:**
+    - **Tile header** (`block-info`): link + `<span class="size">{{formatBytes .Size}}</span>` + (when `MaxBlockSize > 0`) `<span class="size-pct">{{printf "%.0f" (mulf .TotalFillRatio 100.0)}}%</span>` + age. Mempool variant uses `formatBytes .TotalSize`.
+    - **Vote row**: `{{if .Voted}}{{if .VoteValid}}vote-yes{{else}}vote-no{{end}}{{else}}vote-skip{{end}}` for the span class. `title` JSON: `{"object": "Vote", "coin": "VAR", "voted": "<bool>", "voteValid": "<bool>"}`. Empty-slot pad to 5 unchanged.
+    - **Tickets row**: structurally unchanged; ticket and revocation `title` JSON now carries `"coin": "VAR"`. Truncation `> 50 → clipSlice 30 + "+N more"` and empty-slot formula `zeroSlice (intSubtract 20 ticketsRevsCount)` unchanged.
+    - **Indicator-fill block** (replacing the legacy transactions row): one `.total-bar` driven by `.TotalFillRatio`, then `{{range .CoinFills}}` emitting one `.fill-bar` per entry. Markup identical to `home_mempool.tmpl:16-89` (same `role="meter"`, `aria-*`, `data-coin`, segment classes). Per-bar `title` JSON: `{"object":"FillBar","coin":"<symbol>","txCount":"<n>"}`; TOTAL bar uses `sumRegularCoinCounts` (block) or `sumMempoolRegularCounts` (mempool); per-coin bars use `regularCountForSymbol` (block) or `mempoolRegularCountForSymbol` (mempool).
+  - The mempool tile and block tile are written out separately (no shared `{{define}}` partial) but share the same row order: header → votes → tickets → indicator-fill.
+
+- **Location:** `cmd/dcrdata/public/scss/visualblocks.scss` (rewritten in `38636d52`)
+  - **Removed:** `.block-rewards`, `.pow`, `.pos`, `.fund`, `.fees`, `.paint`, `.block-transactions`, `.block-tx`.
+  - **Added:** `.block-votes .vote-yes` (`#2971ff`), `.vote-no` (`rgba(253 113 74 / 80%)`), `.vote-skip` (`#c4cbd2`). Dark-theme override: `.vote-skip` becomes `#555`. `.size-pct` styling (small grey).
+  - **Indicator-fill overrides:** `.block-indicator-fill { flex-grow: 2; flex-basis: 5px; padding: 2px; gap: 2px; border-top: 1px solid white; }` plus shrunken `.fill-bar__label` / `.fill-bar__pct` (~0.65rem font) and `.fill-bar__track` height (`0.75rem`). The base `_indicator-fill.scss` is imported globally via `application.scss:56` — the SCSS partial is shared with the homepage; only the compact-tile sizing lives in `visualblocks.scss`.
+  - **Layout:** `.block-rows { height: 90px; }` restored after a brief stint without it (the no-height version made votes/tickets visibly thinner — see the post-rewrite tuning in the same commit). `flex-grow: 1` on `.block-votes` and `.block-tickets`; `flex-grow: 2` on `.block-indicator-fill` to give the 3-bar component the room it needs (~45px for 3 sub-bars at 0.75rem each).
+  - Dark-theme `body.darkBG { … }` updated to keep the new vote-skip class legible.
+
+- **Location:** `cmd/dcrdata/public/js/controllers/visualBlocks_controller.js` (full rewrite in `38636d52`)
+  - **Data Structures:** Stimulus controller with targets `box, title, showmore, root, tooltip, block, indicator`.
+  - **Named exports (for vitest):** `makeMempoolBlock(tile)`, `newBlockHtmlElement(tile)`, `makeVoteElements(votes)`, `makeTicketAndRevocationElements(tickets, revs, blockHref)`, `makeIndicatorBars(totalFillRatio, coinFills, totalTxCount, countForSymbol)`, `normaliseWsBlock(block)`. Default export is the Stimulus Controller class.
+  - **Pure helpers (file scope, not exported):** `makeNode`, `coinTypeFromSymbol`, `formatBytes`, `regularCountForSymbol`, `sumRegularCoinCounts`, `mempoolRegularCountForSymbol`, `sumMempoolRegularCounts`, `fillBarHtml`, `totalBarHtml`, `stakeTxSpan`, `blockInfoHtml`. Each helper has an equivalent on the Go side (`templates.go`); future contributors must keep the pair in sync.
+  - **Normalisers:**
+    - `normaliseWsBlock(block)` translates the WS wire-shape into a canonical PascalCase tile: reads `block.height` / `block.time` / `block.size` / `block.formatted_bytes` (BlockBasic lowercase JSON tags), `block.Votes` / `block.Tickets` / `block.Revs` (BlockInfo PascalCase, no JSON tags), `block.coin_fills` / `block.regular_coin_counts` / `block.total_fill_ratio` / `block.max_block_size` / `block.active_ska_count` (snake_case from the contract patch).
+    - `normaliseMempool(mempool)` translates `TrimmedMempoolInfo`: reads `mempool.Votes/Tickets/Revocations/Time` (PascalCase) and `mempool.coin_fills` / `mempool.coin_stats` / `mempool.total_fill_ratio` / `mempool.total_size` / `mempool.max_block_size` (snake_case).
+    - `normaliseTxs(txs)` normalises nested `TrimmedTxInfo` records: PascalCase `TxID`/`Total` (TxBasic no JSON tags) + snake-case `voted`/`vote_valid`/`vin_count`/`vout_count` (TrimmedTxInfo JSON tags) → single PascalCase shape.
+  - **WS handlers:**
+    - `_handleVisualBlocksUpdate(newBlock)` reads `newBlock.block`, normalises it, builds the new tile via `newBlockHtmlElement(tile)`, inserts after the mempool tile (`box.firstChild.nextSibling`), drops the `visible` class from the last visible tile, and `removeChild(lastChild)` to maintain ≤30 DOM tiles. The JS-side coinbase filter (`block.Tx.filter(!Coinbase)`) is gone — no per-tx rendering anymore.
+    - `handleMempoolUpdate(evt)` parses, normalises, and `replaceChild` the first child (mempool tile) with the freshly-built tile.
+  - **Tooltips (`setupTooltips`)** updated for the new title JSON shapes:
+    - `Vote`: `"Voted YES"` / `"Voted NO"` / `"Did not vote"` based on `voted` + `voteValid`.
+    - `FillBar`: `"N transactions"` (TOTAL) or `"N <coin>-transactions"` (per-coin).
+    - `Ticket` / `Revocation`: `<total> VAR` + inputs/outputs.
+    - Legacy `PoW Reward / PoS Reward / Project Fund / Tx Fees / Transaction` cases removed.
+
+- **Location:** `cmd/dcrdata/internal/explorer/visualblocks_contract_test.go` (extended in `38636d52`)
+  - **Transformations:** Sub-test `BlockContractWireFormat` adds `total_fill_ratio` assertion (`wantRatio := float64(15000) / maxBlockSize`). Sub-test `BlockWSWireFormatEquivalence` adds `total_fill_ratio` to `contractFields` and patches `RegularCoinCounts` + `TotalFillRatio` onto the test's `blockCopy` to mirror the production handler. **The contract now asserts five fields are wire-identical between HTTP and WS**, not four.
+
+- **Location:** `cmd/dcrdata/public/js/controllers/visualBlocks_controller.test.js` (new in `38636d52`)
+  - **Coverage:** 13 tests across `makeMempoolBlock`, `newBlockHtmlElement`, and `normaliseWsBlock`. Asserts:
+    - Header size + percent, no DCR text.
+    - No `.block-rewards`/`.block-transactions`/`.block-tx`/`.fund`/`.pow`/`.pos`/`.fees`.
+    - Three vote-state classes by `(Voted, VoteValid)`; empty slots to 5.
+    - Indicator-fill: one TOTAL + one fill-bar per CoinFills entry, ordered `VAR, SKA1, …`.
+    - FillBar `txCount` derived correctly (block: from `RegularCoinCounts`; mempool: from `CoinStats[ct].regular_count`).
+    - Ticket title carries `"coin": "VAR"`.
+    - `block-rows > *` order: votes → tickets → indicator-fill.
+    - Regression: `normaliseWsBlock` reads BlockBasic's lowercase JSON tags (`height`/`time`/`size`/`formatted_bytes`) instead of PascalCase — locks in the fix for the `/block/undefined` bug observed during in-browser verification.
 
 ### Section 4 — Cross-Layer Dependencies
-- **Two transport shapes for "one block."** HTTP renders `TrimmedBlockInfo` (already filtered, `Transactions` field name). WebSocket pushes the full `BlockInfo` (`Tx` field name, includes coinbase). JS does the trim equivalent client-side. **PR #284 narrows the asymmetry for four fields** (`regular_coin_counts`, `coin_fills`, `active_ska_count`, `max_block_size`) by patching them onto a shallow-copy `BlockInfo` at WS-encode time. `Transactions` ↔ `Tx`, `Coinbase` filtering, and the `Subsidy` struct names remain asymmetric.
-- **WS shallow-copy is load-bearing.** The `*BlockInfo` returned by `GetExplorerBlock` is a memoized shared pointer (`pgb.lastExplorerBlock`). The WS handler builds `blockCopy := *block` before patching `CoinFills`/`ActiveSKACount`/`MaxBlockSize` precisely because the source struct is shared with `/visualblocks`'s next HTTP visitor, the block page, the mempool page, and `/ws` `sigNewBlock` itself. Removing the shallow copy reintroduces the cross-page corruption risk this PR was designed to prevent.
-- **`Subsidy` is still two different Go types depending on path.** Mempool tile gets `BlockSubsidy{Dev int64, …}` (JSON: `dev`). Block tiles get `chainjson.GetBlockSubsidyResult{Developer …}` (JSON: `developer`). Template uses both names; JS uses `subsidy.developer || subsidy.dev`. Unchanged by PR #284.
-- **Shared mutable state:** `exp.pageData` and `exp.invs` are read by Home, Mempool, `/visualblocks`, and `/ws`. Three distinct locks: `pageData.RWMutex`, `invsMtx` (the pointer guard on `explorerUI`), and `MempoolInfo.RWMutex` (embedded in the struct). `Store` (block saver) is the only path that nests two locks: `pageData.Lock()` then `invsMtx.Lock()` (see [explorer.go:547,608-614](../../../cmd/dcrdata/internal/explorer/explorer.go#L547-L614)). `StoreMPData` takes `pageData.RLock` then releases it before taking `invsMtx.Lock` — not nested. **PR #284 also unwound a `MempoolInfo.RLock` ⊃ `pageData.RLock` overlap in `getmempooltrimmed` and `pubsub.getmempooltxs`** (snapshot `pageData` first, release, then `Trim`). `MempoolInfo.Trim` itself now holds its RLock via `defer` for the whole function — slightly longer hold but no new acquisition inside.
-- **Memoized DB block pointer:** `pgb.lastExplorerBlock.blockInfo` is shared by every consumer of the most-recent block. Mutating the returned `*BlockInfo` in any handler still corrupts everyone else's view. The new shallow-copy step in `sigNewBlock` is the textbook fix.
-- **`pubsub/pubsubhub.go` duplicates the home subsidy/reward math** (per CLAUDE.md). `HomeInfo.NBlockSubsidy` reaches the visualblocks mempool tile via the WS subsidy patch — keep both updaters in sync. **PR #284 introduced a new pubsub divergence**: `/ws` `sigNewBlock` patches `CoinFills`/`ActiveSKACount`/`MaxBlockSize` onto a shallow-copy `BlockInfo` before encoding, but `/ps` `sigNewBlock` encodes `psh.state.BlockInfo` directly. A `/ps` subscriber that starts reading those fields would see them zero/nil.
-- **Contract test as enforcement.** Future changes to the four contract fields are guarded by `TestVisualBlocksDataContract`. If you rename one of them or add a fifth, update the test in the same change or the cross-transport equivalence claim regresses silently.
-- **`homePageBlocksMaxCount = 30` enforced in three places:** Go constant, template `clipSlice 30` (per-tile internals), JS `splice(30)` / removeChild loop. Mismatches lead to off-by-one visual glitches and stuck DOM nodes. Unchanged.
+- **Two transport shapes for "one block."** HTTP renders `TrimmedBlockInfo` (already filtered, `Transactions` field name — still present on the wire but the new template does NOT iterate it). WebSocket pushes the full `BlockInfo` (`Tx` field name, includes coinbase — also no longer iterated by the controller). The five contract fields (`regular_coin_counts`, `coin_fills`, `active_ska_count`, `max_block_size`, `total_fill_ratio`) are patched onto the WS shallow-copy so the contract test can assert byte-identical JSON for them across transports. The remaining asymmetry (Tx/Transactions, coinbase filter, Subsidy struct) no longer reaches the page — every consumer the rewrite added reads only the five contract fields plus the BlockBasic embeds (`Size`/`FormattedBytes`) plus Votes/Tickets/Revs.
+
+- **WS wire-shape mix is now an explicit JS concern.** `normaliseWsBlock` and `normaliseMempool` are load-bearing: they paper over the BlockBasic-vs-BlockInfo JSON-tag inconsistency in one place so the rest of the controller sees PascalCase only. Future contract additions should mirror the existing pattern — populate in `Trim`, patch on `blockCopy`, and *add the field to `normaliseWsBlock`* (the controller will silently miss the field otherwise).
+
+- **WS shallow-copy is load-bearing (unchanged from PR #284).** The `*BlockInfo` returned by `GetExplorerBlock` is a memoized shared pointer (`pgb.lastExplorerBlock`). The WS handler builds `blockCopy := *block` before patching the five contract fields; writing them directly to the memoized pointer corrupts every other consumer.
+
+- **Vote three-state contract.** `(Voted, VoteValid) → class` is now a contract between three locations: `(*BlockInfo).Trim` doesn't synthesise these fields (they come from `trimmedTxInfoFromMsgTx` at `pgblockchain.go:6558-6562`), `visualblocks.tmpl` emits the class via `{{if .Voted}}{{if .VoteValid}}…`, and `visualBlocks_controller.js:makeVoteElements` mirrors the mapping in JS. The contract test asserts `voted=true` on a vote-bearing fixture but does not exhaustively cover the three-state mapping — `visualBlocks_controller.test.js` does.
+
+- **Indicator-fill component sharing.** `_indicator-fill.scss` is imported globally via `application.scss:56`; both `/home` (`home_mempool.tmpl`) and `/visualblocks` use the same `.total-bar` / `.fill-bar` markup. The visualblocks-specific overrides (`.block-indicator-fill` selector) only shrink fonts/heights and adjust flex weights for the compact tile context. Changing the base partial affects both pages; changing the override affects only `/visualblocks`. The homepage controller (`homepage_controller.js`) has its own dynamic injection logic for new SKA bars (`injectFillBar` in `public/js/helpers/indicator_fill.js`); the visualblocks controller does NOT use this — it rebuilds the entire tile from a string template on every WS push. C6 (template cloning) is still violated by both controllers via dompurify + string templates; this is a pre-existing pattern.
+
+- **Template helper ↔ JS helper symmetry.** Five template helpers (`formatBytes`, `regularCountForSymbol`, `mempoolRegularCountForSymbol`, `sumRegularCoinCounts`, `sumMempoolRegularCounts`) all have JS-side equivalents declared at file scope in `visualBlocks_controller.js`. Behaviour must match byte-for-byte (especially `formatBytes` which mirrors `humanize.Bytes` SI conversion). No test currently asserts cross-language equivalence; first-render vs live-update divergence is the silent-drift class to watch for.
+
+- **Coin symbol parsing.** `coinTypeFromSymbol("SKA{n}") → n` is the inverse of `coinSymbol(ct)` and exists in two places: `templates.go:1019` (Go, used by `mempoolRegularCountForSymbol`) and `visualBlocks_controller.js` (used by the JS mempool tooltip path). If `coinSymbol` ever stops producing the `SKA{n}` pattern, both inverses must update.
+
+- **Subsidy struct asymmetry is now dead code on this page.** The Subsidy patch in `getmempooltrimmed` is still in place at `websockethandlers.go:200` (mempool tile `Subsidy = HomeInfo.NBlockSubsidy`), but no template field reads `.Subsidy` anymore. The patch is harmless but retired in practice — leave it in place to keep the WS shape stable for now.
+
+- **Shared mutable state (unchanged).** `exp.pageData` and `exp.invs` are read by Home, Mempool, `/visualblocks`, and `/ws`. Lock map unchanged from PR #284: `pageData.RWMutex`, `invsMtx`, `MempoolInfo.RWMutex`. Only `Store` nests two (`pageData.Lock` then `invsMtx.Lock`). `getmempooltrimmed`/`getmempooltxs` still snapshot pageData first, release, then `Trim`.
+
+- **Memoized DB block pointer (unchanged).** `pgb.lastExplorerBlock.blockInfo` is still shared by every consumer of the most-recent block. Treat read-only after `GetExplorerBlock` returns. WS shallow-copy is the canonical safe-augmentation pattern.
+
+- **Contract test as enforcement.** `TestVisualBlocksDataContract` is the de facto spec for cross-transport equivalence. It now asserts five fields. Renames or additions must touch this test in the same change.
+
+- **Outer 30-tile cap (unchanged).** Go const `homePageBlocksMaxCount = 30` + JS `box.removeChild(box.lastChild)`. Per-tile internals cap for tickets (`> 50 → clipSlice 30`) preserved. Transactions-row truncation is gone with the transactions row.
 
 ### Section 5 — Critical Constraints
-- **C1 (float64 VAR-only amount path).** `TrimmedBlockInfo.Total`/`.Fees` and `TrimmedTxInfo.Total` (via `dcrutil.Amount.ToCoin()`) remain `float64`. Per [core/constraints.md C1](../../core/constraints.md#C1), SKA atoms (18 decimals) exceed float64's significand and must stay as `big.Int`-derived strings end-to-end. The aggregate bars (`flex-grow: {{.Total}}`) are **still lossy for SKA**. **PR #284 does not fix this**; it surfaces `CoinFills` (per-coin fill ratios computed from `Size`, not `Amount`, so precision-safe), `ActiveSKACount`, and `MaxBlockSize`, all of which are size-domain (`int32`/`float64` on bytes — safe). To make SKA amount bars precise the next step must add atom-string fields, not new float64s.
-- **C2 (dual-pipeline mutation).** The HTTP + WS pipelines are now contract-aligned for four fields by the WS-side shallow-copy patch. Any field added to `TrimmedBlockInfo` must also be patched onto `blockCopy` in `sigNewBlock` to keep parity — adding to one side only re-creates the silent-drift bug class.
-- **C7 (centralized coin-type labels).** `CoinFillData.Symbol` is filled from `CoinTypeSymbol(ct)`/`fmt.Sprintf("SKA%d", ct)` inside `ComputeCoinFills` — server-produced, not built in JS. `RegularCoinCountsFromCoinRows` also uses `CoinTypeSymbol(ct)`. If the canonical label changes, this is one of the call sites to audit.
-- **C8 (dual-transport shape asymmetry).** PR #284 collapses four of the previously asymmetric fields. The remaining asymmetries are: `Transactions` (HTTP) vs `Tx` (WS); HTTP-side `FilterRegularTx` vs JS-side `block.Tx.filter(!Coinbase)`; `Subsidy.Developer` vs `Subsidy.Dev`; the WS still carries the full `BlockInfo` (treasury, stake fees, all of `Tx`) where the HTTP trim drops most of that. These remain load-bearing.
-- **Coin-type single-tx invariant.** Per CLAUDE.md, every tx is single-coin and pays fees in its own coin. `MiningFee` here is summed only over VAR-counted fees through `dcrutil.Amount`. SKA SSFee distributions live in `BlockInfo.FeesByCoin`/`SSFeeTotalsByCoin` (still `json:"-"`) — *not* surfaced on this page.
-- **Memo non-mutation invariant.** `pgb.lastExplorerBlock` returns a shared pointer; handlers must treat it read-only after build. The new `sigNewBlock` shallow-copy is the canonical pattern for safely augmenting it with per-encode fields.
-- **Empty-slot constants.** Template + JS both pad to `5` votes and `20` tickets+revs per tile. Hardcoded, not chain-param-derived.
-- **CSS unit label.** `DCR` is still hardcoded in `visualblocks.tmpl` (lines 34, 142) and `visualBlocks_controller.js` (lines 24, 61). Decoupled from the chain symbol.
+- **C1 (numeric precision) — dormant on this page in v1.** The page no longer displays coin amounts. Bar widths are byte-domain (`Size / MaxBlockSize`), counts are integers. Per spec §0.2 the precision rule sits idle until a future iteration brings amounts back. The aggregate `BlockInfo.TotalSent` / `MiningFee` / `TrimmedTxInfo.Total` still travel through `dcrutil.Amount.ToCoin()` (float64) and remain VAR-precision-only — they're carried over the wire but not rendered. Surfacing SKA amounts in a future iteration must add atom-string fields, not new float64.
+
+- **C2 (dual-pipeline mutation).** Five contract fields are now pinned across HTTP and WS by the shallow-copy patch + contract test. Adding a sixth re-applies the rule: populate in `Trim`, patch on `blockCopy`, assert in `visualblocks_contract_test.go`, **and** extend `normaliseWsBlock` so the JS side picks it up. Skip any step and the silent-drift bug class returns.
+
+- **C3 (template + WebSocket parity).** Now harder, not easier: the JS controller builds a much larger DOM string per tile (header + 3 rows including an indicator-fill block with TOTAL + N per-coin bars). Class names, `data-*` hooks, `title` JSON shapes, and the `data-visualBlocks-target="tooltip"` attribute must match the template byte-for-byte. The contract test does not cover DOM shape; `visualBlocks_controller.test.js` covers most of the JS side but the template is unverified at this level — manual or Playwright verification is still required for template-only changes.
+
+- **C5 (CSS styling).** The new SCSS pulls colours from inline values (`#2971ff` for vote-yes, `#fd714a` for vote-rev, etc.) — these are pre-existing literals carried over from the legacy code. If you touch them, prefer to add an SCSS variable in `_variables.scss` and reference it; do not invent new inline hexes.
+
+- **C6 (in-DOM template cloning).** The controller still uses `dompurify.sanitize` + template literals to build tiles, not `<template>` cloning. This violates C6 but matches the legacy controller's idiom; it has not been reworked because the entire tile is rebuilt per WS event (not a small sub-element). A future refactor could introduce a `<template id="visual-blocks-tile">` element to satisfy C6 cleanly; this would also collapse the C3 risk by guaranteeing identical markup with the server-rendered tile.
+
+- **C7 (centralized coin-type labels).** `CoinFillData.Symbol` is server-set via `coinSymbol(ct)` inside `ComputeCoinFills`/`RegularCoinCountsFromCoinRows`. The controller never constructs SKA labels — it consumes `entry.symbol` directly. The new `coinTypeFromSymbol` parser exists only to map symbol strings back to coin-type indices for the mempool `CoinStats` map lookup; if `coinSymbol` ever stops producing `SKA{n}`, both inverses must update.
+
+- **C8 (dual-transport shape asymmetry).** Narrowed materially on this page:
+  - Five fields are wire-identical across HTTP and WS (was four under PR #284).
+  - The `Subsidy.Dev` vs `Subsidy.Developer` asymmetry no longer reaches the page (rewards row gone).
+  - The `Tx` vs `Transactions` field-name asymmetry no longer matters (neither tile reads per-tx).
+  - WS still carries the full `BlockInfo` (treasury, stake fees, all of `Tx`) but nothing on this page reads those.
+  - Wire-shape mix (BlockBasic lowercase JSON tags vs BlockInfo PascalCase vs TrimmedTxInfo snake-case) is still there; `normaliseWsBlock` is the load-bearing reconciliation.
+  - `/ps` (pubsub) divergence unchanged — `pubsubhub.go:sigNewBlock` does not patch any of the five contract fields.
+
+- **Single-tx single-coin / fee follows coin.** Unchanged from PR #284: per-coin counts and fill ratios live on `CoinFills`/`CoinStats`/`RegularCoinCounts`. The page no longer surfaces SSFee distribution (it never did meaningfully) or per-coin amounts.
+
+- **Hardcoded literals preserved.** `5` votes per tile, `20` tickets+revs per tile, `> 50 → clipSlice 30 + "+N more"` for tickets, `30` outer tile cap. All stake/render parameters.
 
 ### Section 6 — Mutation Impact
 When modifying `/visualblocks` data:
+
 - **Direct dependencies:**
-  - `explorerroutes.go:VisualBlocks` (handler — now thin: snapshot pageData, loop `block.Trim`, mempool `inv.Trim`, render).
-  - `views/visualblocks.tmpl` (template).
-  - `explorer/types/explorertypes.go`:
-    - `TrimmedBlockInfo`, `TrimmedTxInfo`, `TrimmedMempoolInfo`, `BlockSubsidy`, `WebsocketBlock`
-    - `(*BlockInfo).Trim`, `(*MempoolInfo).Trim` — **changing either signature ripples to every caller (handler, WS handler, pubsubhub, viewmodel tests, dev_indicators)**.
-    - `types.ComputeCoinFills`, `StatsFromCoinRows`, `RegularCoinCountsFromCoinRows`.
-  - `db/dcrpg/pgblockchain.go`: `GetExplorerBlock`, `GetExplorerFullBlocks`, `trimmedTxInfoFromMsgTx` (now sets `Voted`).
+  - `explorerroutes.go:VisualBlocks` (handler — thin: snapshot pageData, loop `block.Trim`, mempool `inv.Trim`, render).
+  - `views/visualblocks.tmpl` (template — 3-row tile + indicator-fill).
+  - `templates.go` template helpers (`formatBytes`, `regularCountForSymbol`, `mempoolRegularCountForSymbol`, `sumRegularCoinCounts`, `sumMempoolRegularCounts`, plus `coinTypeFromSymbol` internal).
+  - `explorer/types/explorertypes.go`: `TrimmedBlockInfo`, `TrimmedTxInfo`, `TrimmedMempoolInfo`, `WebsocketBlock`, `(*BlockInfo).Trim`, `(*MempoolInfo).Trim`, `types.ComputeCoinFills`, `StatsFromCoinRows`, `RegularCoinCountsFromCoinRows`.
+  - `db/dcrpg/pgblockchain.go`: `GetExplorerBlock`, `GetExplorerFullBlocks`, `trimmedTxInfoFromMsgTx` (Voted source).
   - `explorer.go:Store`/`StoreMPData` (background updaters; both call `types.ComputeCoinFills`).
-  - `websockethandlers.go` `sigNewBlock` (shallow-copy + patch sequence) + `getmempooltrimmed` case (lock-order-restructured).
-  - `public/index.js` (WS → event bus) and `public/js/controllers/visualBlocks_controller.js` (DOM render — does not yet read new fields).
-  - `visualblocks_contract_test.go` (cross-transport contract assertions).
+  - `websockethandlers.go:sigNewBlock` (shallow-copy + 5-field patch) + `getmempooltrimmed`.
+  - `public/index.js` (WS → event bus) and `public/js/controllers/visualBlocks_controller.js` (DOM render + normalisation).
+  - `public/scss/visualblocks.scss` (compact-tile overrides for indicator-fill + vote classes).
+  - `public/scss/_indicator-fill.scss` (shared with homepage).
+  - `visualblocks_contract_test.go` (5-field cross-transport assertions).
+  - `visualBlocks_controller.test.js` (vitest pinning the new DOM shape).
+
 - **Indirect dependencies:**
-  - `pubsub/pubsubhub.go` — duplicates home-page subsidy/reward calc; **and now broadcasts `psh.state.BlockInfo` over `sigNewBlock` without the contract-field patch the explorer `/ws` applies.** Changes to `HomeInfo.NBlockSubsidy` must mirror; any `/ps` subscriber that consumes `CoinFills`/`ActiveSKACount`/`MaxBlockSize` needs a parallel patch added there.
-  - Home page (`home_latest_blocks_controller.js`), block page, mempool page — all consume the same `BlockInfo`/`MempoolInfo` shapes via the same WS frames. **`RegularCoinCounts` is now wire-visible on `BlockInfo`** (previously `json:"-"`); any controller that does `JSON.stringify(block)` or hashes the payload will see a bigger object.
+  - `pubsub/pubsubhub.go` — duplicates home-page subsidy/reward calc; broadcasts `psh.state.BlockInfo` over `sigNewBlock` WITHOUT the 5-field contract patch.
+  - Home page (`home_latest_blocks_controller.js`, `home_mempool.tmpl`), block page, mempool page — all consume the same `BlockInfo`/`MempoolInfo` shapes via WS frames. `TotalFillRatio` is the new wire-visible field; consumers that stringify or hash the payload will see a slightly larger object.
   - `status_controller.js`, `blocks_controller.js`, `time_controller.js`, `address_controller.js` — all subscribe to `BLOCK_RECEIVED`.
+
 - **Serialization boundaries:**
-  - HTTP: Go template rendering of `TrimmedBlockInfo`/`TrimmedMempoolInfo`.
-  - WS new-block: `json.Encode(WebsocketBlock{Block:&blockCopy, Extra:*HomeInfo})` — shallow-copy then patch.
-  - WS mempool: `json.Encode(*TrimmedMempoolInfo)` with `MaxBlockSize`/`TotalSize` carried through `Trim`, plus patched `Subsidy`.
-- **Rendering layers:** `visualblocks.tmpl` (initial 30 tiles + mempool) and `visualBlocks_controller.js` (incremental updates).
+  - HTTP: Go template rendering of `TrimmedBlockInfo`/`TrimmedMempoolInfo` (now with `TotalFillRatio` on the block side).
+  - WS new-block: `json.Encode(WebsocketBlock{Block:&blockCopy, Extra:*HomeInfo})` — five fields patched.
+  - WS mempool: `json.Encode(*TrimmedMempoolInfo)` with `MaxBlockSize`/`TotalSize`/`TotalFillRatio`/`CoinFills`/`CoinStats` already populated by `Trim` plus `Subsidy` patched from `HomeInfo.NBlockSubsidy` (still patched even though the template no longer reads it).
+
+- **Rendering layers:** `visualblocks.tmpl` (initial 30 tiles + mempool tile) and `visualBlocks_controller.js` (incremental updates).
 
 **Silent failures:**
-- A SKA-only tx renders with float64 `Total` from `ToCoin()` of 18-dp atoms → garbage `flex-grow`, the tile becomes the dominant bar in its block. **Unchanged by PR #284.**
-- Forgetting to patch a new contract field onto the WS shallow-copy → newly-pushed tiles silently miss the field while initial-render tiles show it. The contract test catches this *only* for the four fields it asserts; any new field needs a new assertion.
-- Removing the WS shallow-copy and writing fields directly to `pageData.BlockInfo` → corrupts the memoized pointer cross-page.
-- `/ps` consumer added that reads `CoinFills`/`ActiveSKACount`/`MaxBlockSize` from a `sigNewBlock` frame → fields are zero/nil because pubsub's `sigNewBlock` is not patched.
-- Renaming `Subsidy.Developer` ↔ `Dev` on either side without touching all three (Go struct, template, JS) → the "fund" bar silently collapses to 0 width.
-- Setting a non-JSON `title` attribute → `setupTooltips` JSON.parse fails silently and that tile loses its tooltip.
-- **Wire-format break for external consumers** of `TrimmedTxInfo` — fields now serialize as `vote_valid`/`vin_count`/`vout_count`/etc. instead of Go-name keys. The contract test does not cover external clients.
+
+- WS-shape regression (lowercase JSON tag fields read as PascalCase) → `/block/undefined`, `NaNs ago`. Locked by `normaliseWsBlock` test.
+- New contract field added to `TrimmedBlockInfo` + `Trim` but not to `blockCopy` patch → first 30 tiles correct, WS-pushed tiles silently miss the field. Contract test catches only the five currently asserted.
+- New contract field patched but not added to `normaliseWsBlock` → WS shape carries it but the JS tile builder reads `undefined`.
+- Template helper diverges from JS equivalent → header/tooltip mismatch between first-render and live-update tiles. Not currently locked.
+- Vote three-state mapping out of sync between template + JS → wrong colour class on the JS-built tile only.
+- `coinTypeFromSymbol` divergence → mempool-tile bar tooltip looks up wrong coin.
+- C3 drift: adding a `data-*` hook or class to the template but not to `newBlockHtmlElement`/`makeMempoolBlock` → CSS or tippy.js fails on live-updated tiles only.
+- `/ps` consumer reading `total_fill_ratio` (or any of the five) from pubsub `sigNewBlock` → zero/nil because pubsub is still unpatched.
+- Subsidy field-name one-sided rename — now harmless on this page (no template field reads `.Subsidy`) but still hot on the homepage. Be careful about cleanup.
+- Non-JSON `title` attribute → tooltip silently disabled (the `setupTooltips` `catch {}` block swallows the parse error).
 
 **Hard failures:**
-- Removing `block.Tx` from `BlockInfo`: `(*BlockInfo).Trim` scans `bi.Tx` for the coinbase and applies `FilterRegularTx(bi.Tx)` → nil deref. JS calls `block.Tx.filter(...)` → runtime error.
-- Removing `HomeInfo.NBlockSubsidy`: `mempoolInfo.Subsidy = exp.pageData.HomeInfo.NBlockSubsidy` (explorerroutes.go:357, websockethandlers.go:196, pubsubhub.go:323) fails to compile.
-- Removing `MempoolInfo.Trim`: handler at `:354` and WS case at `:199`, pubsub case fail to compile.
-- Changing `(*MempoolInfo).Trim` signature (e.g. drop the `maxBlockSize` arg): all four call sites (handler, WS handler, pubsubhub, viewmodel tests) fail to compile — that is the safe-by-default property of this PR.
-- Changing `(*BlockInfo).Trim` signature: the handler loop and the WS shallow-copy patch both fail to compile.
+
+- Removing `block.Tx` from `BlockInfo` → `(*BlockInfo).Trim` nil deref (still scans `bi.Tx` for the coinbase).
+- Removing or renaming any of `formatBytes`, `regularCountForSymbol`, `mempoolRegularCountForSymbol`, `sumRegularCoinCounts`, `sumMempoolRegularCounts` → template parse error at first request.
+- Removing `(*BlockInfo).Trim` / `(*MempoolInfo).Trim` → compile failure across handler, websockethandlers, pubsubhub, viewmodel tests, dev_indicators.
+- Changing `Trim` signatures → fan-out compile error (safe-by-default).
 
 ### Section 7 — Common Pitfalls
-1. Assuming the WebSocket frame goes through the same trim as the HTTP handler. It still does not — the WS sends a full `BlockInfo` and the JS controller re-implements `FilterRegularTx` (`block.Tx.filter(!Coinbase)`). PR #284 patches four contract fields onto the WS shape but does not collapse the broader asymmetry.
-2. Treating SKA amounts as safe through `float64`. `flex-grow: {{.Total}}` will still produce nonsense for SKA-precision values; surfacing SKA needs new atom-string fields and parallel template + JS handling.
-3. Conflating `block.Tx` (WS, full BlockInfo) with `block.Transactions` (HTTP, TrimmedBlockInfo). Same data, different names.
-4. Mixing up `Subsidy.Developer` (chainjson) and `Subsidy.Dev` (BlockSubsidy). Both appear in the same `visualblocks.tmpl`.
-5. Expecting `Treasury` or `StakeFees` slices to appear — `(*BlockInfo).Trim` drops them when building `TrimmedBlockInfo`.
-6. **Mutating `pageData.BlockInfo` directly when adding new contract fields.** The WS handler must continue to shallow-copy and patch — the source pointer is shared with the memo. Adding `MaxBlockSize = ...` directly to `block` writes through to every other reader.
-7. Adding a new contract field to `TrimmedBlockInfo` but forgetting to patch it onto the WS shallow-copy → C8 silent-drift returns. Mirror in `pubsub/pubsubhub.go` `sigNewBlock` too if pubsub clients need it.
-8. Changing the outer 30 cap without updating the JS `removeChild` trim that assumes 30, or the template's per-tile `clipSlice 30`.
-9. Forgetting that `pubsub/pubsubhub.go` duplicates the subsidy/reward calc on the home path; a one-sided fix drifts the visualblocks mempool tile out of sync.
-10. **Holding `MempoolInfo.Lock` (writer) while another goroutine holds `pageData.RLock`.** PR #284's lock-order refactor of `getmempooltrimmed` deliberately reads pageData first, then takes the mempool lock — reverting to the old "Trim then pageData.RLock" order recreates a (narrow) lock-overlap risk.
-11. Assuming the new JSON tags on `TrimmedTxInfo` are inconsequential — external callers reading the raw struct as JSON now see snake_case keys (`fees`, `vote_valid`, `vin_count`, …). The contract test does not cover backward compatibility of the wire format.
+1. **Reading PascalCase Go fields from the WS wire-shape.** `BlockBasic` fields have lowercase JSON tags (`height`, `time`, `size`, `formatted_bytes`); `BlockInfo`'s non-embedded fields have no JSON tags and serialise as PascalCase (`Votes`, `Tickets`, `Revs`, `Tx`). The mixing is real and intentional, and `normaliseWsBlock` is the single place that resolves it. New WS-shape code outside this normaliser will reintroduce the `/block/undefined` bug class.
+
+2. **Adding a contract field without updating the JS normaliser.** Five steps per addition: (a) `TrimmedBlockInfo` struct + JSON tag; (b) `BlockInfo` struct + JSON tag; (c) `(*BlockInfo).Trim` populates it; (d) `websockethandlers.go:sigNewBlock` patches it onto `blockCopy`; (e) `visualBlocks_controller.js:normaliseWsBlock` reads it. Skip (e) and the JS tile silently misses the field on live updates.
+
+3. **Template helper drift.** `formatBytes` mirrors `humanize.Bytes`; if you change the Go formatter you must mirror in the JS implementation. Same for the count-lookup helpers. There is no automated cross-language equivalence test.
+
+4. **Mutating `pageData.BlockInfo` directly when adding new contract fields.** The WS handler must continue to shallow-copy and patch — the source pointer is shared with the memo.
+
+5. **`pubsub/pubsubhub.go` divergence.** `/ps` `sigNewBlock` still doesn't patch any of the five contract fields. If a `/ps` consumer ever needs them, mirror the patch sequence.
+
+6. **Holding `MempoolInfo.RLock` while waiting on `pageData.RLock`.** The PR #284 lock-order refactor is preserved; don't reintroduce the inverted nest.
+
+7. **Forgetting to update the dark theme.** The new `.vote-skip` class needs a dark-theme variant (already in `visualblocks.scss`); future vote-state additions need the same treatment.
+
+8. **C6 still violated.** Don't expand the string-template approach into more places; if you add a new dynamic tile-injection surface, prefer `<template>` cloning per C6.
+
+9. **C7 inverse parser duplication.** `coinTypeFromSymbol` exists in both Go (`templates.go`) and JS (`visualBlocks_controller.js`). Treat as paired code.
+
+10. **Subsidy patch is dead but still wired.** The mempool tile no longer reads `.Subsidy`, but the WS path still writes it onto `mempoolInfo.Subsidy`. Removing the patch is safe only if you also verify no consumer outside this page reads it from the WS payload — currently no one does, but the audit is a chore worth its own commit.
 
 ### Section 8 — Evidence
 - `cmd/dcrdata/main.go:694` — route registration `r.Get("/visualblocks", explore.VisualBlocks)`.
 - `cmd/dcrdata/internal/explorer/explorerroutes.go:135` — `homePageBlocksMaxCount = 30`.
-- `cmd/dcrdata/internal/explorer/explorerroutes.go:320-381` — `VisualBlocks` handler. Pre-snapshot pageData (`:339-345`), trim loop (`:347-350`), mempool trim (`:354`), Subsidy patch + template exec under `pageData.RLock` (`:356-371`).
+- `cmd/dcrdata/internal/explorer/explorerroutes.go:320-381` — `VisualBlocks` handler.
 - `db/dcrpg/pgblockchain.go:6558-6562` — `trimmedTxInfoFromMsgTx` populates `Voted: txBasic.VoteInfo != nil`.
 - `db/dcrpg/pgblockchain.go:7172-7188` — `GetExplorerFullBlocks` sequential loop.
-- `db/dcrpg/pgblockchain.go:6366-6633` — `GetExplorerBlock`; memo at `:6371-6376` and `:6626-6630`; per-coin SKA fee recompute at `:6529-6553`; VAR `ToCoin()` summation at `:6594-6605`.
-- `explorer/types/explorertypes.go:357-367` — `TrimmedTxInfo` with explicit JSON tags + `Voted bool`.
-- `explorer/types/explorertypes.go:239-282` — `RegularCoinCountsFromCoinRows`.
-- `explorer/types/explorertypes.go:667-684` — `CoinFillData`.
-- `explorer/types/explorertypes.go:704-722` — `TrimmedBlockInfo` widened shape with JSON tags.
-- `explorer/types/explorertypes.go:725-754` — `(*BlockInfo).Trim(maxBlockSize, issuedSKA)`.
-- `explorer/types/explorertypes.go:795,801-803` — `BlockInfo.RegularCoinCounts` promoted to wire; new `CoinFills`/`ActiveSKACount`/`MaxBlockSize`.
-- `explorer/types/explorertypes.go:899-905` — `TrimmedMempoolInfo` with `MaxBlockSize`/`TotalSize`.
-- `explorer/types/explorertypes.go:949-987` — `MempoolInfo.Trim(maxBlockSize)` with deferred unlock.
-- `explorer/types/explorertypes.go:1720-1733` — `StatsFromCoinRows` (coinbase-size subtraction for VAR).
-- `explorer/types/explorertypes.go:1735-1822` — `types.ComputeCoinFills`.
-- `cmd/dcrdata/internal/explorer/explorer.go:498,609` — call sites updated to `types.ComputeCoinFills`.
-- `cmd/dcrdata/internal/explorer/dev_indicators.go:58` — test helper updated to `types.ComputeCoinFills`.
-- `cmd/dcrdata/internal/explorer/templates_test.go:339-590` — all `TestComputeCoinFills` cases updated to `types.ComputeCoinFills`.
-- `cmd/dcrdata/internal/explorer/home_viewmodel_test.go:377,389,406` — `m.Trim(1e6)` signature update.
-- `cmd/dcrdata/internal/explorer/websockethandlers.go:189-209` — `getmempooltrimmed` (pageData snapshot → release → Trim → Subsidy patch).
-- `cmd/dcrdata/internal/explorer/websockethandlers.go:272-300` — `sigNewBlock` (shallow-copy `BlockInfo` + patch `CoinFills`/`ActiveSKACount`/`MaxBlockSize` from `block.Trim(...)`).
-- `pubsub/pubsubhub.go:319-340` — `getmempooltxs` (same lock-order refactor as `/ws`).
-- `pubsub/pubsubhub.go:459-472` — `sigNewBlock` (NOT patched; pubsub broadcasts the un-augmented `state.BlockInfo`).
-- `cmd/dcrdata/internal/explorer/visualblocks_contract_test.go:1-146` — `TestVisualBlocksDataContract`: `BlockContractWireFormat`, `BlockWSWireFormatEquivalence`, `MempoolContractWireFormat`.
+- `db/dcrpg/pgblockchain.go:6366-6633` — `GetExplorerBlock` with memo at `:6371-6376` / `:6626-6630`.
+- `explorer/types/explorertypes.go:357-367` — `TrimmedTxInfo` with PR #284 JSON tags; `Voted bool`.
+- `explorer/types/explorertypes.go:704-723` — `TrimmedBlockInfo` extended with `TotalFillRatio` (line 722).
+- `explorer/types/explorertypes.go:725-758` — `(*BlockInfo).Trim` extended to populate `TotalFillRatio` (guarded `maxBlockSize > 0`).
+- `explorer/types/explorertypes.go:757-805` — `BlockInfo` adds `TotalFillRatio float64 \`json:"total_fill_ratio,omitempty"\``.
+- `explorer/types/explorertypes.go:898-915` — `TrimmedMempoolInfo` (PR #284 shape unchanged).
+- `explorer/types/explorertypes.go:957-989` — `MempoolInfo.Trim` (unchanged from PR #284).
+- `cmd/dcrdata/internal/explorer/templates.go:1019-1075` — five new template helpers + `coinTypeFromSymbol`.
+- `cmd/dcrdata/internal/explorer/websockethandlers.go:272-300` — `sigNewBlock` shallow-copy + 5-field patch.
+- `cmd/dcrdata/internal/explorer/websockethandlers.go:189-209` — `getmempooltrimmed` (PR #284 lock-order preserved).
+- `pubsub/pubsubhub.go:319-340` — `getmempooltxs` (PR #284 lock-order preserved).
+- `pubsub/pubsubhub.go:459-472` — `sigNewBlock` (still NOT patched).
+- `cmd/dcrdata/internal/explorer/visualblocks_contract_test.go` — `BlockContractWireFormat` asserts `total_fill_ratio`; `BlockWSWireFormatEquivalence` asserts five-field parity; `MempoolContractWireFormat` unchanged.
 - `cmd/dcrdata/public/index.js:46-64` — `ws.registerEvtHandler('newblock', ...)` → `globalEventBus.publish('BLOCK_RECEIVED', newBlock)`.
-- `cmd/dcrdata/public/js/controllers/visualBlocks_controller.js:14-36, 235-260, 262-267` — controller; does NOT yet consume `coin_fills`/`active_ska_count`/`max_block_size`/`regular_coin_counts`/`voted`.
-- `cmd/dcrdata/views/visualblocks.tmpl` — full template (mempool tile + 30 blocks; subsidy field-name asymmetry; `clipSlice 30` when `>50`); does NOT yet consume the new fields.
-- `cmd/dcrdata/public/scss/visualblocks.scss` and `cmd/dcrdata/public/scss/application.scss:49`.
+- `cmd/dcrdata/public/js/controllers/visualBlocks_controller.js:1-420` — full rewrite: helpers, normalisers, exported builders, Stimulus controller.
+- `cmd/dcrdata/public/js/controllers/visualBlocks_controller.test.js:1-280` — 13 tests (vote states, indicator-fill structure, FillBar tooltip JSON, ticket coin label, block-rows order, WS-shape regression).
+- `cmd/dcrdata/views/visualblocks.tmpl` — full rewrite: 3-row tile (votes / tickets / indicator-fill), three vote states, formatBytes header, indicator-fill markup mirroring `home_mempool.tmpl`.
+- `cmd/dcrdata/public/scss/visualblocks.scss` — vote-state classes, compact indicator-fill overrides, dark-theme update.
+- `cmd/dcrdata/public/scss/_indicator-fill.scss` — base partial (shared with homepage), imported globally via `application.scss:56`.
 
 See also:
 - /wiki/code-analysis/page-rendering/patterns.md (shares-pattern-with: out-of-band shared page state; shared-state lock discipline; `*CommonPageData` embedding)
 - /wiki/code-analysis/page-rendering/impact.md (depends-on: saver writer/reader drift; lock-order inversion against `Store`; `commonData` nil render crash)
-- /wiki/code-analysis/visualblocks/patterns.md — domain patterns (cross-pipeline tile rendering, JS-side server-filter mirror, Subsidy struct asymmetry, triple-enforced 30-cap, memoized BlockInfo, shared page state, WS subsidy patch, **cross-transport contract via WS shallow-copy + Trim patch**).
+- /wiki/code-analysis/visualblocks/patterns.md — domain patterns (cross-pipeline tile rendering, wire-shape normalisation, indicator-fill component reuse, three-state vote rendering, cross-transport contract via WS shallow-copy + Trim patch, memoized BlockInfo, lock order).
 - /wiki/code-analysis/visualblocks/impact.md — mutation impact, loud/silent failure modes, safe-change checklist.
-- /wiki/code-analysis/block/flow.full.md (shares-pattern-with: fan-out BlockDataSaver, dual transport shape REST vs WebSocket, multi-coin big.Int→string precision)
+- /wiki/code-analysis/mempool/flow.full.md (shares-pattern-with: `MempoolInfo` aggregation, `CoinFills` derivation in `StoreMPData`; indicator-fill component is shared with `/home` mempool card)
+- /wiki/code-analysis/block/flow.full.md (shares-pattern-with: fan-out BlockDataSaver, dual transport shape REST vs WebSocket)
 - /wiki/code-analysis/transaction/flow.full.md (shares-pattern-with: mempool aggregation vs confirmed Vout-array — the same C8 dual-transport class)
-- /wiki/code-analysis/mempool/flow.full.md (depends-on: `MempoolInfo` aggregation, `CoinFills` derivation in `StoreMPData`; shares the trim/transport asymmetry)
-- /wiki/core/constraints.md (depends-on: C1 numeric precision — float64 VAR vs big.Int SKA; C2 dual pipeline; shares-pattern-with: C8 dual-transport shape asymmetry — **PR #284 narrows it for four fields but does not eliminate it**)
-- /wiki/specs/homepage-metrics/spec.md (shares-pattern-with: home-page latest-blocks tiles consume the same `BlockInfo` over the same WS frames)
+- /wiki/core/constraints.md (depends-on: C1 numeric precision — dormant on this page in v1; C2 dual pipeline; C3 template + WS parity — more critical post-rewrite; C6 in-DOM template cloning — still violated; C7 centralized coin-type labels; C8 dual-transport shape asymmetry — narrowed to wire-shape mixing only)
+- /wiki/specs/homepage-metrics/spec.md (shares-pattern-with: home-page indicator-fill component reused by `/visualblocks`)
+- /wiki/specs/visualblocks/spec.md (depends-on: the spec this rewrite implements; §13 acceptance checklist verified in `38636d52`)
