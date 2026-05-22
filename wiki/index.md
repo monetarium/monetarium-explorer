@@ -100,12 +100,12 @@ _Historical data fetching, cache aggregation, and payload serialization for UI c
 
 ### VisualBlocks
 
-_The `/visualblocks` page: latest-N blocks plus mempool rendered as flex-grow tiles. Dual pipeline (HTTP `TrimmedBlockInfo` vs WebSocket full `BlockInfo`) with two different `Subsidy` struct shapes and a JS-side coinbase filter._
+_The `/visualblocks` page: latest-N blocks plus mempool rendered as flex-grow tiles. Dual pipeline (HTTP `TrimmedBlockInfo` vs WebSocket full `BlockInfo`) with two different `Subsidy` struct shapes and a JS-side coinbase filter. **Revised at `HEAD=386f2e12` (post PR #284 `feat/visualblocks-data-contract`)**: four contract fields (`coin_fills`, `active_ska_count`, `max_block_size`, `regular_coin_counts`) now wire-symmetric across HTTP and `/ws` via a shallow-copy + `(*BlockInfo).Trim` patch on the WS path; trim logic moved into `explorer/types` as `(*BlockInfo).Trim(maxBlockSize, issuedSKA)` and `(*MempoolInfo).Trim(maxBlockSize)`; `computeCoinFills` exported as `types.ComputeCoinFills`; `TrimmedTxInfo.Voted` added; `pubsub/ps:sigNewBlock` is NOT patched (known divergence); `visualblocks.tmpl` / `visualBlocks_controller.js` do not yet consume the new fields._
 
-- flow (compact): code-analysis/visualblocks/flow.compact.md — high-level summary of the HTTP + WS pipelines and the trim asymmetry
-- flow (full): code-analysis/visualblocks/flow.full.md — detailed, step-by-step function trace covering handler, DB memo, WS encoder, JS controller, and template
-- patterns: code-analysis/visualblocks/patterns.md — cross-pipeline tile rendering, JS-side server-filter mirror, Subsidy struct asymmetry, triple-enforced 30-cap, memoized BlockInfo, lock order, WS subsidy patch
-- impact: code-analysis/visualblocks/impact.md — mutation impact across HTTP/WS/JS/DB layers, loud and silent failure modes, safe-change checklist
+- flow (compact): code-analysis/visualblocks/flow.compact.md — current data path, contract-field patch sequence, lock-order refactor, mutation checklist
+- flow (full): code-analysis/visualblocks/flow.full.md — detailed function trace covering handler, DB memo, `(*BlockInfo).Trim`, WS shallow-copy + patch, pubsub divergence, contract test, JS controller, and template
+- patterns: code-analysis/visualblocks/patterns.md — cross-pipeline tile rendering, JS-side server-filter mirror, **cross-transport contract via WS shallow-copy + Trim patch (PR #284)**, Subsidy struct asymmetry, triple-enforced 30-cap, memoized BlockInfo, **Trim methods on the types package**, lock order, WS subsidy patch, contract test as enforcement
+- impact: code-analysis/visualblocks/impact.md — mutation impact across HTTP/WS/JS/DB/pubsub layers, contract-field safe-change checklist, `/ps` divergence as known gap, loud and silent failure modes
 
 ### Attack-Cost
 
