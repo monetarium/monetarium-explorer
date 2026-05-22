@@ -6548,6 +6548,43 @@ func trimmedTxInfoFromMsgTx(txraw *chainjson.TxRawResult, ticketPrice int64, msg
 		VoteValid: voteValid,
 		Voted:     txBasic.VoteInfo != nil,
 	}
+
+	// Calculate high-precision fee and fee rate for all non-coinbase transactions
+	if !tx.Coinbase {
+		if tx.CoinType != 0 { // SKA
+			totalIn := new(big.Int)
+			for vi := range txraw.Vin {
+				if txraw.Vin[vi].SKAAmountIn == "" {
+					continue
+				}
+				if amt, ok := new(big.Int).SetString(txraw.Vin[vi].SKAAmountIn, 10); ok {
+					totalIn.Add(totalIn, amt)
+				}
+			}
+			totalOut := new(big.Int)
+			if tx.TotalRaw != "" {
+				totalOut.SetString(tx.TotalRaw, 10)
+			}
+			fee := new(big.Int).Sub(totalIn, totalOut)
+			if fee.Sign() < 0 {
+				fee.SetInt64(0)
+			}
+			tx.FeeRaw = fee.String()
+			if txSize := int64(msgTx.SerializeSize()); txSize > 0 {
+				// Fee rate = atoms / byte
+				rate := new(big.Int).Quo(fee, big.NewInt(txSize))
+				tx.FeeRateRaw = rate.String()
+			}
+		} else { // VAR
+			fee, _ := txhelpers.TxFeeRate(msgTx)
+			tx.FeeRaw = strconv.FormatInt(int64(fee), 10)
+			if txSize := int64(msgTx.SerializeSize()); txSize > 0 {
+				rate := int64(fee) / txSize
+				tx.FeeRateRaw = strconv.FormatInt(rate, 10)
+			}
+		}
+	}
+
 	return tx, txType
 }
 
@@ -6726,44 +6763,6 @@ func (pgb *ChainDB) GetExplorerBlock(ctx context.Context, hash string) *exptypes
 		for i := range tx.Vin {
 			if tx.Vin[i].IsCoinBase() {
 				exptx.Fee, exptx.FeeRate, exptx.Fees = 0.0, 0.0, 0.0
-			}
-		}
-
-		// SKA fee = sum(SKAAmountIn) - sum(outputs) in the tx's coin. The node
-		// includes per-input SKA atoms in the verbose tx, so this needs no DB
-		// lookup. makeExplorerTxBasic skips this because it has no access to
-		// vin.SKAAmountIn; do it here so the block page renders the right fee
-		// in the row's own coin instead of "0 VAR".
-		if exptx.CoinType != 0 && !exptx.Coinbase {
-			totalIn := new(big.Int)
-			for vi := range tx.Vin {
-				if tx.Vin[vi].SKAAmountIn == "" {
-					continue
-				}
-				if amt, ok := new(big.Int).SetString(tx.Vin[vi].SKAAmountIn, 10); ok {
-					totalIn.Add(totalIn, amt)
-				}
-			}
-			totalOut := new(big.Int)
-			if exptx.TotalRaw != "" {
-				totalOut.SetString(exptx.TotalRaw, 10)
-			}
-			fee := new(big.Int).Sub(totalIn, totalOut)
-			if fee.Sign() < 0 {
-				fee.SetInt64(0)
-			}
-			exptx.FeeRaw = fee.String()
-			if txSize := int64(msgTx.SerializeSize()); txSize > 0 {
-				// Fee rate = atoms / byte
-				rate := new(big.Int).Quo(fee, big.NewInt(txSize))
-				exptx.FeeRateRaw = rate.String()
-			}
-		} else if !exptx.Coinbase {
-			// VAR transactions: compute FeeRateRaw as atoms / byte
-			fee, _ := txhelpers.TxFeeRate(msgTx)
-			if txSize := int64(msgTx.SerializeSize()); txSize > 0 {
-				rate := int64(fee) / txSize
-				exptx.FeeRateRaw = strconv.FormatInt(rate, 10)
 			}
 		}
 
