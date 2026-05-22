@@ -1,12 +1,16 @@
 package types
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net"
 	"strconv"
 	"strings"
 
+	"github.com/coder/websocket"
 	"github.com/decred/base58"
 	exptypes "github.com/monetarium/monetarium-explorer/explorer/types"
 )
@@ -28,24 +32,29 @@ func (v Ver) String() string {
 	return fmt.Sprintf("%d.%d.%d", v.Major, v.Minor, v.Patch)
 }
 
-var (
-	// ErrWsClosed is the error message when a websocket.(*Conn).Close tries to
-	// close an already closed connection. See Go's src/internal/poll/fd.go.
-	ErrWsClosed = "use of closed network connection"
-)
-
-// IsWSClosedErr checks if the passed error indicates a closed websocket
-// connection.
-func IsWSClosedErr(err error) (closedErr bool) {
-	// Must use strings.Contains to catch errors like "write tcp
-	// 127.0.0.1:7777->127.0.0.1:39196: use of closed network connection".
-	return err != nil && strings.Contains(err.Error(), ErrWsClosed)
+// IsWSClosedErr reports whether err indicates the websocket connection is
+// closed (normally or abnormally) and the caller should stop using it. It
+// catches close frames from the peer, EOF on the underlying stream,
+// "use of closed network connection" after a local Close, and context
+// cancellation (which the read/write loops use to tear down a connection
+// after the ping goroutine detects a dead client).
+func IsWSClosedErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, net.ErrClosed) ||
+		errors.Is(err, io.EOF) ||
+		errors.Is(err, context.Canceled) {
+		return true
+	}
+	return websocket.CloseStatus(err) != -1
 }
 
-// IsIOTimeoutErr checks if the passed error indicates an I/O timeout error.
+// IsIOTimeoutErr reports whether err is a context deadline exceeded error,
+// which is how coder/websocket surfaces per-call read/write timeouts after
+// the migration from SetReadDeadline / SetWriteDeadline.
 func IsIOTimeoutErr(err error) bool {
-	t, ok := err.(net.Error)
-	return ok && t.Timeout()
+	return errors.Is(err, context.DeadlineExceeded)
 }
 
 // IsTemporaryErr checks if the passed error indicates a transient error.

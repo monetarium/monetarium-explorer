@@ -17,7 +17,6 @@ require (
 	github.com/monetarium/monetarium-node/rpcclient v1.1.0
 	github.com/monetarium/monetarium-node/txscript v1.1.0
 	github.com/monetarium/monetarium-node/wire v1.1.0
-	golang.org/x/net v0.28.0
 )
 
 require (
@@ -26,6 +25,7 @@ require (
 	github.com/nxadm/tail v1.4.8 // indirect
 	github.com/onsi/ginkgo v1.15.0 // indirect
 	github.com/onsi/gomega v1.10.5 // indirect
+	golang.org/x/net v0.28.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
 
@@ -33,6 +33,7 @@ require (
 	github.com/AndreasBriese/bbloom v0.0.0-20190825152654-46b345b51c96 // indirect
 	github.com/agl/ed25519 v0.0.0-20170116200512-5312a6153412 // indirect
 	github.com/cespare/xxhash v1.1.0 // indirect
+	github.com/coder/websocket v1.8.14
 	github.com/dchest/siphash v1.2.3 // indirect
 	github.com/decred/dcrd/crypto/blake256 v1.1.0 // indirect
 	github.com/decred/go-socks v1.1.0 // indirect
