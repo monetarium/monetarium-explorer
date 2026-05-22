@@ -6754,9 +6754,16 @@ func (pgb *ChainDB) GetExplorerBlock(ctx context.Context, hash string) *exptypes
 			}
 			exptx.FeeRaw = fee.String()
 			if txSize := int64(msgTx.SerializeSize()); txSize > 0 {
-				rate := new(big.Int).Mul(fee, big.NewInt(1000))
-				rate.Quo(rate, big.NewInt(txSize))
+				// Fee rate = atoms / byte
+				rate := new(big.Int).Quo(fee, big.NewInt(txSize))
 				exptx.FeeRateRaw = rate.String()
+			}
+		} else if !exptx.Coinbase {
+			// VAR transactions: compute FeeRateRaw as atoms / byte
+			fee, _ := txhelpers.TxFeeRate(msgTx)
+			if txSize := int64(msgTx.SerializeSize()); txSize > 0 {
+				rate := int64(fee) / txSize
+				exptx.FeeRateRaw = strconv.FormatInt(rate, 10)
 			}
 		}
 
