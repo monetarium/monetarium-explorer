@@ -6757,9 +6757,6 @@ func (pgb *ChainDB) GetExplorerBlock(ctx context.Context, hash string) *exptypes
 				rate := new(big.Int).Mul(fee, big.NewInt(1000))
 				rate.Quo(rate, big.NewInt(txSize))
 				exptx.FeeRateRaw = rate.String()
-				if rate.IsInt64() {
-					exptx.FeeRate = dcrutil.Amount(rate.Int64())
-				}
 			}
 		}
 
@@ -6790,9 +6787,11 @@ func (pgb *ChainDB) GetExplorerBlock(ctx context.Context, hash string) *exptypes
 		for _, tx := range txs {
 			// Coinbase transactions have no fee. The fee should be zero already
 			// (as in makeExplorerTxBasic), but intercept coinbase just in case.
-			// Note that this does not include stakebase transactions (votes),
-			// which can have a fee but are not required to.
 			if tx.Coinbase {
+				continue
+			}
+			// Exclude stake-type transactions (votes/stake fees) from the header total
+			if tx.Type == txhelpers.TxTypeVote || tx.Type == txhelpers.TxTypeSSFee {
 				continue
 			}
 			if tx.Fee < 0 {
