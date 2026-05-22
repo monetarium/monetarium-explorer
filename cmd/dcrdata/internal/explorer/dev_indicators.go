@@ -55,7 +55,7 @@ func buildDevIndicatorScenarios() []devIndicatorScenario {
 	const maxBlock = 100.0
 
 	mkMempool := func(stats map[uint8]types.MempoolCoinStats, issued []uint8) *types.MempoolInfo {
-		fills, totalFill, activeSKA := computeCoinFills(stats, maxBlock, issued)
+		fills, totalFill, activeSKA := types.ComputeCoinFills(stats, maxBlock, issued)
 		mp := &types.MempoolInfo{}
 		mp.MempoolShort.CoinFills = fills
 		mp.MempoolShort.TotalFillRatio = totalFill

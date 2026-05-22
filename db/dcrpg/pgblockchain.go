@@ -1065,11 +1065,13 @@ func (pgb *ChainDB) skaSupplyUpdater(charts *cache.ChartData) error {
 				cumulativeValues = append(cumulativeValues, runningTotal.String())
 			}
 
+			charts.SKASupplyMtx.Lock()
 			charts.SKASupply[coinType] = cache.SKASupplyChartData{
 				Heights:    blockHeights,
 				Timestamps: timestamps,
 				Values:     cumulativeValues,
 			}
+			charts.SKASupplyMtx.Unlock()
 		}
 	}
 
@@ -1127,11 +1129,13 @@ func (pgb *ChainDB) LoadSKASupplyForCoin(ctx context.Context, charts *cache.Char
 			cumulativeValues = append(cumulativeValues, runningTotal.String())
 		}
 
+		charts.SKASupplyMtx.Lock()
 		charts.SKASupply[coinType] = cache.SKASupplyChartData{
 			Heights:    blockHeights,
 			Timestamps: timestamps,
 			Values:     cumulativeValues,
 		}
+		charts.SKASupplyMtx.Unlock()
 		return nil
 	}
 
@@ -6558,6 +6562,7 @@ func trimmedTxInfoFromMsgTx(txraw *chainjson.TxRawResult, ticketPrice int64, msg
 		VinCount:  len(txraw.Vin),
 		VoutCount: len(txraw.Vout),
 		VoteValid: voteValid,
+		Voted:     txBasic.VoteInfo != nil,
 	}
 	return tx, txType
 }

@@ -336,7 +336,7 @@ func TestComputeCoinFills(t *testing.T) {
 	const max = 100.0 // simplified maxBlockSize for easy math
 
 	t.Run("empty stats", func(t *testing.T) {
-		fills, totalFill, numSKA := computeCoinFills(nil, max, nil)
+		fills, totalFill, numSKA := types.ComputeCoinFills(nil, max, nil)
 		if len(fills) != 1 || fills[0].Symbol != "VAR" || fills[0].Status != "ok" {
 			t.Errorf("unexpected fills for empty stats: %v", fills)
 		}
@@ -350,7 +350,7 @@ func TestComputeCoinFills(t *testing.T) {
 
 	t.Run("VAR within quota", func(t *testing.T) {
 		stats := map[uint8]types.MempoolCoinStats{0: {Size: 5}} // 5 of 10 quota
-		fills, _, _ := computeCoinFills(stats, max, nil)
+		fills, _, _ := types.ComputeCoinFills(stats, max, nil)
 		if fills[0].Status != "ok" {
 			t.Errorf("VAR within quota: want ok, got %s", fills[0].Status)
 		}
@@ -364,7 +364,7 @@ func TestComputeCoinFills(t *testing.T) {
 
 	t.Run("VAR over quota, block not full", func(t *testing.T) {
 		stats := map[uint8]types.MempoolCoinStats{0: {Size: 15}} // 15 > 10 quota, < 100 total
-		fills, _, _ := computeCoinFills(stats, max, nil)
+		fills, _, _ := types.ComputeCoinFills(stats, max, nil)
 		if fills[0].Status != "borrowing" {
 			t.Errorf("VAR borrowing: want borrowing, got %s", fills[0].Status)
 		}
@@ -375,7 +375,7 @@ func TestComputeCoinFills(t *testing.T) {
 
 	t.Run("VAR over quota, block full", func(t *testing.T) {
 		stats := map[uint8]types.MempoolCoinStats{0: {Size: 110}} // > 100 total
-		fills, totalFill, _ := computeCoinFills(stats, max, nil)
+		fills, totalFill, _ := types.ComputeCoinFills(stats, max, nil)
 		if fills[0].Status != "full" {
 			t.Errorf("VAR full: want full, got %s", fills[0].Status)
 		}
@@ -390,7 +390,7 @@ func TestComputeCoinFills(t *testing.T) {
 	t.Run("SKA within quota", func(t *testing.T) {
 		// 1 SKA type gets 90% = 90 quota
 		stats := map[uint8]types.MempoolCoinStats{1: {Size: 40}}
-		fills, _, numSKA := computeCoinFills(stats, max, nil)
+		fills, _, numSKA := types.ComputeCoinFills(stats, max, nil)
 		if numSKA != 1 {
 			t.Errorf("SKA count: want 1, got %d", numSKA)
 		}
@@ -411,7 +411,7 @@ func TestComputeCoinFills(t *testing.T) {
 	t.Run("SKA over own quota, pool not exhausted", func(t *testing.T) {
 		// 2 SKA types, each gets 45 quota; SKA1 uses 50 but total SKA = 50 < 90
 		stats := map[uint8]types.MempoolCoinStats{1: {Size: 50}, 2: {Size: 0}}
-		fills, _, numSKA := computeCoinFills(stats, max, nil)
+		fills, _, numSKA := types.ComputeCoinFills(stats, max, nil)
 		if numSKA != 2 {
 			t.Errorf("SKA count: want 2, got %d", numSKA)
 		}
@@ -432,7 +432,7 @@ func TestComputeCoinFills(t *testing.T) {
 
 	t.Run("SKA does not affect VAR status", func(t *testing.T) {
 		stats := map[uint8]types.MempoolCoinStats{0: {Size: 5}, 1: {Size: 95}}
-		fills, _, _ := computeCoinFills(stats, max, nil)
+		fills, _, _ := types.ComputeCoinFills(stats, max, nil)
 		for _, f := range fills {
 			if f.Symbol == "VAR" && f.Status != "ok" {
 				t.Errorf("VAR should be ok regardless of SKA: got %s", f.Status)
@@ -442,7 +442,7 @@ func TestComputeCoinFills(t *testing.T) {
 
 	t.Run("SKA types sorted by ascending coin-type key", func(t *testing.T) {
 		stats := map[uint8]types.MempoolCoinStats{3: {Size: 1}, 1: {Size: 1}, 2: {Size: 1}}
-		fills, _, _ := computeCoinFills(stats, max, nil)
+		fills, _, _ := types.ComputeCoinFills(stats, max, nil)
 		// fills[0] is VAR; fills[1..3] should be SKA1, SKA2, SKA3
 		if fills[1].Symbol != "SKA1" || fills[2].Symbol != "SKA2" || fills[3].Symbol != "SKA3" {
 			t.Errorf("SKA order: want SKA1,SKA2,SKA3 got %s,%s,%s", fills[1].Symbol, fills[2].Symbol, fills[3].Symbol)
@@ -452,7 +452,7 @@ func TestComputeCoinFills(t *testing.T) {
 	t.Run("issued SKA with no mempool activity gets zero-fill entry", func(t *testing.T) {
 		// SKA5 is issued on-chain but has no mempool transactions yet.
 		stats := map[uint8]types.MempoolCoinStats{0: {Size: 5}}
-		fills, _, numSKA := computeCoinFills(stats, max, []uint8{5})
+		fills, _, numSKA := types.ComputeCoinFills(stats, max, []uint8{5})
 		if numSKA != 1 {
 			t.Errorf("want numSKA 1, got %d", numSKA)
 		}
@@ -475,7 +475,7 @@ func TestComputeCoinFills(t *testing.T) {
 
 	t.Run("issuedSKA does not duplicate coins already in stats", func(t *testing.T) {
 		stats := map[uint8]types.MempoolCoinStats{1: {Size: 10}}
-		fills, _, numSKA := computeCoinFills(stats, max, []uint8{1})
+		fills, _, numSKA := types.ComputeCoinFills(stats, max, []uint8{1})
 		if numSKA != 1 {
 			t.Errorf("want numSKA 1 (no duplicate), got %d", numSKA)
 		}
@@ -505,7 +505,7 @@ func TestComputeCoinFills(t *testing.T) {
 
 	t.Run("PctOfTC: no SKA, VAR within quota matches TOTAL", func(t *testing.T) {
 		stats := map[uint8]types.MempoolCoinStats{0: {Size: 5}}
-		fills, totalFill, _ := computeCoinFills(stats, max, nil)
+		fills, totalFill, _ := types.ComputeCoinFills(stats, max, nil)
 		pctApproxEq(t, fills[0].PctOfTC, totalFill*100)
 		if fills[0].IsOverflow {
 			t.Errorf("VAR within quota: IsOverflow should be false")
@@ -514,7 +514,7 @@ func TestComputeCoinFills(t *testing.T) {
 
 	t.Run("PctOfTC: no SKA, VAR borrowing matches TOTAL", func(t *testing.T) {
 		stats := map[uint8]types.MempoolCoinStats{0: {Size: 15}}
-		fills, totalFill, _ := computeCoinFills(stats, max, nil)
+		fills, totalFill, _ := types.ComputeCoinFills(stats, max, nil)
 		pctApproxEq(t, fills[0].PctOfTC, totalFill*100)
 		if fills[0].PctOfTC <= 10.0 {
 			t.Errorf("VAR borrowing: PctOfTC should exceed 10 (was the buggy cap), got %f", fills[0].PctOfTC)
@@ -527,7 +527,7 @@ func TestComputeCoinFills(t *testing.T) {
 	t.Run("PctOfTC: VAR full reports actual % above 100 with overflow flag", func(t *testing.T) {
 		// PO: must surface the true fraction of max block size, not clamp.
 		stats := map[uint8]types.MempoolCoinStats{0: {Size: 110}}
-		fills, _, _ := computeCoinFills(stats, max, nil)
+		fills, _, _ := types.ComputeCoinFills(stats, max, nil)
 		pctApproxEq(t, fills[0].PctOfTC, 110.0)
 		if !fills[0].IsOverflow {
 			t.Errorf("VAR full: IsOverflow should be true")
@@ -539,7 +539,7 @@ func TestComputeCoinFills(t *testing.T) {
 		// total block (with VAR=5, totalUsed=115 > 100) so it can't borrow.
 		// Status=full, PctOfTC reports the true 110% magnitude.
 		stats := map[uint8]types.MempoolCoinStats{0: {Size: 5}, 1: {Size: 110}}
-		fills, _, _ := computeCoinFills(stats, max, nil)
+		fills, _, _ := types.ComputeCoinFills(stats, max, nil)
 		var ska1 types.CoinFillData
 		for _, f := range fills {
 			if f.Symbol == "SKA1" {
@@ -559,7 +559,7 @@ func TestComputeCoinFills(t *testing.T) {
 		// 2 SKAs (45 quota each); SKA1 uses 50 (borrowing 5), SKA2 uses 0.
 		// SKA1 total contribution to block fill = 50/100 = 50%.
 		stats := map[uint8]types.MempoolCoinStats{1: {Size: 50}, 2: {Size: 0}}
-		fills, _, _ := computeCoinFills(stats, max, nil)
+		fills, _, _ := types.ComputeCoinFills(stats, max, nil)
 		var ska1 types.CoinFillData
 		for _, f := range fills {
 			if f.Symbol == "SKA1" {
@@ -572,7 +572,7 @@ func TestComputeCoinFills(t *testing.T) {
 	t.Run("PctOfTC invariant: when no overflow, sum of per-coin pct ≈ total*100", func(t *testing.T) {
 		// 1 active SKA, both within their quotas: VAR=5, SKA1=20, total=25.
 		stats := map[uint8]types.MempoolCoinStats{0: {Size: 5}, 1: {Size: 20}}
-		fills, totalFill, _ := computeCoinFills(stats, max, nil)
+		fills, totalFill, _ := types.ComputeCoinFills(stats, max, nil)
 		var sum float64
 		for _, f := range fills {
 			if f.IsOverflow {
@@ -585,7 +585,7 @@ func TestComputeCoinFills(t *testing.T) {
 
 	t.Run("PctOfTC: issued-but-empty SKA is zero", func(t *testing.T) {
 		stats := map[uint8]types.MempoolCoinStats{0: {Size: 5}}
-		fills, _, _ := computeCoinFills(stats, max, []uint8{5})
+		fills, _, _ := types.ComputeCoinFills(stats, max, []uint8{5})
 		for _, f := range fills {
 			if f.Symbol == "SKA5" && f.PctOfTC != 0 {
 				t.Errorf("SKA5 zero-fill: PctOfTC want 0, got %f", f.PctOfTC)

@@ -374,7 +374,7 @@ func TestMempoolInfo_TotalFillRatio(t *testing.T) {
 	m.TotalFillRatio = 0.75
 	m.ActiveSKACount = 2
 
-	trimmed := m.Trim()
+	trimmed := m.Trim(1e6)
 	if trimmed.TotalFillRatio != 0.75 {
 		t.Errorf("TotalFillRatio: got %v, want 0.75", trimmed.TotalFillRatio)
 	}
@@ -386,7 +386,7 @@ func TestMempoolInfo_TotalFillRatio(t *testing.T) {
 // TestMempoolInfo_TotalFillRatio_Zero verifies zero values propagate correctly.
 func TestMempoolInfo_TotalFillRatio_Zero(t *testing.T) {
 	m := &types.MempoolInfo{}
-	trimmed := m.Trim()
+	trimmed := m.Trim(1e6)
 	if trimmed.TotalFillRatio != 0.0 {
 		t.Errorf("TotalFillRatio: got %v, want 0.0", trimmed.TotalFillRatio)
 	}
@@ -403,7 +403,7 @@ func TestProp_TotalFillRatioRoundTrip(t *testing.T) {
 		m := &types.MempoolInfo{}
 		m.TotalFillRatio = ratio
 		m.ActiveSKACount = count
-		trimmed := m.Trim()
+		trimmed := m.Trim(1e6)
 		if trimmed.TotalFillRatio != ratio {
 			t.Errorf("TotalFillRatio round-trip: got %v, want %v", trimmed.TotalFillRatio, ratio)
 		}

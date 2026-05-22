@@ -496,7 +496,7 @@ func (exp *explorerUI) StoreMPData(_ *mempool.StakeData, _ []types.MempoolTx, in
 	if blockchainInfo != nil && blockchainInfo.MaxBlockSize > 0 {
 		maxBlockSize = float64(blockchainInfo.MaxBlockSize)
 	}
-	fills, totalFillRatio, activeSKACount := computeCoinFills(inv.CoinStats, maxBlockSize, issuedSKA)
+	fills, totalFillRatio, activeSKACount := types.ComputeCoinFills(inv.CoinStats, maxBlockSize, issuedSKA)
 	inv.CoinFills = fills
 	inv.MempoolShort.CoinFills = fills
 	inv.MempoolShort.TotalFillRatio = totalFillRatio
@@ -607,7 +607,7 @@ func (exp *explorerUI) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgB
 			maxBlockSize = float64(p.BlockchainInfo.MaxBlockSize)
 		}
 		exp.invsMtx.Lock()
-		fills, totalFillRatio, activeSKACount := computeCoinFills(exp.invs.CoinStats, maxBlockSize, issuedSKA)
+		fills, totalFillRatio, activeSKACount := types.ComputeCoinFills(exp.invs.CoinStats, maxBlockSize, issuedSKA)
 		exp.invs.CoinFills = fills
 		exp.invs.MempoolShort.CoinFills = fills
 		exp.invs.MempoolShort.TotalFillRatio = totalFillRatio
