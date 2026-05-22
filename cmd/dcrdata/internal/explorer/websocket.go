@@ -14,9 +14,13 @@ import (
 )
 
 const (
+	// wsWriteTimeout bounds individual writes. coder/websocket uses context
+	// cancellation rather than SetWriteDeadline for write timeouts.
 	wsWriteTimeout = 10 * time.Second
-	wsReadTimeout  = 60 * time.Second
-	pingInterval   = 60 * time.Second
+	// pingInterval is the RFC 6455 ping cadence used to detect zombie clients
+	// (e.g. an iOS Safari tab whose TCP connection has silently died) and the
+	// hub-level sigPingAndUserCount broadcast cadence.
+	pingInterval = 60 * time.Second
 
 	tickerSigReset int = iota
 	tickerSigStop
