@@ -335,25 +335,23 @@ func (exp *explorerUI) VisualBlocks(w http.ResponseWriter, r *http.Request) {
 
 	// trim unwanted data in each block
 	trimmedBlocks := make([]*types.TrimmedBlockInfo, 0, len(blocks))
-	for _, block := range blocks {
-		trimmedBlock := &types.TrimmedBlockInfo{
-			Time:         block.BlockTime,
-			Height:       block.Height,
-			Total:        block.TotalSent,
-			Fees:         block.MiningFee,
-			Subsidy:      block.Subsidy,
-			Votes:        block.Votes,
-			Tickets:      block.Tickets,
-			Revocations:  block.Revs,
-			Transactions: types.FilterRegularTx(block.Tx),
-		}
 
+	exp.pageData.RLock()
+	maxBlockSize := float64(exp.pageData.BlockchainInfo.MaxBlockSize)
+	issuedSKA := make([]uint8, 0, len(exp.pageData.HomeInfo.SKACoinSupply))
+	for _, entry := range exp.pageData.HomeInfo.SKACoinSupply {
+		issuedSKA = append(issuedSKA, entry.CoinType)
+	}
+	exp.pageData.RUnlock()
+
+	for _, block := range blocks {
+		trimmedBlock := block.Trim(maxBlockSize, issuedSKA)
 		trimmedBlocks = append(trimmedBlocks, trimmedBlock)
 	}
 
 	// Construct the required TrimmedMempoolInfo from the shared inventory.
 	inv := exp.MempoolInventory()
-	mempoolInfo := inv.Trim() // Trim internally locks the MempoolInfo.
+	mempoolInfo := inv.Trim(maxBlockSize) // Trim internally locks the MempoolInfo.
 
 	exp.pageData.RLock()
 	mempoolInfo.Subsidy = exp.pageData.HomeInfo.NBlockSubsidy
