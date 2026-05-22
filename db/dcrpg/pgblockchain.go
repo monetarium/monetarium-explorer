@@ -6547,11 +6547,12 @@ func trimmedTxInfoFromMsgTx(txraw *chainjson.TxRawResult, ticketPrice int64, msg
 		VoutCount: len(txraw.Vout),
 		VoteValid: voteValid,
 		Voted:     txBasic.VoteInfo != nil,
+		CoinType:  txBasic.CoinType,
 	}
 
 	// Calculate high-precision fee and fee rate for all non-coinbase transactions
-	if !tx.Coinbase {
-		if tx.CoinType != 0 { // SKA
+	if !txBasic.Coinbase {
+		if txBasic.CoinType != 0 { // SKA
 			totalIn := new(big.Int)
 			for vi := range txraw.Vin {
 				if txraw.Vin[vi].SKAAmountIn == "" {
@@ -6562,8 +6563,8 @@ func trimmedTxInfoFromMsgTx(txraw *chainjson.TxRawResult, ticketPrice int64, msg
 				}
 			}
 			totalOut := new(big.Int)
-			if tx.TotalRaw != "" {
-				totalOut.SetString(tx.TotalRaw, 10)
+			if txBasic.TotalRaw != "" {
+				totalOut.SetString(txBasic.TotalRaw, 10)
 			}
 			fee := new(big.Int).Sub(totalIn, totalOut)
 			if fee.Sign() < 0 {
