@@ -7475,7 +7475,8 @@ func (pgb *ChainDB) GetMempool(ctx context.Context) []exptypes.MempoolTx {
 			total += v.Value
 		}
 
-		txType := txhelpers.DetermineTxType(msgTx)
+	txType := txhelpers.DetermineTxType(msgTx)
+
 
 		var voteInfo *exptypes.VoteInfo
 		if txType == stake.TxTypeSSGen {
