@@ -232,19 +232,25 @@ const (
 	// Since part of the grouping is on "matching_tx_hash = ''", what is
 	// logically "any" empty matching is actually no_empty_matching.
 	SelectAddressSpentUnspentCountAndValue = `SELECT
-			(tx_type = 0) AS is_regular,
-			coin_type,
+			(a.tx_type = 0) AS is_regular,
+			a.coin_type,
 			COUNT(*),
-			SUM(value),
-			COALESCE(SUM(NULLIF(ska_value, '')::numeric), 0)::text AS ska_total,
-			is_funding,
-			(matching_tx_hash IS NULL) AS all_empty_matching
-			-- NOT BOOL_AND(matching_tx_hash IS NULL) AS no_empty_matching
-		FROM addresses
-		WHERE address = $1 AND valid_mainchain
-		GROUP BY tx_type=0, coin_type, is_funding,
-			matching_tx_hash IS NULL  -- separate spent and unspent
-		ORDER BY count, is_funding;`
+			COALESCE(SUM(CASE WHEN a.is_funding THEN a.value ELSE v.value END), 0),
+			COALESCE(SUM(NULLIF(CASE WHEN a.is_funding THEN a.ska_value ELSE COALESCE(a.ska_value, v.ska_value) END, '')::numeric), 0)::text AS ska_total,
+			a.is_funding,
+			(a.matching_tx_hash IS NULL) AS all_empty_matching
+		FROM addresses a
+		LEFT JOIN vouts v ON a.tx_vin_vout_row_id = v.id
+		WHERE a.address = $1 AND a.valid_mainchain
+		  AND (
+		      a.is_funding = false 
+		      OR (
+		          v.script_type IS DISTINCT FROM 'nulldata'
+		      )
+		  )
+		GROUP BY a.tx_type=0, a.coin_type, a.is_funding,
+			a.matching_tx_hash IS NULL  -- separate spent and unspent
+		ORDER BY count, a.is_funding;`
 
 	SelectAddressCoinTypes = `SELECT DISTINCT coin_type
 		FROM addresses

@@ -1505,10 +1505,11 @@ func retrieveAddressBalance(ctx context.Context, db *sql.DB, address string) (ba
 
 	balance.Coins = make(map[uint8]*dbtypes.CoinBalance)
 
-	var fromStakeVAR, toStakeVAR int64
+	var fromStakeVAR, toStakeVAR, receivedVAR int64
 	// Per-coin SKA accumulators (big.Int, keyed by coin_type).
 	skaSpent := make(map[uint8]*big.Int)
 	skaUnspent := make(map[uint8]*big.Int)
+	skaReceived := make(map[uint8]*big.Int)
 	skaFromStake := make(map[uint8]*big.Int)
 	skaToStake := make(map[uint8]*big.Int)
 
@@ -1538,6 +1539,17 @@ func retrieveAddressBalance(ctx context.Context, db *sql.DB, address string) (ba
 					skaUnspent[coinType] = new(big.Int)
 				}
 				bigAddSKA(skaUnspent[coinType], skaTotal)
+			}
+		}
+		// All funding transactions contribute to Total Received
+		if isFunding {
+			if coinType == 0 {
+				receivedVAR += totalValue
+			} else {
+				if skaReceived[coinType] == nil {
+					skaReceived[coinType] = new(big.Int)
+				}
+				bigAddSKA(skaReceived[coinType], skaTotal)
 			}
 		}
 		// Spent == spending (but ensure a matching transaction is set)
@@ -1585,55 +1597,55 @@ func retrieveAddressBalance(ctx context.Context, db *sql.DB, address string) (ba
 	// Write accumulated SKA strings into CoinBalance and compute TotalReceived.
 	for coinType, cb := range balance.Coins {
 		if coinType > 0 {
-			spent := skaSpent[coinType]
 			unspent := skaUnspent[coinType]
-			if spent != nil {
-				cb.TotalSpentSKA = spent.String()
-			}
+			received := skaReceived[coinType]
+
 			if unspent != nil {
 				cb.TotalUnspentSKA = unspent.String()
 			}
-			// TotalReceivedSKA = spent + unspent
-			var recv big.Int
-			if spent != nil {
-				recv.Add(&recv, spent)
-			}
-			if unspent != nil {
-				recv.Add(&recv, unspent)
-			}
-			if recv.Sign() > 0 {
-				cb.TotalReceivedSKA = recv.String()
+
+			if received != nil {
+				cb.TotalReceivedSKA = received.String()
+
+				// Calculate spent as Received - Unspent to ensure consistency.
+				// This handles cases where spending records in the DB lack value.
+				unspentVal := unspent
+				if unspentVal == nil {
+					unspentVal = big.NewInt(0)
+				}
+				spent := new(big.Int).Sub(received, unspentVal)
+				if spent.Sign() < 0 {
+					spent = big.NewInt(0)
+				}
+				cb.TotalSpentSKA = spent.String()
 			}
 		} else {
-			cb.TotalReceived = cb.TotalSpent + cb.TotalUnspent
+			// VAR
+			cb.TotalReceived = receivedVAR
+			cb.TotalSpent = receivedVAR - cb.TotalUnspent
+			if cb.TotalSpent < 0 {
+				cb.TotalSpent = 0
+			}
 		}
 	}
 
 	// Compute stake percentages per coin
 	for coinType, cb := range balance.Coins {
+
 		if coinType == 0 {
-			totalTransferVAR := cb.TotalSpent + cb.TotalUnspent
-			if totalTransferVAR > 0 {
-				cb.FromStake = float64(fromStakeVAR) / float64(totalTransferVAR)
+			if receivedVAR > 0 {
+				cb.FromStake = float64(fromStakeVAR) / float64(receivedVAR)
 			}
 			if cb.TotalSpent > 0 {
 				cb.ToStake = float64(toStakeVAR) / float64(cb.TotalSpent)
 			}
 		} else {
-			// SKA: ratio = (stake_atoms) / (total_atoms)
-			var totalAtoms big.Int
-			if spent := skaSpent[coinType]; spent != nil {
-				totalAtoms.Add(&totalAtoms, spent)
-			}
-			if unspent := skaUnspent[coinType]; unspent != nil {
-				totalAtoms.Add(&totalAtoms, unspent)
-			}
-
-			if totalAtoms.Sign() > 0 {
+			// SKA: ratio = (stake_atoms) / (total_received_atoms)
+			if recv := skaReceived[coinType]; recv != nil && recv.Sign() > 0 {
 				fromSkaStake := skaFromStake[coinType]
 				if fromSkaStake != nil {
 					fFrom := new(big.Float).SetInt(fromSkaStake)
-					fTotal := new(big.Float).SetInt(&totalAtoms)
+					fTotal := new(big.Float).SetInt(recv)
 					cb.FromStake, _ = new(big.Float).Quo(fFrom, fTotal).Float64()
 				}
 			}
