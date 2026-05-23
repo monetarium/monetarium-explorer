@@ -137,7 +137,8 @@
   border: 1px solid #aaa;
 }
 
-.btn-set > label {
+.btn-set > label,
+.btn-set > span {
   position: absolute;
   top: -0.7em;
   line-height: 1em;
