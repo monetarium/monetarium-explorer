@@ -2408,15 +2408,17 @@ type AddressInfo struct {
 // For SKA (CoinType>0): use TotalSpentSKA, TotalUnspentSKA, TotalReceivedSKA (string).
 // This is an invariant every read site must respect.
 type CoinBalance struct {
-	CoinType         uint8  `json:"coin_type"`
-	NumSpent         int64  `json:"num_spent"`
-	NumUnspent       int64  `json:"num_unspent"`
-	TotalSpent       int64  `json:"total_spent,omitempty"`        // VAR atoms (1e8) - meaningful when CoinType == 0
-	TotalUnspent     int64  `json:"total_unspent,omitempty"`      // VAR atoms (1e8) - meaningful when CoinType == 0
-	TotalSpentSKA    string `json:"total_spent_ska,omitempty"`    // SKA atoms as string (1e18) - meaningful when CoinType > 0
-	TotalUnspentSKA  string `json:"total_unspent_ska,omitempty"`  // SKA atoms as string (1e18) - meaningful when CoinType > 0
-	TotalReceived    int64  `json:"total_received,omitempty"`     // VAR atoms - precomputed: TotalSpent + TotalUnspent
-	TotalReceivedSKA string `json:"total_received_ska,omitempty"` // SKA atoms - precomputed: TotalSpentSKA + TotalUnspentSKA
+	CoinType         uint8   `json:"coin_type"`
+	NumSpent         int64   `json:"num_spent"`
+	NumUnspent       int64   `json:"num_unspent"`
+	TotalSpent       int64   `json:"total_spent,omitempty"`        // VAR atoms (1e8) - meaningful when CoinType == 0
+	TotalUnspent     int64   `json:"total_unspent,omitempty"`      // VAR atoms (1e8) - meaningful when CoinType == 0
+	TotalSpentSKA    string  `json:"total_spent_ska,omitempty"`    // SKA atoms as string (1e18) - meaningful when CoinType > 0
+	TotalUnspentSKA  string  `json:"total_unspent_ska,omitempty"`  // SKA atoms as string (1e18) - meaningful when CoinType > 0
+	TotalReceived    int64   `json:"total_received,omitempty"`     // VAR atoms - precomputed: TotalSpent + TotalUnspent
+	TotalReceivedSKA string  `json:"total_received_ska,omitempty"` // SKA atoms - precomputed: TotalSpentSKA + TotalUnspentSKA
+	FromStake        float64 `json:"from_stake,omitempty"`         // Fraction received from stake
+	ToStake          float64 `json:"to_stake,omitempty"`           // Fraction spent to stake
 }
 
 // AddressBalance represents the number and value of spent and unspent outputs
@@ -2426,14 +2428,6 @@ type AddressBalance struct {
 	Coins        map[uint8]*CoinBalance `json:"coins,omitempty"` // Per-coin balances keyed by coin_type
 	TotalOutputs int64                  `json:"total_outputs"`   // Σ(NumSpent + NumUnspent) across all coins
 	TotalInputs  int64                  `json:"total_inputs"`    // Σ(NumSpent) across all coins
-	FromStake    float64                `json:"from_stake"`      // VAR-only stake percentage
-	ToStake      float64                `json:"to_stake"`        // VAR-only stake percentage
-
-	// TODO: Remove these fields once frontend is updated for multi-coin support
-	TotalUnspent int64 `json:"total_unspent"`
-	TotalSpent   int64 `json:"total_spent"`
-	NumSpent     int64 `json:"num_spent"`
-	NumUnspent   int64 `json:"num_unspent"`
 }
 
 // NewCoinBalance creates a new CoinBalance for the given coin type.
@@ -2480,13 +2474,23 @@ func FormatSKACoins(atomsStr string) string {
 // HasStakeOutputs checks whether any of the Address tx outputs were
 // stake-related.
 func (balance *AddressBalance) HasStakeOutputs() bool {
-	return balance.FromStake > 0
+	for _, cb := range balance.Coins {
+		if cb.FromStake > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // HasStakeInputs checks whether any of the Address tx inputs were
 // stake-related.
 func (balance *AddressBalance) HasStakeInputs() bool {
-	return balance.ToStake > 0
+	for _, cb := range balance.Coins {
+		if cb.ToStake > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // ReduceAddressHistory generates a template AddressInfo from a slice of
@@ -2587,14 +2591,6 @@ func ReduceAddressHistory(addrHist []*AddressRow) (*AddressInfo, float64, float6
 		Coins:        coins,
 		TotalInputs:  0,
 		TotalOutputs: 0,
-	}
-
-	// Populate mock fields for frontend backward compatibility (using VAR)
-	if varBal, ok := coins[0]; ok {
-		balance.TotalUnspent = varBal.TotalUnspent
-		balance.TotalSpent = varBal.TotalSpent
-		balance.NumSpent = varBal.NumSpent
-		balance.NumUnspent = varBal.NumUnspent
 	}
 
 	for ct, cb := range coins {
