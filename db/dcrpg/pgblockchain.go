@@ -1831,6 +1831,19 @@ func (pgb *ChainDB) TimeBasedIntervals(ctx context.Context, timeGrouping dbtypes
 	return bgi, pgb.replaceCancelError(err)
 }
 
+// TimeBasedIntervalsCount returns the number of distinct time-truncated
+// groupings (days, weeks, months, or years) that actually contain at least
+// one block, used to drive pagination on the time-based listing views.
+func (pgb *ChainDB) TimeBasedIntervalsCount(ctx context.Context, timeGrouping dbtypes.TimeBasedGrouping) (uint64, error) {
+	if timeGrouping >= dbtypes.NumIntervals {
+		return 0, fmt.Errorf("invalid time grouping %d", timeGrouping)
+	}
+	ctx, cancel := context.WithTimeout(ctx, pgb.queryTimeout)
+	defer cancel()
+	count, err := retrieveTimeBasedBlockListingCount(ctx, pgb.db, timeGrouping.String())
+	return count, pgb.replaceCancelError(err)
+}
+
 // TicketPoolVisualization helps block consecutive and duplicate DB queries for
 // the requested ticket pool chart data. If the data for the given interval is
 // cached and fresh, it is returned. If the cached data is stale and there are

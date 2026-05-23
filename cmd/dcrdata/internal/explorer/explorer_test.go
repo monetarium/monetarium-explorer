@@ -112,6 +112,9 @@ func (m *mockDataSource) PosIntervals(ctx context.Context, limit, offset uint64)
 func (m *mockDataSource) TimeBasedIntervals(ctx context.Context, timeGrouping dbtypes.TimeBasedGrouping, limit, offset uint64) ([]*dbtypes.BlocksGroupedInfo, error) {
 	return nil, nil
 }
+func (m *mockDataSource) TimeBasedIntervalsCount(ctx context.Context, timeGrouping dbtypes.TimeBasedGrouping) (uint64, error) {
+	return 0, nil
+}
 func (m *mockDataSource) AgendasVotesSummary(ctx context.Context, agendaID string) (summary *dbtypes.AgendaSummary, err error) {
 	return nil, nil
 }
