@@ -49,6 +49,14 @@ type CoinStat struct {
 // It is used as the default when ?coin= is absent from a request.
 const CoinTypeAll = uint8(255)
 
+// Reward types to distinguish PoS (Staker) from PoW (Miner) income.
+const (
+	TxTypeBlockRewardPoS int16 = 101
+	TxTypeBlockRewardPoW int16 = 102
+	TxTypeSSFeePoS       int16 = 103
+	TxTypeSSFeePoW       int16 = 104
+)
+
 // VoteTicketData holds data for a single vote and its associated ticket purchase.
 type VoteTicketData struct {
 	TicketHash     string `json:"ticket_hash"`

@@ -1506,19 +1506,23 @@ func retrieveAddressBalance(ctx context.Context, db *sql.DB, address string) (ba
 	balance.Coins = make(map[uint8]*dbtypes.CoinBalance)
 
 	var fromStakeVAR, toStakeVAR, receivedVAR int64
+	var receivedExclIssuanceVAR int64
 	// Per-coin SKA accumulators (big.Int, keyed by coin_type).
 	skaSpent := make(map[uint8]*big.Int)
 	skaUnspent := make(map[uint8]*big.Int)
 	skaReceived := make(map[uint8]*big.Int)
+	skaReceivedExclIssuance := make(map[uint8]*big.Int)
 	skaFromStake := make(map[uint8]*big.Int)
 	skaToStake := make(map[uint8]*big.Int)
 
 	for rows.Next() {
 		var count, totalValue int64
 		var skaTotal string
-		var noMatchingTx, isFunding, isRegular bool
+		var txType int16
+		var noMatchingTx, isFunding bool
 		var coinType uint8
-		err = rows.Scan(&isRegular, &coinType, &count, &totalValue, &skaTotal, &isFunding, &noMatchingTx)
+		var prevTxHash []byte
+		err = rows.Scan(&txType, &coinType, &count, &totalValue, &skaTotal, &isFunding, &noMatchingTx, &prevTxHash)
 		if err != nil {
 			return
 		}
@@ -1543,22 +1547,42 @@ func retrieveAddressBalance(ctx context.Context, db *sql.DB, address string) (ba
 		}
 		// All funding transactions contribute to Total Received
 		if isFunding {
+			// Check if it's an issuance transaction (coinbase: prev_tx_hash is all zeros)
+			isIssuance := len(prevTxHash) == 32 && bytes.Equal(prevTxHash, make([]byte, 32))
+
 			if coinType == 0 {
 				receivedVAR += totalValue
+				if !isIssuance {
+					receivedExclIssuanceVAR += totalValue
+				}
 			} else {
 				if skaReceived[coinType] == nil {
 					skaReceived[coinType] = new(big.Int)
 				}
 				bigAddSKA(skaReceived[coinType], skaTotal)
+
+				if !isIssuance {
+					if skaReceivedExclIssuance[coinType] == nil {
+						skaReceivedExclIssuance[coinType] = new(big.Int)
+					}
+					bigAddSKA(skaReceivedExclIssuance[coinType], skaTotal)
+				}
 			}
 		}
 		// Spent == spending (but ensure a matching transaction is set)
 		if !isFunding {
 			if noMatchingTx {
+				fmt.Printf("DEBUG: Skipping spent row: matching_tx_hash is NULL for address %s\n", address)
 				log.Errorf("Found spending transactions with matching_tx_hash"+
 					" unset for %s!", address)
 				continue
 			}
+			fmt.Printf("DEBUG: Adding spent row: value=%d, coin=%d\n", totalValue, coinType)
+			coinBalance.NumSpent += count
+			if coinType == 0 {
+				coinBalance.TotalSpent += totalValue
+			}
+
 			coinBalance.NumSpent += count
 			if coinType == 0 {
 				coinBalance.TotalSpent += totalValue
@@ -1569,7 +1593,7 @@ func retrieveAddressBalance(ctx context.Context, db *sql.DB, address string) (ba
 				bigAddSKA(skaSpent[coinType], skaTotal)
 			}
 			// Stake metrics computed per coin
-			if !isRegular {
+			if txType != 0 && txType != dbtypes.TxTypeBlockRewardPoW && txType != dbtypes.TxTypeSSFeePoW {
 				if coinType == 0 {
 					toStakeVAR += totalValue
 				} else {
@@ -1579,7 +1603,7 @@ func retrieveAddressBalance(ctx context.Context, db *sql.DB, address string) (ba
 					bigAddSKA(skaToStake[coinType], skaTotal)
 				}
 			}
-		} else if !isRegular {
+		} else if txType != 0 && txType != dbtypes.TxTypeBlockRewardPoW && txType != dbtypes.TxTypeSSFeePoW {
 			if coinType == 0 {
 				fromStakeVAR += totalValue
 			} else {
@@ -1631,21 +1655,20 @@ func retrieveAddressBalance(ctx context.Context, db *sql.DB, address string) (ba
 
 	// Compute stake percentages per coin
 	for coinType, cb := range balance.Coins {
-
 		if coinType == 0 {
-			if receivedVAR > 0 {
-				cb.FromStake = float64(fromStakeVAR) / float64(receivedVAR)
+			if receivedExclIssuanceVAR > 0 {
+				cb.FromStake = float64(fromStakeVAR) / float64(receivedExclIssuanceVAR)
 			}
 			if cb.TotalSpent > 0 {
 				cb.ToStake = float64(toStakeVAR) / float64(cb.TotalSpent)
 			}
 		} else {
-			// SKA: ratio = (stake_atoms) / (total_received_atoms)
-			if recv := skaReceived[coinType]; recv != nil && recv.Sign() > 0 {
+			// SKA: ratio = (stake_atoms) / (total_received_atoms excluding issuance)
+			if recvExcl := skaReceivedExclIssuance[coinType]; recvExcl != nil && recvExcl.Sign() > 0 {
 				fromSkaStake := skaFromStake[coinType]
 				if fromSkaStake != nil {
 					fFrom := new(big.Float).SetInt(fromSkaStake)
-					fTotal := new(big.Float).SetInt(recv)
+					fTotal := new(big.Float).SetInt(recvExcl)
 					cb.FromStake, _ = new(big.Float).Quo(fFrom, fTotal).Float64()
 				}
 			}

@@ -89,6 +89,24 @@ func processTransactions(msgBlock *wire.MsgBlock, tree int8, chainParams *chainc
 	for txIndex, tx := range txs {
 		txType := txhelpers.DetermineTxType(tx)
 		isStake := txType != stake.TxTypeRegular
+
+		// Handle granular reward types for SSFee transactions.
+		// An SSFee tx is either all PoS (SF marker) or all PoW (MF marker).
+		if txType == stake.TxTypeSSFee {
+			marker := stake.SSFeeMarkerNone
+			for _, out := range tx.TxOut {
+				if m := stake.HasSSFeeMarker(out.PkScript); m != stake.SSFeeMarkerNone {
+					marker = m
+					break
+				}
+			}
+			if marker == stake.SSFeeMarkerStaker {
+				txType = stake.TxType(TxTypeSSFeePoS)
+			} else if marker == stake.SSFeeMarkerMiner {
+				txType = stake.TxType(TxTypeSSFeePoW)
+			}
+		}
+
 		if isStake && !stakeTree {
 			fmt.Printf(" ***************** INCONSISTENT TREE: txn %v, type = %v", tx.TxHash(), txType)
 			continue
@@ -220,16 +238,25 @@ func processTransactions(msgBlock *wire.MsgBlock, tree int8, chainParams *chainc
 		dbTxVouts[txIndex] = make([]*Vout, 0, len(tx.TxOut))
 		for io, txout := range tx.TxOut {
 			ct := txout.CoinType
-			vout := Vout{
-				TxHash:   dbTx.TxID,
-				TxIndex:  uint32(io),
-				TxTree:   tree,
-				TxType:   dbTx.TxType,
-				CoinType: uint8(ct),
-				Version:  txout.Version,
-				// Mixed only applies to VAR CoinJoin outputs.
-				Mixed: ct == cointype.CoinTypeVAR && mixDenom > 0 && mixDenom == txout.Value,
+		vout := Vout{
+			TxHash:   dbTx.TxID,
+			TxIndex:  uint32(io),
+			TxTree:   tree,
+			TxType:   dbTx.TxType,
+			CoinType: uint8(ct),
+			Version:  txout.Version,
+			// Mixed only applies to VAR CoinJoin outputs.
+			Mixed: ct == cointype.CoinTypeVAR && mixDenom > 0 && mixDenom == txout.Value,
+		}
+
+		// Coinbase outputs are split between PoW (index 0) and PoS (index > 0).
+		if txhelpers.IsCoinBaseTx(tx) {
+			if io == 0 {
+				vout.TxType = int16(TxTypeBlockRewardPoW)
+			} else {
+				vout.TxType = int16(TxTypeBlockRewardPoS)
 			}
+		}
 			if ct == cointype.CoinTypeVAR {
 				vout.Value = uint64(txout.Value)
 			} else if ct.IsSKA() && txout.SKAValue != nil {
