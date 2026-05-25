@@ -2560,8 +2560,6 @@ func (pgb *ChainDB) AddressHistory(ctx context.Context, address string, N, offse
 				Coins:   make(map[uint8]*dbtypes.CoinBalance),
 			}
 		}
-		// TODO: Remove flat VAR fields sync once frontend is updated for multi-coin support.
-		// Sync flat fields from Coins[0] for backward compatibility.
 	}
 
 	if balance != nil && balance.Coins != nil && balance.Coins[0] != nil {
