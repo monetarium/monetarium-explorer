@@ -55,6 +55,7 @@ const (
 	TxTypeBlockRewardPoW int16 = 102
 	TxTypeSSFeePoS       int16 = 103
 	TxTypeSSFeePoW       int16 = 104
+	TxTypeTicketPurchase  int16 = 105
 )
 
 // VoteTicketData holds data for a single vote and its associated ticket purchase.

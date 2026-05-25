@@ -88,7 +88,19 @@ func processTransactions(msgBlock *wire.MsgBlock, tree int8, chainParams *chainc
 
 	for txIndex, tx := range txs {
 		txType := txhelpers.DetermineTxType(tx)
+		// If the node classifies this as a regular transaction, check the scripts for ticket indicators.
+		if txType == stake.TxTypeRegular {
+			for _, txout := range tx.TxOut {
+				sc, _ := stdscript.ExtractAddrs(txout.Version, txout.PkScript, chainParams)
+				class := NewScriptClass(sc)
+				if class == SCStakeSubmission || class == SCStakeSubChange {
+					txType = stake.TxTypeSStx
+					break
+				}
+			}
+		}
 		isStake := txType != stake.TxTypeRegular
+
 
 		// Handle granular reward types for SSFee transactions.
 		// An SSFee tx is either all PoS (SF marker) or all PoW (MF marker).
@@ -105,6 +117,8 @@ func processTransactions(msgBlock *wire.MsgBlock, tree int8, chainParams *chainc
 			} else if marker == stake.SSFeeMarkerMiner {
 				txType = stake.TxType(TxTypeSSFeePoW)
 			}
+		} else if txType == stake.TxTypeSStx {
+			txType = stake.TxType(TxTypeTicketPurchase)
 		}
 
 		if isStake && !stakeTree {
@@ -257,20 +271,20 @@ func processTransactions(msgBlock *wire.MsgBlock, tree int8, chainParams *chainc
 				vout.TxType = int16(TxTypeBlockRewardPoS)
 			}
 		}
-			if ct == cointype.CoinTypeVAR {
-				vout.Value = uint64(txout.Value)
-			} else if ct.IsSKA() && txout.SKAValue != nil {
-				vout.SKAValue = txout.SKAValue.String()
-			}
-			scriptClass, scriptAddrs := stdscript.ExtractAddrs(vout.Version, txout.PkScript, chainParams)
-			addys := make([]string, 0, len(scriptAddrs))
-			for ia := range scriptAddrs {
-				addys = append(addys, scriptAddrs[ia].String())
-			}
-			vout.ScriptPubKeyData.Type = NewScriptClass(scriptClass)
-			vout.ScriptPubKeyData.Addresses = addys
-			dbTxVouts[txIndex] = append(dbTxVouts[txIndex], &vout)
+		if ct == cointype.CoinTypeVAR {
+			vout.Value = uint64(txout.Value)
+		} else if ct.IsSKA() && txout.SKAValue != nil {
+			vout.SKAValue = txout.SKAValue.String()
 		}
+		scriptClass, scriptAddrs := stdscript.ExtractAddrs(vout.Version, txout.PkScript, chainParams)
+		addys := make([]string, 0, len(scriptAddrs))
+		for ia := range scriptAddrs {
+			addys = append(addys, scriptAddrs[ia].String())
+		}
+		vout.ScriptPubKeyData.Type = NewScriptClass(scriptClass)
+		vout.ScriptPubKeyData.Addresses = addys
+		dbTxVouts[txIndex] = append(dbTxVouts[txIndex], &vout)
+	}
 
 		dbTransactions = append(dbTransactions, dbTx)
 	}

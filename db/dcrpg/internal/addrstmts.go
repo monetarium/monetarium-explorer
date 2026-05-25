@@ -43,7 +43,7 @@ const (
 	// the inserted/updated address row id.
 	UpsertAddressRow = insertAddressRow + `ON CONFLICT (tx_vin_vout_row_id, address, is_funding) DO UPDATE
 		SET matching_tx_hash = $2, tx_hash = $3, tx_vin_vout_index = $4,
-		block_time = $7, valid_mainchain = $9 RETURNING id;`
+		block_time = $7, valid_mainchain = $9, tx_type = $10 RETURNING id;`
 
 	// InsertAddressRowOnConflictDoNothing allows an INSERT with a DO NOTHING on
 	// conflict with addresses' unique tx index, while returning the row id of
@@ -231,7 +231,12 @@ const (
 	//
 	// Since part of the grouping is on "matching_tx_hash = ''", what is
 	// logically "any" empty matching is actually no_empty_matching.
-	SelectAddressSpentUnspentCountAndValue = `SELECT
+	SelectAddressSpentUnspentCountAndValue = `WITH spending_txs AS (
+			SELECT tx_hash 
+			FROM addresses 
+			WHERE address = $1 AND valid_mainchain AND is_funding = false
+		)
+		SELECT
 			a.tx_type,
 			a.coin_type,
 			COUNT(*),
@@ -239,9 +244,10 @@ const (
 			COALESCE(SUM(NULLIF(CASE WHEN a.is_funding THEN a.ska_value ELSE COALESCE(a.ska_value, v.ska_value) END, '')::numeric), 0)::text AS ska_total,
 			a.is_funding,
 			(a.matching_tx_hash IS NULL) AS all_empty_matching,
-			(SELECT prev_tx_hash FROM vins WHERE id = a.tx_vin_vout_row_id AND a.is_funding = true LIMIT 1) AS prev_tx_hash
+			(s.tx_hash IS NOT NULL) AS is_change
 		FROM addresses a
 		LEFT JOIN vouts v ON a.tx_vin_vout_row_id = v.id
+		LEFT JOIN spending_txs s ON a.tx_hash = s.tx_hash
 		WHERE a.address = $1 AND a.valid_mainchain
 		  AND (
 		      a.is_funding = false 
@@ -251,7 +257,7 @@ const (
 		  )
 		GROUP BY a.tx_type, a.coin_type, a.is_funding,
 			a.matching_tx_hash IS NULL,
-			(SELECT prev_tx_hash FROM vins WHERE id = a.tx_vin_vout_row_id AND a.is_funding = true LIMIT 1)
+			is_change
 		ORDER BY count, a.is_funding;`
 
 	SelectAddressCoinTypes = `SELECT DISTINCT coin_type
