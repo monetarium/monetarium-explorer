@@ -265,9 +265,9 @@ func processTransactions(msgBlock *wire.MsgBlock, tree int8, chainParams *chainc
 			// Coinbase outputs are split between PoW (index 0) and PoS (index > 0).
 			if txhelpers.IsCoinBaseTx(tx) {
 				if io == 0 {
-					vout.TxType = int16(TxTypeBlockRewardPoW)
+					vout.TxType = TxTypeBlockRewardPoW
 				} else {
-					vout.TxType = int16(TxTypeBlockRewardPoS)
+					vout.TxType = TxTypeBlockRewardPoS
 				}
 			}
 			if ct == cointype.CoinTypeVAR {
