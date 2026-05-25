@@ -154,6 +154,7 @@ let commonOptions, typesGraphOptions, amountFlowGraphOptions, balanceGraphOption
 // Cannot set these until DyGraph is fetched.
 function createOptions() {
   commonOptions = {
+    axes: { y: { axisLabelWidth: 70 } },
     digitsAfterDecimal: 8,
     showRangeSelector: true,
     rangeSelectorHeight: 20,
@@ -173,7 +174,6 @@ function createOptions() {
   typesGraphOptions = {
     labels: ['Date', 'Sending (regular)', 'Receiving (regular)', 'Tickets', 'Votes', 'Revocations'],
     colors: ['#69D3F5', '#2971FF', '#41BF53', 'darkorange', '#FF0090'],
-    ylabel: 'Tx Count',
     visibility: [true, true, true, true, true],
     legendFormatter: formatter,
     stackedGraph: true,
@@ -248,6 +248,7 @@ export default class extends Controller {
       'view',
       'mergedMsg',
       'chartLoader',
+      'chartTitle',
       'listLoader',
       'expando',
       'littlechart',
@@ -686,34 +687,36 @@ export default class extends Controller {
     const coinLabel = renderCoinType(coin)
     const amountFormatter = makeAmountFormatter(coin, ctrl.skaAtomsByTime)
     ctrl.flowTarget.classList.add('d-hide')
+    let title = ''
     switch (chart) {
       case 'types':
         options = {
           ...typesGraphOptions,
-          ylabel: 'Tx Count',
           legendFormatter: formatter,
           plotter: sizedBarPlotter(binSize)
         }
+        title = 'Tx Count'
         break
 
       case 'amountflow':
         options = {
           ...amountFlowGraphOptions,
-          ylabel: `Total (${coinLabel})`,
           legendFormatter: amountFormatter,
           plotter: sizedBarPlotter(binSize)
         }
+        title = `Total (${coinLabel})`
         ctrl.flowTarget.classList.remove('d-hide')
         break
 
       case 'balance':
         options = {
           ...balanceGraphOptions,
-          ylabel: `Balance (${coinLabel})`,
           legendFormatter: amountFormatter
         }
+        title = `Balance (${coinLabel})`
         break
     }
+    if (ctrl.hasChartTitleTarget) ctrl.chartTitleTarget.textContent = title
     options.zoomCallback = null
     options.drawCallback = null
     if (ctrl.graph === undefined) {
