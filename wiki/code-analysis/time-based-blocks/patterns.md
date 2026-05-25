@@ -54,18 +54,21 @@ The DB layer formats `FormattedStartTime` uniformly as `startTime.Format("2006-0
 
 ---
 
-## Genesis-anchored pagination with partial-interval +1 buffer
+## Row-count-driven pagination via `COUNT(DISTINCT DATE_TRUNC(...))`
 
 **Appears in:**
 - [/wiki/code-analysis/time-based-blocks/flow.full.md](flow.full.md)
 
 **Description:**
-Pagination is not row-count driven; it is **time driven**. `maxOffset = (time.Now().Unix() - oldestBlockTime) / int64(i)` where `oldestBlockTime` is the genesis block header timestamp (`exp.ChainParams.GenesisBlock.Header.Timestamp`) and `i` is the interval length in seconds from `TimeBasedGroupingToInterval` ([cmd/dcrdata/internal/explorer/explorerroutes.go:521-523](../../../cmd/dcrdata/internal/explorer/explorerroutes.go); [db/dbtypes/conversion.go:110-133](../../../db/dbtypes/conversion.go)). A `+1` buffer is added to `maxOffset` for unaligned partial year/month intervals when "now" has not yet reached the genesis month/day boundary ([explorerroutes.go:534-538](../../../cmd/dcrdata/internal/explorer/explorerroutes.go)). The requested `offset` is clamped to `maxOffset` ([:524-526](../../../cmd/dcrdata/internal/explorer/explorerroutes.go)), and `lastOffset` (the final page's offset) is derived from `maxOffset % rows` ([:558-565](../../../cmd/dcrdata/internal/explorer/explorerroutes.go)). `maxOffset` is exported to the template as `BestGrouping` and consumed by `calcPages` and `timelisting.tmpl` ([:590-592](../../../cmd/dcrdata/internal/explorer/explorerroutes.go); [cmd/dcrdata/views/timelisting.tmpl:15,74](../../../cmd/dcrdata/views/timelisting.tmpl)).
+Pagination is **row-count driven**. `timeBasedBlocksListing` calls `dataSource.TimeBasedIntervalsCount(ctx, grouping)` which returns the exact number of distinct time-truncated groupings that contain at least one block: `SELECT COUNT(DISTINCT DATE_TRUNC($1, time at time zone 'utc')) FROM blocks` ([db/dcrpg/internal/blockstmts.go `SelectBlocksTimeListingCount`](../../../db/dcrpg/internal/blockstmts.go); [db/dcrpg/queries.go `retrieveTimeBasedBlockListingCount`](../../../db/dcrpg/queries.go); [db/dcrpg/pgblockchain.go `TimeBasedIntervalsCount`](../../../db/dcrpg/pgblockchain.go)). The handler then derives `maxOffset = totalGroupings - 1` (0 on an empty chain) and uses that as the semantic "largest valid offset" for the existing downstream math: the offset clamp, `lastOffset` derivation ([explorerroutes.go `lastOffsetRows := uint64(maxOffset) % rows`](../../../cmd/dcrdata/internal/explorer/explorerroutes.go)), `calcPages(int(maxOffset), …)`, and the template's `{{$lastGrouping = (add .BestGrouping 1)}}` ([cmd/dcrdata/views/timelisting.tmpl:15,74](../../../cmd/dcrdata/views/timelisting.tmpl)).
+
+This replaced an earlier genesis-anchored, time-driven formula (`maxOffset = (now - genesis) / interval_seconds` plus a partial-interval `+1` buffer for unaligned year/month boundaries). That earlier formula overestimated the page count whenever some intervals had no blocks (sparse chain, testnet, gaps), making the page-number switcher render pages past the last grouping that actually had data — see issue #302.
 
 **Constraints:**
-- `TimeBasedGroupingToInterval` returns `float64` seconds; `MonthGrouping`/`YearGrouping` use the approximation `daysPerMonth = 30.41666…` (365/12). The page-count math is intentionally approximate — do not "fix" it to exact calendar months without re-deriving the `+1` buffer logic, which compensates for the approximation against the genesis boundary.
-- `oldestBlockTime` is the chain genesis timestamp from `ChainParams`, not the oldest row in the DB. On a freshly-synced or pruned DB the two can differ; the math assumes genesis.
-- `BestGrouping` (the template name for `maxOffset`) drives both `calcPages` and the "last page" link (`{{add .BestGrouping 1}}`, `LastOffset`). Changing the offset formula requires re-checking both the clamp at `:524-526` and the `lastOffset` derivation at `:558-565`, and the template's `$lastGrouping` math.
+- The `DATE_TRUNC` expression in `SelectBlocksTimeListingCount` MUST be identical to the one in `SelectBlocksTimeListingByLimit` (same interval string, same `time at time zone 'utc'` cast). The two queries are paired: the count drives `calcPages`, the listing fills the page. A drift between them would make the displayed page-of-N header disagree with the actual rows returned.
+- The count query is unindexed against the truncated expression and runs once per request; consider a chain-tip-keyed cache in `db/cache` if profiling shows it as a hotspot. Currently the page itself runs a heavier aggregation, so the count is not the bottleneck.
+- `BestGrouping` (the template name for `maxOffset`) is exported to the template as `totalGroupings - 1`, so `{{add .BestGrouping 1}}` yields the actual row total for the "1 – N of M rows" header. Changing this derivation requires re-checking the template's arithmetic, `calcPages`'s expectation that its first argument is "last valid offset", and the `lastOffset` derivation.
+- `TimeBasedGroupingToInterval` is still invoked for validation only — its returned interval is no longer used for pagination. The function errors on `UnknownGrouping`, and the handler keeps the year-grouping fallback off that error path.
 
 ---
 

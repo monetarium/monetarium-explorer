@@ -13,7 +13,6 @@ import Zoom from '../helpers/zoom_helper'
 import globalEventBus from '../services/event_bus_service'
 
 const blockDuration = 5 * 60000
-const maxAddrRows = 160
 let Dygraph // lazy loaded on connect
 
 function txTypesFunc(d, binSize) {
@@ -353,10 +352,6 @@ export default class extends Controller {
 
   bindElements() {
     this.flowBoxes = this.flowTarget.querySelectorAll('input')
-    // pagesizeTarget is not available for dummy addresses
-    this.pageSizeOptions = this.hasPagesizeTarget
-      ? this.pagesizeTarget.querySelectorAll('option')
-      : []
     this.zoomButtons = this.zoomTarget.querySelectorAll('button')
     this.binputs = this.intervalTarget.querySelectorAll('button')
   }
@@ -549,20 +544,6 @@ export default class extends Controller {
     }
     setAbility(ctrl.pageplusTarget, params.offset + count < rowMax)
     setAbility(ctrl.pageminusTarget, params.offset - count >= 0)
-    ctrl.pageSizeOptions.forEach((option) => {
-      if (option.value > 100) {
-        if (rowMax > 100) {
-          option.disabled = false
-          option.text = option.value = Math.min(rowMax, maxAddrRows)
-        } else {
-          option.disabled = true
-          option.text = option.value = maxAddrRows
-        }
-      } else {
-        option.disabled = rowMax <= option.value
-      }
-    })
-    setAbility(ctrl.pagesizeTarget, rowMax > 20)
     const suffix = rowMax > 1 ? 's' : ''
     let rangeEnd = params.offset + count
     if (rangeEnd > rowMax) rangeEnd = rowMax

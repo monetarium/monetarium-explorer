@@ -161,6 +161,13 @@ const (
 		ORDER BY index_value DESC
 		LIMIT $2 OFFSET $3;`
 
+	// SelectBlocksTimeListingCount returns the number of distinct
+	// time-truncated groupings that actually have at least one block. Its
+	// DATE_TRUNC expression MUST stay identical to the one in
+	// SelectBlocksTimeListingByLimit; the two values are paired by the
+	// time-based listing handler to drive pagination.
+	SelectBlocksTimeListingCount = `SELECT COUNT(DISTINCT DATE_TRUNC($1, time at time zone 'utc')) FROM blocks;`
+
 	// SelectBlocksPreviousHash = `SELECT previous_hash FROM blocks WHERE hash = $1;`
 
 	// SelectBlocksHashes = `SELECT hash FROM blocks ORDER BY id;`

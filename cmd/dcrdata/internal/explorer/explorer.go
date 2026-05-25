@@ -100,6 +100,7 @@ type explorerDataSource interface {
 	VoutsForTx(context.Context, *dbtypes.Tx) ([]dbtypes.Vout, error)
 	PosIntervals(ctx context.Context, limit, offset uint64) ([]*dbtypes.BlocksGroupedInfo, error)
 	TimeBasedIntervals(ctx context.Context, timeGrouping dbtypes.TimeBasedGrouping, limit, offset uint64) ([]*dbtypes.BlocksGroupedInfo, error)
+	TimeBasedIntervalsCount(ctx context.Context, timeGrouping dbtypes.TimeBasedGrouping) (uint64, error)
 	AgendasVotesSummary(ctx context.Context, agendaID string) (summary *dbtypes.AgendaSummary, err error)
 	BlockTimeByHeight(ctx context.Context, height int64) (int64, error)
 	GetChainParams() *chaincfg.Params

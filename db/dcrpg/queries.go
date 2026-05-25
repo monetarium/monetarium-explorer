@@ -955,6 +955,19 @@ func retrieveWindowBlocks(ctx context.Context, db *sql.DB, windowSize, currentHe
 	return data, nil
 }
 
+// retrieveTimeBasedBlockListingCount returns the number of distinct
+// time-truncated groupings (days, weeks, months, or years) that actually
+// contain at least one block. It is used to drive pagination on the
+// /days, /weeks, /months and /years views so page numbers never run past
+// the last grouping that has data.
+func retrieveTimeBasedBlockListingCount(ctx context.Context, db *sql.DB, timeInterval string) (uint64, error) {
+	var count uint64
+	if err := db.QueryRowContext(ctx, internal.SelectBlocksTimeListingCount, timeInterval).Scan(&count); err != nil {
+		return 0, fmt.Errorf("retrieveTimeBasedBlockListingCount failed: error: %w", err)
+	}
+	return count, nil
+}
+
 // retrieveTimeBasedBlockListing fetches blocks in chunks based on their block
 // time using the limit and offset provided. The time-based blocks groupings
 // include but are not limited to day, week, month and year.

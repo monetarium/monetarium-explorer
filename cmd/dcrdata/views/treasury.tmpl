@@ -298,18 +298,12 @@
               id="pagesize"
               data-address-target="pagesize"
               data-action="change->address#changePageSize"
-              class="form-control-sm mb-2 me-sm-2 mb-sm-0 {{if lt $TxnCount 20}}disabled{{end}} dropdown"
-              {{- if lt $TxnCount 20}} disabled{{end}}
+              class="form-control-sm mb-2 me-sm-2 mb-sm-0 dropdown"
             >
-            {{- $Txlen := len .Transactions}}
-              <option {{if eq $Txlen 20}}selected {{end}}value="20"{{if lt $TxnCount 20}} disabled{{end}}>20</option>
-              <option {{if eq $Txlen 40}}selected {{end}}value="40"{{if lt $TxnCount 40}} disabled{{end}}>40</option>
-              <option {{if eq $Txlen 80}}selected {{end}}value="80"{{if lt $TxnCount 80}} disabled{{end}}>80</option>
-            {{- if lt $TxnCount 160}}
-              <option {{if eq $Txlen $TxnCount}}selected {{end}}value="{{$TxnCount}}"{{if le $TxnCount 160}} disabled{{end}}>{{$TxnCount}}</option>
-            {{- else}}
-              <option {{if ge $Txlen 160}}selected {{end}}value="160">160</option>
-            {{- end}}
+              <option {{if eq .Limit 20}}selected {{end}}value="20">20</option>
+              <option {{if eq .Limit 40}}selected {{end}}value="40">40</option>
+              <option {{if eq .Limit 80}}selected {{end}}value="80">80</option>
+              <option {{if eq .Limit 160}}selected {{end}}value="160">160</option>
             </select>
           </div>
         </div>

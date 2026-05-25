@@ -503,11 +503,12 @@ func (exp *explorerUI) timeBasedBlocksListing(val string, w http.ResponseWriter,
 		rows = o
 	}
 	grouping := dbtypes.TimeGroupingFromStr(val)
-	i, err := dbtypes.TimeBasedGroupingToInterval(grouping)
-	if err != nil {
+	// TimeBasedGroupingToInterval is still called to validate the grouping
+	// (it errors on UnknownGrouping); the returned interval is unused now
+	// that pagination is row-count-driven rather than time-derived.
+	if _, err := dbtypes.TimeBasedGroupingToInterval(grouping); err != nil {
 		// default to year grouping if grouping is missing
-		i, err = dbtypes.TimeBasedGroupingToInterval(dbtypes.YearGrouping)
-		if err != nil {
+		if _, err = dbtypes.TimeBasedGroupingToInterval(dbtypes.YearGrouping); err != nil {
 			exp.StatusPage(w, defaultErrorCode, "Invalid year grouping found.", "",
 				ExpStatusError)
 			log.Errorf("Invalid year grouping found: error: %v ", err)
@@ -516,23 +517,26 @@ func (exp *explorerUI) timeBasedBlocksListing(val string, w http.ResponseWriter,
 		grouping = dbtypes.YearGrouping
 	}
 
-	oldestBlockTime := exp.ChainParams.GenesisBlock.Header.Timestamp.Unix()
-	maxOffset := (time.Now().Unix() - oldestBlockTime) / int64(i)
-	m := uint64(maxOffset)
-	if offset > m {
-		offset = m
+	totalGroupings, err := exp.dataSource.TimeBasedIntervalsCount(ctx, grouping)
+	if exp.timeoutErrorPage(w, err, "TimeBasedIntervalsCount") {
+		return
+	}
+	if err != nil {
+		log.Errorf("TimeBasedIntervalsCount failed for /%s: %v", val, err)
+		exp.StatusPage(w, defaultErrorCode, defaultErrorMessage, "", ExpStatusError)
+		return
 	}
 
-	oldestBlockTimestamp := exp.ChainParams.GenesisBlock.Header.Timestamp
-	oldestBlockMonth := oldestBlockTimestamp.Month()
-	oldestBlockDay := oldestBlockTimestamp.Day()
-
-	now := time.Now()
-
-	if (grouping == dbtypes.YearGrouping && now.Month() < oldestBlockMonth) ||
-		grouping == dbtypes.MonthGrouping && now.Day() < oldestBlockDay ||
-		grouping == dbtypes.YearGrouping && now.Month() == oldestBlockMonth && now.Day() < oldestBlockDay {
-		maxOffset = maxOffset + 1
+	// maxOffset is the largest valid row offset (i.e. totalGroupings - 1),
+	// preserved as the semantic input to calcPages and to the template's
+	// "of (BestGrouping + 1) rows" display. When the chain has no blocks at
+	// all, leave it at 0 so the empty-data branch in the template renders.
+	var maxOffset int64
+	if totalGroupings > 0 {
+		maxOffset = int64(totalGroupings) - 1
+	}
+	if offset > uint64(maxOffset) {
+		offset = uint64(maxOffset)
 	}
 
 	if rows == 0 {
