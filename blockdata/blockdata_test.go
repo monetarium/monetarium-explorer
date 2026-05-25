@@ -336,93 +336,75 @@ func TestExtractSKARewardsFromCoinbase_Summing(t *testing.T) {
 	}
 }
 
-func TestComputeMiningFee_UserScenario(t *testing.T) {
-	// User's provided Coinbase TX: Total = 32.00016925 VAR = 3200016925 atoms
-	coinbase := wire.NewMsgTx()
-	coinbase.AddTxOut(wire.NewTxOut(0, nil))          // vout 0: 0
-	coinbase.AddTxOut(wire.NewTxOut(0, nil))          // vout 1: 0
-	coinbase.AddTxOut(wire.NewTxOut(3200016925, nil)) // vout 2: 32.00016925 VAR
-
-	block := &wire.MsgBlock{
-		Transactions: []*wire.MsgTx{coinbase},
-	}
-
-	// Subsidy = 32 VAR = 3200000000 atoms
-	got := computeMiningFee(block, 3200000000)
-	want := int64(16925)
-	if got != want {
-		t.Errorf("got %d, want %d", got, want)
-	}
+// newTxWithFee creates a wire.MsgTx with an input of inputAmount atoms and outputs
+// totalling inputAmount - fee atoms. The fee is the difference between input and outputs.
+func newTxWithFee(inputAmount, fee int64) *wire.MsgTx {
+	tx := wire.NewMsgTx()
+	tx.AddTxIn(wire.NewTxIn(&wire.OutPoint{}, inputAmount, nil))
+	tx.AddTxOut(wire.NewTxOut(inputAmount-fee, nil))
+	return tx
 }
 
-// TestComputeMiningFee_CoinbaseEqualsSubsidy tests when coinbase equals the base subsidy.
-// This happens when there are no transaction fees in the block.
-func TestComputeMiningFee_CoinbaseEqualsSubsidy(t *testing.T) {
-	// Coinbase output = 16.00 VAR (exactly equal to subsidy)
+func TestComputeMiningFee_NoRegularTx(t *testing.T) {
 	coinbase := wire.NewMsgTx()
-	coinbase.AddTxOut(wire.NewTxOut(16e8, nil)) // 16 VAR = 1.6e9 atoms
+	coinbase.AddTxOut(wire.NewTxOut(16e8, nil))
 
 	block := &wire.MsgBlock{
 		Transactions: []*wire.MsgTx{coinbase},
 	}
 
-	got := computeMiningFee(block, 16e8)
+	got := computeMiningFee(block)
 	want := int64(0)
 	if got != want {
 		t.Errorf("got %d, want %d", got, want)
 	}
 }
 
-// TestComputeMiningFee_CoinbaseGreaterThanSubsidy tests when coinbase is greater than subsidy.
-// This happens when there are transaction fees (positive net from txs).
-func TestComputeMiningFee_CoinbaseGreaterThanSubsidy(t *testing.T) {
-	// Block 36500: Coinbase output = 16.00731048 VAR (fee = 0.00731048 VAR)
-	// 16.00731048 VAR = 1600731048 atoms
+func TestComputeMiningFee_WithRegularTx(t *testing.T) {
 	coinbase := wire.NewMsgTx()
-	coinbase.AddTxOut(wire.NewTxOut(1600731048, nil))
+	coinbase.AddTxOut(wire.NewTxOut(16e8+10000, nil))
+	regTx := newTxWithFee(100000, 10000)
 
 	block := &wire.MsgBlock{
-		Transactions: []*wire.MsgTx{coinbase},
+		Transactions: []*wire.MsgTx{coinbase, regTx},
 	}
 
-	got := computeMiningFee(block, 16e8)
-	want := int64(731048) // 1600731048 - 1600000000 = 731048 atoms = 0.00731048 VAR
+	got := computeMiningFee(block)
+	want := int64(10000)
 	if got != want {
 		t.Errorf("got %d, want %d", got, want)
 	}
 }
 
-// TestComputeMiningFee_CoinbaseLessThanSubsidy tests when coinbase is less than subsidy.
-// This is an edge case that can happen if fees are negative.
-func TestComputeMiningFee_CoinbaseLessThanSubsidy(t *testing.T) {
-	// Coinbase output = 15.99 VAR (less than 16 VAR subsidy)
+func TestComputeMiningFee_NoFees(t *testing.T) {
 	coinbase := wire.NewMsgTx()
-	coinbase.AddTxOut(wire.NewTxOut(1599000000, nil)) // 15.99 VAR = 1599000000 atoms
+	coinbase.AddTxOut(wire.NewTxOut(16e8, nil))
+	regTx := newTxWithFee(100000, 0)
 
 	block := &wire.MsgBlock{
-		Transactions: []*wire.MsgTx{coinbase},
+		Transactions: []*wire.MsgTx{coinbase, regTx},
 	}
 
-	got := computeMiningFee(block, 16e8)
-	want := int64(-1000000) // 1599000000 - 1600000000 = -1000000 atoms = -0.01 VAR
+	got := computeMiningFee(block)
+	want := int64(0)
 	if got != want {
 		t.Errorf("got %d, want %d", got, want)
 	}
 }
 
-// TestComputeMiningFee_PositiveFee tests with real data from Block 36504.
-// Coinbase output = 16.01076502 VAR
-func TestComputeMiningFee_Block36504(t *testing.T) {
-	// Block 36504: Coinbase = 16.01076502 VAR = 1601076502 atoms
+func TestComputeMiningFee_MultipleRegularTx(t *testing.T) {
 	coinbase := wire.NewMsgTx()
-	coinbase.AddTxOut(wire.NewTxOut(1601076502, nil))
+	coinbase.AddTxOut(wire.NewTxOut(16e8+6000, nil))
+	tx1 := newTxWithFee(10000, 1000)
+	tx2 := newTxWithFee(20000, 2000)
+	tx3 := newTxWithFee(30000, 3000)
 
 	block := &wire.MsgBlock{
-		Transactions: []*wire.MsgTx{coinbase},
+		Transactions: []*wire.MsgTx{coinbase, tx1, tx2, tx3},
 	}
 
-	got := computeMiningFee(block, 16e8)
-	want := int64(1076502) // 1601076502 - 1600000000 = 1076502 atoms = 0.01076502 VAR
+	got := computeMiningFee(block)
+	want := int64(6000)
 	if got != want {
 		t.Errorf("got %d, want %d", got, want)
 	}

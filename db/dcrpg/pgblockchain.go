@@ -6572,17 +6572,14 @@ func trimmedTxInfoFromMsgTx(txraw *chainjson.TxRawResult, ticketPrice int64, msg
 			}
 			tx.FeeRaw = fee.String()
 			if txSize := int64(msgTx.SerializeSize()); txSize > 0 {
-				// Fee rate = atoms / byte
-				rate := new(big.Int).Quo(fee, big.NewInt(txSize))
+				rate := new(big.Int).Mul(fee, big.NewInt(1000))
+				rate.Quo(rate, big.NewInt(txSize))
 				tx.FeeRateRaw = rate.String()
 			}
 		} else { // VAR
-			fee, _ := txhelpers.TxFeeRate(msgTx)
+			fee, feeRate := txhelpers.TxFeeRate(msgTx)
 			tx.FeeRaw = strconv.FormatInt(int64(fee), 10)
-			if txSize := int64(msgTx.SerializeSize()); txSize > 0 {
-				rate := int64(fee) / txSize
-				tx.FeeRateRaw = strconv.FormatInt(rate, 10)
-			}
+			tx.FeeRateRaw = strconv.FormatInt(int64(feeRate), 10)
 		}
 	}
 
@@ -7475,8 +7472,7 @@ func (pgb *ChainDB) GetMempool(ctx context.Context) []exptypes.MempoolTx {
 			total += v.Value
 		}
 
-	txType := txhelpers.DetermineTxType(msgTx)
-
+		txType := txhelpers.DetermineTxType(msgTx)
 
 		var voteInfo *exptypes.VoteInfo
 		if txType == stake.TxTypeSSGen {

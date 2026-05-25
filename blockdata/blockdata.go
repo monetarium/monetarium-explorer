@@ -247,7 +247,7 @@ func (t *Collector) CollectBlockInfo(hash *chainhash.Hash) (*apitypes.BlockDataB
 	}
 	var miningFee int64
 	if curSubsidy != nil {
-		miningFee = computeMiningFee(msgBlock, curSubsidy.PoW)
+		miningFee = computeMiningFee(msgBlock)
 	}
 
 	// Work/Stake difficulty
@@ -655,26 +655,21 @@ func BlockSKAPoWRewardsFromSTx(msgBlock *wire.MsgBlock) map[uint8]string {
 	return out
 }
 
-// computeMiningFee calculates total mining fees from a block.
-// Formula: Mining Fee = Coinbase Output - PoW Subsidy
-// This is equivalent to summing (Inputs - Outputs) for all non-coinbase transactions,
-// but more efficient and accurate.
-func computeMiningFee(msgBlock *wire.MsgBlock, powSubsidy int64) int64 {
-	// Get coinbase output (first transaction, first output)
-	coinbaseOutput := int64(0)
-	for _, txOut := range msgBlock.Transactions[0].TxOut {
-		coinbaseOutput += txOut.Value
-	}
-	miningFee := coinbaseOutput - powSubsidy
-
-	// Exclude stake fees (fees from vote transactions) from the mining fee
-	var voteFees int64
-	for _, tx := range msgBlock.Transactions {
-		if txhelpers.DetermineTxType(tx) == stake.TxTypeSSGen {
-			fee, _ := txhelpers.TxFeeRate(tx)
-			voteFees += int64(fee)
+// computeMiningFee calculates total mining fees from a block by summing fees
+// from regular transactions and tickets, excluding votes and stake fees (SSFee).
+// For Monetarium, fees included in MiningFee are only from Tx and Tickets.
+func computeMiningFee(msgBlock *wire.MsgBlock) int64 {
+	var miningFee int64
+	for i, tx := range msgBlock.Transactions {
+		if i == 0 {
+			continue // skip coinbase
 		}
+		txType := txhelpers.DetermineTxType(tx)
+		if txType == stake.TxTypeSSGen || txType == stake.TxTypeSSFee {
+			continue // exclude votes and stake fees
+		}
+		fee, _ := txhelpers.TxFeeRate(tx)
+		miningFee += int64(fee)
 	}
-
-	return miningFee - voteFees
+	return miningFee
 }

@@ -94,11 +94,27 @@ func TestTrimmedTxInfoFromMsgTx_Fees(t *testing.T) {
 				t.Errorf("expected fee %s, got %s", tt.expectedFee, tx.FeeRaw)
 			}
 
-			if tt.expectRateOk && tx.FeeRateRaw == "" {
-				t.Errorf("expected non-empty fee rate for tx with fee")
-			}
-			if !tt.expectRateOk && tx.FeeRateRaw != "" && tx.FeeRateRaw != "0" {
-				t.Errorf("expected empty or zero fee rate for coinbase, got %s", tx.FeeRateRaw)
+			if tt.expectRateOk {
+				if tx.FeeRateRaw == "" || tx.FeeRateRaw == "0" {
+					t.Errorf("expected non-zero fee rate for tx with fee, got %s", tx.FeeRateRaw)
+				} else {
+					// Verify fee rate is in atoms/kB: rate = fee * 1000 / size
+					feeBig := new(big.Int)
+					feeBig.SetString(tt.expectedFee, 10)
+					expectedRate := new(big.Int).Mul(feeBig, big.NewInt(1000))
+					txSize := int64(tt.msgTx.SerializeSize())
+					if txSize > 0 {
+						expectedRate.Quo(expectedRate, big.NewInt(txSize))
+						if tx.FeeRateRaw != expectedRate.String() {
+							t.Errorf("expected fee rate %s atoms/kB (fee=%s, size=%d), got %s",
+								expectedRate.String(), tt.expectedFee, txSize, tx.FeeRateRaw)
+						}
+					}
+				}
+			} else {
+				if tx.FeeRateRaw != "" && tx.FeeRateRaw != "0" {
+					t.Errorf("expected empty or zero fee rate for coinbase, got %s", tx.FeeRateRaw)
+				}
 			}
 		})
 	}
