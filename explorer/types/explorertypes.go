@@ -719,6 +719,7 @@ type TrimmedBlockInfo struct {
 	ActiveSKACount    int                              `json:"active_ska_count"`
 	RegularCoinCounts []CoinCount                      `json:"regular_coin_counts,omitempty"`
 	MaxBlockSize      float64                          `json:"max_block_size"`
+	TotalFillRatio    float64                          `json:"total_fill_ratio"`
 }
 
 // Trim converts BlockInfo to TrimmedBlockInfo.
@@ -733,6 +734,11 @@ func (bi *BlockInfo) Trim(maxBlockSize float64, issuedSKA []uint8) *TrimmedBlock
 	}
 	stats := StatsFromCoinRows(bi.BlockBasic.CoinRows, coinbaseSize)
 	fills, _, activeSKACount := ComputeCoinFills(stats, maxBlockSize, issuedSKA)
+
+	var totalFillRatio float64
+	if maxBlockSize > 0 {
+		totalFillRatio = float64(bi.BlockBasic.Size) / maxBlockSize
+	}
 
 	return &TrimmedBlockInfo{
 		Time:              bi.BlockTime,
@@ -750,6 +756,7 @@ func (bi *BlockInfo) Trim(maxBlockSize float64, issuedSKA []uint8) *TrimmedBlock
 		ActiveSKACount:    activeSKACount,
 		RegularCoinCounts: RegularCoinCountsFromCoinRows(bi.BlockBasic.CoinRows, bi.BlockBasic.Voters, bi.BlockBasic.FreshStake, bi.BlockBasic.Revocations),
 		MaxBlockSize:      maxBlockSize,
+		TotalFillRatio:    totalFillRatio,
 	}
 }
 
@@ -801,6 +808,7 @@ type BlockInfo struct {
 	CoinFills      []CoinFillData `json:"coin_fills,omitempty"`
 	ActiveSKACount int            `json:"active_ska_count,omitempty"`
 	MaxBlockSize   float64        `json:"max_block_size,omitempty"`
+	TotalFillRatio float64        `json:"total_fill_ratio,omitempty"`
 }
 
 // CoinAmount represents an amount for a specific coin type.

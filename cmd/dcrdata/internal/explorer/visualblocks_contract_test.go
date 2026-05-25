@@ -67,6 +67,10 @@ func TestVisualBlocksDataContract(t *testing.T) {
 		if wire["regular_coin_counts"] == nil {
 			t.Error("Wire Block: regular_coin_counts is missing")
 		}
+		wantRatio := float64(15000) / maxBlockSize
+		if got, ok := wire["total_fill_ratio"].(float64); !ok || got != wantRatio {
+			t.Errorf("Wire TotalFillRatio mismatch: got %v, want %v", wire["total_fill_ratio"], wantRatio)
+		}
 
 		txs := wire["transactions"].([]interface{})
 		if len(txs) != 1 {
@@ -96,6 +100,8 @@ func TestVisualBlocksDataContract(t *testing.T) {
 		blockCopy.CoinFills = trimmed.CoinFills
 		blockCopy.ActiveSKACount = trimmed.ActiveSKACount
 		blockCopy.MaxBlockSize = trimmed.MaxBlockSize
+		blockCopy.RegularCoinCounts = trimmed.RegularCoinCounts
+		blockCopy.TotalFillRatio = trimmed.TotalFillRatio
 
 		wsData, err := json.Marshal(blockCopy)
 		if err != nil {
@@ -107,7 +113,7 @@ func TestVisualBlocksDataContract(t *testing.T) {
 		}
 
 		// 3. Verify that the data contract fields are IDENTICAL across transports
-		contractFields := []string{"regular_coin_counts", "coin_fills", "active_ska_count", "max_block_size"}
+		contractFields := []string{"regular_coin_counts", "coin_fills", "active_ska_count", "max_block_size", "total_fill_ratio"}
 		for _, f := range contractFields {
 			// Use JSON marshaling to compare potentially complex types like slices
 			hVal, _ := json.Marshal(httpWire[f])
