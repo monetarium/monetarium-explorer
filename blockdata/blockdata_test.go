@@ -4,6 +4,7 @@ import (
 	"math/big"
 	"testing"
 
+	"github.com/monetarium/monetarium-node/blockchain/stake"
 	"github.com/monetarium/monetarium-node/cointype"
 	"github.com/monetarium/monetarium-node/wire"
 )
@@ -410,6 +411,128 @@ func TestComputeMiningFee_MultipleRegularTx(t *testing.T) {
 	}
 }
 
-func TestComputeMiningFee_STransactions(t *testing.T) {
-	t.Skip("Skipping: constructing valid SStx/SSGen transactions requires specific OP_RETURN structure")
+// Reference SStx output scripts copied verbatim from
+// monetarium-node/blockchain/stake's own test fixtures (sstxTxOut0/1/2). They
+// satisfy stake.CheckSStx purely as scripts — values are independent, so the
+// helper below can dial in a chosen fee.
+var (
+	opSSTxScript = []byte{
+		0xba, 0x76, 0xa9, 0x14, // OP_SSTX OP_DUP OP_HASH160 OP_DATA_20
+		0xc3, 0x98, 0xef, 0xa9,
+		0xc3, 0x92, 0xba, 0x60,
+		0x13, 0xc5, 0xe0, 0x4e,
+		0xe7, 0x29, 0x75, 0x5e,
+		0xf7, 0xf5, 0x8b, 0x32,
+		0x88, 0xac, // OP_EQUALVERIFY OP_CHECKSIG
+	}
+	opSStxCommitScript = []byte{
+		0x6a, 0x1e, // OP_RETURN, 30-byte push
+		0x94, 0x8c, 0x76, 0x5a,
+		0x69, 0x14, 0xd4, 0x3f,
+		0x2a, 0x7a, 0xc1, 0x77,
+		0xda, 0x2c, 0x2f, 0x6b,
+		0x52, 0xde, 0x3d, 0x7c,
+		0x00, 0xe3, 0x23, 0x21,
+		0x00, 0x00, 0x00, 0x00,
+		0x44, 0x3f,
+	}
+	opSSTxChangeScript = []byte{
+		0xbd, 0x76, 0xa9, 0x14, // OP_SSTXCHANGE OP_DUP OP_HASH160 OP_DATA_20
+		0xc3, 0x98, 0xef, 0xa9,
+		0xc3, 0x92, 0xba, 0x60,
+		0x13, 0xc5, 0xe0, 0x4e,
+		0xe7, 0x29, 0x75, 0x5e,
+		0xf7, 0xf5, 0x8b, 0x32,
+		0x88, 0xac,
+	}
+)
+
+// newSStxWithFee returns an SStx (ticket) with one input of inputAmount atoms,
+// outputs summing to inputAmount-fee, and a script layout that satisfies
+// stake.IsSStx so DetermineTxType classifies it as TxTypeSStx.
+func newSStxWithFee(t *testing.T, inputAmount, fee int64) *wire.MsgTx {
+	t.Helper()
+	if fee < 0 || fee > inputAmount {
+		t.Fatalf("invalid test setup: inputAmount=%d fee=%d", inputAmount, fee)
+	}
+	purchase := (inputAmount - fee) / 2
+	change := (inputAmount - fee) - purchase
+
+	tx := wire.NewMsgTx()
+	tx.AddTxIn(wire.NewTxIn(&wire.OutPoint{}, inputAmount, nil))
+
+	out0 := wire.NewTxOut(purchase, opSSTxScript)
+	tx.AddTxOut(out0)
+	out1 := wire.NewTxOut(0, opSStxCommitScript)
+	tx.AddTxOut(out1)
+	out2 := wire.NewTxOut(change, opSSTxChangeScript)
+	tx.AddTxOut(out2)
+
+	if !stake.IsSStx(tx) {
+		t.Fatalf("test fixture failed: constructed tx is not classified as SStx")
+	}
+	return tx
+}
+
+func TestComputeMiningFee_TicketInSTransactions(t *testing.T) {
+	coinbase := wire.NewMsgTx()
+	coinbase.AddTxOut(wire.NewTxOut(16e8, nil))
+	ticket := newSStxWithFee(t, 1_000_000, 12_345)
+
+	block := &wire.MsgBlock{
+		Transactions:  []*wire.MsgTx{coinbase},
+		STransactions: []*wire.MsgTx{ticket},
+	}
+
+	got := computeMiningFee(block)
+	want := int64(12_345)
+	if got != want {
+		t.Errorf("got %d, want %d", got, want)
+	}
+}
+
+func TestComputeMiningFee_BothTrees(t *testing.T) {
+	coinbase := wire.NewMsgTx()
+	coinbase.AddTxOut(wire.NewTxOut(16e8+1000, nil))
+	regTx := newTxWithFee(50_000, 1_000)
+	ticket1 := newSStxWithFee(t, 1_000_000, 2_500)
+	ticket2 := newSStxWithFee(t, 2_000_000, 4_000)
+
+	block := &wire.MsgBlock{
+		Transactions:  []*wire.MsgTx{coinbase, regTx},
+		STransactions: []*wire.MsgTx{ticket1, ticket2},
+	}
+
+	got := computeMiningFee(block)
+	want := int64(1_000 + 2_500 + 4_000)
+	if got != want {
+		t.Errorf("got %d, want %d", got, want)
+	}
+}
+
+// TestComputeMiningFee_NonTicketSTransactionsExcluded confirms the STransactions
+// loop's `!= TxTypeSStx` filter actually drops non-ticket entries. A plain
+// (non-stake) MsgTx in STransactions is classified TxTypeRegular by
+// DetermineTxType, so its fee must not contribute to MiningFee — the same code
+// path that excludes votes (SSGen), stake fees (SSFee), and revocations (SSRtx).
+func TestComputeMiningFee_NonTicketSTransactionsExcluded(t *testing.T) {
+	coinbase := wire.NewMsgTx()
+	coinbase.AddTxOut(wire.NewTxOut(16e8, nil))
+	ticket := newSStxWithFee(t, 1_000_000, 7_777)
+	nonTicket := newTxWithFee(500_000, 9_999) // classified TxTypeRegular
+
+	if got := stake.DetermineTxType(nonTicket); got == stake.TxTypeSStx {
+		t.Fatalf("test fixture broken: non-ticket tx is classified as SStx")
+	}
+
+	block := &wire.MsgBlock{
+		Transactions:  []*wire.MsgTx{coinbase},
+		STransactions: []*wire.MsgTx{ticket, nonTicket},
+	}
+
+	got := computeMiningFee(block)
+	want := int64(7_777) // only the ticket's fee
+	if got != want {
+		t.Errorf("got %d, want %d (nonTicket fee of 9_999 must not be counted)", got, want)
+	}
 }
