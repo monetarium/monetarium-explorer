@@ -170,7 +170,7 @@ func TestRetrieveAddressBalance_ExcludeBurn(t *testing.T) {
 	if cbVAR.TotalReceived != 2270 {
 		t.Errorf("VAR Expected TotalReceived 2270, got %d", cbVAR.TotalReceived)
 	}
-	
+
 	// Ratio = 50 / (100 + 50 + 20) = 50 / 170 = 29.4118%
 	// Note: 20 is PoW, so it's excluded from numerator but included in denominator
 	expectedRatio := 50.0 / 170.0

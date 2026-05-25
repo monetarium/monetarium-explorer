@@ -1514,7 +1514,6 @@ func retrieveAddressBalance(ctx context.Context, db *sql.DB, address string) (ba
 	skaReceivedExclIssuance := make(map[uint8]*big.Int)
 	skaFromStake := make(map[uint8]*big.Int)
 
-
 	for rows.Next() {
 		var count, totalValue int64
 		var skaTotal string

@@ -101,7 +101,6 @@ func processTransactions(msgBlock *wire.MsgBlock, tree int8, chainParams *chainc
 		}
 		isStake := txType != stake.TxTypeRegular
 
-
 		// Handle granular reward types for SSFee transactions.
 		// An SSFee tx is either all PoS (SF marker) or all PoW (MF marker).
 		if txType == stake.TxTypeSSFee {
@@ -252,39 +251,39 @@ func processTransactions(msgBlock *wire.MsgBlock, tree int8, chainParams *chainc
 		dbTxVouts[txIndex] = make([]*Vout, 0, len(tx.TxOut))
 		for io, txout := range tx.TxOut {
 			ct := txout.CoinType
-		vout := Vout{
-			TxHash:   dbTx.TxID,
-			TxIndex:  uint32(io),
-			TxTree:   tree,
-			TxType:   dbTx.TxType,
-			CoinType: uint8(ct),
-			Version:  txout.Version,
-			// Mixed only applies to VAR CoinJoin outputs.
-			Mixed: ct == cointype.CoinTypeVAR && mixDenom > 0 && mixDenom == txout.Value,
-		}
-
-		// Coinbase outputs are split between PoW (index 0) and PoS (index > 0).
-		if txhelpers.IsCoinBaseTx(tx) {
-			if io == 0 {
-				vout.TxType = int16(TxTypeBlockRewardPoW)
-			} else {
-				vout.TxType = int16(TxTypeBlockRewardPoS)
+			vout := Vout{
+				TxHash:   dbTx.TxID,
+				TxIndex:  uint32(io),
+				TxTree:   tree,
+				TxType:   dbTx.TxType,
+				CoinType: uint8(ct),
+				Version:  txout.Version,
+				// Mixed only applies to VAR CoinJoin outputs.
+				Mixed: ct == cointype.CoinTypeVAR && mixDenom > 0 && mixDenom == txout.Value,
 			}
+
+			// Coinbase outputs are split between PoW (index 0) and PoS (index > 0).
+			if txhelpers.IsCoinBaseTx(tx) {
+				if io == 0 {
+					vout.TxType = int16(TxTypeBlockRewardPoW)
+				} else {
+					vout.TxType = int16(TxTypeBlockRewardPoS)
+				}
+			}
+			if ct == cointype.CoinTypeVAR {
+				vout.Value = uint64(txout.Value)
+			} else if ct.IsSKA() && txout.SKAValue != nil {
+				vout.SKAValue = txout.SKAValue.String()
+			}
+			scriptClass, scriptAddrs := stdscript.ExtractAddrs(vout.Version, txout.PkScript, chainParams)
+			addys := make([]string, 0, len(scriptAddrs))
+			for ia := range scriptAddrs {
+				addys = append(addys, scriptAddrs[ia].String())
+			}
+			vout.ScriptPubKeyData.Type = NewScriptClass(scriptClass)
+			vout.ScriptPubKeyData.Addresses = addys
+			dbTxVouts[txIndex] = append(dbTxVouts[txIndex], &vout)
 		}
-		if ct == cointype.CoinTypeVAR {
-			vout.Value = uint64(txout.Value)
-		} else if ct.IsSKA() && txout.SKAValue != nil {
-			vout.SKAValue = txout.SKAValue.String()
-		}
-		scriptClass, scriptAddrs := stdscript.ExtractAddrs(vout.Version, txout.PkScript, chainParams)
-		addys := make([]string, 0, len(scriptAddrs))
-		for ia := range scriptAddrs {
-			addys = append(addys, scriptAddrs[ia].String())
-		}
-		vout.ScriptPubKeyData.Type = NewScriptClass(scriptClass)
-		vout.ScriptPubKeyData.Addresses = addys
-		dbTxVouts[txIndex] = append(dbTxVouts[txIndex], &vout)
-	}
 
 		dbTransactions = append(dbTransactions, dbTx)
 	}
