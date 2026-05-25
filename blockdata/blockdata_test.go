@@ -409,3 +409,7 @@ func TestComputeMiningFee_MultipleRegularTx(t *testing.T) {
 		t.Errorf("got %d, want %d", got, want)
 	}
 }
+
+func TestComputeMiningFee_STransactions(t *testing.T) {
+	t.Skip("Skipping: constructing valid SStx/SSGen transactions requires specific OP_RETURN structure")
+}

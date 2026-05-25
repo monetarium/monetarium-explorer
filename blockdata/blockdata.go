@@ -656,19 +656,24 @@ func BlockSKAPoWRewardsFromSTx(msgBlock *wire.MsgBlock) map[uint8]string {
 }
 
 // computeMiningFee calculates total mining fees from a block by summing fees
-// from regular transactions and tickets, excluding votes and stake fees (SSFee).
-// For Monetarium, fees included in MiningFee are only from Tx and Tickets.
+// from regular transactions (Transactions tree) and tickets (STransactions tree
+// limited to TxTypeSStx), matching the GetExplorerBlock formula:
+//
+//	getTotalFee(block.Tx) + getTotalFee(block.Tickets)
 func computeMiningFee(msgBlock *wire.MsgBlock) int64 {
 	var miningFee int64
 	for i, tx := range msgBlock.Transactions {
 		if i == 0 {
 			continue // skip coinbase
 		}
-		txType := txhelpers.DetermineTxType(tx)
-		if txType == stake.TxTypeSSGen || txType == stake.TxTypeSSFee {
-			continue // exclude votes and stake fees
-		}
 		fee, _ := txhelpers.TxFeeRate(tx)
+		miningFee += int64(fee)
+	}
+	for _, stx := range msgBlock.STransactions {
+		if txhelpers.DetermineTxType(stx) != stake.TxTypeSStx {
+			continue // only include tickets
+		}
+		fee, _ := txhelpers.TxFeeRate(stx)
 		miningFee += int64(fee)
 	}
 	return miningFee
