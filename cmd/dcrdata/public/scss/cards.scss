@@ -27,6 +27,60 @@
   transform: translateX(-50%);
 }
 
+// Mempool mini-ledger: a 2-column grid (amount, symbol) stacking VAR on top of
+// active SKA-n rows inside a single Total Sent / Regular tile.
+.mempool-ledger {
+  display: inline-grid;
+  grid-template-columns: max-content max-content;
+  column-gap: 0.5rem;
+  row-gap: 0.15rem;
+  align-items: baseline;
+}
+
+.mempool-ledger-centered {
+  display: grid;
+  justify-content: center;
+}
+
+.mempool-ledger-row {
+  display: contents;
+}
+
+.mempool-ledger-row > .mempool-ledger-amount {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.mempool-ledger-row > .mempool-ledger-symbol {
+  white-space: nowrap;
+  text-align: left;
+}
+
+.mempool-ledger-secondary > .mempool-ledger-amount {
+  font-size: 1.0625rem; // ~17px
+  font-weight: 500;
+  line-height: 1.1;
+}
+
+.mempool-ledger-secondary > .mempool-ledger-symbol {
+  font-size: 0.75rem; // ~12px
+}
+
+// When no SKA coins are active, the centered ledger (Regular tile) falls back
+// to the vertically-stacked count-over-total presentation used by Tickets /
+// Votes / Revocations. Once any SKA row exists, the mini-ledger grid rules
+// above apply again.
+.mempool-ledger-centered:not(:has(.mempool-ledger-secondary)) {
+  display: block;
+  text-align: center;
+}
+
+.mempool-ledger-centered:not(:has(.mempool-ledger-secondary)) .mempool-ledger-amount,
+.mempool-ledger-centered:not(:has(.mempool-ledger-secondary)) .mempool-ledger-symbol {
+  display: block;
+  text-align: center;
+}
+
 body.darkBG {
   .secondary-card {
     background-color: $card-bg-secondary-dark;
