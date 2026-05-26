@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"html"
 	"io"
+	"math/big"
 	"net/http"
 	"reflect"
 	"sort"
@@ -615,9 +616,17 @@ func (c *appContext) getBlockVerbose(w http.ResponseWriter, r *http.Request) {
 
 		// SKA fees from SSFeeTotalsByCoin (stake fee distribution)
 		if summary.SSFeeTotalsByCoin != nil {
-			for ct, fee := range summary.SSFeeTotalsByCoin {
-				if fee != "0" && fee != "" {
-					response.Fees[fmt.Sprintf("%d", ct)] = fee
+			for ct, split := range summary.SSFeeTotalsByCoin {
+				total := new(big.Int)
+				if split.PoW != nil {
+					total.Add(total, split.PoW)
+				}
+				if split.PoS != nil {
+					total.Add(total, split.PoS)
+				}
+				feeStr := total.String()
+				if feeStr != "" && feeStr != "0" {
+					response.Fees[fmt.Sprintf("%d", ct)] = feeStr
 				}
 			}
 		}
@@ -1939,6 +1948,8 @@ func (c *appContext) getTreasuryIO(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, data, m.GetIndentCtx(r))
 }
 
+const skaSupplyStaleHeightThreshold = 10 // approx. 10-20 mins staleness budget
+
 func (c *appContext) ChartTypeData(w http.ResponseWriter, r *http.Request) {
 	chartType := m.GetChartTypeCtx(r)
 	bin := r.URL.Query().Get("bin")
@@ -1950,9 +1961,20 @@ func (c *appContext) ChartTypeData(w http.ResponseWriter, r *http.Request) {
 	// Check if this is an SKA supply chart and if data needs to be loaded
 	if c.charts != nil && cache.IsSKASupplyChart(chartType) {
 		coinType := cache.SkaCoinType(chartType)
-		if coinType > 0 && !c.charts.SKASupplyExists(coinType) {
-			if err := c.DataSource.LoadSKASupplyForCoin(r.Context(), c.charts, coinType); err != nil {
-				log.Warnf("ChartTypeData: failed to load SKA supply for coin type %d: %v", coinType, err)
+		if coinType > 0 {
+			reload := !c.charts.SKASupplyExists(coinType)
+			if currHeight, err := c.DataSource.GetHeight(r.Context()); err == nil {
+				if cachedHeight, ok := c.charts.SKASupplyHeight(coinType); !ok || currHeight-cachedHeight > skaSupplyStaleHeightThreshold {
+					reload = true
+				}
+			} else {
+				log.Warnf("ChartTypeData: failed to get current height: %v", err)
+			}
+
+			if reload {
+				if err := c.DataSource.LoadSKASupplyForCoin(r.Context(), c.charts, coinType); err != nil {
+					log.Warnf("ChartTypeData: failed to load SKA supply for coin type %d: %v", coinType, err)
+				}
 			}
 		}
 	}

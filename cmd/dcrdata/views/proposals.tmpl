@@ -50,7 +50,6 @@
 
                         {{$count := (int64 (len .Proposals))}}
                         {{$oldest := (add .Offset $count)}}
-                        {{$pending := (subtract $.TotalCount .Offset)}}
 
                         <span class="fs12 nowrap text-end">
                             <label class="mb-0 me-1" for="tbPagesize">Page Size</label>
@@ -60,14 +59,13 @@
                                 data-action="change->pagenavigation#setPageSize"
                                 data-offset="{{$.Offset}}"
                                 data-offsetkey="offset"
-                                class="form-control-sm mb-2 me-sm-2 mb-sm-0 {{if lt $pending 20}}disabled{{end}} dropdown"
-                                {{if lt $pending 20}}disabled="disabled"{{end}}
+                                class="form-control-sm mb-2 me-sm-2 mb-sm-0 dropdown"
                             >
-                            {{if ge $pending 20}}<option {{if eq $count 20}}selected{{end}} value="20">20</option>{{end}}
-                            {{if ge $pending 30}}<option {{if eq $count 30}}selected{{end}} value="30">30</option>{{end}}
-                            {{if ge $pending 50}}<option {{if eq $count 50}}selected{{end}} value="50">50</option>{{end}}
-                            {{if eq $.TotalCount $count 20 30 50}}{{else}}<option value="{{$.TotalCount}}">{{$.TotalCount}}</option>{{end}}
-                            {{if eq $count 20 30 50}}{{else}}<option selected value="{{$count}}">{{$count}}</option>{{end}}
+                                <option {{if eq .Limit 10}}selected{{end}} value="10">10</option>
+                                <option {{if eq .Limit 20}}selected{{end}} value="20">20</option>
+                                <option {{if eq .Limit 30}}selected{{end}} value="30">30</option>
+                                <option {{if eq .Limit 50}}selected{{end}} value="50">50</option>
+                                <option {{if eq .Limit 100}}selected{{end}} value="100">100</option>
                             </select>
                         </span>
                         <span class="fs12 nowrap text-end form-control-sm mb-2 me-sm-2 mb-sm-0">

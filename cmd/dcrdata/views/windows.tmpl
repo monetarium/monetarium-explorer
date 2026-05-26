@@ -11,11 +11,8 @@
         {{$windowsCount := (int64 (len .Data))}}
         <div class="px-1 mb-1">
             {{if gt $windowsCount 0}}
-            {{$pendingWindows := (int64 (index .Data 0).IndexVal)}}
             {{$oldest = (add .OffsetWindow $windowsCount)}}
             {{$lastWindow = (add .BestWindow 1)}}
-            {{$dropVal := $lastWindow}}
-            {{if gt $lastWindow 200}}{{$dropVal = 200}}{{end}}
             <div class="d-flex justify-content-between align-items-end">
               <span class="h2 d-flex pt-4 pb-1 pe-2">
                 Windows
@@ -32,15 +29,13 @@
                         data-action="change->pagenavigation#setPageSize"
                         data-offset="{{$.OffsetWindow}}"
                         data-offsetkey="offset"
-                        class="dropdown text-secondary my-2 {{if lt $pendingWindows 10}}disabled{{end}}"
-                        {{if lt $pendingWindows 10}}disabled="disabled"{{end}}
+                        class="dropdown text-secondary my-2"
                     >
-                      {{if eq $windowsCount 20 30 50 100 200}}{{else}}<option selected value="{{$windowsCount}}">{{$windowsCount}} per page</option>{{end}}
-                      {{if ge $pendingWindows 20}}<option {{if eq $windowsCount 20}}selected{{end}} value="20">20 per page</option>{{end}}
-                      {{if ge $pendingWindows 30}}<option {{if eq $windowsCount 30}}selected{{end}} value="30">30 per page</option>{{end}}
-                      {{if ge $pendingWindows 50}}<option {{if eq $windowsCount 50}}selected{{end}} value="50">50 per page</option>{{end}}
-                      {{if ge $pendingWindows 100}}<option {{if eq $windowsCount 100}}selected{{end}} value="100">100 per page</option>{{end}}
-                      {# {{if eq $dropVal $windowsCount 20 30 50 100}}{{else}}<option value="{{$dropVal}}">{{$dropVal}} per page</option>{{end}} #}
+                      <option {{if eq .Limit 10}}selected{{end}} value="10">10 per page</option>
+                      <option {{if eq .Limit 20}}selected{{end}} value="20">20 per page</option>
+                      <option {{if eq .Limit 30}}selected{{end}} value="30">30 per page</option>
+                      <option {{if eq .Limit 50}}selected{{end}} value="50">50 per page</option>
+                      <option {{if eq .Limit 100}}selected{{end}} value="100">100 per page</option>
                     </select>
                 </span>
                 <nav aria-label="blocks navigation" data-limit="{{.Limit}}" class="ms-2 my-2 d-inline-block text-end">

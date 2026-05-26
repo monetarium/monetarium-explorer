@@ -5,6 +5,7 @@
 package types
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -356,12 +357,13 @@ type TxBasic struct {
 // TrimmedTxInfo for use with /visualblocks
 type TrimmedTxInfo struct {
 	*TxBasic
-	Fees         float64
-	VinCount     int
-	VoutCount    int
-	VoteValid    bool
-	CoinType     uint8  // 0=VAR, 1-255=SKAn for stake fees; for revocations, set when processing
-	TicketStatus string // Pool status for revocations: "voted", "missed", "expired"
+	Fees         float64 `json:"fees"`
+	VoteValid    bool    `json:"vote_valid"`
+	Voted        bool    `json:"voted"`
+	VinCount     int     `json:"vin_count"`
+	VoutCount    int     `json:"vout_count"`
+	CoinType     uint8   `json:"coin_type,omitempty"`     // 0=VAR, 1-255=SKAn for stake fees; for revocations, set when processing
+	TicketStatus string  `json:"ticket_status,omitempty"` // Pool status for revocations: "voted", "missed", "expired"
 }
 
 // TxInfo models data needed for display on the tx page
@@ -701,17 +703,61 @@ type MempoolCoinStats struct {
 
 // TrimmedBlockInfo models data needed to display block info on the new home page
 type TrimmedBlockInfo struct {
-	Time         TimeDef
-	Height       int64
-	Total        float64
-	Fees         float64
-	Subsidy      *chainjson.GetBlockSubsidyResult
-	Votes        []*TrimmedTxInfo
-	Tickets      []*TrimmedTxInfo
-	Revocations  []*TrimmedTxInfo
-	Transactions []*TrimmedTxInfo
-	// CoinRows holds per-coin row data for the expandable blocks table.
-	CoinRows []CoinRowData
+	Time              TimeDef                          `json:"time"`
+	Height            int64                            `json:"height"`
+	Total             float64                          `json:"total"`
+	Fees              float64                          `json:"fees"`
+	Subsidy           *chainjson.GetBlockSubsidyResult `json:"subsidy"`
+	Votes             []*TrimmedTxInfo                 `json:"votes"`
+	Tickets           []*TrimmedTxInfo                 `json:"tickets"`
+	Revocations       []*TrimmedTxInfo                 `json:"revocations"`
+	Transactions      []*TrimmedTxInfo                 `json:"transactions"`
+	CoinRows          []CoinRowData                    `json:"coin_rows"`
+	Size              int32                            `json:"size"`
+	FormattedBytes    string                           `json:"formatted_bytes"`
+	CoinFills         []CoinFillData                   `json:"coin_fills,omitempty"`
+	ActiveSKACount    int                              `json:"active_ska_count"`
+	RegularCoinCounts []CoinCount                      `json:"regular_coin_counts,omitempty"`
+	MaxBlockSize      float64                          `json:"max_block_size"`
+	TotalFillRatio    float64                          `json:"total_fill_ratio"`
+}
+
+// Trim converts BlockInfo to TrimmedBlockInfo.
+func (bi *BlockInfo) Trim(maxBlockSize float64, issuedSKA []uint8) *TrimmedBlockInfo {
+	// Exclude coinbase from VAR fill bar.
+	coinbaseSize := int32(0)
+	for _, tx := range bi.Tx {
+		if tx.TxBasic != nil && tx.TxBasic.Coinbase {
+			coinbaseSize = tx.TxBasic.Size
+			break
+		}
+	}
+	stats := StatsFromCoinRows(bi.BlockBasic.CoinRows, coinbaseSize)
+	fills, _, activeSKACount := ComputeCoinFills(stats, maxBlockSize, issuedSKA)
+
+	var totalFillRatio float64
+	if maxBlockSize > 0 {
+		totalFillRatio = float64(bi.BlockBasic.Size) / maxBlockSize
+	}
+
+	return &TrimmedBlockInfo{
+		Time:              bi.BlockTime,
+		Height:            bi.Height,
+		Total:             bi.TotalSent,
+		Fees:              bi.MiningFee,
+		Subsidy:           bi.Subsidy,
+		Votes:             bi.Votes,
+		Tickets:           bi.Tickets,
+		Revocations:       bi.Revs,
+		Transactions:      FilterRegularTx(bi.Tx),
+		Size:              bi.BlockBasic.Size,
+		FormattedBytes:    bi.BlockBasic.FormattedBytes,
+		CoinFills:         fills,
+		ActiveSKACount:    activeSKACount,
+		RegularCoinCounts: RegularCoinCountsFromCoinRows(bi.BlockBasic.CoinRows, bi.BlockBasic.Voters, bi.BlockBasic.FreshStake, bi.BlockBasic.Revocations),
+		MaxBlockSize:      maxBlockSize,
+		TotalFillRatio:    totalFillRatio,
+	}
 }
 
 // BlockInfo models data for display on the block page
@@ -753,12 +799,16 @@ type BlockInfo struct {
 	TotalSentByCoin []CoinAmount `json:"-"`
 	// RegularCoinCounts is an ordered slice of regular transaction counts per coin type,
 	// for template rendering. Same ordering as TotalSentByCoin.
-	RegularCoinCounts []CoinCount `json:"-"`
+	RegularCoinCounts []CoinCount `json:"regular_coin_counts,omitempty"`
 	// FeesByCoin is an ordered slice of fees per coin type, for template rendering.
 	// VAR fees are total transaction fees in the block; SKA fees are SSFee distribution amounts
 	// (total SKA atoms distributed via TxTypeSSFee per coin type, i.e., fees collected from SKA outputs).
 	// Same ordering as TotalSentByCoin.
-	FeesByCoin []CoinAmount `json:"-"`
+	FeesByCoin     []CoinAmount   `json:"-"`
+	CoinFills      []CoinFillData `json:"coin_fills,omitempty"`
+	ActiveSKACount int            `json:"active_ska_count,omitempty"`
+	MaxBlockSize   float64        `json:"max_block_size,omitempty"`
+	TotalFillRatio float64        `json:"total_fill_ratio,omitempty"`
 }
 
 // CoinAmount represents an amount for a specific coin type.
@@ -860,6 +910,8 @@ type TrimmedMempoolInfo struct {
 	TotalFillRatio float64                    `json:"total_fill_ratio"`
 	ActiveSKACount int                        `json:"active_ska_count"`
 	CoinStats      map[uint8]MempoolCoinStats `json:"coin_stats,omitempty"`
+	MaxBlockSize   float64                    `json:"max_block_size"`
+	TotalSize      int32                      `json:"total_size"`
 }
 
 // MempoolInfo models data to update mempool info on the home page.
@@ -902,8 +954,9 @@ func (mpi *MempoolInfo) DeepCopy() *MempoolInfo {
 }
 
 // Trim converts the MempoolInfo to TrimmedMempoolInfo.
-func (mpi *MempoolInfo) Trim() *TrimmedMempoolInfo {
+func (mpi *MempoolInfo) Trim(maxBlockSize float64) *TrimmedMempoolInfo {
 	mpi.RLock()
+	defer mpi.RUnlock()
 
 	mempoolRegularTxs := TrimMempoolTxs(mpi.Transactions)
 	mempoolVotes := TrimMempoolTxs(mpi.Votes)
@@ -921,9 +974,9 @@ func (mpi *MempoolInfo) Trim() *TrimmedMempoolInfo {
 		TotalFillRatio: mpi.MempoolShort.TotalFillRatio,
 		ActiveSKACount: mpi.MempoolShort.ActiveSKACount,
 		CoinStats:      mpi.MempoolShort.CoinStats,
+		MaxBlockSize:   maxBlockSize,
+		TotalSize:      mpi.MempoolShort.TotalSize,
 	}
-
-	mpi.RUnlock()
 
 	// Calculate total fees for all mempool transactions.
 	getTotalFee := func(txs []*TrimmedTxInfo) dcrutil.Amount {
@@ -1512,52 +1565,116 @@ type AddrPrefix struct {
 	Description string
 }
 
-// AddressPrefixes generates an array AddrPrefix by using chaincfg.Params
+// addrPrefixSet captures the textual base58 prefix that every address of each
+// type begins with on a given network. These are the values documented in
+// `monetarium-node/chaincfg/{mainnet,testnet,simnet,regnet}params.go` as the
+// "starts with X" comments next to each magic-byte field. We hardcode the
+// table per network because the textual prefix is a property of typical
+// real-world hash160 / BIP32 payloads, not a deterministic function of the
+// magic bytes alone (the leading base58 digit shifts with the payload).
+type addrPrefixSet struct {
+	pubKeyAddrID, pubKeyHashAddrID, pkhEdwardsAddrID, pkhSchnorrAddrID string
+	scriptHashAddrID, privateKeyID, hdPrivateKeyID, hdPublicKeyID      string
+}
+
+var (
+	mainnetAddrPrefixes = addrPrefixSet{
+		pubKeyAddrID: "Mk", pubKeyHashAddrID: "Ms", pkhEdwardsAddrID: "Me",
+		pkhSchnorrAddrID: "MS", scriptHashAddrID: "Mc", privateKeyID: "Pm",
+		hdPrivateKeyID: "dprv", hdPublicKeyID: "dpub",
+	}
+	testnetAddrPrefixes = addrPrefixSet{
+		pubKeyAddrID: "Tk", pubKeyHashAddrID: "Ts", pkhEdwardsAddrID: "Te",
+		pkhSchnorrAddrID: "TS", scriptHashAddrID: "Tc", privateKeyID: "Pt",
+		hdPrivateKeyID: "tprv", hdPublicKeyID: "tpub",
+	}
+	simnetAddrPrefixes = addrPrefixSet{
+		pubKeyAddrID: "Sk", pubKeyHashAddrID: "Ss", pkhEdwardsAddrID: "Se",
+		pkhSchnorrAddrID: "SS", scriptHashAddrID: "Sc", privateKeyID: "Ps",
+		hdPrivateKeyID: "sprv", hdPublicKeyID: "spub",
+	}
+	regnetAddrPrefixes = addrPrefixSet{
+		pubKeyAddrID: "Rk", pubKeyHashAddrID: "Rs", pkhEdwardsAddrID: "Re",
+		pkhSchnorrAddrID: "RS", scriptHashAddrID: "Rc", privateKeyID: "Pr",
+		hdPrivateKeyID: "rprv", hdPublicKeyID: "rpub",
+	}
+)
+
+// AddressPrefixes returns the textual address prefixes for the active network
+// on /parameters. Recognised nets (mainnet/testnet*/simnet/regnet) return the
+// documented textual prefixes; any other network falls back to the magic-byte
+// hex representation so the table is never silently empty.
 func AddressPrefixes(params *chaincfg.Params) []AddrPrefix {
-	Descriptions := []string{"P2PK address",
-		"P2PKH address prefix. Standard wallet address. 1 public key -> 1 private key",
-		"Ed25519 P2PKH address prefix",
-		"secp256k1 Schnorr P2PKH address prefix",
-		"P2SH address prefix",
-		"WIF private key prefix",
-		"HD extended private key prefix",
-		"HD extended public key prefix",
+	set, recognised := lookupAddrPrefixSet(params.Name)
+
+	prefix2 := func(known string, magic [2]byte) string {
+		if recognised {
+			return known
+		}
+		return "0x" + hex.EncodeToString(magic[:])
 	}
-	Name := []string{"PubKeyAddrID",
-		"PubKeyHashAddrID",
-		"PKHEdwardsAddrID",
-		"PKHSchnorrAddrID",
-		"ScriptHashAddrID",
-		"PrivateKeyID",
-		"HDPrivateKeyID",
-		"HDPublicKeyID",
+	prefix4 := func(known string, magic [4]byte) string {
+		if recognised {
+			return known
+		}
+		return "0x" + hex.EncodeToString(magic[:])
 	}
 
-	MainnetPrefixes := []string{"Dk", "Ds", "De", "DS", "Dc", "Pm", "dprv", "dpub"}
-	TestnetPrefixes := []string{"Tk", "Ts", "Te", "TS", "Tc", "Pt", "tprv", "tpub"}
-	SimnetPrefixes := []string{"Sk", "Ss", "Se", "SS", "Sc", "Ps", "sprv", "spub"}
-
-	name := params.Name
-	var netPrefixes []string
-	if name == "mainnet" {
-		netPrefixes = MainnetPrefixes
-	} else if strings.HasPrefix(name, "testnet") {
-		netPrefixes = TestnetPrefixes
-	} else if name == "simnet" {
-		netPrefixes = SimnetPrefixes
-	} else {
-		return nil
+	return []AddrPrefix{
+		{Name: "PubKeyAddrID", Prefix: prefix2(set.pubKeyAddrID, params.PubKeyAddrID),
+			Description: "P2PK address"},
+		{Name: "PubKeyHashAddrID", Prefix: prefix2(set.pubKeyHashAddrID, params.PubKeyHashAddrID),
+			Description: "P2PKH address prefix. Standard wallet address. 1 public key -> 1 private key"},
+		{Name: "PKHEdwardsAddrID", Prefix: prefix2(set.pkhEdwardsAddrID, params.PKHEdwardsAddrID),
+			Description: "Ed25519 P2PKH address prefix"},
+		{Name: "PKHSchnorrAddrID", Prefix: prefix2(set.pkhSchnorrAddrID, params.PKHSchnorrAddrID),
+			Description: "secp256k1 Schnorr P2PKH address prefix"},
+		{Name: "ScriptHashAddrID", Prefix: prefix2(set.scriptHashAddrID, params.ScriptHashAddrID),
+			Description: "P2SH address prefix"},
+		{Name: "PrivateKeyID", Prefix: prefix2(set.privateKeyID, params.PrivateKeyID),
+			Description: "WIF private key prefix"},
+		{Name: "HDPrivateKeyID", Prefix: prefix4(set.hdPrivateKeyID, params.HDPrivateKeyID),
+			Description: "HD extended private key prefix"},
+		{Name: "HDPublicKeyID", Prefix: prefix4(set.hdPublicKeyID, params.HDPublicKeyID),
+			Description: "HD extended public key prefix"},
 	}
+}
 
-	addrPrefix := make([]AddrPrefix, 0, len(Descriptions))
-	for i, desc := range Descriptions {
-		addrPrefix = append(addrPrefix, AddrPrefix{
-			Name:        Name[i],
-			Description: desc,
-			Prefix:      netPrefixes[i],
-		})
+func lookupAddrPrefixSet(netName string) (addrPrefixSet, bool) {
+	switch {
+	case netName == "mainnet":
+		return mainnetAddrPrefixes, true
+	case strings.HasPrefix(netName, "testnet"):
+		return testnetAddrPrefixes, true
+	case netName == "simnet":
+		return simnetAddrPrefixes, true
+	case netName == "regnet":
+		return regnetAddrPrefixes, true
+	default:
+		return addrPrefixSet{}, false
 	}
-	return addrPrefix
+}
+
+// SKACoinParam is the per-coin view-model for the SKA coin parameters table
+// on /parameters. All 18-decimal SKA amounts are pre-formatted to plain
+// decimal strings server-side; no *big.Int / atoms cross the template
+// boundary (see wiki/core/constraints.md#C1).
+type SKACoinParam struct {
+	CoinType          uint8
+	Label             string // "SKA1", "SKA2" — no dash, see wiki/core/product.md
+	Name              string
+	Symbol            string
+	Description       string
+	Active            bool // SKACoinConfig.Active
+	InitiallyActive   bool // present in chaincfg.Params.InitialSKATypes
+	MaxSupply         string
+	AtomsPerCoin      string
+	MinRelayTxFee     string
+	MaxFeeMultiplier  int64
+	EmissionHeight    int32
+	EmissionWindow    int32
+	EmissionAddresses []string
+	EmissionAmounts   []string // parallel to EmissionAddresses
 }
 
 // StatsInfo represents all of the data for the stats page.
@@ -1604,6 +1721,116 @@ func UnspentOutputIndices(vouts []Vout) (unspents []int) {
 		unspents = append(unspents, idx)
 	}
 	return
+}
+
+// StatsFromCoinRows converts CoinRowData to MempoolCoinStats for fill bar computation.
+// coinbaseSize is subtracted from the VAR coin (type 0) size to exclude it from the bar.
+func StatsFromCoinRows(rows []CoinRowData, coinbaseSize int32) map[uint8]MempoolCoinStats {
+	stats := make(map[uint8]MempoolCoinStats)
+	for _, row := range rows {
+		size := int32(row.Size)
+		if row.CoinType == 0 {
+			size -= coinbaseSize
+			if size < 0 {
+				size = 0
+			}
+		}
+		stats[row.CoinType] = MempoolCoinStats{Size: size}
+	}
+	return stats
+}
+
+func ComputeCoinFills(stats map[uint8]MempoolCoinStats, maxBlockSize float64, issuedSKA []uint8) ([]CoinFillData, float64, int) {
+	varQuota := maxBlockSize * 0.10
+	skaPool := maxBlockSize * 0.90
+
+	skaKeySet := make(map[int]struct{})
+	for ct := range stats {
+		if ct != 0 {
+			skaKeySet[int(ct)] = struct{}{}
+		}
+	}
+	for _, ct := range issuedSKA {
+		skaKeySet[int(ct)] = struct{}{}
+	}
+	var skaKeys []int
+	var totalSKASize float64
+	for k := range skaKeySet {
+		skaKeys = append(skaKeys, k)
+		totalSKASize += float64(stats[uint8(k)].Size)
+	}
+	sort.Ints(skaKeys)
+	numSKA := len(skaKeys)
+
+	varSize := float64(0)
+	if s, ok := stats[0]; ok {
+		varSize = float64(s.Size)
+	}
+	totalUsed := varSize + totalSKASize
+	totalFillRatio := totalUsed / maxBlockSize
+
+	fillStatus := func(size, quota float64) string {
+		switch {
+		case size <= quota:
+			return "ok"
+		case totalUsed <= maxBlockSize:
+			return "borrowing"
+		default:
+			return "full"
+		}
+	}
+
+	extraOrOverflow := func(size, quota float64, status string) (extra, overflow float64) {
+		if status == "borrowing" {
+			extra = math.Min((size-quota)/maxBlockSize, 1.0)
+		} else if status == "full" {
+			overflow = math.Min((size-quota)/maxBlockSize, 1.0)
+		}
+		return
+	}
+
+	withDisplay := func(d CoinFillData) CoinFillData {
+		raw := d.GQFillRatio*d.GQPositionRatio + d.ExtraFillRatio + d.OverflowFillRatio
+		d.PctOfTC = raw * 100.0
+		d.IsOverflow = raw > 1.0
+		return d
+	}
+
+	varStatus := fillStatus(varSize, varQuota)
+	varExtra, varOverflow := extraOrOverflow(varSize, varQuota, varStatus)
+
+	fills := make([]CoinFillData, 0, 1+numSKA)
+	fills = append(fills, withDisplay(CoinFillData{
+		Symbol:            "VAR",
+		GQFillRatio:       math.Min(varSize/varQuota, 1.0),
+		ExtraFillRatio:    varExtra,
+		OverflowFillRatio: varOverflow,
+		GQPositionRatio:   0.10,
+		Status:            varStatus,
+	}))
+
+	if numSKA == 0 {
+		return fills, totalFillRatio, 0
+	}
+
+	perSKAQuota := skaPool / float64(numSKA)
+	gqPos := 0.90 / float64(numSKA)
+
+	for _, ct := range skaKeys {
+		s := stats[uint8(ct)]
+		size := float64(s.Size)
+		status := fillStatus(size, perSKAQuota)
+		extra, overflow := extraOrOverflow(size, perSKAQuota, status)
+		fills = append(fills, withDisplay(CoinFillData{
+			Symbol:            fmt.Sprintf("SKA%d", ct),
+			GQFillRatio:       math.Min(size/perSKAQuota, 1.0),
+			ExtraFillRatio:    extra,
+			OverflowFillRatio: overflow,
+			GQPositionRatio:   gqPos,
+			Status:            status,
+		}))
+	}
+	return fills, totalFillRatio, numSKA
 }
 
 // MsgTxMempoolInputs parses a MsgTx and creates a list of MempoolInput.

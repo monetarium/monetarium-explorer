@@ -9,7 +9,7 @@
 ### Critical Constraints
 - **UTC Time Requirement:** Time groupings must always enforce `utc` at the SQL level, or aggregation logic silently drifts.
 - **Genesis Block Offsets:** Maximum valid pagination offsets are tightly bound by calculations utilizing the `oldestBlockTime` (Genesis Block).
-- **Silent Defaults:** Providing unhandled grouping names (e.g. `/hours`) quietly routes to `/years` (`dbtypes.YearGrouping`).
+- **Silent Defaults:** `TimeGroupingFromStr` returns `UnknownGrouping` (not `YearGrouping`) for unhandled names; the `timeBasedBlocksListing` handler catches that error and falls back to `dbtypes.YearGrouping`. Production routes pass fixed literals, so this path is unreached in practice.
 
 ### Mutation Checklist
 - [ ] If changing `dbtypes.BlocksGroupedInfo`, did I verify the `StakeDiffWindows` pipeline isn't broken?

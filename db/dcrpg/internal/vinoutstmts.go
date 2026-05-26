@@ -248,15 +248,38 @@ const (
 		AND transactions.is_mainchain AND transactions.is_valid
 		GROUP BY vouts.coin_type;`
 
-	// SelectSKACoinSupplyPerBlock fetches the cumulative SKA supply per block for a specific coin type.
-	// Returns: block_height, block_time, total (sum of unspent outputs at that block).
-	SelectSKACoinSupplyPerBlock = `SELECT transactions.block_height, transactions.block_time, COALESCE(sum(vouts.ska_value::numeric), 0)::text AS total
-		FROM vouts JOIN transactions ON vouts.tx_hash = transactions.tx_hash
-		WHERE vouts.spend_tx_row_id IS NULL AND vouts.coin_type = $2
+	// SelectSKACoinSupplyPerBlock fetches the supply delta per block for a specific coin type.
+	// Returns: block_height, block_time, delta (sum of outputs - sum of inputs) as text.
+	SelectSKACoinSupplyPerBlock = `SELECT 
+		t.block_height, 
+		t.block_time, 
+		(COALESCE(vout_sums.delta, 0) - COALESCE(vin_sums.delta, 0))::text AS delta
+	FROM (
+		SELECT height as block_height, time as block_time
+		FROM blocks
+		WHERE is_mainchain AND height > $1
+	) t
+	LEFT JOIN (
+		SELECT transactions.block_height, sum(vouts.ska_value::numeric) as delta
+		FROM vouts 
+		JOIN transactions ON vouts.tx_hash = transactions.tx_hash
+		WHERE vouts.coin_type = $2
+		AND vouts.script_type IS DISTINCT FROM 'nulldata'
 		AND transactions.is_mainchain AND transactions.is_valid
-		AND transactions.block_height > $1
-		GROUP BY transactions.block_height, transactions.block_time
-		ORDER BY transactions.block_height;`
+		GROUP BY transactions.block_height
+	) vout_sums ON t.block_height = vout_sums.block_height
+	LEFT JOIN (
+		SELECT transactions.block_height, sum(vins.ska_value::numeric) as delta
+		FROM vins 
+		JOIN transactions ON vins.tx_hash = transactions.tx_hash
+		WHERE vins.coin_type = $2
+		-- Invariant: issuance inputs are identified by a zero prev_tx_hash.
+		-- These are excluded from the subtraction to correctly calculate circulating supply.
+		AND vins.prev_tx_hash != '\x0000000000000000000000000000000000000000000000000000000000000000'::bytea
+		AND transactions.is_mainchain AND transactions.is_valid
+		GROUP BY transactions.block_height
+	) vin_sums ON t.block_height = vin_sums.block_height
+	ORDER BY t.block_height;`
 
 	// SelectVARCoinSupplyPerBlock fetches the cumulative VAR supply per block.
 	// VAR (coin_type = 0) uses value column (atoms, 8 decimals). Multiply by 10^10 to get 18 decimal places.

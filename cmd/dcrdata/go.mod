@@ -29,6 +29,7 @@ require (
 	github.com/monetarium/monetarium-node/blockchain/standalone v1.1.0
 	github.com/monetarium/monetarium-node/chaincfg v1.1.0
 	github.com/monetarium/monetarium-node/chaincfg/chainhash v1.1.0
+	github.com/monetarium/monetarium-node/cointype v1.0.14
 	github.com/monetarium/monetarium-node/dcrutil v1.1.0
 	github.com/monetarium/monetarium-node/rpc/jsonrpc/types v1.1.0
 	github.com/monetarium/monetarium-node/rpcclient v1.1.0
@@ -78,6 +79,7 @@ require (
 	github.com/cockroachdb/pebble v1.1.1 // indirect
 	github.com/cockroachdb/redact v1.1.5 // indirect
 	github.com/cockroachdb/tokenbucket v0.0.0-20230807174530-cc333fc44b06 // indirect
+	github.com/coder/websocket v1.8.14
 	github.com/companyzero/sntrup4591761 v0.0.0-20220309191932-9e0f3af2f07a // indirect
 	github.com/consensys/bavard v0.1.13 // indirect
 	github.com/consensys/gnark-crypto v0.12.1 // indirect
@@ -181,7 +183,6 @@ require (
 	github.com/mattn/go-runewidth v0.0.13 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.4 // indirect
 	github.com/mmcloughlin/addchain v0.4.0 // indirect
-	github.com/monetarium/monetarium-node/cointype v1.0.14 // indirect
 	github.com/monetarium/monetarium-node/crypto/blake256 v1.0.14 // indirect
 	github.com/monetarium/monetarium-node/crypto/rand v1.0.14 // indirect
 	github.com/monetarium/monetarium-node/crypto/ripemd160 v1.0.14 // indirect

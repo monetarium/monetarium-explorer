@@ -8,11 +8,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/coder/websocket"
+	"github.com/coder/websocket/wsjson"
 	exptypes "github.com/monetarium/monetarium-explorer/explorer/types"
 	pubsub "github.com/monetarium/monetarium-explorer/pubsub"
 	pstypes "github.com/monetarium/monetarium-explorer/pubsub/types"
 	"github.com/monetarium/monetarium-explorer/semver"
-	"golang.org/x/net/websocket"
 )
 
 // Version indicates the semantic version of the pubsub module, to which the
@@ -95,6 +96,11 @@ func newPingMsg(reqID int64) []byte {
 const (
 	DefaultReadTimeout  = pubsub.PingInterval * 10 / 9
 	DefaultWriteTimeout = 5 * time.Second
+
+	// maxPayloadBytes is the largest single message accepted from the server.
+	// Mirrors the server-side enforcement; coder/websocket defaults to 32 KiB
+	// otherwise.
+	maxPayloadBytes = 1 << 20
 )
 
 // Opts defines the psclient Client options.
@@ -103,9 +109,9 @@ type Opts struct {
 	WriteTimeout time.Duration
 }
 
-// Client wraps a *websocket.Conn.
+// Client wraps a *websocket.Conn (github.com/coder/websocket).
 type Client struct {
-	*websocket.Conn
+	conn          *websocket.Conn
 	ourConn       bool
 	readTimeout   time.Duration
 	writeTimeout  time.Duration
@@ -113,27 +119,29 @@ type Client struct {
 	recvMsgChan   chan *ClientMessage
 	nextRequestID int64
 	requests      map[int64]chan *pstypes.ResponseMessage
-	sendMtx       sync.Mutex
 	ctx           context.Context
 	shutdown      context.CancelFunc
 }
 
 // New creates a new Client from a URL.
 func New(url string, ctx context.Context, opts *Opts) (*Client, error) {
-	ws, err := websocket.Dial(url, "", "/")
-	if err != nil {
-		return nil, err
-	}
-
 	readTimeout, writeTimeout := DefaultReadTimeout, DefaultWriteTimeout
 	if opts != nil {
 		readTimeout = opts.ReadTimeout
 		writeTimeout = opts.WriteTimeout
 	}
 
+	dialCtx, dialCancel := context.WithTimeout(ctx, writeTimeout)
+	defer dialCancel()
+	ws, _, err := websocket.Dial(dialCtx, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	ws.SetReadLimit(maxPayloadBytes)
+
 	ctx, shutdown := context.WithCancel(ctx)
 	cl := &Client{
-		Conn:         ws,
+		conn:         ws,
 		ourConn:      true,
 		readTimeout:  readTimeout,
 		writeTimeout: writeTimeout,
@@ -167,7 +175,7 @@ func New(url string, ctx context.Context, opts *Opts) (*Client, error) {
 	return cl, nil
 }
 
-// NewFromConn creates a new Client from a *websocket.Conn.
+// NewFromConn creates a new Client from an existing *websocket.Conn.
 func NewFromConn(ws *websocket.Conn, ctx context.Context, opts *Opts) *Client {
 	if ws == nil {
 		return nil
@@ -179,9 +187,11 @@ func NewFromConn(ws *websocket.Conn, ctx context.Context, opts *Opts) *Client {
 		writeTimeout = opts.WriteTimeout
 	}
 
+	ws.SetReadLimit(maxPayloadBytes)
+
 	ctx, shutdown := context.WithCancel(ctx)
 	cl := &Client{
-		Conn:         ws,
+		conn:         ws,
 		readTimeout:  readTimeout,
 		writeTimeout: writeTimeout,
 		recvMsgChan:  make(chan *ClientMessage, 16),
@@ -205,7 +215,7 @@ func (c *Client) Stop() {
 
 	// Close the websocket connection.
 	if c.ourConn {
-		if err := c.Conn.Close(); err != nil {
+		if err := c.conn.Close(websocket.StatusNormalClosure, "client stopping"); err != nil {
 			log.Errorf("Failed to Close websocket connection: %v", err)
 		}
 	}
@@ -308,11 +318,9 @@ func (c *Client) receiver() {
 }
 
 func (c *Client) send(msg []byte) error {
-	c.sendMtx.Lock()
-	defer c.sendMtx.Unlock()
-	_ = c.SetWriteDeadline(time.Now().Add(c.writeTimeout))
-	_, err := c.Write(msg)
-	return err
+	ctx, cancel := context.WithTimeout(c.ctx, c.writeTimeout)
+	defer cancel()
+	return c.conn.Write(ctx, websocket.MessageText, msg)
 }
 
 func (c *Client) responseChan(reqID int64) chan *pstypes.ResponseMessage {
@@ -440,9 +448,10 @@ func (c *Client) Ping() error {
 // receiveMsgTimeout waits for the specified time Duration for a message,
 // returned decoded into a WebSocketMessage.
 func (c *Client) receiveMsgTimeout(timeout time.Duration) (*pstypes.WebSocketMessage, error) {
-	_ = c.SetReadDeadline(time.Now().Add(timeout))
+	ctx, cancel := context.WithTimeout(c.ctx, timeout)
+	defer cancel()
 	msg := new(pstypes.WebSocketMessage)
-	if err := websocket.JSON.Receive(c.Conn, &msg); err != nil {
+	if err := wsjson.Read(ctx, c.conn, msg); err != nil {
 		return nil, err
 	}
 	return msg, nil

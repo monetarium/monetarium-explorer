@@ -47,6 +47,6 @@ See also:
 - /wiki/code-analysis/address/flow.full.md (Sections 1–8)
 - /wiki/code-analysis/charts/flow.compact.md (shares-pattern-with: TurboQuery URL ownership; per-coin chart endpoints; SKA atom strings)
 - /wiki/code-analysis/transaction/flow.compact.md (depends-on: address tx-list / Coin-column rendering)
-- /wiki/code-analysis/address/patterns.md (shares-pattern-with: CoinCtx contract, coin-aware aggregation — **reconcile via `Consolidate: address`**)
-- /wiki/code-analysis/address/{summary,transactions,charts}.impact.md (**describe now-completed/overturned migration — stale, reconcile next**)
+- /wiki/code-analysis/address/patterns.md (shares-pattern-with: CoinCtx contract, coin-aware aggregation, per-coin caching, SKA decimal-string pipeline, TurboQuery URL ownership)
+- /wiki/code-analysis/address/impact.md (depends-on: consolidated current-reality blast radius — signature fan-out, CoinTypeAll sentinel, SKA precision, caches, flat-field shim, CSV rename)
 - /wiki/core/constraints.md#C1, #C7 (now honored in template + controller)

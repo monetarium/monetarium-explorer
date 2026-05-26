@@ -7,6 +7,7 @@ _Human-curated rules, architecture, and constraints. Read these to understand th
 - product: core/product.md — what are we building, token limits
 - structure: core/structure.md — Go modules, folders boundaries
 - tech-stack: core/tech-stack.md — packages, node engines
+- cicd: core/cicd.md — CI/CD pipeline, automation and Docker distribution
 - staking-rewards: core/staking-rewards.md — mechanics of pow and pos yields and fee splits
 - constraints: core/constraints.md — cross-domain architectural constraints
 - pages: core/pages.md — registry of all HTML pages
@@ -26,6 +27,9 @@ _Requirements and guidelines for specific features and pages._
 - address-summary: specs/address-summary/spec.md — left-top card: per-coin Balance / Received / Spent, Unconfirmed, Stake %, fiat removal, empty state
 - address-charts: specs/address-charts/spec.md — right-top card: chart coin selector, per-coin endpoints (`?coin=N`), Tx Type 5/2-series rule, BigInt balance accumulation
 - address-transactions: specs/address-transactions/spec.md — bottom section: Coin column, coin filter, sstxcommitment gate, multi-coin CSV schema, server↔XHR parity
+- parameters: specs/parameters/spec.md — `/parameters` page Monetarium adjustment: drop Treasury section + treasury-share row, keep Rule change as reference, show actual 50/50 PoW/PoS split, fix Decred address prefixes, add SKA coin parameters section
+- attack-cost: specs/attack-cost/spec.md — `/attack-cost` page Monetarium adjustment: VAR-only domain (no SKA), `DCR`→`VAR` labels, manual-only exchange rate (no auto price), keep formula but drop Decred citation, replace hardcoded Decred miner list with manual hashrate/power/cost inputs
+- market-removal: specs/market-removal/spec.md — `/market` page Monetarium removal: page made unavailable (like `/treasury`, `/agendas`, `/proposals`), drop "Market" menu item and Home "Exchange Rate" card, remove USD equivalents on Home / `/tx` / `/address` / `/block`, turn off background exchange polling and the related service endpoints
 
 ## 🤖 Code Traces
 
@@ -55,17 +59,17 @@ _Address page rendering: paginated transaction table, chart endpoints, CSV downl
 
 - flow (compact): code-analysis/address/flow.compact.md — current data path, `?coin=` contract, filter-before-paginate + confirmed-only-balance invariants, and a stale-claim delta table vs. the prior revision
 - flow (full): code-analysis/address/flow.full.md — current function trace: coin-filtered `AddressHistory`, rewritten mempool overlay, merged-view LIMIT-0 fix, per-coin templates, coin-aware controller, chart serialization
-- patterns: code-analysis/address/patterns.md — `CoinCtx` URL contract, coin-aware aggregation, per-coin caching, SKA decimal-string pipeline, TurboQuery URL ownership ⚠️ **stale (pre-#265/#266: dual-field shim) — reconcile via `Consolidate: address`**
-- impact (summary card): code-analysis/address/summary.impact.md ⚠️ **stale** — describes the now-completed VAR-only→multi-coin summary migration (`FiatBalance` removed, per-coin card shipped)
-- impact (transactions): code-analysis/address/transactions.impact.md ⚠️ **stale** — per-row coin fields are now read by the template (Coin column + SKA branches shipped)
-- impact (charts): code-analysis/address/charts.impact.md ⚠️ **partially stale** — frontend now emits `?coin=`; SKA SQL precision bug fixed (PR #263)
+- patterns: code-analysis/address/patterns.md — `CoinCtx` URL contract (backend + frontend), coin-aware aggregation (3 pipelines), per-coin caching, SKA decimal-string pipeline, dual VAR/SKA SUM, VAR-only stake metrics, legacy flat-field shim (residual), TurboQuery URL ownership
+- impact: code-analysis/address/impact.md — consolidated current-reality blast radius: coin-filter signature fan-out (+4 mocks), `CoinTypeAll=255` dual semantics, SKA-through-VAR precision (PR #263 class), coin-keyed cache staleness, `?coin=` server/client desync, legacy flat-field shim removal, CSV `value`→`amount` schema break (folds the former summary/transactions/charts sub-area notes)
 
 ### Windows
 
-_Ticket price window intervals, calculating and displaying current and upcoming ticket prices._
+_Ticket price window intervals: server-rendered `/ticketpricewindows` page; SQL-side integer-division bucketing of mainchain blocks into stake-difficulty windows; multi-coin `coin_tx_stats` JSONB reconciliation; shared `BlocksGroupedInfo` struct with time-based-blocks. Revised at `HEAD=3cdba1e7`._
 
-- flow (compact): code-analysis/windows/flow.compact.md — high-level summary of ticket window calculations and database queries
-- flow (full): code-analysis/windows/flow.full.md — detailed, step-by-step function trace for deep debugging of window intervals
+- flow (compact): code-analysis/windows/flow.compact.md — one-line flow, key patterns, constraints, and a copy-pasteable mutation checklist for `/ticketpricewindows`
+- flow (full): code-analysis/windows/flow.full.md — strict 1–10 trace from `blocks` table → SQL aggregation → `BlocksGroupedInfo` → `PosIntervals` → `StakeDiffWindows` handler → `windows.tmpl`, with all current file:line refs
+- patterns: code-analysis/windows/patterns.md — ticket-price-window reusable behavior: Postgres integer-division GROUP BY grouping, mainchain-only filter, shared dbtypes.BlocksGroupedInfo pass-through, multi-coin coin_tx_stats reconciliation
+- impact: code-analysis/windows/impact.md — windows mutation blast radius: StakeDiffWindowSize/SQL-denominator desync, cross-domain BlocksGroupedInfo field changes, coin_tx_stats Scan mismatch, TicketPrice template-boundary type, pagination drift
 
 ### Time-Based Blocks
 
@@ -73,6 +77,8 @@ _Aggregation and grouping of blocks over specific time intervals (days, weeks, m
 
 - flow (compact): code-analysis/time-based-blocks/flow.compact.md — high-level summary of how blocks are grouped by time periods
 - flow (full): code-analysis/time-based-blocks/flow.full.md — detailed, step-by-step function trace for deep debugging of time aggregations
+- patterns: code-analysis/time-based-blocks/patterns.md — SQL date_trunc UTC aggregation, shared BlocksGroupedInfo struct (windows coupling), controller-level YTD mutation, genesis-anchored pagination, handler-level year fallback
+- impact: code-analysis/time-based-blocks/impact.md — UTC cast divergence, positional rows.Scan desync, cross-domain struct breakage, YTD mislabel, fallback removal, hard DB-timeout blanking
 
 ### Mempool
 
@@ -81,7 +87,7 @@ _Multi-coin aggregation (CoinStats + derived CoinFills), dual collection paths (
 - flow (compact): code-analysis/mempool/flow.compact.md — high-level summary of mempool state aggregation, fan-out, and WS delivery
 - flow (full): code-analysis/mempool/flow.full.md — detailed, step-by-step function trace covering monitor/collector, savers, CoinFills derivation, WS encoders, templates, and JS controller
 - patterns: code-analysis/mempool/patterns.md — batch+incremental aggregation, multi-saver fan-out, dual-transport WS, atom-string arithmetic, derived-view dual write, inventory locking, rAF indicator batching
-- impact: code-analysis/mempool/impact.md — precision, batch/incremental drift, CoinFills recompute gaps, saver nil-guard, DeepCopy/Trim omissions, WS schema drift, Go↔JS drift, mempool.tmpl SKA gap, lock-order inversion
+- impact: code-analysis/mempool/impact.md — precision, dual collection-path divergence (CoinStats + per-tx fees), CoinFills recompute gap, saver nil-guard, DeepCopy/Trim omissions, WS schema drift, Go↔JS drift, lock-order inversion
 
 ### Charts
 
@@ -89,15 +95,17 @@ _Historical data fetching, cache aggregation, and payload serialization for UI c
 
 - flow (compact): code-analysis/charts/flow.compact.md — high-level summary of both VAR and SKA chart pipelines
 - flow (full): code-analysis/charts/flow.full.md — detailed, step-by-step function trace covering RPC/SQL → cache → API → controller → Dygraphs for both pipelines
+- patterns: code-analysis/charts/patterns.md — reusable architecture: dual VAR/SKA coin-supply pipelines under one chart-ID namespace, string-precision SKA path, uint8↔string ID coupling, contractual `h` height field, cache-write asymmetry, lockless first-load, TurboQuery+Zoom projection
+- impact: code-analysis/charts/impact.md — mutation blast radius: `accumulate`/`uint64` misuse on SKA, legend `float64` precision loss, missing `h` on time-axis, `coinType==0` loader path, concurrent first-load race, `coin-supply`/`coin-supply/0` endpoint duality, `DataSource` mock fan-out, `ActiveSKATypes` dropdown drift
 
 ### VisualBlocks
 
-_The `/visualblocks` page: latest-N blocks plus mempool rendered as flex-grow tiles. Dual pipeline (HTTP `TrimmedBlockInfo` vs WebSocket full `BlockInfo`) with two different `Subsidy` struct shapes and a JS-side coinbase filter._
+_The `/visualblocks` page: latest-N blocks plus mempool rendered as 3-row tiles (votes / tickets / indicator-fill bars). Dual pipeline (HTTP `TrimmedBlockInfo` vs WebSocket full `BlockInfo` shallow-copy + 5-field patch). **Revised at `HEAD=38636d52` (post visualblocks UI rewrite for #270 on top of PR #284 data contract)**: legacy rewards row and per-tx transactions row deleted (rewards are 50/50 fixed, no Project Fund); header shows block/mempool size with optional `% of maxBlockSize`; vote row carries three states (`vote-yes` / `vote-no` / `vote-skip`) driven by `(Voted, VoteValid)`; transactions row replaced by an indicator-fill block (TOTAL + VAR + SKAn bars) that reuses the homepage `_indicator-fill.scss` partial as-is; `TrimmedBlockInfo` gained `TotalFillRatio` and the WS shallow-copy patch now covers five fields (`coin_fills`, `active_ska_count`, `max_block_size`, `regular_coin_counts`, `total_fill_ratio`); JS controller exports `normaliseWsBlock` / `normaliseMempool` / `normaliseTxs` to reconcile the BlockBasic-lowercase / BlockInfo-PascalCase / contract-snake-case JSON-tag mix in one place; new template helpers (`formatBytes`, `regularCountForSymbol`, `mempoolRegularCountForSymbol`, `sumRegularCoinCounts`, `sumMempoolRegularCounts`) pinned by 13 vitest assertions in `visualBlocks_controller.test.js`; `pubsub/ps:sigNewBlock` still NOT patched (known divergence); the JS-side coinbase filter is gone (no per-tx rendering)._
 
-- flow (compact): code-analysis/visualblocks/flow.compact.md — high-level summary of the HTTP + WS pipelines and the trim asymmetry
-- flow (full): code-analysis/visualblocks/flow.full.md — detailed, step-by-step function trace covering handler, DB memo, WS encoder, JS controller, and template
-- patterns: code-analysis/visualblocks/patterns.md — cross-pipeline tile rendering, JS-side server-filter mirror, Subsidy struct asymmetry, triple-enforced 30-cap, memoized BlockInfo, lock order, WS subsidy patch
-- impact: code-analysis/visualblocks/impact.md — mutation impact across HTTP/WS/JS/DB layers, loud and silent failure modes, safe-change checklist
+- flow (compact): code-analysis/visualblocks/flow.compact.md — current data path, 5-field contract patch sequence, three-row tile structure, mutation checklist
+- flow (full): code-analysis/visualblocks/flow.full.md — detailed function trace covering handler, DB memo, `(*BlockInfo).Trim` (extended with `TotalFillRatio`), WS shallow-copy + 5-field patch, pubsub divergence, contract test, template + helpers, JS controller (normalisers + tile builders), SCSS overrides, vitest pin
+- patterns: code-analysis/visualblocks/patterns.md — cross-pipeline tile rendering, **wire-shape normalisation (BlockBasic lowercase + BlockInfo PascalCase + contract snake-case)**, **three-state vote rendering**, **indicator-fill component reuse from homepage**, cross-transport contract via WS shallow-copy + Trim patch (5 fields), memoized BlockInfo, Trim methods on the types package, lock order, **template helper / JS helper symmetry**, **Subsidy struct asymmetry retired on this page**, **vitest DOM-shape pin**
+- impact: code-analysis/visualblocks/impact.md — mutation impact across template + helpers + JS controller + normalisers + SCSS + indicator-fill partial + HTTP/WS/DB/pubsub layers, refreshed 5-field safe-change checklist, `/ps` divergence as known gap, loud and silent failure modes (incl. WS-shape regression)
 
 ### Attack-Cost
 
@@ -114,6 +122,51 @@ _The `/parameters` page: active-network consensus config. ~95% static `chaincfg.
 
 - flow (compact): code-analysis/parameters/flow.compact.md — high-level summary of the static-vs-dynamic split, dual injection, and silent/hard failure modes
 - flow (full): code-analysis/parameters/flow.full.md — detailed, step-by-step trace from node config/RPC → pageData → handler → template, with cross-layer deps and mutation impact
+- patterns: code-analysis/parameters/patterns.md — near-static chaincfg.Params page: dual-source commonData/ExtendedParams split, hardcoded network-name prefix table, VAR-only subsidy rows, unchecked MaximumBlockSizes[0] fallback
+- impact: code-analysis/parameters/impact.md — commonData nil → .ChainParams deref crash, silent blank/misaligned address-prefix table on unknown network, stale/empty-slice MaximumBlockSize, unlocked pageData.BlockchainInfo race
+
+### Sidechain
+
+_The `/side` page: read-only HTML table of every block with `is_mainchain=false`. Single SQL query (`blocks JOIN block_chain`), no WebSocket, no Stimulus, no amounts — the simplest page-rendering shape in the codebase. Writers are two independent paths: startup `ImportSideChains` (off by default, inserts rows) and live reorg `TipToSideChain` (flips existing rows). `BlockStatus` is shared with 3 sibling endpoints (`/disapproved`, `/block/{hash}` status, height-keyed status) each Scanning a different column subset — positional Scan invariant._
+
+- flow (compact): code-analysis/sidechain/flow.compact.md — high-level summary of the read path, both writer paths, and why C1/C3/C8 don't apply
+- flow (full): code-analysis/sidechain/flow.full.md — detailed handler → DataSource → SQL → Scan → template trace, plus `ImportSideChains` and reorg writers
+- impact: code-analysis/sidechain/impact.md — `BlockStatus` 4-endpoint blast, positional Scan desync, uninitialized `IsMainchain`, `ImportSideChains=false` empty-page-is-correct, real-time-element imports C3/C8
+
+### Disapproved Blocks
+
+_The `/disapproved` page: read-only HTML table of every block with `is_valid=false` (regular tx tree invalidated by stakeholder votes on the next block). Structural twin of `/side` — same shared `BlockStatus` struct, same `blocks JOIN block_chain` query — but with a single, always-on writer (`updateLastBlock` inside the normal block-connect path, no flag, no reorg required) and ETag/Last-Modified caching (`withCache`) that `/side` lacks. Each list endpoint pre-trims its filter column from the SELECT, leaving a different `BlockStatus` field unwritten by Scan: `/disapproved` leaves `IsValid` zero; `/side` leaves `IsMainchain` zero._
+
+- flow (compact): code-analysis/disapproved-blocks/flow.compact.md — high-level summary of the writer cascade, ETag-wrapped read path, shared `BlockStatus` Scan invariant, and why C1/C2/C3/C6/C8 are out of scope today
+- flow (full): code-analysis/disapproved-blocks/flow.full.md — detailed handler → DataSource → SQL → Scan → template trace, `updateLastBlock` vote-bit invalidation cascade, `/rejects` 308 alias, and the `withCache` divergence vs `/side`
+- impact: code-analysis/disapproved-blocks/impact.md — `BlockStatus` 4-reader Scan blast, `IsValid` Scan-default trap, `updateLastBlock` as sole writer (cross-table is_valid coherence), ETag cache key coupling, real-time/amount-column re-import of C1/C3/C6/C7/C8
+
+### Decode/Broadcast Tx
+
+_The `/decodetx` page: a static HTML form whose handler carries no data; all interaction runs over `/ws` as request/response RPC-over-WebSocket (`decodetx` / `sendtx` → `decodetxResp` / `sendtxResp`). The only user-driven write path to the node in the page tier. The same RPCs are exposed on three transports — explorer `/ws`, pubsub `/ps`, and Insight `POST /insight/api/tx/send` — each with its own envelope, size limit, and error-string convention. SKA precision is preserved by accident of pass-through: `*chainjson.TxRawResult` is marshaled verbatim and dumped into `<pre>.textContent`, never parsed by the explorer._
+
+- flow (compact): code-analysis/decodetx/flow.compact.md — HTML-shell + WS-only data path, three-transport surface, pass-through multi-coin invariant, mutation checklist
+- flow (full): code-analysis/decodetx/flow.full.md — handler → template → Stimulus → `/ws` `switch` → `ChainDB.{Decode,Send}RawTransaction` → node RPC trace, with the pubsub `/ps` twin and Insight REST surface
+- patterns: code-analysis/decodetx/patterns.md — P1 form-shell over WS-RPC, P2 three-transport surface for the same node RPC, P3 multi-coin pass-through via opaque JSON
+- impact: code-analysis/decodetx/impact.md — R1 event-string drift across 5 sites, R2 oversize-request silent drop, R3 `/ws`/`/ps` dual-pipeline drift, R4 interface fan-out (+ mock), R5 latent SKA precision loss, R6 same-event success/error multiplexing, R7 shared receive loop, R8 legacy `/explorer/decodetx` redirect
+
+### Ticketpool
+
+_The `/ticketpool` page: form-shell HTML + three live data channels (HTTP `/api/ticketpool/charts`, HTTP `/api/ticketpool/bydate/{tp}`, WS `getticketpooldata`→`Resp`). Server `Ticketpool` handler injects only `commonData`; `sigNewBlock` carries no ticket data, the JS controller re-requests on every `newblock`. One `PoolTicketsData` struct populated by three positional Scans; process-global stale-while-revalidate cache keyed `(interval, height)` with `trylock.Mutex` updater election and an inner retry loop to keep all three sub-charts at one block. VAR-only float64 pipeline (tickets are a VAR PoS instrument by chain design); same JSON field `mempool.price` carries two different semantics across REST vs WS — a C8 manifestation inside a single field._
+
+- flow (compact): code-analysis/ticketpool/flow.compact.md — high-level summary of the form-shell + three-channel data path, height-keyed cache, and dual-transport mempool divergence
+- flow (full): code-analysis/ticketpool/flow.full.md — detailed handler → API/WS → DB → cache → SQL → Scan → JS controller trace, with REST/WS semantic asymmetry
+- patterns: code-analysis/ticketpool/patterns.md — P1 form-shell over WS-RPC, P2 tri-modal struct with positional Scan, P3 process-global stale-while-revalidate cache, P4 dual-transport overlay with divergent semantics, P5 VAR-only float64 staking pipeline
+- impact: code-analysis/ticketpool/impact.md — column-Scan desync, REST/WS payload drift, `Mempool.Price` semantic drift, WS event-name drift, TimeGrouping enum drift, SKA-through-VAR pipeline corruption, cache-loop removal, process-global cache cross-talk, C6 violation surface, legacy `DCR` label leak, `/bydate` response asymmetry
+
+### Market
+
+_The `/market` page: server-rendered shell + Stimulus chart controller fed by a single nullable `*exchanges.ExchangeBot` (Coinbase + Binance + Mexc + dex.decred.org polling, or optional DCRRates gRPC master). The bot snapshot is read three ways: HTML render via `MarketPage`/`getExchangeState`, WS pushes via `watchExchanges → "exchange" event → globalEventBus 'EXCHANGE_UPDATE'`, and lazily-encoded versioned chart bytes via `/api/chart/market/{token}/{candlestick|depth}`. The same bot also drives `xcBot.Conversion(float64)` fiat sidebars on home/tx/address (and the 410-gated treasury handler). Per [/wiki/core/pages.md](core/pages.md) this page is flagged "should be disabled" — no Monetarium asset trades anywhere; the entire surface is `float64` (VAR-safe, SKA-incompatible) and DCR-symbol-hard-coded across 5 layers. Network-name gate `Name != "mainnet"` is a no-op on Monetarium mainnet._
+
+- flow (compact): code-analysis/market/flow.compact.md — three-channel data path, dual collection mode (DCRRates gRPC vs HTTP poll), snapshot/stateCopy invariant, mutation checklist
+- flow (full): code-analysis/market/flow.full.md — detailed bot construction → updateState → MarketPage handler / watchExchanges / QuickSticks·QuickDepth → market.tmpl + market_controller.js trace, including cross-page `Conversion(...)` callsites
+- patterns: code-analysis/market/patterns.md — P1 globally-shared optional collector, P2 dual collection source (gRPC vs poll), P3 lock-free stateCopy read, P4 versioned lazy-encoded chart cache, P5 untyped WS bridge via globalEventBus
+- impact: code-analysis/market/impact.md — `float64`-only SKA precision trap, 5-layer DCR-symbol hard-coding, network-name gate no-op on Monetarium mainnet, cross-page conversion fan-out (~7 sites), WS event-id silent drift, C8 WS vs REST schema asymmetry, `IsFailed()` only honored by `/market` (cross-page conversions show stale fiat)
 
 ### Page-Rendering (cross-domain consolidation)
 

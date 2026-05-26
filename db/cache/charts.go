@@ -459,6 +459,8 @@ type ChartData struct {
 	updateMtx    sync.Mutex
 	updaters     []ChartUpdater
 	SKASupply    SKASupplyData
+	// Lock() must be held when mutating SKASupply.
+	SKASupplyMtx sync.RWMutex
 }
 
 // ValidateLengths checks that the length of all arguments is equal.
@@ -869,13 +871,27 @@ func (charts *ChartData) SKASupplyExists(coinType uint8) bool {
 	if charts == nil {
 		return false
 	}
-	charts.mtx.RLock()
-	defer charts.mtx.RUnlock()
+	charts.SKASupplyMtx.RLock()
+	defer charts.SKASupplyMtx.RUnlock()
 	if charts.SKASupply == nil {
 		return false
 	}
 	data, ok := charts.SKASupply[coinType]
 	return ok && len(data.Timestamps) > 0
+}
+
+// SKASupplyHeight returns the height of the last recorded block for the given coin type.
+func (charts *ChartData) SKASupplyHeight(coinType uint8) (int64, bool) {
+	charts.SKASupplyMtx.RLock()
+	defer charts.SKASupplyMtx.RUnlock()
+	if charts.SKASupply == nil {
+		return 0, false
+	}
+	data, ok := charts.SKASupply[coinType]
+	if !ok || len(data.Heights) == 0 {
+		return 0, false
+	}
+	return data.Heights[len(data.Heights)-1], true
 }
 
 // PoolSizeTip is the height of the PoolSize data.
@@ -1810,7 +1826,7 @@ func ChartUintsFromStrings(data []string) ChartUints {
 }
 
 // aggregateSKASupply aggregates block-level SKA supply data to daily bins.
-// Returns timestamps (Unix time seconds), block heights, and values for each day.
+// It takes the last recorded supply value of each day to reflect the end-of-day supply.
 func aggregateSKASupply(timestamps []int64, heights []int64, values []string) ([]int64, []int64, []string) {
 	if len(timestamps) == 0 {
 		return nil, nil, nil
@@ -1827,6 +1843,7 @@ func aggregateSKASupply(timestamps []int64, heights []int64, values []string) ([
 		dayKey := t / 86400
 		if i < len(values) && i < len(heights) {
 			if v, ok := new(big.Int).SetString(values[i], 10); ok {
+				// Overwrite with the latest value for the day to capture end-of-day supply.
 				dailyMap[dayKey] = dailyData{
 					timestamp: t,
 					height:    heights[i],

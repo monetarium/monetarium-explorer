@@ -4,6 +4,8 @@ import (
 	"reflect"
 	"testing"
 	"time"
+
+	"github.com/monetarium/monetarium-node/chaincfg"
 )
 
 func TestTimeDefMarshal(t *testing.T) {
@@ -452,4 +454,93 @@ func TestBytesString(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestAddressPrefixes(t *testing.T) {
+	cases := []struct {
+		name   string
+		params *chaincfg.Params
+		want   map[string]string // AddrPrefix.Name -> AddrPrefix.Prefix
+	}{
+		{
+			name:   "mainnet",
+			params: chaincfg.MainNetParams(),
+			want: map[string]string{
+				"PubKeyAddrID":     "Mk",
+				"PubKeyHashAddrID": "Ms",
+				"PKHEdwardsAddrID": "Me",
+				"PKHSchnorrAddrID": "MS",
+				"ScriptHashAddrID": "Mc",
+				"PrivateKeyID":     "Pm",
+				"HDPrivateKeyID":   "dprv",
+				"HDPublicKeyID":    "dpub",
+			},
+		},
+		{
+			name:   "testnet",
+			params: chaincfg.TestNet3Params(),
+			want: map[string]string{
+				"PubKeyAddrID":     "Tk",
+				"PubKeyHashAddrID": "Ts",
+				"PKHEdwardsAddrID": "Te",
+				"PKHSchnorrAddrID": "TS",
+				"ScriptHashAddrID": "Tc",
+				"PrivateKeyID":     "Pt",
+				"HDPrivateKeyID":   "tprv",
+				"HDPublicKeyID":    "tpub",
+			},
+		},
+		{
+			name:   "simnet",
+			params: chaincfg.SimNetParams(),
+			want: map[string]string{
+				"PubKeyAddrID":     "Sk",
+				"PubKeyHashAddrID": "Ss",
+				"PKHEdwardsAddrID": "Se",
+				"PKHSchnorrAddrID": "SS",
+				"ScriptHashAddrID": "Sc",
+				"PrivateKeyID":     "Ps",
+				"HDPrivateKeyID":   "sprv",
+				"HDPublicKeyID":    "spub",
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := AddressPrefixes(tc.params)
+			if len(got) != len(tc.want) {
+				t.Fatalf("len(AddressPrefixes)=%d, want %d", len(got), len(tc.want))
+			}
+			for _, ap := range got {
+				want, ok := tc.want[ap.Name]
+				if !ok {
+					t.Errorf("unexpected entry %q", ap.Name)
+					continue
+				}
+				if ap.Prefix != want {
+					t.Errorf("%s: prefix=%q, want %q", ap.Name, ap.Prefix, want)
+				}
+				if ap.Description == "" {
+					t.Errorf("%s: empty description", ap.Name)
+				}
+			}
+		})
+	}
+
+	// Unknown / custom network must never produce an empty table. We use a
+	// shallow clone of mainnet with a renamed Name to exercise the fallback.
+	t.Run("unknown-net-fallback", func(t *testing.T) {
+		clone := *chaincfg.MainNetParams()
+		clone.Name = "custom-devnet-xyz"
+		got := AddressPrefixes(&clone)
+		if len(got) == 0 {
+			t.Fatal("AddressPrefixes returned empty slice for unrecognised net")
+		}
+		for _, ap := range got {
+			if ap.Prefix == "" {
+				t.Errorf("%s: empty prefix on unrecognised net", ap.Name)
+			}
+		}
+	})
 }

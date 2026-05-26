@@ -42,7 +42,7 @@
           {{- $balance := .Balance -}}
           {{- $active := .ActiveCoins -}}
           {{- $varCB := index $balance.Coins 0 -}}
-          <div class="position-relative d-flex justify-content-between align-items-center flex-wrap">
+          <div class="position-relative d-flex justify-content-between align-items-start flex-wrap">
             <div class="d-inline-block text-start pe-2 pb-3">
               <span class="text-secondary fs13">Balance</span>
               <br>
@@ -155,8 +155,9 @@
             <div class="d-flex flex-wrap justify-content-around align-items-start">
               <div class="loader-v2 loading" data-address-target="chartLoader"></div>
               <div class="btn-set secondary-card d-inline-flex flex-nowrap mx-2">
-                <label>Chart</label>
+                <span>Chart</span>
                 <select
+                    id="address-chart-type"
                     class="chart-box d-inline-flex dropdown"
                     data-address-target="options"
                     data-action="change->address#changeGraph"
@@ -167,7 +168,7 @@
                 </select>
               </div>
               <div class="btn-set secondary-card d-inline-flex flex-nowrap mx-2">
-                <label>Coin</label>
+                <span>Coin</span>
                 {{- if gt (len .ActiveCoins) 1}}
                 <select
                     class="chart-box d-inline-flex dropdown"
@@ -210,7 +211,7 @@
                   data-address-target="zoom"
                   data-action="click->address#onZoom"
               >
-                <label>Zoom</label>
+                <span>Zoom</span>
                 <button class="btn-selected" name="all" data-fixed="1">All</button>
                 <button name="year">Year</button>
                 <button name="month">Month</button>
@@ -224,7 +225,7 @@
                   data-address-target="interval"
                   data-action="click->address#changeBin"
               >
-                  <label class="d-inline-flex pe-1">Group By </label>
+                  <span class="d-inline-flex pe-1">Group By </span>
                   <button name="year">Year</button>
                   <button class="btn-selected" name="month">Month</button>
                   <button name="week">Week</button>
@@ -250,6 +251,7 @@
             <div class="p-3 address_chart_wrap">
               <div class="expando monicon-expand" data-address-target="expando" data-action="click->address#toggleExpand"></div>
               <div class="py-5 fs16 d-none" data-address-target="noconfirms"></div>
+              <div class="text-start fs14 fw-bold text-secondary mb-1" data-address-target="chartTitle"></div>
               <div data-address-target="chart" class="address_chart"></div>
             </div>
           </div>
@@ -331,6 +333,7 @@
             <div class="d-inline-block text-end">
               <label class="mb-0 me-1" for="txntype">Type</label>
               <select
+                id="txntype"
                 name="txntype"
                 data-address-target="txntype"
                 data-action="change->address#changeTxType"
@@ -350,6 +353,7 @@
               <label class="mb-0 me-1" for="coin">Coin</label>
               {{- if gt (len .ActiveCoins) 1}}
               <select
+                id="coin"
                 name="coin"
                 data-address-target="coinFilter"
                 data-action="change->address#changeCoin"
@@ -364,6 +368,7 @@
               {{- $onlyCoin := index .ActiveCoins 0}}
               <span title="This address only has {{coinSymbol $onlyCoin}} transactions">
                 <select
+                  id="coin"
                   name="coin"
                   class="form-control-sm mb-2 me-sm-2 mb-sm-0 dropdown"
                   disabled
@@ -374,6 +379,7 @@
               {{- else}}
               <span title="This address has no transactions">
                 <select
+                  id="coin"
                   name="coin"
                   class="form-control-sm mb-2 me-sm-2 mb-sm-0 dropdown"
                   disabled
@@ -390,18 +396,12 @@
                   id="pagesize"
                   data-address-target="pagesize"
                   data-action="change->address#changePageSize"
-                  class="form-control-sm mb-2 me-sm-2 mb-sm-0 {{if lt $TxnCount 20}}disabled{{end}} dropdown"
-                  {{- if lt $TxnCount 20}} disabled{{end}}
+                  class="form-control-sm mb-2 me-sm-2 mb-sm-0 dropdown"
               >
-              {{- $Txlen := len .Transactions}}
-                <option {{if eq $Txlen 20}}selected {{end}}value="20"{{if lt $TxnCount 20}} disabled{{end}}>20</option>
-                <option {{if eq $Txlen 40}}selected {{end}}value="40"{{if lt $TxnCount 40}} disabled{{end}}>40</option>
-                <option {{if eq $Txlen 80}}selected {{end}}value="80"{{if lt $TxnCount 80}} disabled{{end}}>80</option>
-              {{- if lt $TxnCount 160}}
-                <option {{if eq $Txlen $TxnCount}}selected {{end}}value="{{$TxnCount}}"{{if le $TxnCount 160}} disabled{{end}}>{{$TxnCount}}</option>
-              {{- else}}
-                <option {{if ge $Txlen 160}}selected {{end}}value="160">160</option>
-              {{- end}}
+                <option {{if eq .Limit 20}}selected {{end}}value="20">20</option>
+                <option {{if eq .Limit 40}}selected {{end}}value="40">40</option>
+                <option {{if eq .Limit 80}}selected {{end}}value="80">80</option>
+                <option {{if eq .Limit 160}}selected {{end}}value="160">160</option>
               </select>
             </div>
           </div>

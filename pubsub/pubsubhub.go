@@ -16,6 +16,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/coder/websocket"
+	"github.com/coder/websocket/wsjson"
 	"github.com/monetarium/monetarium-node/chaincfg"
 	"github.com/monetarium/monetarium-node/dcrutil"
 	chainjson "github.com/monetarium/monetarium-node/rpc/jsonrpc/types"
@@ -30,7 +32,6 @@ import (
 	pstypes "github.com/monetarium/monetarium-explorer/pubsub/types"
 	"github.com/monetarium/monetarium-explorer/semver"
 	"github.com/monetarium/monetarium-explorer/txhelpers"
-	"golang.org/x/net/websocket"
 )
 
 var version = semver.NewSemver(3, 2, 0)
@@ -41,8 +42,9 @@ func Version() semver.Semver {
 }
 
 const (
+	// wsWriteTimeout bounds individual write operations. coder/websocket uses
+	// context cancellation rather than SetWriteDeadline for write timeouts.
 	wsWriteTimeout = 5 * time.Second
-	wsReadTimeout  = 7 * time.Second
 )
 
 // DataSource defines the interface for collecting required data.
@@ -84,6 +86,11 @@ type connection struct {
 	sync.WaitGroup
 	ws     *websocket.Conn
 	client *clientHubSpoke
+	// ctx is cancelled when any of the per-connection goroutines (receive,
+	// send, ping) decides the connection is dead. Cancelling tears down the
+	// other two so the handler can exit and the hub can unregister the client.
+	ctx    context.Context
+	cancel context.CancelFunc
 }
 
 // PubSubHub manages the collection and distribution of block chain and mempool
@@ -168,11 +175,10 @@ func (psh *PubSubHub) MempoolInventory() *exptypes.MempoolInfo {
 	return psh.invs
 }
 
-// closeWS attempts to close a websocket.Conn, logging errors other than those
-// with messages containing ErrWsClosed.
+// closeWS attempts a graceful close of a websocket.Conn, logging unexpected
+// errors. Repeated closes are silently ignored.
 func closeWS(ws *websocket.Conn) {
-	err := ws.Close()
-	// Do not log error if connection is just closed
+	err := ws.Close(websocket.StatusNormalClosure, "")
 	if err != nil && !pstypes.IsWSClosedErr(err) && !pstypes.IsIOTimeoutErr(err) {
 		log.Errorf("Failed to close websocket: %v", err)
 	}
@@ -181,32 +187,25 @@ func closeWS(ws *websocket.Conn) {
 // receiveLoop receives and processes incoming messages from active websocket
 // connections. receiveLoop should be started as a goroutine, after conn.Add(1)
 // and before a conn.Wait(). receiveLoop returns when the websocket connection,
-// conn.ws, is closed, which should be initiated when sendLoop returns.
+// conn.ws, is closed, which should be initiated when sendLoop returns or when
+// the ping goroutine cancels conn.ctx after a missed pong.
 func (psh *PubSubHub) receiveLoop(ctx context.Context, conn *connection) {
 	//defer conn.client.cl.unsubscribeAll()
 
 	// receiveLoop should be started after conn.Add(1) and before a conn.Wait().
 	defer conn.Done()
+	// Tear down the rest of the per-connection goroutines on exit.
+	defer conn.cancel()
 
 	// Receive messages on the websocket.Conn until it is closed.
 	ws := conn.ws
 	for {
-		// Set this Conn's read deadline.
-		err := ws.SetReadDeadline(time.Now().Add(wsReadTimeout))
-		if err != nil && !pstypes.IsWSClosedErr(err) {
-			log.Warnf("SetReadDeadline: %v", err)
-		}
-
-		// Wait to receive a message on the websocket
+		// Wait to receive a message on the websocket. Liveness is enforced by
+		// the ping goroutine (RFC 6455 ping/pong), not a per-read deadline.
 		msg := new(pstypes.WebSocketMessage)
-		if err := websocket.JSON.Receive(ws, &msg); err != nil {
-			// Keep listening for new messages if the read deadline has passed.
-			if pstypes.IsIOTimeoutErr(err) {
-				//log.Tracef("No data read from client in %v. Trying again.", wsReadTimeout)
-				continue
-			}
-			// EOF is a common client disconnected error.
-			if err.Error() != "EOF" && !pstypes.IsWSClosedErr(err) {
+		err := wsjson.Read(conn.ctx, ws, msg)
+		if err != nil {
+			if !pstypes.IsWSClosedErr(err) {
 				log.Warnf("websocket client receive error: %v", err)
 			}
 			return
@@ -319,11 +318,14 @@ func (psh *PubSubHub) receiveLoop(ctx context.Context, conn *connection) {
 		case "getmempooltxs": // TODO: maybe disable this case
 			// construct mempool object with properties required in template
 			inv := psh.MempoolInventory()
-			mempoolInfo := inv.Trim() // Trim locks the inventory.
 
 			psh.state.mtx.RLock()
-			mempoolInfo.Subsidy = psh.state.GeneralInfo.NBlockSubsidy
+			maxBlockSize := float64(psh.state.BlockchainInfo.MaxBlockSize)
+			subsidy := psh.state.GeneralInfo.NBlockSubsidy
 			psh.state.mtx.RUnlock()
+
+			mempoolInfo := inv.Trim(maxBlockSize) // Trim locks the inventory.
+			mempoolInfo.Subsidy = subsidy
 
 			var b []byte
 			b, err = json.Marshal(mempoolInfo)
@@ -365,13 +367,11 @@ func (psh *PubSubHub) receiveLoop(ctx context.Context, conn *connection) {
 			continue
 		}
 
-		// Send the response.
-		err = ws.SetWriteDeadline(time.Now().Add(wsWriteTimeout))
-		if err != nil && !pstypes.IsWSClosedErr(err) {
-			log.Warnf("SetWriteDeadline: %v", err)
-		}
-		if err := websocket.JSON.Send(ws, resp); err != nil {
-			// Do not log the error if the connection is just closed.
+		// Send the response with a bounded write timeout.
+		writeCtx, writeCancel := context.WithTimeout(conn.ctx, wsWriteTimeout)
+		err = wsjson.Write(writeCtx, ws, resp)
+		writeCancel()
+		if err != nil {
 			if !pstypes.IsWSClosedErr(err) {
 				log.Debugf("Failed to encode WebSocketMessage (reply) %s: %v",
 					resp.EventId, err)
@@ -396,6 +396,8 @@ func (psh *PubSubHub) sendLoop(conn *connection) {
 
 	// sendLoop should be started after conn.Add(1), and before a conn.Wait().
 	defer conn.Done()
+	// Tear down sibling goroutines (receive, ping) on exit.
+	defer conn.cancel()
 
 	// If returning because the WebSocketHub sent a quit signal, the receive
 	// loop may still be waiting for a message, so it is necessary to close the
@@ -546,73 +548,105 @@ loop:
 			continue loop // break sigselect
 		} // switch sig
 
-		// Send the message.
-		err := ws.SetWriteDeadline(time.Now().Add(wsWriteTimeout))
-		if err != nil && !pstypes.IsWSClosedErr(err) {
-			log.Warnf("SetWriteDeadline failed: %v", err)
-		}
-		if err = websocket.JSON.Send(ws, pushMsg); err != nil {
-			// Do not log the error if the connection is just closed.
+		// Send the message with a bounded write timeout.
+		writeCtx, writeCancel := context.WithTimeout(conn.ctx, wsWriteTimeout)
+		err := wsjson.Write(writeCtx, ws, pushMsg)
+		writeCancel()
+		if err != nil {
 			if !pstypes.IsWSClosedErr(err) {
-				log.Debugf("Failed to encode WebSocketMessage (push) %v: %v", sig, err)
+				log.Debugf("Failed to send WebSocketMessage (push) %v: %v", sig, err)
+				log.Errorf("wsjson.Write of %v type message failed: %v", sig, err)
 			}
 			// If the send failed, the client is probably gone, quit the
 			// send loop, unregistering the client from the websocket hub.
-			log.Errorf("websocket.JSON.Send of %v type message failed: %v", sig, err)
 			return
 		}
 	} // for range { a.k.a. loop:
 }
 
 // WebSocketHandler is the http.HandlerFunc for new websocket connections. The
-// connection is registered with the WebSocketHub, and the send/receive loops
-// are launched.
+// connection is registered with the WebSocketHub, and the send/receive/ping
+// loops are launched.
 func (psh *PubSubHub) WebSocketHandler(w http.ResponseWriter, r *http.Request) {
 	// Register websocket client.
 	ch := psh.wsHub.NewClientHubSpoke()
 	defer close(ch.cl.killed)
 
-	wsHandler := websocket.Handler(func(ws *websocket.Conn) {
-		// Set the max payload size for this connection.
-		ws.MaxPayloadBytes = psh.wsHub.requestLimit
-
-		// The receive loop will be sitting on websocket.JSON.Receive, while the
-		// send loop will be waiting for signals from the WebSocketHub. One must
-		// close the other depending on whether the connection was closed/lost,
-		// or the WebSocketHub quit or forcibly unregistered the client. The
-		// receive loop unregisters the client (thus closing the update signal
-		// channel) when the connection is closed and it returns. The send loop
-		// closes the websocket.Conn on return, which will interrupt the receive
-		// loop from its waiting to receive data on the connection.
-
-		conn := &connection{
-			client: ch,
-			ws:     ws,
-		}
-
-		// Start listening for websocket messages from client, returning when
-		// the connection is closed. The connection will be forcibly closed when
-		// sendLoop returns if it is still opened.
-		conn.Add(1)
-		go psh.receiveLoop(r.Context(), conn)
-
-		// Send loop (ping, new tx, block, etc. update loop). sendLoop returns
-		// when the client's signaling channel, conn.ch.cl.c, is closed.
-		conn.Add(1)
-		go psh.sendLoop(conn)
-
-		// Hang out until the send and receive loops have quit.
-		conn.Wait()
-
-		// Clean up the client's subscriptions.
-		ch.cl.unsubscribeAll()
+	// OriginPatterns "*" preserves the previous open-origin behavior of
+	// websocket.Server{Handler: ...}. The block explorer is a public,
+	// read-only feed; tightening this is a separate decision.
+	ws, err := websocket.Accept(w, r, &websocket.AcceptOptions{
+		OriginPatterns: []string{"*"},
 	})
-
-	// Use a websocket.Server to avoid checking Origin.
-	wsServer := websocket.Server{
-		Handler: wsHandler,
+	if err != nil {
+		log.Warnf("websocket.Accept failed: %v", err)
+		return
 	}
-	wsServer.ServeHTTP(w, r)
+	// CloseNow is the panic/early-return safety net; the normal exit path
+	// closes the connection with StatusNormalClosure via closeWS in sendLoop.
+	defer ws.CloseNow()
+
+	// Set the max payload size for this connection. coder/websocket defaults
+	// to 32 KiB; we need the same 1 MiB cap the hub enforces.
+	ws.SetReadLimit(int64(psh.wsHub.requestLimit))
+
+	// connCtx is shared by all three per-connection goroutines. The first one
+	// to detect a dead connection cancels it, tearing down the other two.
+	connCtx, cancel := context.WithCancel(r.Context())
+	defer cancel()
+
+	conn := &connection{
+		client: ch,
+		ws:     ws,
+		ctx:    connCtx,
+		cancel: cancel,
+	}
+
+	// Start listening for websocket messages from the client.
+	conn.Add(1)
+	go psh.receiveLoop(r.Context(), conn)
+
+	// Send loop (new tx, block, etc. update loop). sendLoop returns when the
+	// client's signaling channel, conn.ch.cl.c, is closed.
+	conn.Add(1)
+	go psh.sendLoop(conn)
+
+	// Ping loop: RFC 6455 keepalive. On missed pong it cancels conn.ctx,
+	// which unblocks the read loop and triggers full connection teardown.
+	go psh.pingLoop(conn)
+
+	// Hang out until the send and receive loops have quit.
+	conn.Wait()
+
+	// Clean up the client's subscriptions.
+	ch.cl.unsubscribeAll()
+}
+
+// pingLoop sends an RFC 6455 ping every PingInterval and aborts the connection
+// if the pong does not arrive within wsWriteTimeout. This is the keepalive
+// mechanism that x/net/websocket lacked: it detects zombie clients (e.g. an
+// iOS Safari tab whose TCP connection has silently died) so the server can
+// close the socket and let the JS reconnect take over.
+func (psh *PubSubHub) pingLoop(conn *connection) {
+	ticker := time.NewTicker(PingInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-conn.ctx.Done():
+			return
+		case <-ticker.C:
+			pingCtx, cancel := context.WithTimeout(conn.ctx, wsWriteTimeout)
+			err := conn.ws.Ping(pingCtx)
+			cancel()
+			if err != nil {
+				if !pstypes.IsWSClosedErr(err) {
+					log.Debugf("websocket ping failed: %v", err)
+				}
+				conn.cancel()
+				return
+			}
+		}
+	}
 }
 
 // StoreMPData stores mempool data. It is advisable to pass a copy of the
@@ -725,14 +759,11 @@ func (psh *PubSubHub) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgBl
 
 	// Calculate Vote VAR Reward (most recent)
 	// Compute fresh from the current block's transactions instead of using potentially stale DB data
-	ssGenTxs := txhelpers.ComputeTxFeeData(msgBlock)
-	ssFeeTotals := txhelpers.BlockSSFeeTotals(ssGenTxs, msgBlock.STransactions)
+	ssFeeTotals := txhelpers.BlockSSFeeTotals(msgBlock.STransactions)
 
 	var latestVarFee float64
-	if fStr, ok := ssFeeTotals[0]; ok && fStr != "" {
-		if f, err := strconv.ParseInt(fStr, 10, 64); err == nil {
-			latestVarFee = float64(f) / 1e8
-		}
+	if split, ok := ssFeeTotals[0]; ok {
+		latestVarFee = txhelpers.RewardAtomsToCoins(split.PoS, 8)
 	}
 
 	voteData, err := psh.sourceBase.GetVoteTicketDataByBlock(ctx, blockData.Header.Hash)
@@ -778,8 +809,8 @@ func (psh *PubSubHub) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgBl
 	// blocksPerYear is already computed in the Vote VAR Reward section.
 
 	coinTypes := make(map[uint8]struct{})
-	for ct, totals := range blockData.ExtraInfo.SSFeeTotalsByCoin {
-		if totals != "" {
+	for ct, split := range blockData.ExtraInfo.SSFeeTotalsByCoin {
+		if split.PoS != nil {
 			coinTypes[ct] = struct{}{}
 		}
 	}
@@ -803,9 +834,9 @@ func (psh *PubSubHub) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgBl
 			var blockHash string
 
 			// Find the latest block specifically for this coin type
-			if totalStr, ok := blockData.ExtraInfo.SSFeeTotalsByCoin[ct]; ok && totalStr != "" {
-				if total, parsed := new(big.Int).SetString(totalStr, 10); parsed && int64(blockData.Header.Voters) > 0 {
-					perVote := new(big.Int).Div(total, big.NewInt(int64(blockData.Header.Voters)))
+			if split, ok := blockData.ExtraInfo.SSFeeTotalsByCoin[ct]; ok && split.PoS != nil {
+				if int64(blockData.Header.Voters) > 0 {
+					perVote := new(big.Int).Div(split.PoS, big.NewInt(int64(blockData.Header.Voters)))
 					perBlock = txhelpers.FormatSKAAtoms(perVote)
 					blockHeight = int64(blockData.Header.Height)
 					blockHash = blockData.Header.Hash
@@ -815,16 +846,14 @@ func (psh *PubSubHub) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgBl
 			if perBlock == "" {
 				// Fallback: Search backwards through historical summaries for this coin
 				for i := len(sum30) - 1; i >= 0; i-- {
-					if totalStr, ok := sum30[i].SSFeeTotalsByCoin[ct]; ok && totalStr != "" {
-						if total, parsed := new(big.Int).SetString(totalStr, 10); parsed {
-							bInfo := psh.sourceBase.GetExplorerBlock(ctx, sum30[i].Hash)
-							if bInfo != nil && bInfo.BlockBasic.Voters > 0 {
-								perVote := new(big.Int).Div(total, big.NewInt(int64(bInfo.BlockBasic.Voters)))
-								perBlock = txhelpers.FormatSKAAtoms(perVote)
-								blockHeight = int64(sum30[i].Height)
-								blockHash = sum30[i].Hash
-								break
-							}
+					if split, ok := sum30[i].SSFeeTotalsByCoin[ct]; ok && split.PoS != nil {
+						bInfo := psh.sourceBase.GetExplorerBlock(ctx, sum30[i].Hash)
+						if bInfo != nil && bInfo.BlockBasic.Voters > 0 {
+							perVote := new(big.Int).Div(split.PoS, big.NewInt(int64(bInfo.BlockBasic.Voters)))
+							perBlock = txhelpers.FormatSKAAtoms(perVote)
+							blockHeight = int64(sum30[i].Height)
+							blockHash = sum30[i].Hash
+							break
 						}
 					}
 				}
@@ -835,13 +864,13 @@ func (psh *PubSubHub) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgBl
 				voteData, err := psh.sourceBase.GetVoteTicketDataByBlock(ctx, blockHash)
 				if err == nil && len(voteData) > 0 {
 					var totalReward *big.Int
-					if totalStr, ok := blockData.ExtraInfo.SSFeeTotalsByCoin[ct]; ok {
-						totalReward, _ = new(big.Int).SetString(totalStr, 10)
+					if split, ok := blockData.ExtraInfo.SSFeeTotalsByCoin[ct]; ok && split.PoS != nil {
+						totalReward = split.PoS
 					} else {
 						for _, s := range sum30 {
 							if int64(s.Height) == blockHeight {
-								if ts, ok := s.SSFeeTotalsByCoin[ct]; ok {
-									totalReward, _ = new(big.Int).SetString(ts, 10)
+								if split, ok := s.SSFeeTotalsByCoin[ct]; ok && split.PoS != nil {
+									totalReward = split.PoS
 								}
 								break
 							}
@@ -886,18 +915,23 @@ func (psh *PubSubHub) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgBl
 		p.GeneralInfo.SKAVoteRewards = nil
 	}
 
-	// PoW SKA rewards: per-SKA-type mining reward amounts from the coinbase.
-	if len(blockData.ExtraInfo.SKAPoWRewards) > 0 {
-		powRewardsBlockHeight := int64(blockData.Header.Height)
-		powRewards := make([]exptypes.PoWSKAReward, 0, len(blockData.ExtraInfo.SKAPoWRewards))
-		for ct, amountStr := range blockData.ExtraInfo.SKAPoWRewards {
-			powRewards = append(powRewards, exptypes.PoWSKAReward{
-				CoinType:    ct,
-				Symbol:      fmt.Sprintf("SKA%d", ct),
-				Amount:      amountStr,
-				BlockHeight: powRewardsBlockHeight,
-			})
+	// PoW SKA Fee Reward: the miner's portion of redistributed SKA tx fees
+	// from the authoritative "MF"-marked SSFee split (issue #273). Mirrors the
+	// explorer (HTTP) derivation so the two paths cannot drift.
+	powRewardsBlockHeight := int64(blockData.Header.Height)
+	powRewards := make([]exptypes.PoWSKAReward, 0)
+	for ct, split := range blockData.ExtraInfo.SSFeeTotalsByCoin {
+		if ct == 0 || split.PoW == nil || split.PoW.Sign() <= 0 {
+			continue
 		}
+		powRewards = append(powRewards, exptypes.PoWSKAReward{
+			CoinType:    ct,
+			Symbol:      fmt.Sprintf("SKA%d", ct),
+			Amount:      txhelpers.FormatSKAAtoms(split.PoW),
+			BlockHeight: powRewardsBlockHeight,
+		})
+	}
+	if len(powRewards) > 0 {
 		sort.Slice(powRewards, func(i, j int) bool { return powRewards[i].CoinType < powRewards[j].CoinType })
 		p.GeneralInfo.PoWSKARewards = powRewards
 	} else {

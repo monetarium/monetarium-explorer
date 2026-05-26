@@ -32,6 +32,7 @@ import (
 	"github.com/monetarium/monetarium-node/txscript/stdscript"
 	"github.com/monetarium/monetarium-node/wire"
 
+	"github.com/monetarium/monetarium-explorer/api/rewardtypes"
 	apitypes "github.com/monetarium/monetarium-explorer/api/types"
 	"github.com/monetarium/monetarium-explorer/blockdata"
 	"github.com/monetarium/monetarium-explorer/db/cache"
@@ -1064,11 +1065,13 @@ func (pgb *ChainDB) skaSupplyUpdater(charts *cache.ChartData) error {
 				cumulativeValues = append(cumulativeValues, runningTotal.String())
 			}
 
+			charts.SKASupplyMtx.Lock()
 			charts.SKASupply[coinType] = cache.SKASupplyChartData{
 				Heights:    blockHeights,
 				Timestamps: timestamps,
 				Values:     cumulativeValues,
 			}
+			charts.SKASupplyMtx.Unlock()
 		}
 	}
 
@@ -1126,11 +1129,13 @@ func (pgb *ChainDB) LoadSKASupplyForCoin(ctx context.Context, charts *cache.Char
 			cumulativeValues = append(cumulativeValues, runningTotal.String())
 		}
 
+		charts.SKASupplyMtx.Lock()
 		charts.SKASupply[coinType] = cache.SKASupplyChartData{
 			Heights:    blockHeights,
 			Timestamps: timestamps,
 			Values:     cumulativeValues,
 		}
+		charts.SKASupplyMtx.Unlock()
 		return nil
 	}
 
@@ -1824,6 +1829,19 @@ func (pgb *ChainDB) TimeBasedIntervals(ctx context.Context, timeGrouping dbtypes
 	bgi, err := retrieveTimeBasedBlockListing(ctx, pgb.db, timeGrouping.String(),
 		limit, offset)
 	return bgi, pgb.replaceCancelError(err)
+}
+
+// TimeBasedIntervalsCount returns the number of distinct time-truncated
+// groupings (days, weeks, months, or years) that actually contain at least
+// one block, used to drive pagination on the time-based listing views.
+func (pgb *ChainDB) TimeBasedIntervalsCount(ctx context.Context, timeGrouping dbtypes.TimeBasedGrouping) (uint64, error) {
+	if timeGrouping >= dbtypes.NumIntervals {
+		return 0, fmt.Errorf("invalid time grouping %d", timeGrouping)
+	}
+	ctx, cancel := context.WithTimeout(ctx, pgb.queryTimeout)
+	defer cancel()
+	count, err := retrieveTimeBasedBlockListingCount(ctx, pgb.db, timeGrouping.String())
+	return count, pgb.replaceCancelError(err)
 }
 
 // TicketPoolVisualization helps block consecutive and duplicate DB queries for
@@ -6557,6 +6575,7 @@ func trimmedTxInfoFromMsgTx(txraw *chainjson.TxRawResult, ticketPrice int64, msg
 		VinCount:  len(txraw.Vin),
 		VoutCount: len(txraw.Vout),
 		VoteValid: voteValid,
+		Voted:     txBasic.VoteInfo != nil,
 	}
 	return tx, txType
 }
@@ -6624,7 +6643,7 @@ func (pgb *ChainDB) GetExplorerBlock(ctx context.Context, hash string) *exptypes
 	}
 
 	// Populate per-coin amounts from the block summary (computed at collection time).
-	var skaFeeTotals map[uint8]string
+	var skaFeeTotals map[uint8]rewardtypes.SSFeeSplit
 	if summary := pgb.GetSummaryByHash(ctx, hash, false); summary != nil && summary.CoinAmounts != nil {
 		block.CoinAmounts = summary.CoinAmounts
 		// Also populate CoinRows on the embedded BlockBasic so the websocket
@@ -6833,9 +6852,17 @@ func (pgb *ChainDB) GetExplorerBlock(ctx context.Context, hash string) *exptypes
 	}
 	// SKA fees from SSFeeTotalsByCoin (stake fee distribution)
 	if skaFeeTotals != nil {
-		for ct, fee := range skaFeeTotals {
-			if fee != "" && fee != "0" {
-				feesMap[ct] = fee
+		for ct, split := range skaFeeTotals {
+			total := new(big.Int)
+			if split.PoW != nil {
+				total.Add(total, split.PoW)
+			}
+			if split.PoS != nil {
+				total.Add(total, split.PoS)
+			}
+			feeStr := total.String()
+			if feeStr != "" && feeStr != "0" {
+				feesMap[ct] = feeStr
 			}
 		}
 	}

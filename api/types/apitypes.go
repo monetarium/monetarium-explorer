@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/monetarium/monetarium-explorer/api/rewardtypes"
 	"github.com/monetarium/monetarium-explorer/db/dbtypes"
 	"github.com/monetarium/monetarium-explorer/txhelpers"
 	chainjson "github.com/monetarium/monetarium-node/rpc/jsonrpc/types"
@@ -768,7 +769,7 @@ type BlockDataBasic struct {
 	// CoinStats holds per-coin tx count and amount (key 0=VAR, 1-255=SKAn).
 	CoinStats map[uint8]dbtypes.CoinStat `json:"coin_stats,omitempty"`
 	// SSFeeTotalsByCoin holds total SKA atoms distributed via TxTypeSSFee per coin type.
-	SSFeeTotalsByCoin map[uint8]string `json:"ssfee_totals,omitempty"`
+	SSFeeTotalsByCoin map[uint8]rewardtypes.SSFeeSplit `json:"ssfee_totals,omitempty"`
 	// TicketPoolInfo may be nil for side chain blocks.
 	PoolInfo *TicketPoolInfo `json:"ticket_pool,omitempty"`
 }
@@ -793,6 +794,13 @@ type BlockExplorerBasic struct {
 	BlockExplorerExtraInfo
 }
 
+// BlockTransactionCounts contains the regular and stake transaction counts for
+// a block.
+type BlockTransactionCounts struct {
+	Tx  int `json:"tx"`
+	STx int `json:"stx"`
+}
+
 // BlockExplorerExtraInfo contains supplemental block metadata used by the
 // explorer.
 type BlockExplorerExtraInfo struct {
@@ -806,16 +814,9 @@ type BlockExplorerExtraInfo struct {
 	// CoinTxStats holds per-coin tx count and size (key 0=VAR, 1-255=SKAn).
 	CoinTxStats map[uint8]CoinTxStats `json:"coin_tx_stats,omitempty"`
 	// SSFeeTotalsByCoin holds total SKA atoms distributed via TxTypeSSFee per coin type.
-	SSFeeTotalsByCoin map[uint8]string `json:"ssfee_totals,omitempty"`
+	SSFeeTotalsByCoin map[uint8]rewardtypes.SSFeeSplit `json:"ssfee_totals,omitempty"`
 	// SKAPoWRewards holds per-SKA-type PoW mining reward amounts (atom strings) from the block's coinbase.
 	SKAPoWRewards map[uint8]string `json:"ska_pow_rewards,omitempty"`
-}
-
-// BlockTransactionCounts contains the regular and stake transaction counts for
-// a block.
-type BlockTransactionCounts struct {
-	Tx  int `json:"tx"`
-	STx int `json:"stx"`
 }
 
 // BlockSubsidies contains the block reward proportions for a certain block

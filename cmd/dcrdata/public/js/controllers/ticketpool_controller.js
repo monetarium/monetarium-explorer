@@ -239,7 +239,7 @@ export default class extends Controller {
       colors: ['#FF8C00', '#006600', '#2971FF', '#ff0090'],
       title: 'Tickets Purchase Distribution',
       ylabel: 'Number of Tickets',
-      y2label: 'A.v.g. Tickets Value (DCR)',
+      y2label: 'A.v.g. Tickets Value (VAR)',
       dateWindow: getWindow('day'),
       series: {
         'Ticket Value': {

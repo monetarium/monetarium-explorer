@@ -335,25 +335,23 @@ func (exp *explorerUI) VisualBlocks(w http.ResponseWriter, r *http.Request) {
 
 	// trim unwanted data in each block
 	trimmedBlocks := make([]*types.TrimmedBlockInfo, 0, len(blocks))
-	for _, block := range blocks {
-		trimmedBlock := &types.TrimmedBlockInfo{
-			Time:         block.BlockTime,
-			Height:       block.Height,
-			Total:        block.TotalSent,
-			Fees:         block.MiningFee,
-			Subsidy:      block.Subsidy,
-			Votes:        block.Votes,
-			Tickets:      block.Tickets,
-			Revocations:  block.Revs,
-			Transactions: types.FilterRegularTx(block.Tx),
-		}
 
+	exp.pageData.RLock()
+	maxBlockSize := float64(exp.pageData.BlockchainInfo.MaxBlockSize)
+	issuedSKA := make([]uint8, 0, len(exp.pageData.HomeInfo.SKACoinSupply))
+	for _, entry := range exp.pageData.HomeInfo.SKACoinSupply {
+		issuedSKA = append(issuedSKA, entry.CoinType)
+	}
+	exp.pageData.RUnlock()
+
+	for _, block := range blocks {
+		trimmedBlock := block.Trim(maxBlockSize, issuedSKA)
 		trimmedBlocks = append(trimmedBlocks, trimmedBlock)
 	}
 
 	// Construct the required TrimmedMempoolInfo from the shared inventory.
 	inv := exp.MempoolInventory()
-	mempoolInfo := inv.Trim() // Trim internally locks the MempoolInfo.
+	mempoolInfo := inv.Trim(maxBlockSize) // Trim internally locks the MempoolInfo.
 
 	exp.pageData.RLock()
 	mempoolInfo.Subsidy = exp.pageData.HomeInfo.NBlockSubsidy
@@ -505,11 +503,12 @@ func (exp *explorerUI) timeBasedBlocksListing(val string, w http.ResponseWriter,
 		rows = o
 	}
 	grouping := dbtypes.TimeGroupingFromStr(val)
-	i, err := dbtypes.TimeBasedGroupingToInterval(grouping)
-	if err != nil {
+	// TimeBasedGroupingToInterval is still called to validate the grouping
+	// (it errors on UnknownGrouping); the returned interval is unused now
+	// that pagination is row-count-driven rather than time-derived.
+	if _, err := dbtypes.TimeBasedGroupingToInterval(grouping); err != nil {
 		// default to year grouping if grouping is missing
-		i, err = dbtypes.TimeBasedGroupingToInterval(dbtypes.YearGrouping)
-		if err != nil {
+		if _, err = dbtypes.TimeBasedGroupingToInterval(dbtypes.YearGrouping); err != nil {
 			exp.StatusPage(w, defaultErrorCode, "Invalid year grouping found.", "",
 				ExpStatusError)
 			log.Errorf("Invalid year grouping found: error: %v ", err)
@@ -518,23 +517,26 @@ func (exp *explorerUI) timeBasedBlocksListing(val string, w http.ResponseWriter,
 		grouping = dbtypes.YearGrouping
 	}
 
-	oldestBlockTime := exp.ChainParams.GenesisBlock.Header.Timestamp.Unix()
-	maxOffset := (time.Now().Unix() - oldestBlockTime) / int64(i)
-	m := uint64(maxOffset)
-	if offset > m {
-		offset = m
+	totalGroupings, err := exp.dataSource.TimeBasedIntervalsCount(ctx, grouping)
+	if exp.timeoutErrorPage(w, err, "TimeBasedIntervalsCount") {
+		return
+	}
+	if err != nil {
+		log.Errorf("TimeBasedIntervalsCount failed for /%s: %v", val, err)
+		exp.StatusPage(w, defaultErrorCode, defaultErrorMessage, "", ExpStatusError)
+		return
 	}
 
-	oldestBlockTimestamp := exp.ChainParams.GenesisBlock.Header.Timestamp
-	oldestBlockMonth := oldestBlockTimestamp.Month()
-	oldestBlockDay := oldestBlockTimestamp.Day()
-
-	now := time.Now()
-
-	if (grouping == dbtypes.YearGrouping && now.Month() < oldestBlockMonth) ||
-		grouping == dbtypes.MonthGrouping && now.Day() < oldestBlockDay ||
-		grouping == dbtypes.YearGrouping && now.Month() == oldestBlockMonth && now.Day() < oldestBlockDay {
-		maxOffset = maxOffset + 1
+	// maxOffset is the largest valid row offset (i.e. totalGroupings - 1),
+	// preserved as the semantic input to calcPages and to the template's
+	// "of (BestGrouping + 1) rows" display. When the chain has no blocks at
+	// all, leave it at 0 so the empty-data branch in the template renders.
+	var maxOffset int64
+	if totalGroupings > 0 {
+		maxOffset = int64(totalGroupings) - 1
+	}
+	if offset > uint64(maxOffset) {
+		offset = uint64(maxOffset)
 	}
 
 	if rows == 0 {
@@ -2159,6 +2161,7 @@ func (exp *explorerUI) ParametersPage(w http.ResponseWriter, r *http.Request) {
 		MaximumBlockSize     int64
 		ActualTicketPoolSize int64
 		AddressPrefix        []types.AddrPrefix
+		SKACoins             []types.SKACoinParam
 	}
 
 	str, err := exp.templates.exec("parameters", struct {
@@ -2170,6 +2173,7 @@ func (exp *explorerUI) ParametersPage(w http.ResponseWriter, r *http.Request) {
 			MaximumBlockSize:     maxBlockSize,
 			AddressPrefix:        addrPrefix,
 			ActualTicketPoolSize: actualTicketPoolSize,
+			SKACoins:             buildSKACoinParams(params),
 		},
 	})
 
@@ -2692,13 +2696,6 @@ func calcPages(rows, pageSize, offset int, link string) pageNumbers {
 
 // AttackCost is the page handler for the "/attack-cost" path.
 func (exp *explorerUI) AttackCost(w http.ResponseWriter, r *http.Request) {
-	price := 24.42
-	if exp.xcBot != nil {
-		if rate := exp.xcBot.Conversion(1.0); rate != nil {
-			price = rate.Value
-		}
-	}
-
 	exp.pageData.RLock()
 
 	height := exp.pageData.BlockInfo.Height
@@ -2714,7 +2711,6 @@ func (exp *explorerUI) AttackCost(w http.ResponseWriter, r *http.Request) {
 		*CommonPageData
 		HashRate        float64
 		Height          int64
-		DCRPrice        float64
 		TicketPrice     float64
 		TicketPoolSize  int64
 		TicketPoolValue float64
@@ -2723,7 +2719,6 @@ func (exp *explorerUI) AttackCost(w http.ResponseWriter, r *http.Request) {
 		CommonPageData:  exp.commonData(r),
 		HashRate:        HashRate,
 		Height:          height,
-		DCRPrice:        price,
 		TicketPrice:     ticketPrice,
 		TicketPoolSize:  int64(ticketPoolSize),
 		TicketPoolValue: ticketPoolValue,

@@ -20,7 +20,33 @@
                         <span class="monicon-stack h5"></span>
                         <span class="h6 d-inline-block ps-2">Current Mempool</span>
                     </div>
-                    <div class="row" data-mempool-target="totalSentRow">
+                    <div class="row">
+                        <div class="col-12 col-md-6 col-lg-12 col-xl-6 text-center pb-3 pt-2 pt-md-0 pt-lg-2 pt-xl-0">
+                            <div class="d-inline-block text-center text-md-start text-lg-center text-xl-start">
+                                <span class="text-secondary fs13">Total Sent</span>
+                                <br>
+                                <template data-mempool-target="totalSentSkaRowTemplate">
+                                    <div class="mempool-ledger-row mempool-ledger-secondary">
+                                        <span class="mempool-ledger-amount" data-slot="amount"></span>
+                                        <span class="mempool-ledger-symbol text-secondary" data-slot="symbol"></span>
+                                    </div>
+                                </template>
+                                <div class="mempool-ledger" data-mempool-target="totalSentRow">
+                                    <div class="mempool-ledger-row mempool-ledger-primary" data-coin-type="0">
+                                        <span class="mempool-ledger-amount h4 mb-0" data-mempool-target="totalSent">{{formatCoinAtoms $varStats.Amount 0}}</span>
+                                        <span class="mempool-ledger-symbol text-secondary">VAR</span>
+                                    </div>
+                                    {{- range orderedMempoolCoinStats .CoinStats}}
+                                    {{- if ne .CoinType 0}}
+                                    <div class="mempool-ledger-row mempool-ledger-secondary" data-coin-type="{{.CoinType}}">
+                                        <span class="mempool-ledger-amount">{{formatCoinAtoms .Stats.Amount .CoinType}}</span>
+                                        <span class="mempool-ledger-symbol text-secondary">{{.Symbol}}</span>
+                                    </div>
+                                    {{- end}}
+                                    {{- end}}
+                                </div>
+                            </div>
+                        </div>
                         <div class="col-12 col-md-6 col-lg-12 col-xl-6 text-center pb-3 pt-2 pt-md-0 pt-lg-2 pt-xl-0">
                             <div class="d-inline-block text-center text-md-start text-lg-center text-xl-start">
                                 <span class="text-secondary fs13">Last Block</span>
@@ -42,15 +68,6 @@
                                 <span class="h4" data-mempool-target="mempoolSize">{{.LikelyMineable.FormattedSize}}</span>
                             </div>
                         </div>
-                        {{range orderedMempoolCoinStats .CoinStats}}
-                        <div class="col-12 col-md-6 col-lg-12 col-xl-6 text-center pb-3 pt-2 pt-md-0 pt-lg-2 pt-xl-0" data-coin-type="{{.CoinType}}">
-                            <div class="d-inline-block text-center text-md-start text-lg-center text-xl-start">
-                                <span class="text-secondary fs13">Total Sent</span>
-                                <br>
-                                <span class="h4"{{if eq .CoinType 0}} data-mempool-target="totalSent"{{end}}>{{formatCoinAtoms .Stats.Amount .CoinType}}</span> <span class="text-secondary">{{.Symbol}}</span>
-                            </div>
-                        </div>
-                        {{end}}
                     </div>
                 </div>
                 <div class="col-24 col-sm-12 col-md-24 col-lg-12 secondary-card pt-3 pb-3 px-3">
@@ -59,7 +76,32 @@
                       <span class="h6 d-inline-block ps-2">Transactions</span>
                     </div>
 
-                    <div class="row mt-1" data-mempool-target="transactionsRow">
+                    <div class="row mt-1">
+                        <div class="col-12 col-md-6 col-lg-12 col-xl-6 pb-3">
+                            <div class="text-center text-secondary fs13">Regular</div>
+                            <template data-mempool-target="regularSkaRowTemplate">
+                                <div class="mempool-ledger-row mempool-ledger-secondary">
+                                    <span class="mempool-ledger-amount" data-slot="count"></span>
+                                    <span class="mempool-ledger-symbol" data-slot="amountSymbol"></span>
+                                </div>
+                            </template>
+                            <div class="mempool-ledger mempool-ledger-centered" data-mempool-target="transactionsRow">
+                                <div class="mempool-ledger-row mempool-ledger-primary" data-coin-type="0">
+                                    <span class="mempool-ledger-amount h4 mb-0" data-mempool-target="regCount">{{$varStats.RegularCount}}</span>
+                                    <span class="mempool-ledger-symbol fs13">
+                                        <span data-mempool-target="regTotal">{{formatCoinAtoms $varStats.RegularAmount 0}}</span> VAR
+                                    </span>
+                                </div>
+                                {{- range orderedMempoolCoinStats .CoinStats}}
+                                {{- if ne .CoinType 0}}
+                                <div class="mempool-ledger-row mempool-ledger-secondary" data-coin-type="{{.CoinType}}">
+                                    <span class="mempool-ledger-amount">{{.Stats.RegularCount}}</span>
+                                    <span class="mempool-ledger-symbol">{{formatCoinAtoms .Stats.RegularAmount .CoinType}} {{.Symbol}}</span>
+                                </div>
+                                {{- end}}
+                                {{- end}}
+                            </div>
+                        </div>
                         <div class="col-12 col-md-6 col-lg-12 col-xl-6 pb-3">
                             <div class="text-center text-secondary fs13">Tickets</div>
                             <div class="text-center h4 mb-0" data-mempool-target="ticketCount">{{$varStats.TicketCount}}</div>
@@ -94,15 +136,6 @@
                                 <span data-mempool-target="revTotal">{{formatCoinAtoms $varStats.RevokeAmount 0}}</span> VAR
                             </div>
                         </div>
-                        {{range orderedMempoolCoinStats .CoinStats}}
-                        <div class="col-12 col-md-6 col-lg-12 col-xl-6 pb-3" data-coin-type="{{.CoinType}}">
-                            <div class="text-center text-secondary fs13">Regular</div>
-                            <div class="text-center h4 mb-0"{{if eq .CoinType 0}} data-mempool-target="regCount"{{end}}>{{.Stats.RegularCount}}</div>
-                            <div class="text-center fs13">
-                                <span{{if eq .CoinType 0}} data-mempool-target="regTotal"{{end}}>{{formatCoinAtoms .Stats.RegularAmount .CoinType}}</span> {{.Symbol}}
-                            </div>
-                        </div>
-                        {{end}}
                     </div>
 
                 </div>

@@ -6,7 +6,7 @@
   3. **Rendering Divergence:** Mempool relies on JS HTML `<template>` cloning; Confirmed relies on Go server-templates.
 - **Critical Constraints:**
   - SKA `CoinType` and exact coin amounts (`SKAValue`) MUST pass through the system as `string` or `*big.Int`. Never use legacy `float64` `Amount`.
-  - The `tx.tmpl` view currently ignores coin data and forces legacy float casting, requiring a template overwrite if accurate coin rendering is needed.
+  - `tx.tmpl` branches on `$.Data.CoinType` (`:573` et al.): VAR via `float64AsDecimalParts .Amount` (8-dec safe), SKA via `skaDecimalParts .ValueRaw` (string). A new coin-dependent field must extend **both** branches; the confirmed page is server-rendered (no WS live-update).
 - **Mutation Checklist:**
   - [ ] Did you update `apitypes.Vout` / `apitypes.TxShort` (Confirmed)?
   - [ ] Did you update `explorertypes.MempoolTx` (Unconfirmed)?
@@ -14,4 +14,4 @@
   - [ ] Are changes reflected in `cmd/dcrdata/views/tx.tmpl` Go templates?
 
 See also:
-- /wiki/code-analysis/address/flow.compact.md — the address page consumes the same `tx.tmpl` rendering and inherits the SKA template gap (address links upstream with `depends-on`).
+- /wiki/code-analysis/address/flow.compact.md — the address page shares the same multi-coin `tx.tmpl` render idiom (address links upstream with `depends-on`).

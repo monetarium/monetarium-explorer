@@ -66,8 +66,6 @@ To support scalable and realistic development workflows, we use a **two-level is
 
 ### 6.2. Sub-issues (Implementation Tasks)
 
-- A Feature can have **any number of sub-issues** (no fixed limit).
-
 - Each sub-issue represents a **concrete, executable unit of work**:
   - should be completable in a single PR
   - should not require deep implicit knowledge from other issues
@@ -86,6 +84,22 @@ To support scalable and realistic development workflows, we use a **two-level is
 
 ---
 
+### 6.2.1. The contract is the seam (default decomposition)
+
+Almost every Feature here is a **backend producing data** and a **frontend rendering it**. The work splits cleanly along the **data contract between them**, and that is the _only_ split made by default.
+
+- **No contract** (pure backend or pure frontend, no handoff) → a **single `issue`**, with checkbox steps in its description for internal planning. No sub-issues.
+- **There is a contract** → **1 Feature (`parent`) + exactly 2 sub-issues**: one for the side that **produces** the contract (`[DATA]`/`[WS]`/`[API]`/`[DB]`) and one for the side that **consumes** it (`[UI]`).
+- **More than two sub-issues is the exception**, allowed only when one side is genuinely several independent PRs (e.g. a schema migration that must land before the aggregation depending on it). A `[DOCS]` follow-up is the one routine third.
+
+**Where the contract lives for page Features:** pages have no JSON API behind them — they are rendered by two pipelines that must emit identical DOM (the Go template on the HTTP path and a Stimulus controller on the live WebSocket path). The contract is therefore the **view-model struct whose field set is identical across the template context and the WebSocket JSON** ("present on both transports"). The producer sub-issue's acceptance gate is a **both-transports parity test**. For a real HTTP endpoint the contract is the JSON response itself — that is `[API]`.
+
+**Keep the contract fat, not raw:** push computation and all precision/format-sensitive values (e.g. 18-decimal SKA, which must stay `big.Int`-derived strings server-side) behind the contract; the frontend renders, it does not compute. This also balances workload between the two sub-issues — balance volume via contract fatness, never by padding the issue count.
+
+Over-decomposition (many thin issues) is the most common planning failure. Fewer, contract-aligned issues are preferred every time.
+
+---
+
 ### 6.3. Structure Constraints
 
 - Only **two levels are allowed**:
@@ -93,9 +107,9 @@ To support scalable and realistic development workflows, we use a **two-level is
 
 - ❌ No nested sub-tasks or deeper hierarchies
 
-- If a Feature is small:
-  - it may consist of a **single issue without sub-issues**
-  - internal steps can be described using checkboxes
+- **A `parent` must have sub-issues — a childless `parent` is invalid.** A Feature too small to split, or with no backend↔frontend contract, is created as a single `type: issue` (with checkbox steps in its description), **not** as a `parent` with nothing under it.
+
+- The default is **exactly two sub-issues** (see §6.2.1); deviating in either direction requires the reasoning stated in §6.2.1.
 
 ---
 
@@ -133,6 +147,7 @@ Prefixes do **not** represent all affected parts of the system. They must reflec
 - Do **not** combine prefixes (e.g., ❌ `[API][DB][UI]`)
 - If a task spans multiple domains equally:
   - split it into multiple sub-issues
+  - in practice this is the single backend↔frontend contract split of §6.2.1 (producer vs. consumer); splitting further, per touched layer, is the exception, not the default
 
 ---
 
@@ -163,6 +178,8 @@ Do:
 [API] Add sorting support to blocks endpoint
 [UI] Implement sorting in blocks table
 ```
+
+This is the backend↔frontend contract split of §6.2.1 — the producer side and the consumer side. Do **not** split further by layer (DB vs. DATA vs. WS) unless one side is genuinely several independent PRs.
 
 ---
 
@@ -311,6 +328,7 @@ Your `tasks.json` must declare an array of task objects. Each task requires a un
 
 - Sub-issues must follow the **prefix naming convention**
 - Issue structure must follow the **two-level hierarchy**
+- Default to **one Feature + two contract-aligned sub-issues** (§6.2.1); a childless `parent` is invalid (§6.3)
 - Do **not** split tasks based on developer specialization
 - Sub-issues should reflect **system boundaries** (API, DB, UI, etc.), not roles
 - Assignment should follow the **Prefix-Based Assignment rule**, but may be adjusted for balance
@@ -318,6 +336,8 @@ Your `tasks.json` must declare an array of task objects. Each task requires a un
 ---
 
 ### 8.4. Example `tasks.json`
+
+The canonical shape: one Feature + the two contract sides (+ a routine `[DOCS]` refresh when a wiki code-analysis trace exists for the area):
 
 ```json
 {
@@ -327,63 +347,45 @@ Your `tasks.json` must declare an array of task objects. Each task requires a un
       "type": "parent",
       "issue_type": "Feature",
       "title": "Blocks List Page",
-      "description": "Display a paginated list of blocks with VAR and SKA{n} metrics.",
+      "description": "Display a paginated list of blocks with VAR and SKA{n} metrics. Spec: wiki/specs/blocks-list/spec.md.",
       "assignee": "yanchenko-igor",
       "labels": ["enhancement"]
     },
     {
-      "id": "blocks-data-aggregation",
+      "id": "blocks-list-contract",
       "type": "sub-issue",
       "parent": "feature-blocks-list",
       "issue_type": "Task",
-      "title": "[DATA] Aggregate block data for list page",
-      "description": "Prepare structured block data including VAR and SKA{n} values.",
+      "title": "[DATA] Blocks list backend↔frontend data contract",
+      "description": "Deliver the per-block VAR + SKA{n} view-model, identical on both transports (HTTP template context and WebSocket JSON). Implementation is free; acceptance gate is a both-transports parity test plus the invariants in the area's wiki/code-analysis patterns.md.",
       "assignee": "yanchenko-igor",
       "labels": ["enhancement"]
     },
     {
-      "id": "blocks-db-query",
+      "id": "blocks-list-ui",
       "type": "sub-issue",
       "parent": "feature-blocks-list",
       "issue_type": "Task",
-      "title": "[DB] Optimize blocks query for list page",
-      "description": "Ensure efficient retrieval of block data from PostgreSQL.",
-      "assignee": "yanchenko-igor",
-      "labels": ["enhancement"]
-    },
-    {
-      "id": "blocks-api-endpoint",
-      "type": "sub-issue",
-      "parent": "feature-blocks-list",
-      "issue_type": "Task",
-      "title": "[API] Blocks list endpoint",
-      "description": "Expose aggregated block data via API endpoint.",
-      "assignee": "yanchenko-igor",
-      "labels": ["enhancement"]
-    },
-    {
-      "id": "blocks-ui-table",
-      "type": "sub-issue",
-      "parent": "feature-blocks-list",
-      "issue_type": "Task",
-      "title": "[UI] Blocks table rendering",
-      "description": "Render blocks table using templates and Stimulus controllers.",
+      "title": "[UI] Blocks list rendering",
+      "description": "Render the blocks table (template + Stimulus controller + SCSS) against the agreed contract; acceptance criteria are the spec's own acceptance checklist.",
       "assignee": "edshav",
       "labels": ["enhancement"]
     },
     {
-      "id": "blocks-ui-pagination",
+      "id": "blocks-list-docs",
       "type": "sub-issue",
       "parent": "feature-blocks-list",
       "issue_type": "Task",
-      "title": "[UI] Implement pagination for blocks table",
-      "description": "Add pagination controls and behavior to the blocks list page.",
+      "title": "[DOCS] Refresh blocks-list code-analysis",
+      "description": "After the two implementation issues land, update wiki/code-analysis/blocks-list/{flow.compact,patterns,impact}.md to match the shipped contract.",
       "assignee": "edshav",
-      "labels": ["enhancement"]
+      "labels": ["documentation"]
     }
   ]
 }
 ```
+
+**Exception (more than two implementation sub-issues):** only when one contract side is genuinely several independent PRs — e.g. a DB schema migration that must merge before the aggregation depending on it, justifying a separate `[DB]` issue ahead of `[DATA]`. This is the documented exception of §6.2.1, not the template.
 
 ---
 

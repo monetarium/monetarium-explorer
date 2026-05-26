@@ -137,19 +137,14 @@
                                 <td>Reduction interval in blocks</td>
                             </tr>
                             <tr>
-                                <td class="mono text-start pe-2 nowrap p03rem0">WorkRewardProportion</td>
-                                <td class="mono">{{uint16Mul .ChainParams.WorkRewardProportion 10}}%</td>
-                                <td>Comparative amount of the subsidy given for creating a block</td>
+                                <td class="mono text-start pe-2 nowrap p03rem0">WorkRewardProportionV2</td>
+                                <td class="mono">{{uint16Mul .ChainParams.WorkRewardProportionV2 10}}%</td>
+                                <td>Comparative amount of the subsidy given for creating a block (Monetarium fixes PoW/PoS at 50% / 50%)</td>
                             </tr>
                             <tr>
-                                <td class="mono text-start pe-2 nowrap p03rem0">StakeRewardProportion</td>
-                                <td class="mono">{{uint16Mul .ChainParams.StakeRewardProportion 10}}%</td>
+                                <td class="mono text-start pe-2 nowrap p03rem0">StakeRewardProportionV2</td>
+                                <td class="mono">{{uint16Mul .ChainParams.StakeRewardProportionV2 10}}%</td>
                                 <td>Comparative amount of the subsidy given for casting stake votes (collectively, per block)</td>
-                            </tr>
-                            <tr>
-                                <td class="mono text-start pe-2 nowrap p03rem0">BlockTaxProportion</td>
-                                <td class="mono">{{uint16Mul .ChainParams.BlockTaxProportion 10}}%</td>
-                                <td>Inverse of the percentage of funds for each block to allocate to the developer organization</td>
                             </tr>
                         </tbody>
                     </table>
@@ -255,63 +250,6 @@
                             </tr>
                         </tbody>
                     </table>
-                    <h4><span>Treasury parameters</span></h4>
-                    <table class="table table-mono-cells table-sm f15">
-                        <thead>
-                          <tr>
-                            <th width="20%">Parameter</th>
-                            <th>Value</th>
-                            <th width="60%">Description</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                            <tr>
-                                <td class="mono text-start pe-2 nowrap p03rem0">TreasuryVoteInterval</td>
-                                <td class="mono">{{.ChainParams.TreasuryVoteInterval}}</td>
-                                <td>How frequently a TSpend transaction is allowed in a block (see standalone.IsTreasuryVoteInterval)</td>
-                            </tr>
-                            <tr>
-                                <td class="mono text-start pe-2 nowrap p03rem0">TreasuryVoteIntervalMultiplier</td>
-                                <td class="mono">{{.ChainParams.TreasuryVoteIntervalMultiplier}}</td>
-                                <td>Multiplier to TreasuryVoteInterval to calculate Expiry (see standalone.CalcTSpendWindow)</td>
-                            </tr>
-                            <tr>
-                                <td class="mono text-start pe-2 nowrap p03rem0">TreasuryVoteQuorumMultiplier</td>
-                                <td class="mono">{{.ChainParams.TreasuryVoteQuorumMultiplier}}</td>
-                                <td>Numerator of the TSpend vote quorum percentage (see CheckTSpendHasVotes)</td>
-                            </tr>
-                            <tr>
-                                <td class="mono text-start pe-2 nowrap p03rem0">TreasuryVoteQuorumDivisor</td>
-                                <td class="mono">{{.ChainParams.TreasuryVoteQuorumDivisor}}</td>
-                                <td>Divisor of the TSpend vote quorum percentage (see CheckTSpendHasVotes)</td>
-                            </tr>
-                            <tr>
-                                <td class="mono text-start pe-2 nowrap p03rem0">TreasuryVoteRequiredMultiplier</td>
-                                <td class="mono">{{.ChainParams.TreasuryVoteRequiredMultiplier}}</td>
-                                <td>Numerator of the required votes percentage (see CheckTSpendHasVotes)</td>
-                            </tr>
-                            <tr>
-                                <td class="mono text-start pe-2 nowrap p03rem0">TreasuryVoteRequiredDivisor</td>
-                                <td class="mono">{{.ChainParams.TreasuryVoteRequiredDivisor}}</td>
-                                <td>Divisor of the required votes vote quorum percentage (see CheckTSpendHasVotes)</td>
-                            </tr>
-                            <tr>
-                                <td class="mono text-start pe-2 nowrap p03rem0">TreasuryExpenditureWindow</td>
-                                <td class="mono">{{.ChainParams.TreasuryExpenditureWindow}}</td>
-                                <td>The number of TreasuryVoteInterval*TreasuryVoteIntervalMultiplier windows that define a single expenditure window (see maxTreasuryExpenditure)</td>
-                            </tr>
-                            <tr>
-                                <td class="mono text-start pe-2 nowrap p03rem0">TreasuryExpenditurePolicy</td>
-                                <td class="mono">{{.ChainParams.TreasuryExpenditurePolicy}}</td>
-                                <td>The number of previous TreasuryExpenditureWindows that defines how far back to calculate the average expenditure of the treasury for an expenditure policy check (see maxTreasuryExpenditure)</td>
-                            </tr>
-                            <tr>
-                                <td class="mono text-start pe-2 nowrap p03rem0">TreasuryExpenditureBootstrap</td>
-                                <td class="mono">{{.ChainParams.TreasuryExpenditureBootstrap}}</td>
-                                <td>Default previous average expenditure when there are no treasury spends inside the entire window defined by TreasuryExpenditurePolicy</td>
-                            </tr>
-                        </tbody>
-                    </table>
                     <h4><span>Rule change parameters</span></h4>
                     <table class="table table-mono-cells table-sm f15">
                         <thead>
@@ -383,6 +321,77 @@
                             {{end}}
                         </tbody>
                     </table>
+                    <h4><span>SKA coin parameters</span></h4>
+                    {{range $coin := .ExtendedParams.SKACoins}}
+                    <h5 class="mt-3">
+                        <span class="mono">{{$coin.Label}}</span>
+                        <span class="fs14 text-secondary">— {{$coin.Name}}{{if $coin.Symbol}} ({{$coin.Symbol}}){{end}}</span>
+                        {{if not $coin.Active}}<span class="badge bg-secondary ms-2 fs12">inactive</span>{{else if not $coin.InitiallyActive}}<span class="badge bg-info ms-2 fs12">activated post-genesis</span>{{end}}
+                    </h5>
+                    <table class="table table-mono-cells table-sm">
+                        <thead>
+                          <tr>
+                            <th width="20%">Parameter</th>
+                            <th>Value</th>
+                            <th width="60%">Description</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td class="mono text-start pe-2 nowrap p03rem0">Description</td>
+                                <td colspan="2">{{$coin.Description}}</td>
+                            </tr>
+                            <tr>
+                                <td class="mono text-start pe-2 nowrap p03rem0">Active</td>
+                                <td class="mono">{{$coin.Active}}</td>
+                                <td>Whether this coin type is currently active and can be used in transactions</td>
+                            </tr>
+                            <tr>
+                                <td class="mono text-start pe-2 nowrap p03rem0">MaxSupply</td>
+                                <td class="mono">{{$coin.MaxSupply}} <span class="unit lh15rem">{{$coin.Label}}</span></td>
+                                <td>Maximum number of coins that can ever be emitted for this coin type</td>
+                            </tr>
+                            <tr>
+                                <td class="mono text-start pe-2 nowrap p03rem0">AtomsPerCoin</td>
+                                <td class="mono">{{$coin.AtomsPerCoin}}</td>
+                                <td>Atomic scale: number of atoms in one whole coin</td>
+                            </tr>
+                            <tr>
+                                <td class="mono text-start pe-2 nowrap p03rem0">MinRelayTxFee</td>
+                                <td class="mono">{{$coin.MinRelayTxFee}} <span class="unit lh15rem">{{$coin.Label}}</span> / KB</td>
+                                <td>Minimum fee rate for transactions of this coin type</td>
+                            </tr>
+                            <tr>
+                                <td class="mono text-start pe-2 nowrap p03rem0">MaxFeeMultiplier</td>
+                                <td class="mono">{{$coin.MaxFeeMultiplier}}x</td>
+                                <td>Multiplier applied to MinRelayTxFee to determine the maximum allowed fee</td>
+                            </tr>
+                            <tr>
+                                <td class="mono text-start pe-2 nowrap p03rem0">EmissionHeight</td>
+                                <td class="mono"><a href="/block/{{$coin.EmissionHeight}}">{{$coin.EmissionHeight}}</a></td>
+                                <td>Block height at which this coin type is/was initially emitted</td>
+                            </tr>
+                            <tr>
+                                <td class="mono text-start pe-2 nowrap p03rem0">EmissionWindow</td>
+                                <td class="mono">{{$coin.EmissionWindow}} blocks</td>
+                                <td>Number of blocks after EmissionHeight during which emission is allowed</td>
+                            </tr>
+                            <tr>
+                                <td class="mono text-start pe-2 nowrap p03rem0">EmissionAddresses</td>
+                                <td colspan="2">
+                                    {{range $i, $addr := $coin.EmissionAddresses}}
+                                    <div class="mono">
+                                        <a href="/address/{{$addr}}">{{$addr}}</a>
+                                        {{if (index $coin.EmissionAmounts $i)}} — {{index $coin.EmissionAmounts $i}} <span class="unit lh15rem">{{$coin.Label}}</span>{{end}}
+                                    </div>
+                                    {{end}}
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    {{else}}
+                    <p class="text-secondary">No SKA coins configured for this network.</p>
+                    {{end}}
                 </div>
             </div>
         </div>

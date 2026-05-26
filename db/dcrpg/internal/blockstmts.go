@@ -115,6 +115,12 @@ const (
 	RetrieveBestBlockHeight = `SELECT id, hash, height FROM blocks
 		WHERE is_mainchain = true ORDER BY height DESC LIMIT 1;`
 
+	// UpdateBlockSSFeeTotals overwrites the ssfee_totals JSONB for the
+	// main-chain block at a given height. Used by the maintenance upgrade that
+	// recomputes the marker-based PoW/PoS split.
+	UpdateBlockSSFeeTotals = `UPDATE blocks SET ssfee_totals = $1
+		WHERE height = $2 AND is_mainchain = true;`
+
 	// SelectBlocksTicketsPrice selects the ticket price and difficulty for the
 	// first block in a stake difficulty window.
 	SelectBlocksTicketsPrice = `SELECT sbits, time, difficulty, height, fresh_stake
@@ -154,6 +160,13 @@ const (
 		GROUP BY DATE_TRUNC($1, time at time zone 'utc')
 		ORDER BY index_value DESC
 		LIMIT $2 OFFSET $3;`
+
+	// SelectBlocksTimeListingCount returns the number of distinct
+	// time-truncated groupings that actually have at least one block. Its
+	// DATE_TRUNC expression MUST stay identical to the one in
+	// SelectBlocksTimeListingByLimit; the two values are paired by the
+	// time-based listing handler to drive pagination.
+	SelectBlocksTimeListingCount = `SELECT COUNT(DISTINCT DATE_TRUNC($1, time at time zone 'utc')) FROM blocks;`
 
 	// SelectBlocksPreviousHash = `SELECT previous_hash FROM blocks WHERE hash = $1;`
 

@@ -193,43 +193,24 @@ function activeSkaIds(coinStats) {
   return ids
 }
 
-function totalSentSkaCol(id, stats) {
-  const col = document.createElement('div')
-  col.className = 'col-12 col-md-6 col-lg-12 col-xl-6 text-center pb-3 pt-2 pt-md-0 pt-lg-2 pt-xl-0'
-  col.setAttribute('data-coin-type', String(id))
-  const inner = document.createElement('div')
-  inner.className = 'd-inline-block text-center text-md-start text-lg-center text-xl-start'
-  const label = document.createElement('span')
-  label.className = 'text-secondary fs13'
-  label.textContent = 'Total Sent'
-  const amount = document.createElement('span')
-  amount.className = 'h4'
-  amount.textContent = humanize.formatCoinAtoms(stats.amount || '0', id)
-  const sym = document.createElement('span')
-  sym.className = 'text-secondary'
-  sym.textContent = renderCoinType(id)
-  inner.append(label, document.createElement('br'), amount, document.createTextNode(' '), sym)
-  col.appendChild(inner)
-  return col
+function cloneTotalSentSkaRow(template, id, stats) {
+  const row = template.content.firstElementChild.cloneNode(true)
+  row.setAttribute('data-coin-type', String(id))
+  row.querySelector('[data-slot="amount"]').textContent = humanize.formatCoinAtoms(
+    stats.amount || '0',
+    id
+  )
+  row.querySelector('[data-slot="symbol"]').textContent = renderCoinType(id)
+  return row
 }
 
-function regularSkaCol(id, stats) {
-  const col = document.createElement('div')
-  col.className = 'col-12 col-md-6 col-lg-12 col-xl-6 pb-3'
-  col.setAttribute('data-coin-type', String(id))
-  const head = document.createElement('div')
-  head.className = 'text-center text-secondary fs13'
-  head.textContent = 'Regular'
-  const count = document.createElement('div')
-  count.className = 'text-center h4 mb-0'
-  count.textContent = String(stats.regular_count || 0)
-  const totalLine = document.createElement('div')
-  totalLine.className = 'text-center fs13'
-  const amount = document.createElement('span')
-  amount.textContent = humanize.formatCoinAtoms(stats.regular_amount || '0', id)
-  totalLine.append(amount, document.createTextNode(` ${renderCoinType(id)}`))
-  col.append(head, count, totalLine)
-  return col
+function cloneRegularSkaRow(template, id, stats) {
+  const row = template.content.firstElementChild.cloneNode(true)
+  row.setAttribute('data-coin-type', String(id))
+  row.querySelector('[data-slot="count"]').textContent = String(stats.regular_count || 0)
+  row.querySelector('[data-slot="amountSymbol"]').textContent =
+    `${humanize.formatCoinAtoms(stats.regular_amount || '0', id)} ${renderCoinType(id)}`
+  return row
 }
 
 // syncSkaColsIn rebuilds the SKA (CoinType > 0) child cols of a row to match
@@ -274,7 +255,9 @@ export default class extends Controller {
       'txRowTemplate',
       'ticketRowTemplate',
       'revocationRowTemplate',
-      'voteRowTemplate'
+      'voteRowTemplate',
+      'totalSentSkaRowTemplate',
+      'regularSkaRowTemplate'
     ]
   }
 
@@ -372,11 +355,17 @@ export default class extends Controller {
     if (this.hasRevTotalTarget) {
       this.revTotalTarget.textContent = humanize.formatCoinAtoms(v.revoke_amount || '0', 0)
     }
-    if (this.hasTotalSentRowTarget) {
-      syncSkaColsIn(this.totalSentRowTarget, coinStats, totalSentSkaCol)
+    if (this.hasTotalSentRowTarget && this.hasTotalSentSkaRowTemplateTarget) {
+      const tpl = this.totalSentSkaRowTemplateTarget
+      syncSkaColsIn(this.totalSentRowTarget, coinStats, (id, stats) =>
+        cloneTotalSentSkaRow(tpl, id, stats)
+      )
     }
-    if (this.hasTransactionsRowTarget) {
-      syncSkaColsIn(this.transactionsRowTarget, coinStats, regularSkaCol)
+    if (this.hasTransactionsRowTarget && this.hasRegularSkaRowTemplateTarget) {
+      const tpl = this.regularSkaRowTemplateTarget
+      syncSkaColsIn(this.transactionsRowTarget, coinStats, (id, stats) =>
+        cloneRegularSkaRow(tpl, id, stats)
+      )
     }
   }
 
