@@ -28,7 +28,6 @@ jobs:
           plugins: "code-review@claude-code-plugins"
           prompt: "/code-review:code-review --comment ${{ github.repository }}/pull/${{ github.event.pull_request.number }}"
           claude_args: |
-            --model claude-opus-4-7
             --max-turns 60
         env:
           GH_TOKEN: ${{ github.token }}
