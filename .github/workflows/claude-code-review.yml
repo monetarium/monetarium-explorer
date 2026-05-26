@@ -1,0 +1,65 @@
+name: Claude Code Review
+
+on:
+  pull_request:
+    types: [review_requested]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+  id-token: write
+
+jobs:
+  review:
+    if: |
+      github.event.requested_reviewer.login == 'edshav' &&
+      github.event.pull_request.base.ref == 'develop'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            You are reviewing pull request #${{ github.event.pull_request.number }} in ${{ github.repository }}.
+            A formal review has been requested. You MUST submit a formal GitHub PR review — not loose comments.
+
+            Process:
+            1. Read the PR diff and relevant surrounding code. Use `gh pr diff ${{ github.event.pull_request.number }}` and `gh pr view ${{ github.event.pull_request.number }}` for context.
+            2. Consult CLAUDE.md at the repo root if present and follow its conventions.
+            3. Evaluate for: correctness, security, performance, test coverage, maintainability.
+            4. Decide on ONE verdict:
+               - APPROVE: ready to merge; no blocking issues. Optional polish is fine to mention but not required to fix.
+               - REQUEST_CHANGES: at least one blocking issue (bug, security flaw, missing tests for new logic, broken contract).
+               - COMMENT: you have feedback worth sharing but nothing blocking and you don't want to formally approve (use sparingly — prefer APPROVE or REQUEST_CHANGES).
+            5. Submit the review using the gh CLI:
+
+               gh pr review ${{ github.event.pull_request.number }} \
+                 --<approve|request-changes|comment> \
+                 --body "<your summary>"
+
+               For inline comments on specific lines, use the GitHub API via `gh api`:
+               POST /repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/reviews
+               with a `comments` array (path, line, body, side) and the chosen `event` (APPROVE / REQUEST_CHANGES / COMMENT).
+               This lets you submit inline comments and the verdict in a single review.
+
+            Summary body format:
+            - Start with the verdict in one sentence.
+            - "Must fix" section (only if REQUEST_CHANGES).
+            - "Worth considering" section for non-blocking suggestions.
+            - "Looks good" section noting what's solid.
+            Keep it concise. No padding.
+
+            If the PR is trivial (typo, formatting, dep bump): approve with a one-line summary and skip the sections.
+
+          claude_args: |
+            --model claude-opus-4-7
+            --max-turns 20
+            --allowedTools "Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr review:*),Bash(gh api:*),Read,Grep,Glob"
+        env:
+          GH_TOKEN: ${{ github.token }}
