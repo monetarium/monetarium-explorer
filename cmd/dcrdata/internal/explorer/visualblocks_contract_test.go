@@ -124,6 +124,95 @@ func TestVisualBlocksDataContract(t *testing.T) {
 		}
 	})
 
+	t.Run("BlockFeeParity", func(t *testing.T) {
+		// Construct a block with known fee values for both regular txs and stake fees.
+		feeBI := &types.BlockInfo{
+			BlockBasic: &types.BlockBasic{Size: 10000},
+			MiningFee:  1.23456789,
+			Tx: []*types.TrimmedTxInfo{
+				{
+					TxBasic: &types.TxBasic{Size: 500, FeeRaw: "10000000", FeeRateRaw: "500000"},
+				},
+				{
+					TxBasic: &types.TxBasic{Size: 400, Coinbase: true, FeeRaw: "0", FeeRateRaw: "0"},
+				},
+			},
+			StakeFees: []*types.TrimmedTxInfo{
+				{
+					TxBasic: &types.TxBasic{CoinType: 0, FeeRaw: "5000000", FeeRateRaw: "250000"},
+				},
+				{
+					TxBasic: &types.TxBasic{CoinType: 1, FeeRaw: "2500000000000000000", FeeRateRaw: "125000000000000000"},
+				},
+			},
+		}
+
+		// WS path: serialize as WebsocketBlock (simulates the handler at websockethandlers.go:290)
+		wsBlock := types.WebsocketBlock{Block: feeBI, Extra: nil}
+		wsData, err := json.Marshal(wsBlock)
+		if err != nil {
+			t.Fatalf("WS Marshal failed: %v", err)
+		}
+		var wsWire map[string]interface{}
+		if err := json.Unmarshal(wsData, &wsWire); err != nil {
+			t.Fatalf("WS Unmarshal failed: %v", err)
+		}
+		wsBlockWire, ok := wsWire["block"].(map[string]interface{})
+		if !ok {
+			t.Fatal("WS wire: missing block wrapper")
+		}
+
+		// Verify MiningFee
+		wsMiningFee, ok := wsBlockWire["MiningFee"].(float64)
+		if !ok {
+			t.Fatal("WS wire: MiningFee missing or not float64")
+		}
+		// HTTP template reads .MiningFee from the same BlockInfo struct
+		if wsMiningFee != feeBI.MiningFee {
+			t.Errorf("MiningFee parity: WS=%v, HTTP=%v", wsMiningFee, feeBI.MiningFee)
+		}
+
+		// Verify Transactions[].FeeRaw and FeeRateRaw
+		wsTx, ok := wsBlockWire["Tx"].([]interface{})
+		if !ok {
+			t.Fatal("WS wire: tx missing or not slice")
+		}
+		for _, txRaw := range wsTx {
+			tx := txRaw.(map[string]interface{})
+			coinbase, _ := tx["Coinbase"].(bool)
+			if coinbase {
+				continue // skip coinbase — no fee
+			}
+			feeRaw, _ := tx["FeeRaw"].(string)
+			feeRateRaw, _ := tx["FeeRateRaw"].(string)
+			if feeRaw == "" {
+				t.Error("WS tx: FeeRaw is empty for non-coinbase tx")
+			}
+			if feeRateRaw == "" {
+				t.Error("WS tx: FeeRateRaw is empty for non-coinbase tx")
+			}
+		}
+
+		// Verify StakeFees[].FeeRaw and FeeRateRaw
+		wsStakeFees, ok := wsBlockWire["StakeFees"].([]interface{})
+		if !ok {
+			t.Fatal("WS wire: StakeFees missing or not slice")
+		}
+		for i, sfRaw := range wsStakeFees {
+			sf := sfRaw.(map[string]interface{})
+			feeRaw, _ := sf["FeeRaw"].(string)
+			feeRateRaw, _ := sf["FeeRateRaw"].(string)
+			if feeRaw != feeBI.StakeFees[i].FeeRaw {
+				t.Errorf("StakeFees[%d] FeeRaw parity: WS=%s, HTTP=%s",
+					i, feeRaw, feeBI.StakeFees[i].FeeRaw)
+			}
+			if feeRateRaw != feeBI.StakeFees[i].FeeRateRaw {
+				t.Errorf("StakeFees[%d] FeeRateRaw parity: WS=%s, HTTP=%s",
+					i, feeRateRaw, feeBI.StakeFees[i].FeeRateRaw)
+			}
+		}
+	})
+
 	t.Run("MempoolContractWireFormat", func(t *testing.T) {
 		mpi := &types.MempoolInfo{
 			MempoolShort: types.MempoolShort{
