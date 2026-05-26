@@ -1,9 +1,11 @@
 package dbtypes
 
 import (
+	"math"
 	"math/big"
 	"testing"
 
+	"github.com/monetarium/monetarium-node/blockchain/stake"
 	"github.com/monetarium/monetarium-node/chaincfg"
 	"github.com/monetarium/monetarium-node/cointype"
 	"github.com/monetarium/monetarium-node/wire"
@@ -19,6 +21,128 @@ func syntheticBlock(tx *wire.MsgTx) *wire.MsgBlock {
 	blk := &wire.MsgBlock{}
 	blk.Transactions = []*wire.MsgTx{coinbase, tx}
 	return blk
+}
+
+func Test_processTransactions_CoinbaseRewardSplit(t *testing.T) {
+	// Coinbase with multiple vouts: index 0 = PoW, index > 0 = PoS.
+	// IsCoinBaseTx requires prevOut.Index == math.MaxUint32.
+	coinbase := wire.NewMsgTx()
+	coinbase.AddTxIn(wire.NewTxIn(&wire.OutPoint{Index: math.MaxUint32}, 0, nil))
+	coinbase.AddTxOut(wire.NewTxOut(1000, nil)) // index 0
+	coinbase.AddTxOut(wire.NewTxOut(500, nil))  // index 1
+	coinbase.AddTxOut(wire.NewTxOut(300, nil))  // index 2
+
+	blk := &wire.MsgBlock{}
+	blk.Transactions = []*wire.MsgTx{coinbase}
+
+	txs, vouts, _ := processTransactions(blk, wire.TxTreeRegular, chaincfg.SimNetParams(), true, true)
+
+	if len(vouts) < 1 || len(vouts[0]) < 3 {
+		t.Fatalf("expected 3 vouts, got %d", len(vouts[0]))
+	}
+	if vouts[0][0].TxType != TxTypeBlockRewardPoW {
+		t.Errorf("vout[0] TxType: want %d (PoW), got %d", TxTypeBlockRewardPoW, vouts[0][0].TxType)
+	}
+	if vouts[0][1].TxType != TxTypeBlockRewardPoS {
+		t.Errorf("vout[1] TxType: want %d (PoS), got %d", TxTypeBlockRewardPoS, vouts[0][1].TxType)
+	}
+	if vouts[0][2].TxType != TxTypeBlockRewardPoS {
+		t.Errorf("vout[2] TxType: want %d (PoS), got %d", TxTypeBlockRewardPoS, vouts[0][2].TxType)
+	}
+	if txs[0].TxType != 0 {
+		t.Errorf("coinbase tx TxType: want 0 (regular), got %d", txs[0].TxType)
+	}
+}
+
+func Test_processTransactions_TicketClassification(t *testing.T) {
+	t.Run("valid SStx via DetermineTxType", func(t *testing.T) {
+		ticket := validSStx()
+
+		blk := &wire.MsgBlock{}
+		blk.STransactions = []*wire.MsgTx{ticket}
+
+		txs, _, _ := processTransactions(blk, wire.TxTreeStake, chaincfg.SimNetParams(), true, true)
+
+		if len(txs) < 1 {
+			t.Fatalf("expected 1 tx, got %d", len(txs))
+		}
+		if txs[0].TxType != int16(TxTypeTicketPurchase) {
+			t.Errorf("TxType: want %d (TicketPurchase), got %d", TxTypeTicketPurchase, txs[0].TxType)
+		}
+	})
+
+	t.Run("script fallback for tx that misclassifies as regular", func(t *testing.T) {
+		tx := wire.NewMsgTx()
+		tx.AddTxIn(wire.NewTxIn(&wire.OutPoint{}, 1000, nil))
+		tx.AddTxOut(wire.NewTxOut(100000000, opSSTXP2PKH()))
+
+		blk := &wire.MsgBlock{}
+		blk.STransactions = []*wire.MsgTx{tx}
+
+		txs, _, _ := processTransactions(blk, wire.TxTreeStake, chaincfg.SimNetParams(), true, true)
+
+		if len(txs) < 1 {
+			t.Fatalf("expected 1 tx, got %d", len(txs))
+		}
+		if txs[0].TxType != int16(TxTypeTicketPurchase) {
+			t.Errorf("TxType: want %d (TicketPurchase), got %d", TxTypeTicketPurchase, txs[0].TxType)
+		}
+	})
+}
+
+func Test_processTransactions_SSFeeMarkerSplit(t *testing.T) {
+	sfScript := stake.CreateStakerSSFeeMarker(1338, 1)
+	mfScript := stake.CreateMinerSSFeeMarker(1338)
+	p2pkhScript := opP2PKH()
+
+	sfTx := wire.NewMsgTx()
+	sfTx.Version = 3
+	sfTx.AddTxIn(wire.NewTxIn(&wire.OutPoint{}, 0, nil))
+	sfTx.AddTxOut(&wire.TxOut{
+		Value:    0,
+		Version:  0,
+		PkScript: sfScript,
+		CoinType: cointype.CoinTypeVAR,
+	})
+	sfTx.AddTxOut(&wire.TxOut{
+		Value:    100000000,
+		Version:  0,
+		PkScript: p2pkhScript,
+		CoinType: cointype.CoinTypeVAR,
+	})
+
+	skaOut := big.NewInt(500000000000000000)
+	mfTx := wire.NewMsgTx()
+	mfTx.Version = 3
+	mfTx.AddTxIn(wire.NewTxIn(&wire.OutPoint{}, 0, nil))
+	mfTx.AddTxOut(&wire.TxOut{
+		Value:    0,
+		Version:  0,
+		PkScript: mfScript,
+		CoinType: cointype.CoinType(1),
+	})
+	mfTx.AddTxOut(&wire.TxOut{
+		Value:    0,
+		Version:  0,
+		PkScript: p2pkhScript,
+		CoinType: cointype.CoinType(1),
+		SKAValue: skaOut,
+	})
+
+	blk := &wire.MsgBlock{}
+	blk.STransactions = []*wire.MsgTx{sfTx, mfTx}
+
+	txs, _, _ := processTransactions(blk, wire.TxTreeStake, chaincfg.SimNetParams(), true, true)
+
+	if len(txs) < 2 {
+		t.Fatalf("expected 2 txs, got %d", len(txs))
+	}
+	if txs[0].TxType != int16(TxTypeSSFeePoS) {
+		t.Errorf("SF tx TxType: want %d (SSFeePoS), got %d", TxTypeSSFeePoS, txs[0].TxType)
+	}
+	if txs[1].TxType != int16(TxTypeSSFeePoW) {
+		t.Errorf("MF tx TxType: want %d (SSFeePoW), got %d", TxTypeSSFeePoW, txs[1].TxType)
+	}
 }
 
 func Test_processTransactions_VAROnly(t *testing.T) {
@@ -140,6 +264,58 @@ func Test_processTransactions_VinCoinType(t *testing.T) {
 	if vouts[1][0].Value != 0 {
 		t.Errorf("vout Value must be 0 for SKA output, got %d", vouts[1][0].Value)
 	}
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+// opP2PKH builds a standard P2PKH script (25 bytes).
+func opP2PKH() []byte {
+	script := make([]byte, 25)
+	script[0] = 0x76 // OP_DUP
+	script[1] = 0xa9 // OP_HASH160
+	script[2] = 0x14 // OP_DATA_20
+	script[23] = 0x88 // OP_EQUALVERIFY
+	script[24] = 0xac // OP_CHECKSIG
+	return script
+}
+
+// opSSTXP2PKH builds an OP_SSTX-tagged P2PKH script (26 bytes).
+func opSSTXP2PKH() []byte {
+	script := make([]byte, 26)
+	script[0] = 0xba // OP_SSTX
+	script[1] = 0x76 // OP_DUP
+	script[2] = 0xa9 // OP_HASH160
+	script[3] = 0x14 // OP_DATA_20
+	script[24] = 0x88 // OP_EQUALVERIFY
+	script[25] = 0xac // OP_CHECKSIG
+	return script
+}
+
+// validSStx builds a valid stake submission (ticket) tx with 1 input
+// and 3 outputs (OP_SSTX, OP_RETURN commitment, OP_SSTXCHANGE).
+func validSStx() *wire.MsgTx {
+	tx := wire.NewMsgTx()
+	tx.AddTxIn(wire.NewTxIn(&wire.OutPoint{}, 100000000, nil))
+
+	tx.AddTxOut(wire.NewTxOut(100000000, opSSTXP2PKH()))
+
+	commitment := make([]byte, 42)
+	commitment[0] = 0x6a // OP_RETURN
+	commitment[1] = 0x28 // OP_DATA_40
+	tx.AddTxOut(wire.NewTxOut(0, commitment))
+
+	changeScript := make([]byte, 26)
+	changeScript[0] = 0xbd // OP_SSTXCHANGE
+	changeScript[1] = 0x76 // OP_DUP
+	changeScript[2] = 0xa9 // OP_HASH160
+	changeScript[3] = 0x14 // OP_DATA_20
+	changeScript[24] = 0x88 // OP_EQUALVERIFY
+	changeScript[25] = 0xac // OP_CHECKSIG
+	tx.AddTxOut(wire.NewTxOut(20000000, changeScript))
+
+	return tx
 }
 
 func Test_processTransactions_MixedBlock(t *testing.T) {

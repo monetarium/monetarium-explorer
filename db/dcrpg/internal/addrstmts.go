@@ -262,7 +262,7 @@ const (
 
 	SelectAddressCoinTypes = `SELECT DISTINCT coin_type
 		FROM addresses
-		WHERE address = $1
+		WHERE address = $1 AND valid_mainchain
 		ORDER BY coin_type`
 
 	SelectAddressUnspentWithTxn = `SELECT

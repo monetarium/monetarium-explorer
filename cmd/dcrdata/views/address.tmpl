@@ -126,32 +126,32 @@
                   {{- end}}
                 {{- end}}
               {{- end}}
-                {{- if .Balance.HasStakeOutputs}}
-                    <div class="col-12 pb-2 fs14 text-secondary text-start">
-                        <span class="fw-bold">Stake income</span>:
-                        {{- range $ct := .ActiveCoins}}
-                          {{- $cb := index $balance.Coins $ct}}
-                          {{- if $cb}}
-                          {{- if gt $cb.FromStake 0.0}}
-                            {{printf "%.1f" (x100 $cb.FromStake)}}% {{coinSymbol $ct}}<br>
-                          {{- end}}
-                        {{- end}}
-                      {{- end}}
-                  </div>
+            {{- if .Balance.HasStakeOutputs}}
+              <div class="col-12 pb-2 fs14 text-secondary text-start">
+                <span class="fw-bold">Stake income</span>:
+                {{- range $ct := .ActiveCoins}}
+                  {{- $cb := index $balance.Coins $ct}}
+                  {{- if $cb}}
+                    {{- if gt $cb.FromStake 0.0}}
+                      {{printf "%.1f" (x100 $cb.FromStake)}}% {{coinSymbol $ct}}<br>
+                    {{- end}}
+                  {{- end}}
                 {{- end}}
-                {{- if .Balance.HasStakeInputs}}
-                    <div class="col-12 pb-2 fs14 text-secondary text-start">
-                        <span class="fw-bold">Stake spending</span>:
-                        {{- range $ct := .ActiveCoins}}
-                          {{- $cb := index $balance.Coins $ct}}
-                          {{- if $cb}}
-                          {{- if gt $cb.ToStake 0.0}}
-                            {{printf "%.1f" (x100 $cb.ToStake)}}% {{coinSymbol $ct}}<br>
-                          {{- end}}
-                        {{- end}}
-                      {{- end}}
-                  </div>
+              </div>
+            {{- end}}
+            {{- if .Balance.HasStakeInputs}}
+              <div class="col-12 pb-2 fs14 text-secondary text-start">
+                <span class="fw-bold">Stake spending</span>:
+                {{- range $ct := .ActiveCoins}}
+                  {{- $cb := index $balance.Coins $ct}}
+                  {{- if $cb}}
+                    {{- if gt $cb.ToStake 0.0}}
+                      {{printf "%.1f" (x100 $cb.ToStake)}}% {{coinSymbol $ct}}<br>
+                    {{- end}}
+                  {{- end}}
                 {{- end}}
+              </div>
+            {{- end}}
 
           </div>
           {{/* <div class="row pb-3 fs16">
