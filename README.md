@@ -39,9 +39,6 @@ Monetarium Explorer is a block explorer for the [Monetarium](https://monetarium.
 │   └── dcrpg                  MODULE and package dcrpg providing PostgreSQL backend.
 ├── dev                        Shell scripts for maintenance and deployment.
 ├── docs                       Extra documentation.
-├── exchanges                  MODULE and package for gathering data from public exchange APIs.
-│   ├── rateserver             Exchange rate gRPC server.
-│   └── ratesproto             Package dcrrates implementing the gRPC protobuf service.
 ├── explorer/types             Types used primarily by the explorer pages.
 ├── gov                        MODULE for on- and off-chain governance packages.
 │   ├── agendas                Package agendas defines a consensus deployment/agenda DB.

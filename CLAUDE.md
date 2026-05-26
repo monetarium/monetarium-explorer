@@ -23,11 +23,10 @@ A lot of legacy `dcrdata` / `dcrd` naming still exists in code, paths, configs (
 
 ## Multi-module workspace (important)
 
-This repo contains **10 separate Go modules**, not a single one. Tools that operate on the whole repo iterate them in a specific order so that `go mod tidy` cascades correctly:
+This repo contains **8 separate Go modules**, not a single one. Tools that operate on the whole repo iterate them in a specific order so that `go mod tidy` cascades correctly:
 
 ```
 ./go.mod                          (root: blockdata, mempool, stakedb, pubsub, txhelpers, …)
-./exchanges/go.mod
 ./gov/go.mod
 ./db/dcrpg/go.mod
 ./cmd/dcrdata/go.mod              (the executable)
@@ -35,7 +34,6 @@ This repo contains **10 separate Go modules**, not a single one. Tools that oper
 ./cmd/swapscan-btc/go.mod
 ./testutil/dbload/go.mod
 ./testutil/apiload/go.mod
-./exchanges/rateserver/go.mod
 ```
 
 The ordering is hardcoded in [lint.sh](lint.sh) and [run_tests.sh](run_tests.sh). When a change touches a low-level module (e.g. `txhelpers`), expect to run `go mod tidy` in dependent modules in this order. Build/lint/test commands must be run **from the relevant module's directory** — `go build ./...` at the repo root only sees the root module.
@@ -100,8 +98,7 @@ The data flow, from chain to user:
 6. **`txhelpers`** is the central place for tx/block parsing and reward math (`RewardsAtBlock`, `BlockSSFeeTotals`, `AvgSSFeeRate`). Reward calc is non-obvious — see [REWARDS_LOGIC.md](REWARDS_LOGIC.md) for the multi-coin (VAR + SKA{n}) model before changing anything in this area.
 7. **`pubsub`** is the websocket pub/sub server — same data, push-style. Note: parts of the home-page reward calc are duplicated here (`pubsub/pubsubhub.go`) and in the explorer; if you change one, check the other.
 8. **`gov/agendas`** and **`gov/politeia`** are governance DBs (consensus deployments + proposals).
-9. **`exchanges`** polls public exchange APIs; **`exchanges/rateserver`** exposes them via gRPC.
-10. **`cmd/dcrdata`** is the executable that wires everything together.
+9. **`cmd/dcrdata`** is the executable that wires everything together.
 
 Inside `cmd/dcrdata`:
 
