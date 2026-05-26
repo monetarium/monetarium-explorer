@@ -78,10 +78,6 @@ var (
 	defaultAddrCacheLimit   = 4096
 	defaultAddrCacheUXTOCap = 1 << 29
 
-	defaultExchangeIndex     = "USD"
-	defaultDisabledExchanges = ""
-	defaultRateCertFile      = filepath.Join(defaultHomeDir, "rpc.cert")
-
 	defaultMainnetLink  = "https://monetarium.online/"
 	defaultTestnetLink  = "https://testnet.monetarium.online/"
 	defaultOnionAddress = ""
@@ -159,13 +155,6 @@ type config struct {
 	DisableDaemonTLS bool   `long:"nodaemontls" description:"Disable TLS for the daemon RPC client -- NOTE: This is only allowed if the RPC client is connecting to localhost" env:"DCRDATA_DCRD_DISABLE_TLS"`
 	NoBlockPrefetch  bool   `long:"no-dcrd-block-prefetch" description:"Disable block pre-fetch from dcrd during startup sync." env:"DCRDATA_NO_BLOCK_PREFETCH"`
 
-	// ExchangeBot settings
-	EnableExchangeBot bool   `long:"exchange-monitor" description:"Enable the exchange monitor" env:"DCRDATA_MONITOR_EXCHANGES"`
-	DisabledExchanges string `long:"disable-exchange" description:"Exchanges to disable. See /exchanges/exchanges.go for available exchanges. Use a comma to separate multiple exchanges" env:"DCRDATA_DISABLE_EXCHANGES"`
-	ExchangeCurrency  string `long:"exchange-currency" description:"The default price index. A 3-letter currency code." env:"DCRDATA_EXCHANGE_INDEX"`
-	RateMaster        string `long:"ratemaster" description:"The address of a DCRRates instance. Exchange monitoring will get all data from a DCRRates subscription." env:"DCRDATA_RATE_MASTER"`
-	RateCertificate   string `long:"ratecert" description:"File containing DCRRates TLS certificate file." env:"DCRDATA_RATE_MASTER"`
-
 	// Links
 	MainnetLink  string `long:"mainnet-link" description:"When monetarium-explorer is on testnet, this address will be used to direct a user to a monetarium-explorer on mainnet when appropriate." env:"MONETARIUM_MAINNET_LINK"`
 	TestnetLink  string `long:"testnet-link" description:"When monetarium-explorer is on mainnet, this address will be used to direct a user to a monetarium-explorer on testnet when appropriate." env:"MONETARIUM_TESTNET_LINK"`
@@ -203,9 +192,6 @@ var (
 		AddrCacheCap:        defaultAddrCacheCap,
 		AddrCacheLimit:      defaultAddrCacheLimit,
 		AddrCacheUXTOCap:    defaultAddrCacheUXTOCap,
-		ExchangeCurrency:    defaultExchangeIndex,
-		DisabledExchanges:   defaultDisabledExchanges,
-		RateCertificate:     defaultRateCertFile,
 		MainnetLink:         defaultMainnetLink,
 		TestnetLink:         defaultTestnetLink,
 		OnionAddress:        defaultOnionAddress,
@@ -669,7 +655,6 @@ func loadConfig() (*config, error) {
 	cfg.DcrdCert = cleanAndExpandPath(cfg.DcrdCert)
 	cfg.AgendasDBFileName = cleanAndExpandPath(cfg.AgendasDBFileName)
 	cfg.ProposalsFileName = cleanAndExpandPath(cfg.ProposalsFileName)
-	cfg.RateCertificate = cleanAndExpandPath(cfg.RateCertificate)
 	cfg.ChartsCacheDump = cleanAndExpandPath(cfg.ChartsCacheDump)
 
 	// Clean up the provided mainnet and testnet links, ensuring there is a single

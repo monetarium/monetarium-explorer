@@ -27,7 +27,6 @@ import (
 	m "github.com/monetarium/monetarium-explorer/cmd/dcrdata/internal/middleware"
 	"github.com/monetarium/monetarium-explorer/db/cache"
 	"github.com/monetarium/monetarium-explorer/db/dbtypes"
-	"github.com/monetarium/monetarium-explorer/exchanges"
 	"github.com/monetarium/monetarium-explorer/gov/agendas"
 	"github.com/monetarium/monetarium-explorer/gov/politeia"
 	"github.com/monetarium/monetarium-explorer/txhelpers"
@@ -121,7 +120,6 @@ type appContext struct {
 	Params      *chaincfg.Params
 	DataSource  DataSource
 	Status      *apitypes.Status
-	xcBot       *exchanges.ExchangeBot
 	AgendaDB    *agendas.AgendaDB
 	ProposalsDB *politeia.ProposalsDB
 	maxCSVAddrs int
@@ -134,7 +132,6 @@ type AppContextConfig struct {
 	Client            *rpcclient.Client
 	Params            *chaincfg.Params
 	DataSource        DataSource
-	XcBot             *exchanges.ExchangeBot
 	AgendasDBInstance *agendas.AgendaDB
 	ProposalsDB       *politeia.ProposalsDB
 	MaxAddrs          int
@@ -158,7 +155,6 @@ func NewContext(cfg *AppContextConfig) *appContext {
 		nodeClient:  cfg.Client,
 		Params:      cfg.Params,
 		DataSource:  cfg.DataSource,
-		xcBot:       cfg.XcBot,
 		AgendaDB:    cfg.AgendasDBInstance,
 		ProposalsDB: cfg.ProposalsDB,
 		Status:      apitypes.NewStatus(uint32(nodeHeight), conns, APIVersion, cfg.AppVer, cfg.Params.Name),
@@ -1997,51 +1993,6 @@ func (c *appContext) ChartTypeData(w http.ResponseWriter, r *http.Request) {
 	writeJSONBytes(w, chartData)
 }
 
-// route: /market/{token}/candlestick/{bin}
-func (c *appContext) getCandlestickChart(w http.ResponseWriter, r *http.Request) {
-	if c.xcBot == nil {
-		http.Error(w, http.StatusText(http.StatusServiceUnavailable), http.StatusServiceUnavailable)
-		return
-	}
-	token := m.RetrieveExchangeTokenCtx(r)
-	bin := m.RetrieveStickWidthCtx(r)
-	currencyPair, err := c.retrieveCurrencyPair(r)
-	if token == "" || bin == "" || err != nil {
-		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
-		return
-	}
-
-	chart, err := c.xcBot.QuickSticks(token, currencyPair, bin)
-	if err != nil {
-		apiLog.Infof("QuickSticks error: %v", err)
-		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
-		return
-	}
-	writeJSONBytes(w, chart)
-}
-
-// route: /market/{token}/depth
-func (c *appContext) getDepthChart(w http.ResponseWriter, r *http.Request) {
-	if c.xcBot == nil {
-		http.Error(w, http.StatusText(http.StatusServiceUnavailable), http.StatusServiceUnavailable)
-		return
-	}
-	token := m.RetrieveExchangeTokenCtx(r)
-	currencyPair, err := c.retrieveCurrencyPair(r)
-	if token == "" || err != nil {
-		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
-		return
-	}
-
-	chart, err := c.xcBot.QuickDepth(token, currencyPair)
-	if err != nil {
-		apiLog.Infof("QuickDepth error: %v", err)
-		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
-		return
-	}
-	writeJSONBytes(w, chart)
-}
-
 func (c *appContext) getAddressTransactions(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -2148,73 +2099,6 @@ func (c *appContext) getAgendaData(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, data, "")
 }
 
-func (c *appContext) getExchanges(w http.ResponseWriter, r *http.Request) {
-	if c.xcBot == nil {
-		http.Error(w, "Exchange monitoring disabled.", http.StatusServiceUnavailable)
-		return
-	}
-	// Don't provide any info if the bot is in the failed state.
-	if c.xcBot.IsFailed() {
-		http.Error(w, "No exchange data available", http.StatusNotFound)
-		return
-	}
-
-	code := r.URL.Query().Get("code")
-	var state *exchanges.ExchangeBotState
-	if code != "" && code != c.xcBot.Index {
-		var err error
-		state, err = c.xcBot.ConvertedState(code)
-		if err != nil {
-			http.Error(w, fmt.Sprintf("No exchange data for code %q", html.EscapeString(code)), http.StatusNotFound)
-			return
-		}
-	} else {
-		state = c.xcBot.State()
-	}
-	writeJSON(w, state, m.GetIndentCtx(r))
-}
-
-func (c *appContext) getExchangeRates(w http.ResponseWriter, r *http.Request) {
-	if c.xcBot == nil {
-		http.Error(w, "Exchange rate monitoring disabled.", http.StatusServiceUnavailable)
-		return
-	}
-	// Don't provide any info if the bot is in the failed state.
-	if c.xcBot.IsFailed() {
-		http.Error(w, "No exchange rate data available", http.StatusNotFound)
-		return
-	}
-
-	code := r.URL.Query().Get("code")
-	var rates *exchanges.ExchangeRates
-	if code != "" && code != c.xcBot.Index {
-		var err error
-		rates, err = c.xcBot.ConvertedRates(code)
-		if err != nil {
-			http.Error(w, fmt.Sprintf("No exchange rate data for code %q", html.EscapeString(code)), http.StatusNotFound)
-			return
-		}
-	} else {
-		rates = c.xcBot.Rates()
-	}
-
-	writeJSON(w, rates, m.GetIndentCtx(r))
-}
-
-func (c *appContext) getCurrencyCodes(w http.ResponseWriter, r *http.Request) {
-	if c.xcBot == nil {
-		http.Error(w, "Exchange monitoring disabled.", http.StatusServiceUnavailable)
-		return
-	}
-
-	codes := c.xcBot.AvailableIndices()
-	if len(codes) == 0 {
-		http.Error(w, "No codes found.", http.StatusNotFound)
-		return
-	}
-	writeJSON(w, codes, m.GetIndentCtx(r))
-}
-
 // getAgendasData returns high level agendas details that includes Name,
 // Description, Vote Version, VotingDone height, Activated, HardForked,
 // StartTime and ExpireTime.
@@ -2288,17 +2172,4 @@ func (c *appContext) getBlockHashCtx(r *http.Request) (string, error) {
 		}
 	}
 	return hash, nil
-}
-
-// retrieveCurrencyPair tries to fetch the currency pair from the request query.
-func (c *appContext) retrieveCurrencyPair(r *http.Request) (exchanges.CurrencyPair, error) {
-	pair := exchanges.CurrencyPair(r.URL.Query().Get("currencyPair"))
-	if pair == "" {
-		// Use the DCR-BTC pair for backward compatibility.
-		pair = exchanges.CurrencyPairDCRBTC
-	}
-	if !pair.IsValidDCRPair() {
-		return "", fmt.Errorf("invalid currency pair (%s)", pair)
-	}
-	return pair, nil
 }

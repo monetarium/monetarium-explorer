@@ -1,6 +1,5 @@
 {{define "voting-card"}}
     {{- $page := . -}}
-    {{- $conv := $page.Conversions -}}
     {{with $page.Info -}}
         <div class="bg-white mb-1 py-2 px-3 mx-1">
             <div class="my-3 h4">
@@ -20,11 +19,6 @@
                         </span>
                         <span class="ps-1 unit lh15rem">VAR</span>
                     </div>
-                    {{if $conv -}}
-                        <div class="fs12 lh1rem text-black-50">
-                            <span data-voting-target="convertedStake">{{$conv.StakeDiff.TwoDecimals}} {{$conv.StakeDiff.Index}}</span>
-                        </div>
-                    {{- end}}
                 </div>
 
                 {{/* Row 1 right: Ticket Pool Size */}}

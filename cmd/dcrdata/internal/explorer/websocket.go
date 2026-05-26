@@ -68,7 +68,6 @@ type WebsocketHub struct {
 	sendBufferChan   chan int
 	quitWSHandler    chan struct{}
 	dbsSyncing       atomic.Value
-	xcChan           exchangeChannel
 }
 
 // AreDBsSyncing is a thread-safe way to fetch the boolean in dbsSyncing.
@@ -89,7 +88,6 @@ type client struct {
 
 type hubMessage = pstypes.HubMessage
 type hubSpoke chan hubMessage
-type exchangeChannel chan *WebsocketExchangeUpdate
 
 // NewWebsocketHub creates a new WebsocketHub
 func NewWebsocketHub() *WebsocketHub {
@@ -102,14 +100,12 @@ func NewWebsocketHub() *WebsocketHub {
 		bufferTickerChan: make(chan int, clientSignalSize),
 		sendBufferChan:   make(chan int, clientSignalSize),
 		quitWSHandler:    make(chan struct{}),
-		xcChan:           make(exchangeChannel, 16),
 	}
 }
 
 type clientHubSpoke struct {
 	cl *client
 	c  *hubSpoke
-	xc exchangeChannel
 }
 
 // NumClients returns the number of clients connected to the websocket hub.
@@ -125,9 +121,9 @@ func (wsh *WebsocketHub) setNumClients(n int) {
 
 // RegisterClient registers a websocket connection with the hub, and returns a
 // pointer to the new client data object.
-func (wsh *WebsocketHub) RegisterClient(c *hubSpoke, xcChan exchangeChannel) *client {
+func (wsh *WebsocketHub) RegisterClient(c *hubSpoke) *client {
 	cl := new(client)
-	wsh.Register <- &clientHubSpoke{cl, c, xcChan}
+	wsh.Register <- &clientHubSpoke{cl, c}
 	return cl
 }
 
@@ -321,10 +317,6 @@ func (wsh *WebsocketHub) run() {
 				}
 			}
 
-		case update := <-wsh.xcChan:
-			for _, client := range wsh.clients {
-				client.xc <- update
-			}
 		} // select a.k.a events:
 	} // for {
 }
@@ -371,29 +363,4 @@ func (wsh *WebsocketHub) periodicBufferSend() {
 			}
 		}
 	}
-}
-
-const exchangeUpdateID = "exchange"
-
-// WebsocketMiniExchange is minimal info regarding the exchange that triggered
-// an update.
-type WebsocketMiniExchange struct {
-	Token        string  `json:"token"`
-	CurrencyPair string  `json:"pair"`
-	Price        float64 `json:"price"`
-	Volume       float64 `json:"volume"`
-	Change       float64 `json:"change"`
-}
-
-// WebsocketExchangeUpdate is an update to the exchange state to send over the
-// websocket.
-type WebsocketExchangeUpdate struct {
-	Updater     WebsocketMiniExchange `json:"updater"`
-	IsFiatIndex bool                  `json:"fiat"`
-	Index       string                `json:"index"`
-	Price       float64               `json:"price"`
-	Volume      float64               `json:"volume"`
-	// Indices is a map of supported indices to their index price, e.g
-	// BTC-Index, USDT-Index.
-	Indices map[string]float64 `json:"indices"`
 }
