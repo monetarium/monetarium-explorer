@@ -28,10 +28,8 @@ func (exp *explorerUI) RootWebsocket(w http.ResponseWriter, r *http.Request) {
 
 	// Create channel to signal updated data availability
 	updateSig := make(hubSpoke, 3)
-	// Create a channel for exchange updates
-	xcChan := make(exchangeChannel, 3)
 	// register websocket client with our signal channel
-	clientData := exp.wsHub.RegisterClient(&updateSig, xcChan)
+	clientData := exp.wsHub.RegisterClient(&updateSig)
 	// unregister (and close signal channel) before return
 	defer exp.wsHub.UnregisterClient(&updateSig)
 
@@ -357,24 +355,6 @@ loop:
 			}
 
 			err := send(webData)
-			if err != nil {
-				return
-			}
-
-		case update := <-xcChan:
-			buff := new(bytes.Buffer)
-			enc := json.NewEncoder(buff)
-			webData := WebSocketMessage{
-				EventId: exchangeUpdateID,
-				Message: "error",
-			}
-			err := enc.Encode(update)
-			if err == nil {
-				webData.Message = buff.String()
-			} else {
-				log.Errorf("json.Encode(*WebsocketExchangeUpdate) failed: %v", err)
-			}
-			err = send(webData)
 			if err != nil {
 				return
 			}

@@ -134,35 +134,3 @@
 .monicon-info::before {
   content: "\e916";
 }
-
-.exchange-logo {
-  vertical-align: middle;
-  display: inline-block;
-  width: 25px;
-  height: 25px;
-  background: url("/images/exchange-logos-25.svg") no-repeat;
-}
-
-.exchange-logo.bitcoin {
-  background-position: 0 0;
-}
-
-.exchange-logo.coinbase {
-  background-position: 0 -25px;
-}
-
-.exchange-logo.binance {
-  background-position: 0 -75px;
-}
-
-.exchange-logo.aggregated {
-  background-position: 0 -200px;
-}
-
-.exchange-logo.dcrdex {
-  background-position: 0 -225px;
-}
-
-.exchange-logo.mexc {
-  background: url("/images/mexc-logo.svg") no-repeat;
-}

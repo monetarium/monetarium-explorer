@@ -63,7 +63,6 @@ func TestStatusPageResponseCodes(t *testing.T) {
 		AppVersion:    "test",
 		DevPrefetch:   false,
 		Viewsfolder:   viewsPath,
-		XcBot:         nil,
 		Tracker:       nil,
 		AgendasSource: nil,
 		Proposals:     nil,

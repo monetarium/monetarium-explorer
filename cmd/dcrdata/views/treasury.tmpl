@@ -32,11 +32,6 @@
               <span class="fs18">0</span> <span class="text-secondary fs14">DCR</span>
             {{- end}}
             </span>
-            {{if .ConvertedBalance}}
-              <br>
-              <span class="fs15 medium-sans lh1rem">{{threeSigFigs .ConvertedBalance.Value}}</span>
-              <span class="text-secondary fs13 lh1rem">{{.ConvertedBalance.Index}}</span>
-            {{end}}
             <br>
             <span class="text-secondary fs14 lh1rem">{{template "decimalParts" (amountAsDecimalParts $bal.Immature true)}} immature</span>
           </div>

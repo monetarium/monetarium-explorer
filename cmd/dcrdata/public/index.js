@@ -58,9 +58,6 @@ async function createWebSocket(loc) {
     globalEventBus.publish('BLOCK_RECEIVED', newBlock)
   }
   ws.registerEvtHandler('newblock', updateBlockData)
-  ws.registerEvtHandler('exchange', (e) => {
-    globalEventBus.publish('EXCHANGE_UPDATE', JSON.parse(e))
-  })
 }
 
 // Debug logging can be enabled by entering logDebug(true) in the console.

@@ -41,15 +41,9 @@ Non-page endpoints (WebSockets, JSON APIs under `/api` and `/insight/api`, `/dow
 
 ---
 
-## Should be disabled
-
-Currently active in code but slated for removal — no Monetarium adjustment work needed beyond turning them off.
-
-| URL | Handler | Description |
-|---|---|---|
-| `/market` | `MarketPage` | Exchange / market data aggregated from the `exchanges` package. Monetarium coins (VAR, SKA{n}) are not listed on any exchange, so the page can only render empty/legacy Decred data. To disable: return HTTP 410 from `main.go` (alongside `/treasury` etc.), drop the nav link, and remove the `exchanges` polling wiring. |
-
 ---
+
+
 
 ## Disabled (return HTTP 410 Gone)
 
@@ -63,6 +57,7 @@ Wired but intentionally off in this fork. No Monetarium adjustment required unle
 | `/agenda/{agendaid}` | 410 — same | Single-agenda details (timeline, threshold, vote counts). |
 | `/proposals` | 410 — "proposals not available" | Politeia governance proposals list; not used in Monetarium. |
 | `/proposal/{proposaltoken}` | 410 — same | Single Politeia proposal details. |
+| `/market` | 410 — "market not available" | Exchange / market data; no Monetarium asset is traded on any exchange. |
 
 ---
 

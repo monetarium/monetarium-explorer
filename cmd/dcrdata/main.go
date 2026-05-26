@@ -25,7 +25,6 @@ import (
 	"github.com/monetarium/monetarium-node/rpcclient"
 
 	"github.com/monetarium/monetarium-explorer/db/dcrpg"
-	"github.com/monetarium/monetarium-explorer/exchanges"
 	"github.com/monetarium/monetarium-explorer/gov/agendas"
 	politeia "github.com/monetarium/monetarium-explorer/gov/politeia"
 
@@ -409,36 +408,6 @@ func _main(ctx context.Context) error {
 	// WaitGroup for monitoring goroutines
 	var wg sync.WaitGroup
 
-	// ExchangeBot
-	var xcBot *exchanges.ExchangeBot
-	if cfg.EnableExchangeBot && activeChain.Name != "mainnet" {
-		log.Warnf("disabling exchange monitoring. only available on mainnet")
-		cfg.EnableExchangeBot = false
-	}
-	if cfg.EnableExchangeBot {
-		botCfg := exchanges.ExchangeBotConfig{
-			Index:          cfg.ExchangeCurrency,
-			MasterBot:      cfg.RateMaster,
-			MasterCertFile: cfg.RateCertificate,
-		}
-		if cfg.DisabledExchanges != "" {
-			botCfg.Disabled = strings.Split(cfg.DisabledExchanges, ",")
-		}
-		xcBot, err = exchanges.NewExchangeBot(&botCfg)
-		if err != nil {
-			log.Errorf("Could not create exchange monitor. Exchange info will be disabled: %v", err)
-		} else {
-			var xcList, prepend string
-			for k := range xcBot.Exchanges {
-				xcList += prepend + k
-				prepend = ", "
-			}
-			log.Infof("ExchangeBot monitoring %s", xcList)
-			wg.Add(1)
-			go xcBot.Start(ctx, &wg)
-		}
-	}
-
 	// Creates a new or loads an existing agendas db instance that helps to
 	// store and retrieves agendas data. Agendas votes are On-Chain
 	// transactions that appear in the decred blockchain. If corrupted data is
@@ -479,7 +448,6 @@ func _main(ctx context.Context) error {
 		DevPrefetch:       !cfg.NoDevPrefetch,
 		Viewsfolder:       "views",
 		AssetManifestPath: "public/dist/manifest.json",
-		XcBot:             xcBot,
 		AgendasSource:     agendaDB,
 		Tracker:           tracker,
 		Proposals:         proposalsDB,
@@ -637,7 +605,6 @@ func _main(ctx context.Context) error {
 		Client:            dcrdClient,
 		Params:            activeChain,
 		DataSource:        chainDB,
-		XcBot:             xcBot,
 		AgendasDBInstance: agendaDB,
 		ProposalsDB:       proposalsDB,
 		MaxAddrs:          cfg.MaxCSVAddrs,
@@ -783,7 +750,9 @@ func _main(ctx context.Context) error {
 		r.Get("/decodetx", explore.DecodeTxPage)
 		r.Get("/search", explore.Search)
 		r.Get("/ticketpool", explore.Ticketpool)
-		r.Get("/market", explore.MarketPage)
+		r.Get("/market", func(w http.ResponseWriter, r *http.Request) {
+			http.Error(w, "market not available", http.StatusGone)
+		})
 		r.Get("/stats", func(w http.ResponseWriter, r *http.Request) {
 			http.Redirect(w, r, "/", http.StatusPermanentRedirect)
 		})
