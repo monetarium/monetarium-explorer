@@ -66,7 +66,7 @@ func Test_processTransactions_TicketClassification(t *testing.T) {
 		if len(txs) < 1 {
 			t.Fatalf("expected 1 tx, got %d", len(txs))
 		}
-		if txs[0].TxType != int16(TxTypeTicketPurchase) {
+		if txs[0].TxType != TxTypeTicketPurchase {
 			t.Errorf("TxType: want %d (TicketPurchase), got %d", TxTypeTicketPurchase, txs[0].TxType)
 		}
 	})
@@ -84,7 +84,7 @@ func Test_processTransactions_TicketClassification(t *testing.T) {
 		if len(txs) < 1 {
 			t.Fatalf("expected 1 tx, got %d", len(txs))
 		}
-		if txs[0].TxType != int16(TxTypeTicketPurchase) {
+		if txs[0].TxType != TxTypeTicketPurchase {
 			t.Errorf("TxType: want %d (TicketPurchase), got %d", TxTypeTicketPurchase, txs[0].TxType)
 		}
 	})
@@ -137,10 +137,10 @@ func Test_processTransactions_SSFeeMarkerSplit(t *testing.T) {
 	if len(txs) < 2 {
 		t.Fatalf("expected 2 txs, got %d", len(txs))
 	}
-	if txs[0].TxType != int16(TxTypeSSFeePoS) {
+	if txs[0].TxType != TxTypeSSFeePoS {
 		t.Errorf("SF tx TxType: want %d (SSFeePoS), got %d", TxTypeSSFeePoS, txs[0].TxType)
 	}
-	if txs[1].TxType != int16(TxTypeSSFeePoW) {
+	if txs[1].TxType != TxTypeSSFeePoW {
 		t.Errorf("MF tx TxType: want %d (SSFeePoW), got %d", TxTypeSSFeePoW, txs[1].TxType)
 	}
 }
@@ -273,9 +273,9 @@ func Test_processTransactions_VinCoinType(t *testing.T) {
 // opP2PKH builds a standard P2PKH script (25 bytes).
 func opP2PKH() []byte {
 	script := make([]byte, 25)
-	script[0] = 0x76 // OP_DUP
-	script[1] = 0xa9 // OP_HASH160
-	script[2] = 0x14 // OP_DATA_20
+	script[0] = 0x76  // OP_DUP
+	script[1] = 0xa9  // OP_HASH160
+	script[2] = 0x14  // OP_DATA_20
 	script[23] = 0x88 // OP_EQUALVERIFY
 	script[24] = 0xac // OP_CHECKSIG
 	return script
@@ -284,10 +284,10 @@ func opP2PKH() []byte {
 // opSSTXP2PKH builds an OP_SSTX-tagged P2PKH script (26 bytes).
 func opSSTXP2PKH() []byte {
 	script := make([]byte, 26)
-	script[0] = 0xba // OP_SSTX
-	script[1] = 0x76 // OP_DUP
-	script[2] = 0xa9 // OP_HASH160
-	script[3] = 0x14 // OP_DATA_20
+	script[0] = 0xba  // OP_SSTX
+	script[1] = 0x76  // OP_DUP
+	script[2] = 0xa9  // OP_HASH160
+	script[3] = 0x14  // OP_DATA_20
 	script[24] = 0x88 // OP_EQUALVERIFY
 	script[25] = 0xac // OP_CHECKSIG
 	return script
@@ -307,10 +307,10 @@ func validSStx() *wire.MsgTx {
 	tx.AddTxOut(wire.NewTxOut(0, commitment))
 
 	changeScript := make([]byte, 26)
-	changeScript[0] = 0xbd // OP_SSTXCHANGE
-	changeScript[1] = 0x76 // OP_DUP
-	changeScript[2] = 0xa9 // OP_HASH160
-	changeScript[3] = 0x14 // OP_DATA_20
+	changeScript[0] = 0xbd  // OP_SSTXCHANGE
+	changeScript[1] = 0x76  // OP_DUP
+	changeScript[2] = 0xa9  // OP_HASH160
+	changeScript[3] = 0x14  // OP_DATA_20
 	changeScript[24] = 0x88 // OP_EQUALVERIFY
 	changeScript[25] = 0xac // OP_CHECKSIG
 	tx.AddTxOut(wire.NewTxOut(20000000, changeScript))
