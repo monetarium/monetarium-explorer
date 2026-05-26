@@ -2486,14 +2486,6 @@ func (pgb *ChainDB) AddressHistory(ctx context.Context, address string, N, offse
 				Coins:   make(map[uint8]*dbtypes.CoinBalance),
 			}
 		}
-		if balance != nil && balance.Coins != nil {
-			if varBal, ok := balance.Coins[0]; ok {
-				balance.TotalSpent = varBal.TotalSpent
-				balance.TotalUnspent = varBal.TotalUnspent
-				balance.NumSpent = varBal.NumSpent
-				balance.NumUnspent = varBal.NumUnspent
-			}
-		}
 		return pagedRows, balance, nil
 	}
 
@@ -2553,7 +2545,7 @@ func (pgb *ChainDB) AddressHistory(ctx context.Context, address string, N, offse
 				Address: address,
 			}
 		} else {
-			addrInfo, fromStake, toStake := dbtypes.ReduceAddressHistory(addressRows)
+			addrInfo, _, _ := dbtypes.ReduceAddressHistory(addressRows)
 			if addrInfo == nil {
 				return addressRows, nil,
 					fmt.Errorf("ReduceAddressHistory failed. len(addressRows) = %d",
@@ -2564,8 +2556,6 @@ func (pgb *ChainDB) AddressHistory(ctx context.Context, address string, N, offse
 			// It already has correct Coins map (VAR + all SKA types).
 			balance = addrInfo.Balance
 			balance.Address = address
-			balance.FromStake = fromStake
-			balance.ToStake = toStake
 		}
 		// Update balance cache.
 		blockID := cache.NewBlockID(hash, height)
@@ -2579,16 +2569,6 @@ func (pgb *ChainDB) AddressHistory(ctx context.Context, address string, N, offse
 			balance = &dbtypes.AddressBalance{
 				Address: address,
 				Coins:   make(map[uint8]*dbtypes.CoinBalance),
-			}
-		}
-		// TODO: Remove flat VAR fields sync once frontend is updated for multi-coin support.
-		// Sync flat fields from Coins[0] for backward compatibility.
-		if balance != nil && balance.Coins != nil {
-			if varBal, ok := balance.Coins[0]; ok {
-				balance.TotalSpent = varBal.TotalSpent
-				balance.TotalUnspent = varBal.TotalUnspent
-				balance.NumSpent = varBal.NumSpent
-				balance.NumUnspent = varBal.NumUnspent
 			}
 		}
 	}
@@ -2682,15 +2662,6 @@ func (pgb *ChainDB) AddressData(ctx context.Context, address string, limitN, off
 			addrData.Balance = &dbtypes.AddressBalance{Address: address, Coins: make(map[uint8]*dbtypes.CoinBalance)}
 		} else if addrData.Balance.Coins == nil {
 			addrData.Balance.Coins = make(map[uint8]*dbtypes.CoinBalance)
-		}
-
-		// TODO: Remove flat VAR field sync once frontend uses Coins map directly.
-		// Sync flat fields from Coins[0] to keep template backward compatible.
-		if varBal, ok := addrData.Balance.Coins[0]; ok {
-			addrData.Balance.TotalSpent = varBal.TotalSpent
-			addrData.Balance.TotalUnspent = varBal.TotalUnspent
-			addrData.Balance.NumSpent = varBal.NumSpent
-			addrData.Balance.NumUnspent = varBal.NumUnspent
 		}
 
 		// Compute KnownTxns from the selected coin or all coins.

@@ -93,16 +93,32 @@ func TestTreasuryTableRemoved(t *testing.T) {
 	}
 }
 
-// countSelectColumns counts the columns in the SELECT list (between SELECT and FROM).
+// countSelectColumns counts the top-level columns in the outer SELECT list.
+// Uses LastIndex to find the outer query's SELECT/FROM pair, skipping any CTE's inner SELECT/FROM.
+// Handles commas inside parentheses (e.g. COALESCE, CASE) by only counting commas at depth 0.
 func countSelectColumns(sql string) int {
 	upper := strings.ToUpper(sql)
-	start := strings.Index(upper, "SELECT") + len("SELECT")
-	end := strings.Index(upper, "FROM")
+	start := strings.LastIndex(upper, "SELECT") + len("SELECT")
+	end := strings.LastIndex(upper, "FROM")
 	if start < 0 || end < 0 || end <= start {
 		return 0
 	}
 	cols := strings.TrimSpace(sql[start:end])
-	return len(strings.Split(cols, ","))
+	var count int
+	depth := 0
+	for _, ch := range cols {
+		switch ch {
+		case '(':
+			depth++
+		case ')':
+			depth--
+		case ',':
+			if depth == 0 {
+				count++
+			}
+		}
+	}
+	return count + 1 // N commas = N+1 columns
 }
 
 func TestSelectColumnCounts(t *testing.T) {
@@ -115,7 +131,7 @@ func TestSelectColumnCounts(t *testing.T) {
 		{"SelectVoutAddressesByTxOut", SelectVoutAddressesByTxOut, 6},                         // id,script_addresses,value,mixed,coin_type,ska_value
 		{"SelectFullTxByHash", SelectFullTxByHash, 24},                                        // id + 23 columns
 		{"addrsColumnNames", "SELECT " + addrsColumnNames + " FROM x", 13},                    // id,address,...,coin_type,ska_value
-		{"SelectAddressSpentUnspentCountAndValue", SelectAddressSpentUnspentCountAndValue, 9}, // id,address,is_regular,coin_type,count,sum,ska_total,is_funding,all_empty_matching
+		{"SelectAddressSpentUnspentCountAndValue", SelectAddressSpentUnspentCountAndValue, 8}, // tx_type,coin_type,count,sum,ska_total,is_funding,all_empty_matching,is_change
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

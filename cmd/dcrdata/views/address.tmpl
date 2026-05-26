@@ -126,16 +126,33 @@
                   {{- end}}
                 {{- end}}
               {{- end}}
-              {{- if and $varCB $balance.HasStakeOutputs}}
-                <div class="col-12 pb-2 fs14 text-secondary text-start">
-                    <span class="fw-bold">Stake spending</span>: {{printf "%.1f" (x100 $balance.FromStake)}}%
-                </div>
-              {{- end}}
-              {{- if and $varCB $balance.HasStakeInputs}}
-                <div class="col-12 pb-2 fs14 text-secondary text-start">
-                    <span class="fw-bold">Stake income</span>: {{printf "%.1f" (x100 $balance.ToStake)}}%
-                </div>
-              {{- end}}
+            {{- if .Balance.HasStakeOutputs}}
+              <div class="col-12 pb-2 fs14 text-secondary text-start">
+                <span class="fw-bold">Stake income</span>:
+                {{- range $ct := .ActiveCoins}}
+                  {{- $cb := index $balance.Coins $ct}}
+                  {{- if $cb}}
+                    {{- if gt $cb.FromStake 0.0}}
+                      {{printf "%.1f" (x100 $cb.FromStake)}}% {{coinSymbol $ct}}<br>
+                    {{- end}}
+                  {{- end}}
+                {{- end}}
+              </div>
+            {{- end}}
+            {{- if .Balance.HasStakeInputs}}
+              <div class="col-12 pb-2 fs14 text-secondary text-start">
+                <span class="fw-bold">Stake spending</span>:
+                {{- range $ct := .ActiveCoins}}
+                  {{- $cb := index $balance.Coins $ct}}
+                  {{- if $cb}}
+                    {{- if gt $cb.ToStake 0.0}}
+                      {{printf "%.1f" (x100 $cb.ToStake)}}% {{coinSymbol $ct}}<br>
+                    {{- end}}
+                  {{- end}}
+                {{- end}}
+              </div>
+            {{- end}}
+
           </div>
           {{/* <div class="row pb-3 fs16">
             <span class="col-24"><a href="{{$.Links.DownloadLink}}" title="Decred downloads" target="_blank" rel="noopener noreferrer">Get Decrediton</a>, the official desktop wallet.</span>
