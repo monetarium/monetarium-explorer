@@ -177,6 +177,7 @@ func TestVisualBlocksDataContract(t *testing.T) {
 		blockCopy.ActiveSKACount = trimmed.ActiveSKACount
 		blockCopy.MaxBlockSize = trimmed.MaxBlockSize
 		blockCopy.RegularCoinCounts = trimmed.RegularCoinCounts
+		blockCopy.TotalFillRatio = trimmed.TotalFillRatio
 
 		wsData, err := json.Marshal(types.WebsocketBlock{Block: &blockCopy})
 		if err != nil {
