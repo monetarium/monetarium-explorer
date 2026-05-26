@@ -59,7 +59,7 @@ jobs:
 
           claude_args: |
             --model claude-opus-4-7
-            --max-turns 20
-            --allowedTools "Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr review:*),Bash(gh api:*),Read,Grep,Glob"
+            --max-turns 40
+            --allowedTools "Bash(gh:*),Bash(git log:*),Bash(git diff:*),Bash(git show:*),Read,Grep,Glob,LS"
         env:
           GH_TOKEN: ${{ github.token }}
