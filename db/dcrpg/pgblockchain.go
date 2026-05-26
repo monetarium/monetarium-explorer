@@ -2473,8 +2473,6 @@ func (pgb *ChainDB) AddressHistory(ctx context.Context, address string, N, offse
 				Coins:   make(map[uint8]*dbtypes.CoinBalance),
 			}
 		}
-		if balance != nil && balance.Coins != nil {
-		}
 		return pagedRows, balance, nil
 	}
 

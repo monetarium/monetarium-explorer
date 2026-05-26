@@ -241,7 +241,7 @@ const (
 			a.coin_type,
 			COUNT(*),
 			COALESCE(SUM(a.value), 0),
-			COALESCE(SUM(NULLIF(CASE WHEN a.is_funding THEN a.ska_value ELSE COALESCE(a.ska_value, v.ska_value) END, '')::numeric), 0)::text AS ska_total,
+			COALESCE(SUM(NULLIF(CASE WHEN a.is_funding THEN a.ska_value ELSE COALESCE(NULLIF(a.ska_value, ''), v.ska_value) END, '')::numeric), 0)::text AS ska_total,
 			a.is_funding,
 			(a.matching_tx_hash IS NULL) AS all_empty_matching,
 			(s.tx_hash IS NOT NULL) AS is_change

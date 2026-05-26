@@ -50,6 +50,7 @@ type CoinStat struct {
 const CoinTypeAll = uint8(255)
 
 // Reward types to distinguish PoS (Staker) from PoW (Miner) income.
+// Values ≥100 are dbtypes-only extensions to stake.TxType.
 const (
 	TxTypeBlockRewardPoS int16 = 101
 	TxTypeBlockRewardPoW int16 = 102

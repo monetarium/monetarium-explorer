@@ -1550,9 +1550,9 @@ func retrieveAddressBalance(ctx context.Context, db *sql.DB, address string) (ba
 				receivedVAR += totalValue
 				if txType != dbtypes.TxTypeBlockRewardPoW && !isChange {
 					receivedExclIssuanceVAR += totalValue
-				}
-				if txType == dbtypes.TxTypeBlockRewardPoS || txType == dbtypes.TxTypeSSFeePoS {
-					fromStakeVAR += totalValue
+					if txType == dbtypes.TxTypeBlockRewardPoS || txType == dbtypes.TxTypeSSFeePoS {
+						fromStakeVAR += totalValue
+					}
 				}
 			} else {
 				if skaReceived[coinType] == nil {
@@ -1564,19 +1564,18 @@ func retrieveAddressBalance(ctx context.Context, db *sql.DB, address string) (ba
 						skaReceivedExclIssuance[coinType] = new(big.Int)
 					}
 					bigAddSKA(skaReceivedExclIssuance[coinType], skaTotal)
-				}
-				if txType == dbtypes.TxTypeBlockRewardPoS || txType == dbtypes.TxTypeSSFeePoS {
-					if skaFromStake[coinType] == nil {
-						skaFromStake[coinType] = new(big.Int)
+					if txType == dbtypes.TxTypeBlockRewardPoS || txType == dbtypes.TxTypeSSFeePoS {
+						if skaFromStake[coinType] == nil {
+							skaFromStake[coinType] = new(big.Int)
+						}
+						bigAddSKA(skaFromStake[coinType], skaTotal)
 					}
-					bigAddSKA(skaFromStake[coinType], skaTotal)
 				}
 			}
 		}
 		// Spent == spending (but ensure a matching transaction is set)
 		if !isFunding {
 			if noMatchingTx {
-				fmt.Printf("DEBUG: Skipping spent row: matching_tx_hash is NULL for address %s\n", address)
 				log.Errorf("Found spending transactions with matching_tx_hash"+
 					" unset for %s!", address)
 				continue
@@ -1584,7 +1583,7 @@ func retrieveAddressBalance(ctx context.Context, db *sql.DB, address string) (ba
 			coinBalance.NumSpent += count
 			if coinType == 0 {
 				coinBalance.TotalSpent += totalValue
-				if txType == dbtypes.TxTypeTicketPurchase || txType == dbtypes.TxTypeSSFeePoS || txType == 2 || txType == 3 {
+				if txType == dbtypes.TxTypeTicketPurchase || txType == dbtypes.TxTypeSSFeePoS || txType == int16(stake.TxTypeSSGen) || txType == int16(stake.TxTypeSSRtx) {
 					toStakeVAR += totalValue
 				}
 			} else {
@@ -1604,6 +1603,7 @@ func retrieveAddressBalance(ctx context.Context, db *sql.DB, address string) (ba
 		if coinType > 0 {
 			unspent := skaUnspent[coinType]
 			received := skaReceived[coinType]
+			spent := skaSpent[coinType]
 
 			if unspent != nil {
 				cb.TotalUnspentSKA = unspent.String()
@@ -1611,18 +1611,21 @@ func retrieveAddressBalance(ctx context.Context, db *sql.DB, address string) (ba
 
 			if received != nil {
 				cb.TotalReceivedSKA = received.String()
+			}
 
-				// Calculate spent as Received - Unspent to ensure consistency.
-				// This handles cases where spending records in the DB lack value.
+			if spent != nil && spent.Sign() > 0 {
+				cb.TotalSpentSKA = spent.String()
+			} else if received != nil {
+				// Fallback: compute spent as Received - Unspent for safety.
 				unspentVal := unspent
 				if unspentVal == nil {
 					unspentVal = big.NewInt(0)
 				}
-				spent := new(big.Int).Sub(received, unspentVal)
-				if spent.Sign() < 0 {
-					spent = big.NewInt(0)
+				spentCalc := new(big.Int).Sub(received, unspentVal)
+				if spentCalc.Sign() < 0 {
+					spentCalc = big.NewInt(0)
 				}
-				cb.TotalSpentSKA = spent.String()
+				cb.TotalSpentSKA = spentCalc.String()
 			}
 		} else {
 			// VAR

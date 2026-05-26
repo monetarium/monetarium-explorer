@@ -21,18 +21,17 @@ func TestRetrieveAddressBalance_ExcludeBurn(t *testing.T) {
 	}
 	defer tx.Rollback()
 
-	// 1. Issuance: 1000 coins (VAR)
+	// 1. Issuance: 1000 coins (VAR) — coinbase vout index 0 => TxTypeBlockRewardPoW
 	txHashIss := []byte(fmt.Sprintf("txhashIss%d", time.Now().UnixNano()))
 	var voutIDIss uint64
 	err = tx.QueryRow(`INSERT INTO vouts (tx_hash, tx_index, tx_tree, value, coin_type, script_type) VALUES ($1, 0, 0, $2, 0, 'pkh') RETURNING id`, txHashIss, 1000).Scan(&voutIDIss)
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = tx.Exec(`INSERT INTO addresses (address, tx_hash, value, coin_type, is_funding, tx_vin_vout_row_id, valid_mainchain, block_time, tx_type) VALUES ($1, $2, $3, 0, true, $4, true, now(), 0)`, address, txHashIss, 1000, voutIDIss)
+	_, err = tx.Exec(`INSERT INTO addresses (address, tx_hash, value, coin_type, is_funding, tx_vin_vout_row_id, valid_mainchain, block_time, tx_type) VALUES ($1, $2, $3, 0, true, $4, true, now(), $5)`, address, txHashIss, 1000, voutIDIss, dbtypes.TxTypeBlockRewardPoW)
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Mark as coinbase (prev_tx_hash = 0)
 	_, err = tx.Exec(`INSERT INTO vins (tx_hash, tx_index, tx_tree, prev_tx_hash, prev_tx_index, prev_tx_tree, value_in, coin_type, tx_type) VALUES ($1, 0, 0, $2, 4294967295, 0, 0, 0, 0)`, txHashIss, make([]byte, 32))
 	if err != nil {
 		t.Fatal(err)
@@ -49,7 +48,6 @@ func TestRetrieveAddressBalance_ExcludeBurn(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Regular transfer has a prev_tx_hash
 	_, err = tx.Exec(`INSERT INTO vins (tx_hash, tx_index, tx_tree, prev_tx_hash, prev_tx_index, prev_tx_tree, value_in, coin_type, tx_type) VALUES ($1, 0, 0, $2, 0, 0, 100, 0, 0)`, txHash1, []byte("notzero"))
 	if err != nil {
 		t.Fatal(err)
@@ -87,9 +85,14 @@ func TestRetrieveAddressBalance_ExcludeBurn(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// 5. Regular Spending: 30 coins (VAR)
+	// 5. Regular Spending: 100 coins (VAR) — uses the 100-VAR UTXO from txHash1
 	txHash3 := []byte(fmt.Sprintf("txhash3%d", time.Now().UnixNano()))
-	_, err = tx.Exec(`INSERT INTO addresses (address, tx_hash, value, coin_type, is_funding, matching_tx_hash, tx_vin_vout_row_id, valid_mainchain, block_time, tx_type) VALUES ($1, $2, $3, 0, false, $4, $5, true, now(), 0)`, address, txHash3, 30, txHash1, voutID1)
+	_, err = tx.Exec(`INSERT INTO addresses (address, tx_hash, value, coin_type, is_funding, matching_tx_hash, tx_vin_vout_row_id, valid_mainchain, block_time, tx_type) VALUES ($1, $2, $3, 0, false, $4, $5, true, now(), 0)`, address, txHash3, 100, txHash1, voutID1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Link the funding row back to the spending tx (as extraction.go does).
+	_, err = tx.Exec(`UPDATE addresses SET matching_tx_hash = $1 WHERE address = $2 AND tx_hash = $3 AND is_funding = true`, txHash3, address, txHash1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -121,7 +124,7 @@ func TestRetrieveAddressBalance_ExcludeBurn(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// 7. SKA Spending: 400 coins (SKA1)
+	// 7. SKA Spending (ska_value = '' on the address row, forcing SQL to fall through to v.ska_value)
 	txHashS2_S := []byte(fmt.Sprintf("txhashS2_S%d", time.Now().UnixNano()))
 	_, err = tx.Exec(`INSERT INTO addresses (address, tx_hash, value, coin_type, is_funding, matching_tx_hash, tx_vin_vout_row_id, valid_mainchain, block_time, tx_type, ska_value) VALUES ($1, $2, 0, 1, false, $3, $4, true, now(), 0, '')`, address, txHashS2_S, txHashS1_S, voutIDS1_S)
 	if err != nil {
@@ -161,34 +164,52 @@ func TestRetrieveAddressBalance_ExcludeBurn(t *testing.T) {
 	if !ok {
 		t.Fatal("Coin 0 balance not found")
 	}
-	if cbVAR.TotalUnspent != 1190 {
-		t.Errorf("VAR Expected TotalUnspent 1190, got %d", cbVAR.TotalUnspent)
+
+	// Totals
+	//   Received: 1000(issuance) + 100(regular) + 50(PoS) + 20(PoW) + 1190(change) = 2360
+	//   Spent: 100
+	//   Unspent: 1000(issuance) + 50(PoS) + 20(PoW) + 1190(change) = 2260
+	//   Received - Spent = 2360 - 100 = 2260 = Unspent ✓
+	if cbVAR.TotalUnspent != 2260 {
+		t.Errorf("VAR Expected TotalUnspent 2260, got %d", cbVAR.TotalUnspent)
 	}
-	if cbVAR.TotalSpent != 30 {
-		t.Errorf("VAR Expected TotalSpent 30, got %d", cbVAR.TotalSpent)
+	if cbVAR.TotalSpent != 100 {
+		t.Errorf("VAR Expected TotalSpent 100, got %d", cbVAR.TotalSpent)
 	}
-	if cbVAR.TotalReceived != 2270 {
-		t.Errorf("VAR Expected TotalReceived 2270, got %d", cbVAR.TotalReceived)
+	if cbVAR.TotalReceived != 2360 {
+		t.Errorf("VAR Expected TotalReceived 2360, got %d", cbVAR.TotalReceived)
 	}
 
-	// Ratio = 50 / (100 + 50 + 20) = 50 / 170 = 29.4118%
-	// Note: 20 is PoW, so it's excluded from numerator but included in denominator
-	expectedRatio := 50.0 / 170.0
+	// FromStake = 50 (PoS) / 150 (regular + PoS; PoW and coinbase are excluded)
+	expectedRatio := 50.0 / 150.0
 	if fmt.Sprintf("%.4f", cbVAR.FromStake) != fmt.Sprintf("%.4f", expectedRatio) {
 		t.Errorf("VAR Expected FromStake %.4f, got %.4f", expectedRatio, cbVAR.FromStake)
+	}
+	if cbVAR.FromStake > 1.0 {
+		t.Errorf("VAR FromStake %.4f > 1.0", cbVAR.FromStake)
 	}
 
 	cbSKA, okSKA := bal.Coins[1]
 	if !okSKA {
 		t.Fatal("Coin 1 balance not found")
 	}
+
+	// Totals
+	//   Received: 1000(original) + 600(change) = 1600
+	//   Spent: 1000 (full input, from v.ska_value via SQL fallback)
+	//   Unspent: 600(change)
+	//   Received - Spent = 1600 - 1000 = 600 = Unspent ✓
 	if cbSKA.TotalUnspentSKA != "600" {
 		t.Errorf("SKA1 Expected TotalUnspentSKA 600, got %s", cbSKA.TotalUnspentSKA)
 	}
-	if cbSKA.TotalReceivedSKA != "1000" {
-		t.Errorf("SKA1 Expected TotalReceivedSKA 1000, got %s", cbSKA.TotalReceivedSKA)
+	if cbSKA.TotalReceivedSKA != "1600" {
+		t.Errorf("SKA1 Expected TotalReceivedSKA 1600, got %s", cbSKA.TotalReceivedSKA)
 	}
-	if cbSKA.TotalSpentSKA != "400" {
-		t.Errorf("SKA1 Expected TotalSpentSKA 400, got %s", cbSKA.TotalSpentSKA)
+	if cbSKA.TotalSpentSKA != "1000" {
+		t.Errorf("SKA1 Expected TotalSpentSKA 1000, got %s", cbSKA.TotalSpentSKA)
+	}
+	// Verify the skaSpent came from v.ska_value, not from a zero accumulator.
+	if cbSKA.TotalSpentSKA == "0" {
+		t.Error("SKA1 TotalSpentSKA is 0 — regression: spending row ska_value was lost (COALESCE/NULLIF fix missing)")
 	}
 }
