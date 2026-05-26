@@ -5,7 +5,6 @@ go 1.23
 replace (
 	github.com/monetarium/monetarium-explorer => ../../
 	github.com/monetarium/monetarium-explorer/db/dcrpg => ../../db/dcrpg/
-	github.com/monetarium/monetarium-explorer/exchanges => ../../exchanges/
 	github.com/monetarium/monetarium-explorer/gov => ../../gov/
 )
 
