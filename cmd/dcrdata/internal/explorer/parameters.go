@@ -19,7 +19,12 @@ import (
 // 18-decimal SKA atom values are converted to plain decimal strings via
 // formatAtomsAsCoinString; no *big.Int crosses the template boundary (see
 // wiki/core/constraints.md#C1).
-func buildSKACoinParams(params *chaincfg.Params) []types.SKACoinParam {
+//
+// chainHeight is the current chain tip height; emissionHeights maps coin types
+// that have been observed on chain to their first block height. Coins present
+// in emissionHeights have been emitted on chain; those with
+// chainHeight < emissionHeight + CoinbaseMaturity are marked Pending.
+func buildSKACoinParams(params *chaincfg.Params, chainHeight int64, emissionHeights map[uint8]int64) []types.SKACoinParam {
 	if len(params.SKACoins) == 0 {
 		return nil
 	}
@@ -43,6 +48,19 @@ func buildSKACoinParams(params *chaincfg.Params) []types.SKACoinParam {
 		}
 		_, initiallyActive := initial[ct]
 
+		active := c.Active
+		pending := false
+		if !initiallyActive {
+			if firstHeight, observed := emissionHeights[uint8(ct)]; observed {
+				if chainHeight >= firstHeight+int64(params.CoinbaseMaturity) {
+					active = true
+				} else {
+					active = false
+					pending = true
+				}
+			}
+		}
+
 		emissionAmounts := make([]string, len(c.EmissionAmounts))
 		for i, amt := range c.EmissionAmounts {
 			emissionAmounts[i] = formatBigIntAsSKAString(amt)
@@ -54,8 +72,9 @@ func buildSKACoinParams(params *chaincfg.Params) []types.SKACoinParam {
 			Name:              c.Name,
 			Symbol:            c.Symbol,
 			Description:       c.Description,
-			Active:            c.Active,
+			Active:            active,
 			InitiallyActive:   initiallyActive,
+			Pending:           pending,
 			MaxSupply:         formatBigIntAsSKAString(c.MaxSupply),
 			AtomsPerCoin:      formatBigIntWithCommas(c.AtomsPerCoin),
 			MinRelayTxFee:     formatBigIntAsSKAString(c.MinRelayTxFee),

@@ -95,7 +95,7 @@ func TestFormatBigIntWithCommas(t *testing.T) {
 }
 
 func TestBuildSKACoinParams_Mainnet(t *testing.T) {
-	got := buildSKACoinParams(chaincfg.MainNetParams())
+	got := buildSKACoinParams(chaincfg.MainNetParams(), 0, nil)
 	if len(got) < 1 {
 		t.Fatalf("expected >=1 SKA entries on mainnet, got %d", len(got))
 	}
@@ -153,7 +153,7 @@ func TestBuildSKACoinParams_OtherNets(t *testing.T) {
 		chaincfg.TestNet3Params(),
 		chaincfg.RegNetParams(),
 	} {
-		got := buildSKACoinParams(p)
+		got := buildSKACoinParams(p, 0, nil)
 		_ = got // existence + no panic is the contract; SKACoins may be empty.
 	}
 }

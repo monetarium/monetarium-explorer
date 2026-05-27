@@ -1665,8 +1665,9 @@ type SKACoinParam struct {
 	Name              string
 	Symbol            string
 	Description       string
-	Active            bool // SKACoinConfig.Active
+	Active            bool // SKACoinConfig.Active, overridden at runtime if chain shows activation
 	InitiallyActive   bool // present in chaincfg.Params.InitialSKATypes
+	Pending           bool // true when emitted on chain but coinbase is still maturing
 	MaxSupply         string
 	AtomsPerCoin      string
 	MinRelayTxFee     string

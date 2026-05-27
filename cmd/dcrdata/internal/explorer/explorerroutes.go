@@ -2098,6 +2098,7 @@ func (exp *explorerUI) NotFound(w http.ResponseWriter, r *http.Request) {
 // ParametersPage is the page handler for the "/parameters" path.
 func (exp *explorerUI) ParametersPage(w http.ResponseWriter, r *http.Request) {
 	params := exp.ChainParams
+	ctx := r.Context()
 	addrPrefix := types.AddressPrefixes(params)
 	actualTicketPoolSize := int64(params.TicketPoolSize * params.TicketsPerBlock)
 
@@ -2109,6 +2110,25 @@ func (exp *explorerUI) ParametersPage(w http.ResponseWriter, r *http.Request) {
 		maxBlockSize = int64(params.MaximumBlockSizes[0])
 	}
 	exp.pageData.RUnlock()
+
+	// Build an emission-heights map for non-InitiallyActive coin types that
+	// have been observed on chain. Errors are non-fatal — fall back to static
+	// config (which may show an incorrect "inactive" badge).
+	emissionHeights := make(map[uint8]int64, len(params.InitialSKATypes))
+	if supply, err := exp.dataSource.SKACoinSupply(ctx); err == nil {
+		initial := make(map[uint8]struct{}, len(params.InitialSKATypes))
+		for _, ct := range params.InitialSKATypes {
+			initial[uint8(ct)] = struct{}{}
+		}
+		for _, entry := range supply {
+			if _, ok := initial[entry.CoinType]; ok {
+				continue
+			}
+			if h, seen, err := exp.dataSource.SKACoinEmissionHeight(ctx, entry.CoinType); err == nil && seen {
+				emissionHeights[entry.CoinType] = h
+			}
+		}
+	}
 
 	type ExtendedParams struct {
 		MaximumBlockSize     int64
@@ -2126,7 +2146,7 @@ func (exp *explorerUI) ParametersPage(w http.ResponseWriter, r *http.Request) {
 			MaximumBlockSize:     maxBlockSize,
 			AddressPrefix:        addrPrefix,
 			ActualTicketPoolSize: actualTicketPoolSize,
-			SKACoins:             buildSKACoinParams(params),
+			SKACoins:             buildSKACoinParams(params, exp.Height(), emissionHeights),
 		},
 	})
 

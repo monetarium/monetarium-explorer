@@ -248,6 +248,14 @@ const (
 		AND transactions.is_mainchain AND transactions.is_valid
 		GROUP BY vouts.coin_type;`
 
+	// SelectSKACoinEmissionHeight returns the first main-chain block height
+	// where a given SKA coin type appears (coinbase or transfer). Returns NULL
+	// if the coin type has never been observed on chain.
+	SelectSKACoinEmissionHeight = `SELECT MIN(t.block_height)
+		FROM vouts v
+		JOIN transactions t ON v.tx_hash = t.tx_hash
+		WHERE v.coin_type = $1 AND t.is_mainchain AND t.is_valid;`
+
 	// SelectSKACoinSupplyPerBlock fetches the supply delta per block for a specific coin type.
 	// Returns: block_height, block_time, delta (sum of outputs - sum of inputs) as text.
 	SelectSKACoinSupplyPerBlock = `SELECT 
