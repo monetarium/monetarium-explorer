@@ -12,14 +12,14 @@ import humanize from './humanize_helper'
  * /templates.go). Both helpers must produce identical strings — they back the
  * server-rendered initial page and the WebSocket live update of the same row.
  *
- * @param {Array<{txCount: string, amount: string}>} subRows - SKA sub-rows from coinRowsToSKAData
+ * @param {Array<{txCount: number, amount: string}>} subRows - SKA sub-rows from coinRowsToSKAData
  * @returns {string} the cell text content
  */
 export function formatSKAAmountCell(subRows) {
   if (subRows.length >= 2) {
     let active = 0
     for (const r of subRows) {
-      if (Number(r.txCount) > 0) active++
+      if (r.txCount > 0) active++
     }
     return `Σ ${active}`
   }
@@ -70,7 +70,7 @@ export function coinRowsToSKAData(block) {
     } else {
       subRows.push({
         tokenType: cr.symbol,
-        txCount: String(cr.tx_count),
+        txCount: cr.tx_count,
         amount: humanize.formatCoinAtoms(cr.amount, cr.coin_type),
         size: humanize.bytes(cr.size)
       })
@@ -131,7 +131,7 @@ export function insertSKASubRows(tbody, insertRef, subRows, blockHeight, templat
     tr.dataset.blockId = String(blockHeight)
 
     clone.querySelector('.coin-label--ska').textContent = sub.tokenType
-    clone.querySelector('[data-type="tx"]').textContent = sub.txCount
+    clone.querySelector('[data-type="tx"]').textContent = String(sub.txCount)
     clone.querySelector('[data-type="ska-amount"]').textContent = sub.amount
     clone.querySelector('[data-type="size"]').textContent = sub.size
 

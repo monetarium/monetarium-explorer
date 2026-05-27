@@ -151,9 +151,16 @@ type BlockBasic struct {
 }
 
 // FlattenCoinRows populates the template-facing flattened fields (VARAmount,
-// VARTxCount, VARSize, SKAAmount, SKASubRows) from CoinRows. Call this after
-// setting CoinRows.
+// VARTxCount, VARSize, SKAAmount, SKASubRows, SKAActiveSubRows) from CoinRows.
+// Call this after setting CoinRows. Safe to call more than once on the same
+// BlockBasic — accumulators are reset on entry.
 func (b *BlockBasic) FlattenCoinRows() {
+	b.VARAmount = ""
+	b.VARTxCount = 0
+	b.VARSize = ""
+	b.SKAAmount = ""
+	b.SKAActiveSubRows = 0
+	b.SKASubRows = b.SKASubRows[:0]
 	for _, row := range b.CoinRows {
 		if row.CoinType == 0 {
 			b.VARAmount = row.Amount

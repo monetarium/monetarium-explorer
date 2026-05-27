@@ -111,6 +111,9 @@ func TestBuildHomeBlockRows_VAROnly(t *testing.T) {
 	if r.SKAAmount != "" {
 		t.Errorf("expected empty SKAAmount for VAR-only block, got %q", r.SKAAmount)
 	}
+	if r.SKAActiveSubRows != 0 {
+		t.Errorf("expected SKAActiveSubRows == 0 for VAR-only block, got %d", r.SKAActiveSubRows)
+	}
 }
 
 // TestBuildHomeBlockRows_WithCoinRows verifies that CoinRows atom strings are

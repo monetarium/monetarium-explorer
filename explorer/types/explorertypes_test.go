@@ -342,12 +342,13 @@ func TestFlattenCoinRows(t *testing.T) {
 		wantSKAActiveSubRows int
 	}{
 		{
-			name:              "VAR only",
-			coinRows:          []CoinRowData{{CoinType: 0, Symbol: "VAR", TxCount: 5, Amount: "100000000", Size: 200}},
-			wantVARAmount:     "100000000",
-			wantVARTxCount:    5,
-			wantSKAAmount:     "",
-			wantSKASubRowsLen: 0,
+			name:                 "VAR only",
+			coinRows:             []CoinRowData{{CoinType: 0, Symbol: "VAR", TxCount: 5, Amount: "100000000", Size: 200}},
+			wantVARAmount:        "100000000",
+			wantVARTxCount:       5,
+			wantSKAAmount:        "",
+			wantSKASubRowsLen:    0,
+			wantSKAActiveSubRows: 0,
 		},
 		{
 			name: "VAR + single SKA with txs",
@@ -439,6 +440,35 @@ func TestFlattenCoinRows(t *testing.T) {
 				t.Errorf("SKAActiveSubRows: got %d, want %d", b.SKAActiveSubRows, tt.wantSKAActiveSubRows)
 			}
 		})
+	}
+}
+
+// TestFlattenCoinRows_Idempotent verifies that calling FlattenCoinRows more
+// than once on the same BlockBasic does not double SKASubRows or
+// SKAActiveSubRows.
+func TestFlattenCoinRows_Idempotent(t *testing.T) {
+	b := &BlockBasic{
+		Voters:     1,
+		FreshStake: 0,
+		CoinRows: []CoinRowData{
+			{CoinType: 0, Symbol: "VAR", TxCount: 3, Amount: "100000000", Size: 200},
+			{CoinType: 1, Symbol: "SKA1", TxCount: 1, Amount: "500000000000000000", Size: 100},
+			{CoinType: 2, Symbol: "SKA2", TxCount: 0, Amount: "0", Size: 0},
+		},
+	}
+	b.FlattenCoinRows()
+	b.FlattenCoinRows()
+	if len(b.SKASubRows) != 2 {
+		t.Errorf("SKASubRows length after 2 calls: got %d, want 2", len(b.SKASubRows))
+	}
+	if b.SKAActiveSubRows != 1 {
+		t.Errorf("SKAActiveSubRows after 2 calls: got %d, want 1", b.SKAActiveSubRows)
+	}
+	if b.VARTxCount != 2 {
+		t.Errorf("VARTxCount after 2 calls: got %d, want 2", b.VARTxCount)
+	}
+	if b.SKAAmount != "500000000000000000" {
+		t.Errorf("SKAAmount after 2 calls: got %q, want %q", b.SKAAmount, "500000000000000000")
 	}
 }
 

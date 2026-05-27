@@ -1144,6 +1144,13 @@ func TestFormatSKAAmountCell(t *testing.T) {
 			activeCount: 3,
 			want:        "Σ 3",
 		},
+		{
+			name:        "five SKA types, all have txs",
+			skaAmount:   "0",
+			totalCount:  5,
+			activeCount: 5,
+			want:        "Σ 5",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
