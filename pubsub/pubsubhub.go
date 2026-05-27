@@ -912,17 +912,18 @@ func (psh *PubSubHub) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgBl
 	// PoW SKA Fee Reward: the miner's portion of redistributed SKA tx fees
 	// from the authoritative "MF"-marked SSFee split (issue #273). Mirrors the
 	// explorer (HTTP) derivation so the two paths cannot drift.
-	powRewardsBlockHeight := int64(blockData.Header.Height)
+	powRewardsBlockHeight := make(map[uint8]int64)
 	powRewards := make([]exptypes.PoWSKAReward, 0)
 	for ct, split := range blockData.ExtraInfo.SSFeeTotalsByCoin {
 		if ct == 0 || split.PoW == nil || split.PoW.Sign() <= 0 {
 			continue
 		}
+		powRewardsBlockHeight[ct] = int64(blockData.Header.Height)
 		powRewards = append(powRewards, exptypes.PoWSKAReward{
 			CoinType:    ct,
 			Symbol:      fmt.Sprintf("SKA%d", ct),
 			Amount:      txhelpers.FormatSKAAtoms(split.PoW),
-			BlockHeight: powRewardsBlockHeight,
+			BlockHeight: powRewardsBlockHeight[ct],
 		})
 	}
 	if len(powRewards) > 0 {
