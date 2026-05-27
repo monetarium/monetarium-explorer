@@ -6743,24 +6743,7 @@ func (pgb *ChainDB) GetExplorerBlock(ctx context.Context, hash string) *exptypes
 						break
 					}
 				}
-				// SSFee is a distribution tx — the "reward" is the net
-				// value (totalOutput − totalInput), matching BlockSSFeeTotals.
-				net := new(big.Int)
-				for _, vin := range msgTx.TxIn {
-					if vin.SKAValueIn != nil {
-						net.Sub(net, vin.SKAValueIn)
-					} else {
-						net.Sub(net, big.NewInt(vin.ValueIn))
-					}
-				}
-				for _, out := range msgTx.TxOut {
-					if out.CoinType.IsSKA() && out.SKAValue != nil {
-						net.Add(net, out.SKAValue)
-					} else {
-						net.Add(net, big.NewInt(out.Value))
-					}
-				}
-				stx.FeeRaw = net.String()
+				stx.FeeRaw = ssFeeNetReward(msgTx).String()
 			}
 			stakeFees = append(stakeFees, stx)
 		}
@@ -6877,6 +6860,29 @@ func (pgb *ChainDB) GetExplorerBlock(ctx context.Context, hash string) *exptypes
 	pgb.lastExplorerBlock.Unlock()
 
 	return block
+}
+
+// ssFeeNetReward computes the net reward for an SSFee transaction as
+// Σoutputs − Σinputs.  This matches blockSSFeeTotalsInternal in
+// txhelpers/ssfee.go.  The per-element branches on SKAValueIn/SKAValue
+// are equivalent to a prior isSKA gate given the single-coin invariant.
+func ssFeeNetReward(msgTx *wire.MsgTx) *big.Int {
+	net := new(big.Int)
+	for _, vin := range msgTx.TxIn {
+		if vin.SKAValueIn != nil {
+			net.Sub(net, vin.SKAValueIn)
+		} else {
+			net.Sub(net, big.NewInt(vin.ValueIn))
+		}
+	}
+	for _, out := range msgTx.TxOut {
+		if out.CoinType.IsSKA() && out.SKAValue != nil {
+			net.Add(net, out.SKAValue)
+		} else {
+			net.Add(net, big.NewInt(out.Value))
+		}
+	}
+	return net
 }
 
 // GetExplorerBlocks creates an slice of exptypes.BlockBasic beginning at start

@@ -128,10 +128,13 @@ case stake.TxTypeSSFee:
 
 ## Testing
 
-A test case in `pgblockchain_internal_test.go` should be added that:
+Extracted as a package-level helper `ssFeeNetReward` in `pgblockchain.go` and tested in `pgblockchain_internal_test.go` (`TestSSFeeNetReward`). Four table-driven cases:
 
-1. Constructs an SSFee `MsgTx` with a null input and a distribution output (`SKAValue = 5 SKA1`).
-2. Calls `trimmedTxInfoFromMsgTx`.
-3. Asserts `FeeRaw` equals the expected atom string (e.g. `"5000000000000000000"` for 5 SKA1).
+| Case | Input | Output | Expected net |
+|------|-------|--------|-------------|
+| Null input SKA | `ValueIn=0, SKAValueIn=nil` | `SKAValue=5e18` | `5e18` |
+| Consolidation SKA | `SKAValueIn=1e18` | `SKAValue=2e18` | `1e18` |
+| Null input VAR | `ValueIn=0` | `Value=100000000` | `100000000` |
+| Zero reward | `SKAValueIn=5e18` | `SKAValue=5e18` | `0` |
 
-The existing `TestTrimmedTxInfoFromMsgTx` fixture pattern can be extended.
+The helper's per-element `SKAValueIn`/`SKAValue` branching rather than a prior `isSKA` gate matches the same result given the single-coin-per-tx invariant, and the comment calls out the equivalence.
