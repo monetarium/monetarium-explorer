@@ -157,3 +157,48 @@ func TestBuildSKACoinParams_OtherNets(t *testing.T) {
 		_ = got // existence + no panic is the contract; SKACoins may be empty.
 	}
 }
+
+func TestBuildSKACoinParams_RuntimeOverride(t *testing.T) {
+	params := chaincfg.MainNetParams()
+	maturity := int64(params.CoinbaseMaturity)
+
+	tests := []struct {
+		name           string
+		chainHeight    int64
+		emissionHeight int64
+		wantActive     bool
+		wantPending    bool
+	}{
+		{
+			name:           "emitted, still maturing",
+			chainHeight:    150000 + maturity - 1,
+			emissionHeight: 150000,
+			wantActive:     false,
+			wantPending:    true,
+		},
+		{
+			name:           "emitted, past maturity",
+			chainHeight:    150000 + maturity,
+			emissionHeight: 150000,
+			wantActive:     true,
+			wantPending:    false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			heights := map[uint8]int64{2: tc.emissionHeight}
+			got := buildSKACoinParams(params, tc.chainHeight, heights)
+			if len(got) < 2 {
+				t.Fatal("expected at least 2 SKA entries")
+			}
+			ska2 := got[1]
+			if ska2.Active != tc.wantActive {
+				t.Errorf("Active = %v, want %v", ska2.Active, tc.wantActive)
+			}
+			if ska2.Pending != tc.wantPending {
+				t.Errorf("Pending = %v, want %v", ska2.Pending, tc.wantPending)
+			}
+		})
+	}
+}
