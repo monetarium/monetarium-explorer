@@ -10,6 +10,66 @@ import (
 	"github.com/monetarium/monetarium-node/wire"
 )
 
+func TestSSFeeNetReward(t *testing.T) {
+	tests := []struct {
+		name  string
+		msgTx *wire.MsgTx
+		want  string
+	}{
+		{
+			name: "null input SKA",
+			msgTx: &wire.MsgTx{
+				Version: 1,
+				TxIn:    []*wire.TxIn{{}},
+				TxOut: []*wire.TxOut{
+					{CoinType: 1, SKAValue: big.NewInt(5000000000000000000)},
+				},
+			},
+			want: "5000000000000000000",
+		},
+		{
+			name: "consolidation SKA",
+			msgTx: &wire.MsgTx{
+				Version: 1,
+				TxIn:    []*wire.TxIn{{SKAValueIn: big.NewInt(1000000000000000000)}},
+				TxOut: []*wire.TxOut{
+					{CoinType: 1, SKAValue: big.NewInt(2000000000000000000)},
+				},
+			},
+			want: "1000000000000000000",
+		},
+		{
+			name: "null input VAR",
+			msgTx: &wire.MsgTx{
+				Version: 1,
+				TxIn:    []*wire.TxIn{{}},
+				TxOut:   []*wire.TxOut{{Value: 100000000, CoinType: 0}},
+			},
+			want: "100000000",
+		},
+		{
+			name: "zero reward SKA",
+			msgTx: &wire.MsgTx{
+				Version: 1,
+				TxIn:    []*wire.TxIn{{SKAValueIn: big.NewInt(5000000000000000000)}},
+				TxOut: []*wire.TxOut{
+					{CoinType: 1, SKAValue: big.NewInt(5000000000000000000)},
+				},
+			},
+			want: "0",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := ssFeeNetReward(tt.msgTx).String()
+			if got != tt.want {
+				t.Errorf("ssFeeNetReward = %s, want %s", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestTrimmedTxInfoFromMsgTx_Fees(t *testing.T) {
 	params := &chaincfg.Params{}
 	ticketPrice := int64(100000000)
