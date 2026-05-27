@@ -25,10 +25,59 @@ jobs:
       - uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          plugin_marketplaces: "https://github.com/anthropics/claude-code.git"
-          plugins: "code-review@claude-code-plugins"
-          prompt: "/code-review:code-review --comment ${{ github.repository }}/pull/${{ github.event.pull_request.number }}"
+          prompt: |
+            Review pull request #${{ github.event.pull_request.number }} in ${{ github.repository }}.
+
+            ## Process
+
+            1. Read the PR context with `gh pr view ${{ github.event.pull_request.number }}` and the diff with `gh pr diff ${{ github.event.pull_request.number }}`.
+            2. Get the PR head SHA: `gh pr view ${{ github.event.pull_request.number }} --json headRefOid -q .headRefOid` — you'll need it for links.
+            3. Consult CLAUDE.md at the repo root if it exists, and follow its conventions.
+            4. Read any files in the diff that need surrounding context to evaluate properly. Use `gh pr view ${{ github.event.pull_request.number }} --comments` to check for previous Claude review comments — if any exist, focus on what changed since the last review and acknowledge prior findings.
+            5. Evaluate the changes for genuine issues. Quality bar:
+               - DO flag: bugs, logic errors, security flaws, missing error handling, broken contracts, missing tests for new business logic, clear CLAUDE.md violations.
+               - DO NOT flag: style nitpicks, formatting, import order, naming preferences, things a linter would catch, pre-existing issues not introduced by this PR.
+               - If unsure whether something is a real issue, DO NOT flag it.
+
+            ## Output format
+
+            Post a SINGLE comment on the PR. Do NOT submit a formal GitHub review (no `gh pr review --approve`, no `--request-changes`). This is feedback only, not a blocking review state.
+
+            To post the comment, write the body to a file first (avoids all shell escaping issues with backticks in the markdown), then post it:
+
+            1. Use the Write tool to create /tmp/review.md with the full comment body
+            2. Run: `gh pr comment ${{ github.event.pull_request.number }} --body-file /tmp/review.md`
+
+            For file/line references, prefer clickable links: `https://github.com/${{ github.repository }}/blob/<head-sha>/<path>#L<line>`. If you can't construct a link reliably, fall back to plain `path:line` text — never make up a SHA or guess at a path.
+
+            Comment structure:
+
+                ## Claude review
+
+                **Previous review status** (only include when previous Claude comments exist):
+                - <previous blocker>: resolved / still open / no longer applies
+                - ...
+
+                **Blockers** (must fix before merge):
+                - <issue>: <one-line explanation> ([path:line](link))
+                - ...
+                <or: "None">
+
+                **Worth considering** (non-blocking):
+                - <issue>: <one-line explanation>
+                - ...
+                <omit section if empty>
+
+                **Looks good:**
+                - <genuinely notable, max 2 items>
+                <omit section if nothing notable>
+
+                <One-line summary>
+
+            Keep it concise. No padding, no restating what the PR does, no praise for praise's sake. Trivial PRs (typo, dep bump, formatting-only): one sentence is the whole comment.
+
           claude_args: |
-            --max-turns 60
+            --max-turns 50
+            --allowedTools "Bash(gh:*),Bash(git:*),Read,Write,Grep,Glob,LS"
         env:
           GH_TOKEN: ${{ github.token }}
