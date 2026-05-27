@@ -95,7 +95,7 @@ func TestFormatBigIntWithCommas(t *testing.T) {
 }
 
 func TestBuildSKACoinParams_Mainnet(t *testing.T) {
-	got := buildSKACoinParams(chaincfg.MainNetParams())
+	got := buildSKACoinParams(chaincfg.MainNetParams(), 0, nil)
 	if len(got) < 1 {
 		t.Fatalf("expected >=1 SKA entries on mainnet, got %d", len(got))
 	}
@@ -153,7 +153,58 @@ func TestBuildSKACoinParams_OtherNets(t *testing.T) {
 		chaincfg.TestNet3Params(),
 		chaincfg.RegNetParams(),
 	} {
-		got := buildSKACoinParams(p)
+		got := buildSKACoinParams(p, 0, nil)
 		_ = got // existence + no panic is the contract; SKACoins may be empty.
+	}
+}
+
+func TestBuildSKACoinParams_RuntimeOverride(t *testing.T) {
+	params := chaincfg.TestNet3Params()
+	maturity := int64(params.CoinbaseMaturity)
+
+	tests := []struct {
+		name           string
+		chainHeight    int64
+		emissionHeight int64
+		wantActive     bool
+		wantPending    bool
+	}{
+		{
+			name:           "emitted, still maturing",
+			chainHeight:    150000 + maturity - 1,
+			emissionHeight: 150000,
+			wantActive:     false,
+			wantPending:    true,
+		},
+		{
+			name:           "emitted, past maturity",
+			chainHeight:    150000 + maturity,
+			emissionHeight: 150000,
+			wantActive:     true,
+			wantPending:    false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			heights := map[uint8]int64{2: tc.emissionHeight}
+			got := buildSKACoinParams(params, tc.chainHeight, heights)
+			found := -1
+			for i := range got {
+				if got[i].CoinType == 2 {
+					found = i
+					break
+				}
+			}
+			if found == -1 {
+				t.Fatal("expected SKA2 coin type 2")
+			}
+			if got[found].Active != tc.wantActive {
+				t.Errorf("Active = %v, want %v", got[found].Active, tc.wantActive)
+			}
+			if got[found].Pending != tc.wantPending {
+				t.Errorf("Pending = %v, want %v", got[found].Pending, tc.wantPending)
+			}
+		})
 	}
 }

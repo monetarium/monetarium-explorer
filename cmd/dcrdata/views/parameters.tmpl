@@ -326,7 +326,7 @@
                     <h5 class="mt-3">
                         <span class="mono">{{$coin.Label}}</span>
                         <span class="fs14 text-secondary">— {{$coin.Name}}{{if $coin.Symbol}} ({{$coin.Symbol}}){{end}}</span>
-                        {{if not $coin.Active}}<span class="badge bg-secondary ms-2 fs12">inactive</span>{{else if not $coin.InitiallyActive}}<span class="badge bg-info ms-2 fs12">activated post-genesis</span>{{end}}
+                        {{if $coin.Pending}}<span class="badge bg-warning ms-2 fs12">pending</span>{{else if not $coin.Active}}<span class="badge bg-secondary ms-2 fs12">inactive</span>{{else if not $coin.InitiallyActive}}<span class="badge bg-info ms-2 fs12">activated post-genesis</span>{{end}}
                     </h5>
                     <table class="table table-mono-cells table-sm">
                         <thead>

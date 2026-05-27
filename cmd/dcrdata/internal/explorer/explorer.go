@@ -124,6 +124,7 @@ type explorerDataSource interface {
 	GetSummaryRange(ctx context.Context, idx0, idx1 int) []*apitypes.BlockDataBasic
 	VARCoinSupply(ctx context.Context) (*types.VARCoinSupply, error)
 	SKACoinSupply(ctx context.Context) ([]*types.SKACoinSupplyEntry, error)
+	SKACoinEmissionHeights(ctx context.Context, coinTypes []uint8) (map[uint8]int64, error)
 	GetBlockSKAFees(ctx context.Context, height int64) (map[uint8]string, error)
 	GetVoteTicketDataByBlock(ctx context.Context, blockHash string) ([]dbtypes.VoteTicketData, error)
 }
