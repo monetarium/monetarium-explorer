@@ -32,6 +32,10 @@ type HomeBlockRow struct {
 	// no SKA entries.
 	SKAAmount string
 
+	// SKAActiveSubRows is the count of SKASubRows with txCount > 0 — what
+	// the "Σ K" cell summary shows when len(SKASubRows) >= 2.
+	SKAActiveSubRows int
+
 	// SKASubRows holds per-SKA-type accordion breakdown rows.
 	SKASubRows []SKASubRow
 }
@@ -57,6 +61,7 @@ func buildHomeBlockRows(blocks []*types.BlockBasic) []HomeBlockRow {
 		var varAmount, varSize string
 		var varTxCount int
 		var skaAmount string
+		var skaActive int
 		var subRows []SKASubRow
 		totalTxCount := b.Transactions // default: raw block count
 
@@ -94,6 +99,9 @@ func buildHomeBlockRows(blocks []*types.BlockBasic) []HomeBlockRow {
 						Amount:    formatCoinAtoms(cr.Amount, cr.CoinType),
 						Size:      size,
 					})
+					if cr.TxCount > 0 {
+						skaActive++
+					}
 					if skaAmount == "" {
 						skaAmount = cr.Amount
 					}
@@ -107,19 +115,20 @@ func buildHomeBlockRows(blocks []*types.BlockBasic) []HomeBlockRow {
 		}
 
 		rows = append(rows, HomeBlockRow{
-			Height:         b.Height,
-			Hash:           b.Hash,
-			Transactions:   totalTxCount,
-			Voters:         b.Voters,
-			FreshStake:     b.FreshStake,
-			Revocations:    b.Revocations,
-			FormattedBytes: b.FormattedBytes,
-			BlockTime:      b.BlockTime,
-			VARTxCount:     varTxCount,
-			VARAmount:      varAmount,
-			VARSize:        varSize,
-			SKAAmount:      skaAmount,
-			SKASubRows:     subRows,
+			Height:           b.Height,
+			Hash:             b.Hash,
+			Transactions:     totalTxCount,
+			Voters:           b.Voters,
+			FreshStake:       b.FreshStake,
+			Revocations:      b.Revocations,
+			FormattedBytes:   b.FormattedBytes,
+			BlockTime:        b.BlockTime,
+			VARTxCount:       varTxCount,
+			VARAmount:        varAmount,
+			VARSize:          varSize,
+			SKAAmount:        skaAmount,
+			SKAActiveSubRows: skaActive,
+			SKASubRows:       subRows,
 		})
 	}
 	return rows

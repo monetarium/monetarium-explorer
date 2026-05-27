@@ -143,8 +143,11 @@ type BlockBasic struct {
 	// SKAAmount holds the raw atom amount of the first SKA row in CoinRows.
 	// Templates render the aggregate SKA cell via formatSKAAmountCell, which
 	// uses SKAAmount only when len(SKASubRows) == 1.
-	SKAAmount  string
-	SKASubRows []SKASubRow
+	SKAAmount string
+	// SKAActiveSubRows is the number of SKA sub-rows with TxCount > 0 — what
+	// the "Σ K" cell summary shows when len(SKASubRows) >= 2.
+	SKAActiveSubRows int
+	SKASubRows       []SKASubRow
 }
 
 // FlattenCoinRows populates the template-facing flattened fields (VARAmount,
@@ -167,6 +170,9 @@ func (b *BlockBasic) FlattenCoinRows() {
 				Amount:    row.Amount,
 				Size:      humanize.Bytes(uint64(row.Size)),
 			})
+			if row.TxCount > 0 {
+				b.SKAActiveSubRows++
+			}
 			if b.SKAAmount == "" {
 				b.SKAAmount = row.Amount
 			}

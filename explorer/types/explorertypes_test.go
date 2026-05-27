@@ -330,15 +330,16 @@ func TestDeepCopys(t *testing.T) {
 
 func TestFlattenCoinRows(t *testing.T) {
 	tests := []struct {
-		name              string
-		coinRows          []CoinRowData
-		voters            uint16
-		freshStake        uint8
-		revocations       uint32
-		wantVARAmount     string
-		wantVARTxCount    int
-		wantSKAAmount     string
-		wantSKASubRowsLen int
+		name                 string
+		coinRows             []CoinRowData
+		voters               uint16
+		freshStake           uint8
+		revocations          uint32
+		wantVARAmount        string
+		wantVARTxCount       int
+		wantSKAAmount        string
+		wantSKASubRowsLen    int
+		wantSKAActiveSubRows int
 	}{
 		{
 			name:              "VAR only",
@@ -349,39 +350,68 @@ func TestFlattenCoinRows(t *testing.T) {
 			wantSKASubRowsLen: 0,
 		},
 		{
-			name: "VAR + single SKA",
+			name: "VAR + single SKA with txs",
 			coinRows: []CoinRowData{
 				{CoinType: 0, Symbol: "VAR", TxCount: 3, Amount: "100000000", Size: 200},
 				{CoinType: 1, Symbol: "SKA1", TxCount: 1, Amount: "1000000000000000000", Size: 100},
 			},
-			wantVARAmount:     "100000000",
-			wantVARTxCount:    3,
-			wantSKAAmount:     "1000000000000000000",
-			wantSKASubRowsLen: 1,
+			wantVARAmount:        "100000000",
+			wantVARTxCount:       3,
+			wantSKAAmount:        "1000000000000000000",
+			wantSKASubRowsLen:    1,
+			wantSKAActiveSubRows: 1,
 		},
 		{
-			name: "VAR + two SKA — SKAAmount holds first row's atoms",
+			name: "VAR + two SKA — neither has txs",
+			coinRows: []CoinRowData{
+				{CoinType: 0, Symbol: "VAR", TxCount: 2, Amount: "200000000", Size: 200},
+				{CoinType: 1, Symbol: "SKA1", TxCount: 0, Amount: "0", Size: 0},
+				{CoinType: 2, Symbol: "SKA2", TxCount: 0, Amount: "0", Size: 0},
+			},
+			wantVARAmount:        "200000000",
+			wantVARTxCount:       2,
+			wantSKAAmount:        "0",
+			wantSKASubRowsLen:    2,
+			wantSKAActiveSubRows: 0,
+		},
+		{
+			name: "VAR + two SKA — only SKA1 has txs",
+			coinRows: []CoinRowData{
+				{CoinType: 0, Symbol: "VAR", TxCount: 2, Amount: "200000000", Size: 200},
+				{CoinType: 1, Symbol: "SKA1", TxCount: 1, Amount: "500000000000000000", Size: 100},
+				{CoinType: 2, Symbol: "SKA2", TxCount: 0, Amount: "0", Size: 0},
+			},
+			wantVARAmount:        "200000000",
+			wantVARTxCount:       2,
+			wantSKAAmount:        "500000000000000000",
+			wantSKASubRowsLen:    2,
+			wantSKAActiveSubRows: 1,
+		},
+		{
+			name: "VAR + two SKA — both have txs",
 			coinRows: []CoinRowData{
 				{CoinType: 0, Symbol: "VAR", TxCount: 2, Amount: "200000000", Size: 200},
 				{CoinType: 1, Symbol: "SKA1", TxCount: 1, Amount: "500000000000000000", Size: 100},
 				{CoinType: 2, Symbol: "SKA2", TxCount: 2, Amount: "750000000000000000", Size: 150},
 			},
-			wantVARAmount:     "200000000",
-			wantVARTxCount:    2,
-			wantSKAAmount:     "500000000000000000",
-			wantSKASubRowsLen: 2,
+			wantVARAmount:        "200000000",
+			wantVARTxCount:       2,
+			wantSKAAmount:        "500000000000000000",
+			wantSKASubRowsLen:    2,
+			wantSKAActiveSubRows: 2,
 		},
 		{
-			name: "three SKA, no VAR",
+			name: "three SKA, no VAR — all have txs",
 			coinRows: []CoinRowData{
 				{CoinType: 1, Symbol: "SKA1", TxCount: 1, Amount: "1", Size: 1},
 				{CoinType: 2, Symbol: "SKA2", TxCount: 1, Amount: "2", Size: 1},
 				{CoinType: 3, Symbol: "SKA3", TxCount: 1, Amount: "3", Size: 1},
 			},
-			wantVARAmount:     "",
-			wantVARTxCount:    0,
-			wantSKAAmount:     "1",
-			wantSKASubRowsLen: 3,
+			wantVARAmount:        "",
+			wantVARTxCount:       0,
+			wantSKAAmount:        "1",
+			wantSKASubRowsLen:    3,
+			wantSKAActiveSubRows: 3,
 		},
 	}
 	for _, tt := range tests {
@@ -404,6 +434,9 @@ func TestFlattenCoinRows(t *testing.T) {
 			}
 			if len(b.SKASubRows) != tt.wantSKASubRowsLen {
 				t.Errorf("SKASubRows length: got %d, want %d", len(b.SKASubRows), tt.wantSKASubRowsLen)
+			}
+			if b.SKAActiveSubRows != tt.wantSKAActiveSubRows {
+				t.Errorf("SKAActiveSubRows: got %d, want %d", b.SKAActiveSubRows, tt.wantSKAActiveSubRows)
 			}
 		})
 	}

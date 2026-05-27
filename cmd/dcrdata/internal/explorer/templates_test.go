@@ -1059,82 +1059,98 @@ func TestFormatCoinAtoms_LargeSKA(t *testing.T) {
 }
 
 // TestFormatSKAAmountCell exercises the shared rule that drives the SKA
-// aggregate cell in both the Latest Blocks and Blocks tables, covering all
-// six scenarios from the spec. The rule is:
+// aggregate cell in both the Latest Blocks and Blocks tables. The rule is:
 //
-//	subRowCount == 0   → "—"
-//	subRowCount == 1   → formatCoinAtoms(skaAmount, 1)  (zero-value renders "0")
-//	subRowCount >= 2   → "Σ N"
+//	totalCount == 0   → "—"                              (no SKA issued)
+//	totalCount == 1   → formatCoinAtoms(skaAmount, 1)    (zero renders "0")
+//	totalCount >= 2   → "Σ K" where K = activeCount (SKA types with TxCount > 0)
+//
+// The producer side (viewmodel) precomputes activeCount; this helper only
+// renders. The Go and JS helpers must produce identical strings — see
+// public/js/helpers/coin_rows_helper.js.
 func TestFormatSKAAmountCell(t *testing.T) {
-	// One SKA = 1e18 atoms.
-	oneSKA := "1000000000000000000"
 	tests := []struct {
 		name        string
 		skaAmount   string
-		subRowCount int
+		totalCount  int
+		activeCount int
 		want        string
 	}{
 		{
-			name:        "scenario 1: no SKA issued",
-			skaAmount:   "",
-			subRowCount: 0,
-			want:        "—",
+			name:       "scenario 1: no SKA issued",
+			skaAmount:  "",
+			totalCount: 0,
+			want:       "—",
 		},
 		{
-			name:        "scenario 2: SKA1 issued, not in this block (zero-value row)",
-			skaAmount:   "0",
-			subRowCount: 1,
-			want:        "0",
+			name:       "scenario 2: SKA1 issued, not in this block (zero-value row)",
+			skaAmount:  "0",
+			totalCount: 1,
+			want:       "0",
 		},
 		{
 			name:        "scenario 3a: SKA1 present, 1 atom (~1e-18)",
 			skaAmount:   "1",
-			subRowCount: 1,
+			totalCount:  1,
+			activeCount: 1,
 			want:        formatCoinAtoms("1", 1),
 		},
 		{
 			name:        "scenario 3b: SKA1 present, 1.23 SKA",
 			skaAmount:   "1230000000000000000",
-			subRowCount: 1,
+			totalCount:  1,
+			activeCount: 1,
 			want:        "1.23",
 		},
 		{
 			name:        "scenario 3c: SKA1 present, 12,500 SKA",
 			skaAmount:   "12500000000000000000000",
-			subRowCount: 1,
+			totalCount:  1,
+			activeCount: 1,
 			want:        "12.5k",
 		},
 		{
 			name:        "scenario 4: SKA1 & SKA2 issued, neither in block",
 			skaAmount:   "0",
-			subRowCount: 2,
+			totalCount:  2,
+			activeCount: 0,
+			want:        "Σ 0",
+		},
+		{
+			name:        "scenario 5: SKA1 & SKA2 issued, only SKA1 has txs",
+			skaAmount:   "1000000000000000000",
+			totalCount:  2,
+			activeCount: 1,
+			want:        "Σ 1",
+		},
+		{
+			name:        "scenario 6: SKA1 & SKA2 issued, both have txs",
+			skaAmount:   "1000000000000000000",
+			totalCount:  2,
+			activeCount: 2,
 			want:        "Σ 2",
 		},
 		{
-			name:        "scenario 5: SKA1 & SKA2 issued, one present",
-			skaAmount:   oneSKA,
-			subRowCount: 2,
-			want:        "Σ 2",
-		},
-		{
-			name:        "scenario 6: SKA1 & SKA2 issued, both present",
-			skaAmount:   oneSKA,
-			subRowCount: 2,
-			want:        "Σ 2",
-		},
-		{
-			name:        "many SKA types",
+			name:        "five SKA types, none has txs",
 			skaAmount:   "0",
-			subRowCount: 5,
-			want:        "Σ 5",
+			totalCount:  5,
+			activeCount: 0,
+			want:        "Σ 0",
+		},
+		{
+			name:        "five SKA types, three have txs",
+			skaAmount:   "0",
+			totalCount:  5,
+			activeCount: 3,
+			want:        "Σ 3",
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := formatSKAAmountCell(tt.skaAmount, tt.subRowCount)
+			got := formatSKAAmountCell(tt.skaAmount, tt.totalCount, tt.activeCount)
 			if got != tt.want {
-				t.Errorf("formatSKAAmountCell(%q, %d) = %q, want %q",
-					tt.skaAmount, tt.subRowCount, got, tt.want)
+				t.Errorf("formatSKAAmountCell(%q, %d, %d) = %q, want %q",
+					tt.skaAmount, tt.totalCount, tt.activeCount, got, tt.want)
 			}
 		})
 	}

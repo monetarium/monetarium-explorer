@@ -4,19 +4,25 @@ import humanize from './humanize_helper'
  * formatSKAAmountCell renders the aggregate SKA-amount table cell shared by
  * the Latest Blocks (home) and Blocks listing tables. The rule is:
  *
- *   subRows.length === 0  → '—'      (no SKA issued at all)
- *   subRows.length === 1  → formatted amount (zero-value rows render '0')
- *   subRows.length >= 2   → 'Σ N'    (count summary)
+ *   subRows.length === 0  → '—'                           (no SKA issued)
+ *   subRows.length === 1  → formatted amount (zero → '0')
+ *   subRows.length >= 2   → 'Σ K' where K = SKA types with txCount > 0
  *
  * Mirrors the Go-side helper of the same name (cmd/dcrdata/internal/explorer
  * /templates.go). Both helpers must produce identical strings — they back the
  * server-rendered initial page and the WebSocket live update of the same row.
  *
- * @param {Array<{amount: string}>} subRows - SKA sub-rows from coinRowsToSKAData
+ * @param {Array<{txCount: string, amount: string}>} subRows - SKA sub-rows from coinRowsToSKAData
  * @returns {string} the cell text content
  */
 export function formatSKAAmountCell(subRows) {
-  if (subRows.length >= 2) return `Σ ${subRows.length}`
+  if (subRows.length >= 2) {
+    let active = 0
+    for (const r of subRows) {
+      if (Number(r.txCount) > 0) active++
+    }
+    return `Σ ${active}`
+  }
   if (subRows.length === 1) return subRows[0].amount
   return '—'
 }

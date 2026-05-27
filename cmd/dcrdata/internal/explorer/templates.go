@@ -566,18 +566,20 @@ func orderedMempoolCoinStats(stats map[uint8]types.MempoolCoinStats) []MempoolCo
 // formatSKAAmountCell renders the aggregate SKA-amount table cell shared by
 // the Latest Blocks (home) and Blocks listing tables. The rule is:
 //
-//	subRowCount == 0   → "—"      (no SKA issued at all)
-//	subRowCount == 1   → formatted SKA1 amount (zero-value rows render "0")
-//	subRowCount >= 2   → "Σ N"    (count summary)
+//	totalCount == 0   → "—"                           (no SKA issued)
+//	totalCount == 1   → formatted amount (zero → "0")
+//	totalCount >= 2   → "Σ K" where K = activeCount (SKA types with txs in this block)
 //
-// skaAmount is the raw SKA atom string of the first SKA row and is only used
-// when subRowCount == 1. The Go (server-render) and JS (WebSocket live-update)
-// helpers must stay aligned — see public/js/helpers/coin_rows_helper.js.
-func formatSKAAmountCell(skaAmount string, subRowCount int) string {
+// totalCount is len(SKASubRows); activeCount is the precomputed count of
+// SKASubRows with TxCount > 0. skaAmount is the raw atom string of the first
+// SKA row and is only consulted when totalCount == 1. The Go (server-render)
+// and JS (WebSocket live-update) helpers must stay aligned — see
+// public/js/helpers/coin_rows_helper.js.
+func formatSKAAmountCell(skaAmount string, totalCount, activeCount int) string {
 	switch {
-	case subRowCount >= 2:
-		return fmt.Sprintf("Σ %d", subRowCount)
-	case subRowCount == 1:
+	case totalCount >= 2:
+		return fmt.Sprintf("Σ %d", activeCount)
+	case totalCount == 1:
 		return formatCoinAtoms(skaAmount, 1)
 	default:
 		return "—"
