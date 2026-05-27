@@ -549,7 +549,7 @@ export default class extends Controller {
           valueRange: [0, windowSize * 20 * 8],
           axisLabelFormatter: (y) => Math.round(y)
         }
-        yFormatter = customYFormatter((y) => `${y.toFixed(8)} DCR`)
+        yFormatter = customYFormatter((y) => `${y.toFixed(8)} VAR`)
         break
 
       case 'ticket-pool-size': // pool size graph
@@ -595,10 +595,10 @@ export default class extends Controller {
         yFormatter = (div, data, i) => {
           addLegendEntryFmt(div, data.series[0], (y) => `${y.toFixed(4)}%`)
           div.appendChild(
-            legendEntry(`${legendMarker()} Ticket Pool Value: ${intComma(rawPoolValue[i])} DCR`)
+            legendEntry(`${legendMarker()} Ticket Pool Value: ${intComma(rawPoolValue[i])} VAR`)
           )
           div.appendChild(
-            legendEntry(`${legendMarker()} Coin Supply: ${intComma(rawCoinSupply[i])} DCR`)
+            legendEntry(`${legendMarker()} Coin Supply: ${intComma(rawCoinSupply[i])} VAR`)
           )
         }
         break
@@ -611,12 +611,12 @@ export default class extends Controller {
             d,
             [xlabel, 'Ticket Pool Value'],
             true,
-            'Ticket Pool Value (DCR)',
+            'Ticket Pool Value (VAR)',
             true,
             false
           )
         )
-        yFormatter = customYFormatter((y) => `${intComma(y)} DCR`)
+        yFormatter = customYFormatter((y) => `${intComma(y)} VAR`)
         break
 
       case 'block-size': // block size graph
@@ -723,7 +723,7 @@ export default class extends Controller {
         d = zip2D(data, data.fees, atomsToDCR)
         assign(
           gOptions,
-          mapDygraphOptions(d, [xlabel, 'Total Fee'], false, 'Total Fee (DCR)', true, false)
+          mapDygraphOptions(d, [xlabel, 'Total Fee'], false, 'Total Fee (VAR)', true, false)
         )
         break
 
@@ -734,11 +734,11 @@ export default class extends Controller {
         const label = 'Mix Rate'
         assign(
           gOptions,
-          mapDygraphOptions(d.data, [xlabel, label], false, `${label} (DCR)`, true, false)
+          mapDygraphOptions(d.data, [xlabel, label], false, `${label} (VAR)`, true, false)
         )
 
         yFormatter = (div, data, _i) => {
-          addLegendEntryFmt(div, data.series[0], (y) => (y > 0 ? intComma(y) : '0 DCR'))
+          addLegendEntryFmt(div, data.series[0], (y) => (y > 0 ? intComma(y) : '0 VAR'))
         }
         break
       }

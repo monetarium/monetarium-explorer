@@ -210,9 +210,6 @@ const humanize = {
     if (Math.abs(v) < 1.0) return parseFloat(v).toPrecision(3)
     return parseFloat(v).toFixed(2)
   },
-  subsidyToString: function (x, y = 1) {
-    return `${x / 100000000 / y} DCR`
-  },
   bytes: function (s) {
     // from go-humanize
     const sizes = ['B', 'kB', 'MB', 'GB', 'TB', 'PB', 'EB']
