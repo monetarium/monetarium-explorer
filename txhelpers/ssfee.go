@@ -186,6 +186,9 @@ func blockSSFeeTotalsInternal(sTxs []*wire.MsgTx, determineType func(*wire.MsgTx
 				}
 			}
 		} else {
+			// NOTE: VAR SSFee txs never carry coinbase inputs — VAR coinbase
+			// rewards go directly to the miner, not through SSFee — so the
+			// coinbase guard at the SKA branch above is intentionally absent.
 			for _, vin := range tx.TxIn {
 				net.Sub(net, big.NewInt(vin.ValueIn))
 			}

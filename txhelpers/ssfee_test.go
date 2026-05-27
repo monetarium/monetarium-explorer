@@ -12,6 +12,7 @@ import (
 	"github.com/monetarium/monetarium-explorer/api/rewardtypes"
 	"github.com/monetarium/monetarium-node/blockchain/stake"
 	"github.com/monetarium/monetarium-node/chaincfg"
+	"github.com/monetarium/monetarium-node/chaincfg/chainhash"
 	"github.com/monetarium/monetarium-node/cointype"
 	"github.com/monetarium/monetarium-node/wire"
 )
@@ -295,12 +296,18 @@ func sfMarker() []byte {
 // makeSSFeeTx builds a single-input SSFee-shaped tx. For SKA coin types the
 // per-output big amount is set on SKAValue; for VAR it is set on Value only
 // (SKAValue left nil) so a test can prove the correct value field is read.
-func makeSSFeeTx(ct uint8, in int64, outs []int64, scripts [][]byte) *wire.MsgTx {
+// When coinbase is true the input uses MaxPrevOutIndex + zero hash — the
+// canonical coinbase fingerprint — so coinbase-skip code paths are exercised.
+func makeSSFeeTx(ct uint8, in int64, outs []int64, scripts [][]byte, coinbase bool) *wire.MsgTx {
 	isSKA := cointype.CoinType(ct).IsSKA()
 	tx := &wire.MsgTx{}
 	vin := &wire.TxIn{ValueIn: in}
 	if isSKA {
 		vin.SKAValueIn = big.NewInt(in)
+	}
+	if coinbase {
+		vin.PreviousOutPoint.Index = wire.MaxPrevOutIndex
+		vin.PreviousOutPoint.Hash = chainhash.Hash{}
 	}
 	tx.TxIn = append(tx.TxIn, vin)
 	for j, ov := range outs {
@@ -325,7 +332,7 @@ func TestBlockSSFeeTotals(t *testing.T) {
 	t.Run("non-SSFee stake txs are ignored (no false VAR fee)", func(t *testing.T) {
 		// Only TxTypeSSFee contributes now; SSGen/SSRtx are subsidy/principal
 		// movement and must not be counted as fee.
-		tx := makeSSFeeTx(0, 1600000000, []int64{1602300000}, [][]byte{ssfeeStakegenScript})
+		tx := makeSSFeeTx(0, 1600000000, []int64{1602300000}, [][]byte{ssfeeStakegenScript}, false)
 		got := blockSSFeeTotalsInternal([]*wire.MsgTx{tx}, func(*wire.MsgTx) stake.TxType {
 			return stake.TxTypeSSGen
 		})
@@ -381,7 +388,7 @@ func TestBlockSSFeeTotals(t *testing.T) {
 		}
 		for _, tc := range tests {
 			t.Run(tc.name, func(t *testing.T) {
-				tx := makeSSFeeTx(tc.coinType, tc.in, tc.outs, tc.scripts)
+				tx := makeSSFeeTx(tc.coinType, tc.in, tc.outs, tc.scripts, false)
 				got := blockSSFeeTotalsInternal([]*wire.MsgTx{tx}, ssfeeAll)
 				if got == nil {
 					t.Fatal("expected non-nil result")
@@ -404,7 +411,7 @@ func TestBlockSSFeeTotals(t *testing.T) {
 		// VAR coin type: SKAValue is intentionally left nil by makeSSFeeTx;
 		// the result must come from the int64 Value field.
 		tx := makeSSFeeTx(0, 100000000, []int64{150000000, 0},
-			[][]byte{ssfeeStakegenScript, sfMarker()})
+			[][]byte{ssfeeStakegenScript, sfMarker()}, false)
 		got := blockSSFeeTotalsInternal([]*wire.MsgTx{tx}, ssfeeAll)
 		split, ok := got[0]
 		if !ok || split.PoS == nil {
@@ -415,16 +422,47 @@ func TestBlockSSFeeTotals(t *testing.T) {
 		}
 	})
 
+	t.Run("SKA coinbase input is skipped in net calculation", func(t *testing.T) {
+		// Coinbase inputs create value ex-nihilo rather than transferring
+		// it, so they must NOT reduce the net. Without the skip the net
+		// would be outputs − SKAValueIn, understating the PoW reward.
+		tx := makeSSFeeTx(1, 1000000000000000000, []int64{1500000000000000000, 0},
+			[][]byte{ssfeeStakegenScript, sfMarker()}, true)
+		got := blockSSFeeTotalsInternal([]*wire.MsgTx{tx}, ssfeeAll)
+		split, ok := got[1]
+		if !ok || split.PoS == nil {
+			t.Fatalf("expected SKA1 PoS present, got %v", got)
+		}
+		want := big.NewInt(1500000000000000000)
+		if split.PoS.Cmp(want) != 0 {
+			t.Errorf("SKA1 PoS (coinbase) = %v, want %v (net must equal Σoutputs, input is coinbase)", split.PoS, want)
+		}
+	})
+
+	t.Run("SKA2 coinbase also skipped", func(t *testing.T) {
+		tx := makeSSFeeTx(2, 500000000000000000, []int64{900000000000000000, 0},
+			[][]byte{ssfeeStakegenScript, mfMarker()}, true)
+		got := blockSSFeeTotalsInternal([]*wire.MsgTx{tx}, ssfeeAll)
+		split, ok := got[2]
+		if !ok || split.PoW == nil {
+			t.Fatalf("expected SKA2 PoW present, got %v", got)
+		}
+		want := big.NewInt(900000000000000000)
+		if split.PoW.Cmp(want) != 0 {
+			t.Errorf("SKA2 PoW (coinbase) = %v, want %v (net = Σoutputs)", split.PoW, want)
+		}
+	})
+
 	t.Run("multiple SSFee txs aggregate per coin and marker", func(t *testing.T) {
 		txs := []*wire.MsgTx{
 			makeSSFeeTx(1, 1000000000000000000, []int64{1300000000000000000, 0},
-				[][]byte{ssfeeStakegenScript, sfMarker()}), // SKA1 PoS +3e17
+				[][]byte{ssfeeStakegenScript, sfMarker()}, false), // SKA1 PoS +3e17
 			makeSSFeeTx(1, 2000000000000000000, []int64{2500000000000000000, 0},
-				[][]byte{ssfeeStakegenScript, sfMarker()}), // SKA1 PoS +5e17
+				[][]byte{ssfeeStakegenScript, sfMarker()}, false), // SKA1 PoS +5e17
 			makeSSFeeTx(1, 1000000000000000000, []int64{1100000000000000000, 0},
-				[][]byte{ssfeeStakegenScript, mfMarker()}), // SKA1 PoW +1e17
+				[][]byte{ssfeeStakegenScript, mfMarker()}, false), // SKA1 PoW +1e17
 			makeSSFeeTx(2, 500000000000000000, []int64{900000000000000000, 0},
-				[][]byte{ssfeeStakegenScript, sfMarker()}), // SKA2 PoS +4e17
+				[][]byte{ssfeeStakegenScript, sfMarker()}, false), // SKA2 PoS +4e17
 		}
 		got := blockSSFeeTotalsInternal(txs, ssfeeAll)
 		if got[1].PoS.Cmp(big.NewInt(800000000000000000)) != 0 {
@@ -441,11 +479,11 @@ func TestBlockSSFeeTotals(t *testing.T) {
 	t.Run("User Scenario Verification", func(t *testing.T) {
 		txs := []*wire.MsgTx{
 			// TX 1: VAR SF marker, net +16925
-			makeSSFeeTx(0, 0, []int64{16925, 0}, [][]byte{ssfeeStakegenScript, sfMarker()}),
+			makeSSFeeTx(0, 0, []int64{16925, 0}, [][]byte{ssfeeStakegenScript, sfMarker()}, false),
 			// TX 2: SKA1 SF marker, net +5.5e17
-			makeSSFeeTx(1, 1568000000000000000, []int64{2118000000000000000, 0}, [][]byte{ssfeeStakegenScript, sfMarker()}),
+			makeSSFeeTx(1, 1568000000000000000, []int64{2118000000000000000, 0}, [][]byte{ssfeeStakegenScript, sfMarker()}, false),
 			// TX 3: SKA1 MF marker, net +5.5e17
-			makeSSFeeTx(1, 3884000000000000000, []int64{4434000000000000000, 0}, [][]byte{ssfeeStakegenScript, mfMarker()}),
+			makeSSFeeTx(1, 3884000000000000000, []int64{4434000000000000000, 0}, [][]byte{ssfeeStakegenScript, mfMarker()}, false),
 		}
 		got := blockSSFeeTotalsInternal(txs, ssfeeAll)
 		if got == nil {
