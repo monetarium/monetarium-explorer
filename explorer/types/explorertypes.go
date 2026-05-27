@@ -497,7 +497,9 @@ func (t *TxInfo) BlocksToTicketMaturity() (blocks int64) {
 	return t.TicketInfo.TicketMaturity + 1 - t.Confirmations
 }
 
-// TicketInfo is used to represent data shown for a sstx transaction.
+// TicketInfo is used to represent data shown for a sstx transaction. On a
+// revocation tx page, PoolStatus is also populated with the revoked ticket's
+// pool status (the other fields stay zero).
 type TicketInfo struct {
 	TicketMaturity       int64
 	TimeTillMaturity     float64 // Time before a particular ticket reaches maturity, in hours
