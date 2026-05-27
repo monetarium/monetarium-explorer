@@ -29,6 +29,7 @@ type mockDataSource struct {
 	tpvCharts  [3]*dbtypes.PoolTicketsData
 	tpvHeight  int64
 	tpvErr     error
+	summaries  []*apitypes.BlockDataBasic
 }
 
 func (m *mockDataSource) BlockHeight(ctx context.Context, hash string) (int64, error) { return 0, nil }
@@ -171,7 +172,7 @@ func (m *mockDataSource) GetExplorerFullBlocks(ctx context.Context, start int, e
 func (m *mockDataSource) CurrentDifficulty(context.Context) (float64, error)      { return 0, nil }
 func (m *mockDataSource) Difficulty(ctx context.Context, timestamp int64) float64 { return 0 }
 func (m *mockDataSource) GetSummaryRange(ctx context.Context, idx0, idx1 int) []*apitypes.BlockDataBasic {
-	return nil
+	return m.summaries
 }
 func (m *mockDataSource) VARCoinSupply(ctx context.Context) (*explorerTypes.VARCoinSupply, error) {
 	return nil, nil
@@ -286,6 +287,40 @@ func TestStore_PoWSKARewardsFromMFMarker(t *testing.T) {
 		if exp.pageData.HomeInfo.PoWSKARewards != nil {
 			t.Errorf("expected no PoW reward without an MF marker, got %v",
 				exp.pageData.HomeInfo.PoWSKARewards)
+		}
+	})
+
+	t.Run("sum30 fallback yields per-coin BlockHeight for each SKA coin", func(t *testing.T) {
+		exp, mockDS := setup()
+		// Only SKA1 appears in the current block's MF SSFee.
+		// SKA2 exists only in a recent summary (sum30).
+		mockDS.summaries = []*apitypes.BlockDataBasic{
+			{
+				Height: 95,
+				Hash:   "0000000000000000000000000000000000000000000000000000000000000095",
+				SSFeeTotalsByCoin: map[uint8]rewardtypes.SSFeeSplit{
+					2: {PoW: big.NewInt(300000000000000000)},
+				},
+			},
+		}
+		storeBlock(exp, mockDS, apitypes.BlockExplorerExtraInfo{
+			SSFeeTotalsByCoin: map[uint8]rewardtypes.SSFeeSplit{
+				1: {PoW: big.NewInt(550000000000000000)},
+			},
+		})
+
+		exp.pageData.RLock()
+		defer exp.pageData.RUnlock()
+		got := exp.pageData.HomeInfo.PoWSKARewards
+		if len(got) != 2 {
+			t.Fatalf("expected 2 PoW rewards, got %d (%v)", len(got), got)
+		}
+		// Sorted by coin type; each coin must carry its own BlockHeight.
+		if got[0].CoinType != 1 || got[0].Amount != "550000000000000000" || got[0].BlockHeight != 100 {
+			t.Errorf("SKA1 = %+v, want CoinType=1 Amount=550000000000000000 BlockHeight=100", got[0])
+		}
+		if got[1].CoinType != 2 || got[1].Amount != "300000000000000000" || got[1].BlockHeight != 95 {
+			t.Errorf("SKA2 = %+v, want CoinType=2 Amount=300000000000000000 BlockHeight=95", got[1])
 		}
 	})
 
