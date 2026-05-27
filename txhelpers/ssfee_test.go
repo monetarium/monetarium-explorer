@@ -425,7 +425,7 @@ func TestBlockSSFeeTotals(t *testing.T) {
 	t.Run("SKA coinbase input is skipped in net calculation", func(t *testing.T) {
 		// Coinbase inputs create value ex-nihilo rather than transferring
 		// it, so they must NOT reduce the net. Without the skip the net
-		// would be outputs − SKAValueIn, understating the PoW reward.
+		// would be outputs − SKAValueIn, understating the PoS reward.
 		tx := makeSSFeeTx(1, 1000000000000000000, []int64{1500000000000000000, 0},
 			[][]byte{ssfeeStakegenScript, sfMarker()}, true)
 		got := blockSSFeeTotalsInternal([]*wire.MsgTx{tx}, ssfeeAll)
