@@ -4,6 +4,7 @@ import (
 	"math/big"
 	"testing"
 
+	"github.com/monetarium/monetarium-node/blockchain/stake"
 	"github.com/monetarium/monetarium-node/cointype"
 	"github.com/monetarium/monetarium-node/wire"
 )
@@ -336,94 +337,202 @@ func TestExtractSKARewardsFromCoinbase_Summing(t *testing.T) {
 	}
 }
 
-func TestComputeMiningFee_UserScenario(t *testing.T) {
-	// User's provided Coinbase TX: Total = 32.00016925 VAR = 3200016925 atoms
-	coinbase := wire.NewMsgTx()
-	coinbase.AddTxOut(wire.NewTxOut(0, nil))          // vout 0: 0
-	coinbase.AddTxOut(wire.NewTxOut(0, nil))          // vout 1: 0
-	coinbase.AddTxOut(wire.NewTxOut(3200016925, nil)) // vout 2: 32.00016925 VAR
-
-	block := &wire.MsgBlock{
-		Transactions: []*wire.MsgTx{coinbase},
-	}
-
-	// Subsidy = 32 VAR = 3200000000 atoms
-	got := computeMiningFee(block, 3200000000)
-	want := int64(16925)
-	if got != want {
-		t.Errorf("got %d, want %d", got, want)
-	}
+// newTxWithFee creates a wire.MsgTx with an input of inputAmount atoms and outputs
+// totalling inputAmount - fee atoms. The fee is the difference between input and outputs.
+func newTxWithFee(inputAmount, fee int64) *wire.MsgTx {
+	tx := wire.NewMsgTx()
+	tx.AddTxIn(wire.NewTxIn(&wire.OutPoint{}, inputAmount, nil))
+	tx.AddTxOut(wire.NewTxOut(inputAmount-fee, nil))
+	return tx
 }
 
-// TestComputeMiningFee_CoinbaseEqualsSubsidy tests when coinbase equals the base subsidy.
-// This happens when there are no transaction fees in the block.
-func TestComputeMiningFee_CoinbaseEqualsSubsidy(t *testing.T) {
-	// Coinbase output = 16.00 VAR (exactly equal to subsidy)
+func TestComputeMiningFee_NoRegularTx(t *testing.T) {
 	coinbase := wire.NewMsgTx()
-	coinbase.AddTxOut(wire.NewTxOut(16e8, nil)) // 16 VAR = 1.6e9 atoms
+	coinbase.AddTxOut(wire.NewTxOut(16e8, nil))
 
 	block := &wire.MsgBlock{
 		Transactions: []*wire.MsgTx{coinbase},
 	}
 
-	got := computeMiningFee(block, 16e8)
+	got := computeMiningFee(block)
 	want := int64(0)
 	if got != want {
 		t.Errorf("got %d, want %d", got, want)
 	}
 }
 
-// TestComputeMiningFee_CoinbaseGreaterThanSubsidy tests when coinbase is greater than subsidy.
-// This happens when there are transaction fees (positive net from txs).
-func TestComputeMiningFee_CoinbaseGreaterThanSubsidy(t *testing.T) {
-	// Block 36500: Coinbase output = 16.00731048 VAR (fee = 0.00731048 VAR)
-	// 16.00731048 VAR = 1600731048 atoms
+func TestComputeMiningFee_WithRegularTx(t *testing.T) {
 	coinbase := wire.NewMsgTx()
-	coinbase.AddTxOut(wire.NewTxOut(1600731048, nil))
+	coinbase.AddTxOut(wire.NewTxOut(16e8+10000, nil))
+	regTx := newTxWithFee(100000, 10000)
 
 	block := &wire.MsgBlock{
-		Transactions: []*wire.MsgTx{coinbase},
+		Transactions: []*wire.MsgTx{coinbase, regTx},
 	}
 
-	got := computeMiningFee(block, 16e8)
-	want := int64(731048) // 1600731048 - 1600000000 = 731048 atoms = 0.00731048 VAR
+	got := computeMiningFee(block)
+	want := int64(10000)
 	if got != want {
 		t.Errorf("got %d, want %d", got, want)
 	}
 }
 
-// TestComputeMiningFee_CoinbaseLessThanSubsidy tests when coinbase is less than subsidy.
-// This is an edge case that can happen if fees are negative.
-func TestComputeMiningFee_CoinbaseLessThanSubsidy(t *testing.T) {
-	// Coinbase output = 15.99 VAR (less than 16 VAR subsidy)
+func TestComputeMiningFee_NoFees(t *testing.T) {
 	coinbase := wire.NewMsgTx()
-	coinbase.AddTxOut(wire.NewTxOut(1599000000, nil)) // 15.99 VAR = 1599000000 atoms
+	coinbase.AddTxOut(wire.NewTxOut(16e8, nil))
+	regTx := newTxWithFee(100000, 0)
 
 	block := &wire.MsgBlock{
-		Transactions: []*wire.MsgTx{coinbase},
+		Transactions: []*wire.MsgTx{coinbase, regTx},
 	}
 
-	got := computeMiningFee(block, 16e8)
-	want := int64(-1000000) // 1599000000 - 1600000000 = -1000000 atoms = -0.01 VAR
+	got := computeMiningFee(block)
+	want := int64(0)
 	if got != want {
 		t.Errorf("got %d, want %d", got, want)
 	}
 }
 
-// TestComputeMiningFee_PositiveFee tests with real data from Block 36504.
-// Coinbase output = 16.01076502 VAR
-func TestComputeMiningFee_Block36504(t *testing.T) {
-	// Block 36504: Coinbase = 16.01076502 VAR = 1601076502 atoms
+func TestComputeMiningFee_MultipleRegularTx(t *testing.T) {
 	coinbase := wire.NewMsgTx()
-	coinbase.AddTxOut(wire.NewTxOut(1601076502, nil))
+	coinbase.AddTxOut(wire.NewTxOut(16e8+6000, nil))
+	tx1 := newTxWithFee(10000, 1000)
+	tx2 := newTxWithFee(20000, 2000)
+	tx3 := newTxWithFee(30000, 3000)
 
 	block := &wire.MsgBlock{
-		Transactions: []*wire.MsgTx{coinbase},
+		Transactions: []*wire.MsgTx{coinbase, tx1, tx2, tx3},
 	}
 
-	got := computeMiningFee(block, 16e8)
-	want := int64(1076502) // 1601076502 - 1600000000 = 1076502 atoms = 0.01076502 VAR
+	got := computeMiningFee(block)
+	want := int64(6000)
 	if got != want {
 		t.Errorf("got %d, want %d", got, want)
+	}
+}
+
+// Reference SStx output scripts copied verbatim from
+// monetarium-node/blockchain/stake's own test fixtures (sstxTxOut0/1/2). They
+// satisfy stake.CheckSStx purely as scripts — values are independent, so the
+// helper below can dial in a chosen fee.
+var (
+	opSSTxScript = []byte{
+		0xba, 0x76, 0xa9, 0x14, // OP_SSTX OP_DUP OP_HASH160 OP_DATA_20
+		0xc3, 0x98, 0xef, 0xa9,
+		0xc3, 0x92, 0xba, 0x60,
+		0x13, 0xc5, 0xe0, 0x4e,
+		0xe7, 0x29, 0x75, 0x5e,
+		0xf7, 0xf5, 0x8b, 0x32,
+		0x88, 0xac, // OP_EQUALVERIFY OP_CHECKSIG
+	}
+	opSStxCommitScript = []byte{
+		0x6a, 0x1e, // OP_RETURN, 30-byte push
+		0x94, 0x8c, 0x76, 0x5a,
+		0x69, 0x14, 0xd4, 0x3f,
+		0x2a, 0x7a, 0xc1, 0x77,
+		0xda, 0x2c, 0x2f, 0x6b,
+		0x52, 0xde, 0x3d, 0x7c,
+		0x00, 0xe3, 0x23, 0x21,
+		0x00, 0x00, 0x00, 0x00,
+		0x44, 0x3f,
+	}
+	opSSTxChangeScript = []byte{
+		0xbd, 0x76, 0xa9, 0x14, // OP_SSTXCHANGE OP_DUP OP_HASH160 OP_DATA_20
+		0xc3, 0x98, 0xef, 0xa9,
+		0xc3, 0x92, 0xba, 0x60,
+		0x13, 0xc5, 0xe0, 0x4e,
+		0xe7, 0x29, 0x75, 0x5e,
+		0xf7, 0xf5, 0x8b, 0x32,
+		0x88, 0xac,
+	}
+)
+
+// newSStxWithFee returns an SStx (ticket) with one input of inputAmount atoms,
+// outputs summing to inputAmount-fee, and a script layout that satisfies
+// stake.IsSStx so DetermineTxType classifies it as TxTypeSStx.
+func newSStxWithFee(t *testing.T, inputAmount, fee int64) *wire.MsgTx {
+	t.Helper()
+	if fee < 0 || fee > inputAmount {
+		t.Fatalf("invalid test setup: inputAmount=%d fee=%d", inputAmount, fee)
+	}
+	purchase := (inputAmount - fee) / 2
+	change := (inputAmount - fee) - purchase
+
+	tx := wire.NewMsgTx()
+	tx.AddTxIn(wire.NewTxIn(&wire.OutPoint{}, inputAmount, nil))
+
+	out0 := wire.NewTxOut(purchase, opSSTxScript)
+	tx.AddTxOut(out0)
+	out1 := wire.NewTxOut(0, opSStxCommitScript)
+	tx.AddTxOut(out1)
+	out2 := wire.NewTxOut(change, opSSTxChangeScript)
+	tx.AddTxOut(out2)
+
+	if !stake.IsSStx(tx) {
+		t.Fatalf("test fixture failed: constructed tx is not classified as SStx")
+	}
+	return tx
+}
+
+func TestComputeMiningFee_TicketInSTransactions(t *testing.T) {
+	coinbase := wire.NewMsgTx()
+	coinbase.AddTxOut(wire.NewTxOut(16e8, nil))
+	ticket := newSStxWithFee(t, 1_000_000, 12_345)
+
+	block := &wire.MsgBlock{
+		Transactions:  []*wire.MsgTx{coinbase},
+		STransactions: []*wire.MsgTx{ticket},
+	}
+
+	got := computeMiningFee(block)
+	want := int64(12_345)
+	if got != want {
+		t.Errorf("got %d, want %d", got, want)
+	}
+}
+
+func TestComputeMiningFee_BothTrees(t *testing.T) {
+	coinbase := wire.NewMsgTx()
+	coinbase.AddTxOut(wire.NewTxOut(16e8+1000, nil))
+	regTx := newTxWithFee(50_000, 1_000)
+	ticket1 := newSStxWithFee(t, 1_000_000, 2_500)
+	ticket2 := newSStxWithFee(t, 2_000_000, 4_000)
+
+	block := &wire.MsgBlock{
+		Transactions:  []*wire.MsgTx{coinbase, regTx},
+		STransactions: []*wire.MsgTx{ticket1, ticket2},
+	}
+
+	got := computeMiningFee(block)
+	want := int64(1_000 + 2_500 + 4_000)
+	if got != want {
+		t.Errorf("got %d, want %d", got, want)
+	}
+}
+
+// TestComputeMiningFee_NonTicketSTransactionsExcluded confirms the STransactions
+// loop's `!= TxTypeSStx` filter actually drops non-ticket entries. A plain
+// (non-stake) MsgTx in STransactions is classified TxTypeRegular by
+// DetermineTxType, so its fee must not contribute to MiningFee — the same code
+// path that excludes votes (SSGen), stake fees (SSFee), and revocations (SSRtx).
+func TestComputeMiningFee_NonTicketSTransactionsExcluded(t *testing.T) {
+	coinbase := wire.NewMsgTx()
+	coinbase.AddTxOut(wire.NewTxOut(16e8, nil))
+	ticket := newSStxWithFee(t, 1_000_000, 7_777)
+	nonTicket := newTxWithFee(500_000, 9_999) // classified TxTypeRegular
+
+	if got := stake.DetermineTxType(nonTicket); got == stake.TxTypeSStx {
+		t.Fatalf("test fixture broken: non-ticket tx is classified as SStx")
+	}
+
+	block := &wire.MsgBlock{
+		Transactions:  []*wire.MsgTx{coinbase},
+		STransactions: []*wire.MsgTx{ticket, nonTicket},
+	}
+
+	got := computeMiningFee(block)
+	want := int64(7_777) // only the ticket's fee
+	if got != want {
+		t.Errorf("got %d, want %d (nonTicket fee of 9_999 must not be counted)", got, want)
 	}
 }

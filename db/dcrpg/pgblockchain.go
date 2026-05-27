@@ -6547,7 +6547,42 @@ func trimmedTxInfoFromMsgTx(txraw *chainjson.TxRawResult, ticketPrice int64, msg
 		VoutCount: len(txraw.Vout),
 		VoteValid: voteValid,
 		Voted:     txBasic.VoteInfo != nil,
+		CoinType:  txBasic.CoinType,
 	}
+
+	// Calculate high-precision fee and fee rate for all non-coinbase transactions
+	if !txBasic.Coinbase {
+		if txBasic.CoinType != 0 { // SKA
+			totalIn := new(big.Int)
+			for vi := range txraw.Vin {
+				if txraw.Vin[vi].SKAAmountIn == "" {
+					continue
+				}
+				if amt, ok := new(big.Int).SetString(txraw.Vin[vi].SKAAmountIn, 10); ok {
+					totalIn.Add(totalIn, amt)
+				}
+			}
+			totalOut := new(big.Int)
+			if txBasic.TotalRaw != "" {
+				totalOut.SetString(txBasic.TotalRaw, 10)
+			}
+			fee := new(big.Int).Sub(totalIn, totalOut)
+			if fee.Sign() < 0 {
+				fee.SetInt64(0)
+			}
+			tx.FeeRaw = fee.String()
+			if txSize := int64(msgTx.SerializeSize()); txSize > 0 {
+				rate := new(big.Int).Mul(fee, big.NewInt(1000))
+				rate.Quo(rate, big.NewInt(txSize))
+				tx.FeeRateRaw = rate.String()
+			}
+		} else { // VAR
+			fee, feeRate := txhelpers.TxFeeRate(msgTx)
+			tx.FeeRaw = strconv.FormatInt(int64(fee), 10)
+			tx.FeeRateRaw = strconv.FormatInt(int64(feeRate), 10)
+		}
+	}
+
 	return tx, txType
 }
 
@@ -6729,37 +6764,6 @@ func (pgb *ChainDB) GetExplorerBlock(ctx context.Context, hash string) *exptypes
 			}
 		}
 
-		// SKA fee = sum(SKAAmountIn) - sum(outputs) in the tx's coin. The node
-		// includes per-input SKA atoms in the verbose tx, so this needs no DB
-		// lookup. makeExplorerTxBasic skips this because it has no access to
-		// vin.SKAAmountIn; do it here so the block page renders the right fee
-		// in the row's own coin instead of "0 VAR".
-		if exptx.CoinType != 0 && !exptx.Coinbase {
-			totalIn := new(big.Int)
-			for vi := range tx.Vin {
-				if tx.Vin[vi].SKAAmountIn == "" {
-					continue
-				}
-				if amt, ok := new(big.Int).SetString(tx.Vin[vi].SKAAmountIn, 10); ok {
-					totalIn.Add(totalIn, amt)
-				}
-			}
-			totalOut := new(big.Int)
-			if exptx.TotalRaw != "" {
-				totalOut.SetString(exptx.TotalRaw, 10)
-			}
-			fee := new(big.Int).Sub(totalIn, totalOut)
-			if fee.Sign() < 0 {
-				fee.SetInt64(0)
-			}
-			exptx.FeeRaw = fee.String()
-			if txSize := int64(msgTx.SerializeSize()); txSize > 0 {
-				rate := new(big.Int).Mul(fee, big.NewInt(1000))
-				rate.Quo(rate, big.NewInt(txSize))
-				exptx.FeeRateRaw = rate.String()
-			}
-		}
-
 		txs = append(txs, exptx)
 	}
 
@@ -6787,9 +6791,13 @@ func (pgb *ChainDB) GetExplorerBlock(ctx context.Context, hash string) *exptypes
 		for _, tx := range txs {
 			// Coinbase transactions have no fee. The fee should be zero already
 			// (as in makeExplorerTxBasic), but intercept coinbase just in case.
-			// Note that this does not include stakebase transactions (votes),
-			// which can have a fee but are not required to.
 			if tx.Coinbase {
+				continue
+			}
+			// Exclude votes and stake fees from the header total.
+			// This is currently defense-in-depth — only block.Tx and block.Tickets
+			// are passed to getTotalFee, which never contain these types.
+			if tx.Type == txhelpers.TxTypeVote || tx.Type == txhelpers.TxTypeSSFee {
 				continue
 			}
 			if tx.Fee < 0 {
@@ -6811,8 +6819,7 @@ func (pgb *ChainDB) GetExplorerBlock(ctx context.Context, hash string) *exptypes
 	}
 	block.TotalSent = (getTotalSent(block.Tx) + getTotalSent(block.Treasury) + getTotalSent(block.Revs) +
 		getTotalSent(block.Tickets) + getTotalSent(block.Votes) + getTotalSent(block.StakeFees)).ToCoin()
-	block.MiningFee = (getTotalFee(block.Tx) + getTotalFee(block.Treasury) + getTotalFee(block.Revs) +
-		getTotalFee(block.Tickets) + getTotalFee(block.Votes)).ToCoin()
+	block.MiningFee = (getTotalFee(block.Tx) + getTotalFee(block.Tickets)).ToCoin()
 
 	// Aggregate fees per coin type (VAR from MiningFee, SKA from SSFeeTotalsByCoin)
 	feesMap := make(map[uint8]string)

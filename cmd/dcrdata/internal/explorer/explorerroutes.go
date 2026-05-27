@@ -2537,11 +2537,12 @@ const ellipsisHTML = "…"
 // the offset inserted using Sprintf.
 func calcPagesDesc(rows, pageSize, offset int, link string) pageNumbers {
 	nums := make(pageNumbers, 0, 11)
-	endIdx := rows / pageSize
-	if endIdx == 0 {
+	if rows == 0 {
 		return nums
 	}
-	pages := endIdx + 1
+	numPages := (rows + pageSize - 1) / pageSize
+	endIdx := numPages - 1
+	pages := numPages
 	currentPageIdx := (rows - offset) / pageSize
 	if pages > 10 {
 		nums = append(nums, makePageNumber(currentPageIdx == 0, fmt.Sprintf(link, rows), "1"))
@@ -2587,11 +2588,12 @@ func calcPages(rows, pageSize, offset int, link string) pageNumbers {
 		return pageNumbers{}
 	}
 	nums := make(pageNumbers, 0, 11)
-	endIdx := rows / pageSize
-	if endIdx == 0 {
+	if rows == 0 {
 		return nums
 	}
-	pages := endIdx + 1
+	numPages := (rows + pageSize - 1) / pageSize
+	endIdx := numPages - 1
+	pages := numPages
 	currentPageIdx := offset / pageSize
 
 	if pages > 10 {

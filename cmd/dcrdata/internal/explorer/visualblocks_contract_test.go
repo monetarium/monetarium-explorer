@@ -124,6 +124,145 @@ func TestVisualBlocksDataContract(t *testing.T) {
 		}
 	})
 
+	t.Run("BlockFeeParity", func(t *testing.T) {
+		// Self-contained fixture with known fee values.
+		// FeeRateRaw values are derived as fee * 1000 / size to lock in atoms/kB:
+		//   regular:  10000000 * 1000 / 500 = 20000000
+		//   stake:    5000000  * 1000 / 250 = 20000000
+		//   ska fee:  2500000000000000000 * 1000 / 200 = 12500000000000000000
+		const (
+			feeRaw       = "10000000"
+			feeRateRaw   = "20000000"
+			coinbaseRaw  = "0"
+			coinbaseRate = "0"
+			stakeFeeRaw  = "5000000"
+			stakeFeeRate = "20000000"
+			skaFeeRaw    = "2500000000000000000"
+			skaFeeRate   = "12500000000000000000"
+		)
+		feeBI := &types.BlockInfo{
+			BlockBasic: &types.BlockBasic{Size: 10000},
+			MiningFee:  1.23456789,
+			Tx: []*types.TrimmedTxInfo{
+				{
+					TxBasic: &types.TxBasic{
+						Size: 500, FeeRaw: feeRaw, FeeRateRaw: feeRateRaw,
+					},
+				},
+				{
+					TxBasic: &types.TxBasic{
+						Size: 400, Coinbase: true, FeeRaw: coinbaseRaw, FeeRateRaw: coinbaseRate,
+					},
+				},
+			},
+			StakeFees: []*types.TrimmedTxInfo{
+				{
+					TxBasic: &types.TxBasic{CoinType: 0, FeeRaw: stakeFeeRaw, FeeRateRaw: stakeFeeRate},
+				},
+				{
+					TxBasic: &types.TxBasic{CoinType: 1, FeeRaw: skaFeeRaw, FeeRateRaw: skaFeeRate},
+				},
+			},
+		}
+
+		// 1. HTTP wire via Trim (mirrors BlockContractWireFormat)
+		trimmed := feeBI.Trim(maxBlockSize, issuedSKA)
+		httpData, _ := json.Marshal(trimmed)
+		var httpWire map[string]interface{}
+		json.Unmarshal(httpData, &httpWire)
+
+		// 2. WS wire via Trim + patch (mirrors BlockWSWireFormatEquivalence and websockethandlers.go:284-288)
+		blockCopy := *feeBI
+		blockCopy.CoinFills = trimmed.CoinFills
+		blockCopy.ActiveSKACount = trimmed.ActiveSKACount
+		blockCopy.MaxBlockSize = trimmed.MaxBlockSize
+		blockCopy.RegularCoinCounts = trimmed.RegularCoinCounts
+		blockCopy.TotalFillRatio = trimmed.TotalFillRatio
+
+		wsData, err := json.Marshal(types.WebsocketBlock{Block: &blockCopy})
+		if err != nil {
+			t.Fatalf("WS Marshal failed: %v", err)
+		}
+		var wsRaw map[string]interface{}
+		if err := json.Unmarshal(wsData, &wsRaw); err != nil {
+			t.Fatalf("WS Unmarshal failed: %v", err)
+		}
+		wsWire, ok := wsRaw["block"].(map[string]interface{})
+		if !ok {
+			t.Fatal("WS wire: missing block wrapper")
+		}
+
+		// 3. Cross-wire: MiningFee == Fees
+		httpFees, ok := httpWire["fees"].(float64)
+		if !ok {
+			t.Fatal("HTTP wire: fees missing")
+		}
+		wsFees, ok := wsWire["MiningFee"].(float64)
+		if !ok {
+			t.Fatal("WS wire: MiningFee missing")
+		}
+		if httpFees != wsFees {
+			t.Errorf("Fee total cross-wire mismatch: HTTP[ fees ]=%v, WS[ MiningFee ]=%v", httpFees, wsFees)
+		}
+
+		// 4. Cross-wire: Transactions[].FeeRaw and FeeRateRaw
+		httpTx := httpWire["transactions"].([]interface{})
+		wsTx := wsWire["Tx"].([]interface{})
+		if len(httpTx) != 1 {
+			t.Fatalf("HTTP wire: expected 1 non-coinbase tx, got %d", len(httpTx))
+		}
+		if len(wsTx) != 2 {
+			t.Fatalf("WS wire: expected 2 tx entries, got %d", len(wsTx))
+		}
+		// Coinbase is index 1 on WS, absent on HTTP
+		wsCB, ok := wsTx[1].(map[string]interface{})
+		if !ok {
+			t.Fatal("WS wire: tx[1] not a map")
+		}
+		cbVal, _ := wsCB["Coinbase"].(bool)
+		if !cbVal {
+			t.Error("WS wire: tx[1] expected coinbase")
+		}
+
+		// Regular tx at index 0 on both wires
+		hTx, ok := httpTx[0].(map[string]interface{})
+		if !ok {
+			t.Fatal("HTTP wire: transactions[0] not a map")
+		}
+		wTx, ok := wsTx[0].(map[string]interface{})
+		if !ok {
+			t.Fatal("WS wire: Tx[0] not a map")
+		}
+		if got, want := wTx["FeeRaw"].(string), hTx["FeeRaw"].(string); got != want {
+			t.Errorf("Regular tx FeeRaw cross-wire mismatch: HTTP=%s, WS=%s", want, got)
+		}
+		if got, want := wTx["FeeRateRaw"].(string), hTx["FeeRateRaw"].(string); got != want {
+			t.Errorf("Regular tx FeeRateRaw cross-wire mismatch: HTTP=%s, WS=%s", want, got)
+		}
+		// Also verify the values lock in atoms/kB
+		if hTx["FeeRaw"].(string) != feeRaw {
+			t.Errorf("HTTP fee raw: got %s, want %s", hTx["FeeRaw"].(string), feeRaw)
+		}
+		if hTx["FeeRateRaw"].(string) != feeRateRaw {
+			t.Errorf("HTTP fee rate raw: got %s, want %s", hTx["FeeRateRaw"].(string), feeRateRaw)
+		}
+
+		// 5. StakeFees: WS only (no HTTP counterpart). Assert round-trip correctness.
+		wsSF, ok := wsWire["StakeFees"].([]interface{})
+		if !ok {
+			t.Fatal("WS wire: StakeFees missing")
+		}
+		for i, sfRaw := range wsSF {
+			sf := sfRaw.(map[string]interface{})
+			if got := sf["FeeRaw"].(string); got != feeBI.StakeFees[i].FeeRaw {
+				t.Errorf("StakeFees[%d] FeeRaw: WS=%s, expected=%s", i, got, feeBI.StakeFees[i].FeeRaw)
+			}
+			if got := sf["FeeRateRaw"].(string); got != feeBI.StakeFees[i].FeeRateRaw {
+				t.Errorf("StakeFees[%d] FeeRateRaw: WS=%s, expected=%s", i, got, feeBI.StakeFees[i].FeeRateRaw)
+			}
+		}
+	})
+
 	t.Run("MempoolContractWireFormat", func(t *testing.T) {
 		mpi := &types.MempoolInfo{
 			MempoolShort: types.MempoolShort{
