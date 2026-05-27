@@ -803,7 +803,7 @@ func (exp *explorerUI) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgB
 	// taken from the authoritative "MF"-marked SSFee split (issue #273). This
 	// mirrors the "Vote SKA Fee Reward" (PoS) derivation above so the HTTP and
 	// WebSocket paths stay consistent and no heuristic /2 or 100% guess is used.
-	var powRewardsBlockHeight int64
+	powRewardsBlockHeight := make(map[uint8]int64)
 	powRewardsMap := make(map[uint8]string)
 
 	// Prefer the current block; otherwise fall back to the most recent block
@@ -813,7 +813,7 @@ func (exp *explorerUI) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgB
 			continue
 		}
 		powRewardsMap[ct] = txhelpers.FormatSKAAtoms(split.PoW)
-		powRewardsBlockHeight = newBlockData.Height
+		powRewardsBlockHeight[ct] = newBlockData.Height
 	}
 	for i := len(sum30) - 1; i >= 0; i-- {
 		for ct, split := range sum30[i].SSFeeTotalsByCoin {
@@ -824,8 +824,8 @@ func (exp *explorerUI) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgB
 				continue
 			}
 			powRewardsMap[ct] = txhelpers.FormatSKAAtoms(split.PoW)
-			if powRewardsBlockHeight == 0 {
-				powRewardsBlockHeight = int64(sum30[i].Height)
+			if _, hasHeight := powRewardsBlockHeight[ct]; !hasHeight {
+				powRewardsBlockHeight[ct] = int64(sum30[i].Height)
 			}
 		}
 	}
@@ -837,7 +837,7 @@ func (exp *explorerUI) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgB
 				CoinType:    ct,
 				Symbol:      fmt.Sprintf("SKA%d", ct),
 				Amount:      amountStr,
-				BlockHeight: powRewardsBlockHeight,
+				BlockHeight: powRewardsBlockHeight[ct],
 			})
 		}
 		sort.Slice(powRewards, func(i, j int) bool { return powRewards[i].CoinType < powRewards[j].CoinType })

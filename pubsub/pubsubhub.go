@@ -821,12 +821,6 @@ func (psh *PubSubHub) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgBl
 	}
 
 	if len(coinTypes) > 0 {
-		// Only set block height when current block has SKA fee data.
-		var voteRewardsBlockHeight int64
-		if len(blockData.ExtraInfo.SSFeeTotalsByCoin) > 0 {
-			voteRewardsBlockHeight = int64(blockData.Header.Height)
-		}
-
 		rewards := make([]exptypes.SKAVoteReward, 0, len(coinTypes))
 		for ct := range coinTypes {
 			var perBlock string
@@ -906,7 +900,7 @@ func (psh *PubSubHub) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgBl
 				Symbol:      fmt.Sprintf("SKA%d", ct),
 				PerBlock:    perBlock,
 				PerYear:     perYear,
-				BlockHeight: voteRewardsBlockHeight,
+				BlockHeight: blockHeight,
 			})
 		}
 		sort.Slice(rewards, func(i, j int) bool { return rewards[i].CoinType < rewards[j].CoinType })
