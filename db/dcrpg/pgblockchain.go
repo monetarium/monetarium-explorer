@@ -6743,17 +6743,24 @@ func (pgb *ChainDB) GetExplorerBlock(ctx context.Context, hash string) *exptypes
 						break
 					}
 				}
-				// SSFee is a distribution tx — the "fee" is the total
-				// reward amount (sum of all outputs with value).
-				totalReward := new(big.Int)
-				for _, out := range msgTx.TxOut {
-					if out.CoinType.IsSKA() && out.SKAValue != nil {
-						totalReward.Add(totalReward, out.SKAValue)
+				// SSFee is a distribution tx — the "reward" is the net
+				// value (totalOutput − totalInput), matching BlockSSFeeTotals.
+				net := new(big.Int)
+				for _, vin := range msgTx.TxIn {
+					if vin.SKAValueIn != nil {
+						net.Sub(net, vin.SKAValueIn)
 					} else {
-						totalReward.Add(totalReward, big.NewInt(out.Value))
+						net.Sub(net, big.NewInt(vin.ValueIn))
 					}
 				}
-				stx.FeeRaw = totalReward.String()
+				for _, out := range msgTx.TxOut {
+					if out.CoinType.IsSKA() && out.SKAValue != nil {
+						net.Add(net, out.SKAValue)
+					} else {
+						net.Add(net, big.NewInt(out.Value))
+					}
+				}
+				stx.FeeRaw = net.String()
 			}
 			stakeFees = append(stakeFees, stx)
 		}
