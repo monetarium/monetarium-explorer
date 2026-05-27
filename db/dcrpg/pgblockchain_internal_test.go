@@ -12,9 +12,9 @@ import (
 
 func TestSSFeeNetReward(t *testing.T) {
 	tests := []struct {
-		name    string
-		msgTx   *wire.MsgTx
-		want    string
+		name  string
+		msgTx *wire.MsgTx
+		want  string
 	}{
 		{
 			name: "null input SKA",
