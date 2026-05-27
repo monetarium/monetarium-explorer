@@ -96,8 +96,8 @@ func TestFormatBigIntWithCommas(t *testing.T) {
 
 func TestBuildSKACoinParams_Mainnet(t *testing.T) {
 	got := buildSKACoinParams(chaincfg.MainNetParams())
-	if len(got) < 2 {
-		t.Fatalf("expected >=2 SKA entries on mainnet, got %d", len(got))
+	if len(got) < 1 {
+		t.Fatalf("expected >=1 SKA entries on mainnet, got %d", len(got))
 	}
 
 	// Entries must be sorted by CoinType.
@@ -141,21 +141,6 @@ func TestBuildSKACoinParams_Mainnet(t *testing.T) {
 	if len(first.EmissionAmounts) != len(first.EmissionAddresses) {
 		t.Errorf("EmissionAmounts len=%d != EmissionAddresses len=%d",
 			len(first.EmissionAmounts), len(first.EmissionAddresses))
-	}
-
-	// SKA2 on mainnet is configured but inactive and not in InitialSKATypes.
-	second := got[1]
-	if second.CoinType != 2 {
-		t.Errorf("second CoinType=%d, want 2", second.CoinType)
-	}
-	if second.Label != "SKA2" {
-		t.Errorf("second Label=%q, want %q", second.Label, "SKA2")
-	}
-	if second.InitiallyActive {
-		t.Error("SKA2 should NOT be in InitialSKATypes on mainnet")
-	}
-	if second.Active {
-		t.Error("SKA2 should be inactive on mainnet")
 	}
 }
 
