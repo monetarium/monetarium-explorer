@@ -179,9 +179,6 @@ func (m *mockDataSource) VARCoinSupply(ctx context.Context) (*explorerTypes.VARC
 func (m *mockDataSource) SKACoinSupply(ctx context.Context) ([]*explorerTypes.SKACoinSupplyEntry, error) {
 	return nil, nil
 }
-func (m *mockDataSource) SKACoinEmissionHeight(ctx context.Context, coinType uint8) (int64, bool, error) {
-	return 0, false, nil
-}
 func (m *mockDataSource) SKACoinEmissionHeights(ctx context.Context, coinTypes []uint8) (map[uint8]int64, error) {
 	return nil, nil
 }

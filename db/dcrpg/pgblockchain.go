@@ -7582,21 +7582,6 @@ func (pgb *ChainDB) issuedSKACoinTypes(ctx context.Context) []uint8 {
 	return types
 }
 
-// SKACoinEmissionHeight returns the first main-chain block height where a
-// vout with the given SKA coin type was recorded. ok is false when the coin
-// type has never been observed on chain (no vouts at all).
-func (pgb *ChainDB) SKACoinEmissionHeight(ctx context.Context, coinType uint8) (height int64, ok bool, err error) {
-	var h sql.NullInt64
-	err = pgb.db.QueryRowContext(ctx, internal.SelectSKACoinEmissionHeight, coinType).Scan(&h)
-	if err != nil {
-		return 0, false, err
-	}
-	if !h.Valid {
-		return 0, false, nil
-	}
-	return h.Int64, true, nil
-}
-
 // SKACoinEmissionHeights returns a map from coin type to its first observed
 // block height for the given coin types. Only coin types that have been seen on
 // chain are included in the returned map.

@@ -30,8 +30,8 @@ monetarium-node
                                                                           │
                                             explorerUI.Store: p.BlockchainInfo = ...
                                                                           │
-   Postgres ──► SKACoinSupply (emitted CoinTypes) ──► dataSource ◄────────┤
-                + SKACoinEmissionHeight (per coin)                        │
+    Postgres ──► SKACoinSupply (emitted CoinTypes) ──► dataSource ◄────────┤
+                 + SKACoinEmissionHeights (batch)                          │
                                                                           │
    GET /parameters ──► ETagAndLastModifiedIntercept ──► ParametersPage ◄──┘
                                                           │
@@ -93,9 +93,10 @@ monetarium-node
     non-nil, else `int64(params.MaximumBlockSizes[0])` (`:2150-2156`)
   - `emissionHeights map[uint8]int64` is built per request: call
     `exp.dataSource.SKACoinSupply(ctx)` for the list of CoinTypes ever
-    observed on chain, skip those in `params.InitialSKATypes`, then call
-    `exp.dataSource.SKACoinEmissionHeight(ctx, ct)` per remaining CoinType
-    to learn the first main-chain block height where it was minted. Both
+    observed on chain, gather those not in `params.InitialSKATypes` into a
+    slice, then call `exp.dataSource.SKACoinEmissionHeights(ctx, nonInitial)`
+    — a single `GROUP BY coin_type` query — to learn the first main-chain
+    block height for each. Both
     queries are **non-fatal**: on error the map is empty / partial and the
     handler falls back to the static `Active` flag (graceful degradation,
     see Section 5).
@@ -273,7 +274,7 @@ Notes:
 - **`SKACoinParam.Active` is runtime-effective for non-initial coins:**
   the visible `Active` value on `/parameters` is *not* the raw
   `SKACoinConfig.Active` flag for coins outside `InitialSKATypes`. It is
-  derived from `SKACoinSupply` + `SKACoinEmissionHeight` against
+  derived from `SKACoinSupply` + `SKACoinEmissionHeights` against
   `exp.Height()` and `params.CoinbaseMaturity`. Anyone reading "is SKA{n}
   active?" off the page is reading on-chain truth via this derivation,
   not the genesis-config flag. The static flag is the silent fallback if
@@ -319,12 +320,9 @@ When modifying `/parameters` data, check:
   must be inserted in the correct priority order — `Pending` precedes
   `Active` for the same reason a new state must precede whichever existing
   state it visually overrides).
-- `SKACoinEmissionHeight` callers: only `ParametersPage` (one call per
-  non-initial coin observed in `SKACoinSupply`). N+1 against the
-  `vouts`/`transactions` join; tolerable today because (a) page is
-  block-scoped ETag-cached and (b) testnet has only one such coin (SKA2).
-  If `params.SKACoins` grows or the cache scope changes, fold this into a
-  single `GROUP BY coin_type` query.
+- `SKACoinEmissionHeights` callers: only `ParametersPage` (one batch
+  query). Single `GROUP BY coin_type` query against the `vouts`/`transactions`
+  join; cost does not scale with the number of observed coin types.
 
 **Indirect dependencies**
 
@@ -408,10 +406,10 @@ When modifying `/parameters` data, check:
   must move together — a new field on `SKACoinParam` that is never set, or
   a new badge branch that's masked by an earlier `{{else if}}`, are both
   silent-failure modes.
-- Calling `SKACoinEmissionHeight` outside `ParametersPage` without
-  awareness of the N+1 pattern: one query per non-initial coin. Today this
-  is one extra round-trip on a block-scope-cached page; uncached or
-  per-tx-list callers would multiply that.
+- Calling `SKACoinEmissionHeights` without being aware it is a batch
+  `GROUP BY` query (already optimal — no N+1, but the return type
+  `map[uint8]int64` removes the per-coin `(ok bool)` signal that the
+  singular method provided).
 
 ---
 
@@ -429,10 +427,10 @@ When modifying `/parameters` data, check:
   computation: `cmd/dcrdata/internal/explorer/parameters.go`
 - `emissionHeights` map construction in handler:
   `cmd/dcrdata/internal/explorer/explorerroutes.go` `ParametersPage`
-- `explorerDataSource.SKACoinEmissionHeight` interface entry:
+- `explorerDataSource.SKACoinEmissionHeights` interface entry:
   `cmd/dcrdata/internal/explorer/explorer.go`
-- Postgres backing: `ChainDB.SKACoinEmissionHeight`
-  (`db/dcrpg/pgblockchain.go`) + `SelectSKACoinEmissionHeight` SQL
+- Postgres backing: `ChainDB.SKACoinEmissionHeights`
+  (`db/dcrpg/pgblockchain.go`) + `SelectSKACoinEmissionHeights` SQL
   (`db/dcrpg/internal/vinoutstmts.go`)
 - SKA per-coin badge cascade: `cmd/dcrdata/views/parameters.tmpl:329`
 - ChainParams capture: `cmd/dcrdata/internal/explorer/explorer.go:369-371`
