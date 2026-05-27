@@ -44,7 +44,7 @@ func TestTrimmedTxInfoFromMsgTx_Fees(t *testing.T) {
 			name: "SKA tx with fee",
 			txjson: `{
 				"txid": "ska-tx-id",
-				"vin": [{"SkaAmountIn": "1000"}],
+				"vin": [{"skaamountin": "1000"}],
 				"vout": [{"value": 0}],
 				"coin_type": 1
 			}`,

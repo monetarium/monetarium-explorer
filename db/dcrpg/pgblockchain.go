@@ -6794,7 +6794,9 @@ func (pgb *ChainDB) GetExplorerBlock(ctx context.Context, hash string) *exptypes
 			if tx.Coinbase {
 				continue
 			}
-			// Exclude stake-type transactions (votes/stake fees) from the header total
+			// Exclude votes and stake fees from the header total.
+			// This is currently defense-in-depth — only block.Tx and block.Tickets
+			// are passed to getTotalFee, which never contain these types.
 			if tx.Type == txhelpers.TxTypeVote || tx.Type == txhelpers.TxTypeSSFee {
 				continue
 			}

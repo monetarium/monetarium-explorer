@@ -411,7 +411,7 @@
 					<td class="mono fs15 text-end">
 						{{template "decimalParts" (coinDecimalParts .FeeRaw .CoinType false)}} {{coinSymbol .CoinType}}
 					</td>
-						<td class="mono fs15 text-end">{{template "decimalParts" (coinDecimalParts .FeeRateRaw .CoinType false)}} {{coinSymbol .CoinType}}/kB</td>
+					<td class="mono fs15 text-end">{{template "decimalParts" (coinDecimalParts .FeeRateRaw .CoinType false)}} {{coinSymbol .CoinType}}/kB</td>
 					<td class="mono fs15 text-end">{{.FormattedSize}}</td>
 				</tr>
 			{{- end}}
