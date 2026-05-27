@@ -1,8 +1,10 @@
 # Parameters Page — Data Flow (Full)
 
 > Code-grounded trace of `/parameters`. Verified at branch `feat/address-page`.
-> The page is **~95% static chain config**; exactly **one field is dynamic**
-> (`MaximumBlockSize`) plus the shared `commonData` header.
+> The page is **mostly static chain config**; dynamic content is
+> `MaximumBlockSize` (tip-only RPC), the shared `commonData` header, and —
+> for non-initial SKA coins — the runtime-derived `Active` / `Pending`
+> status sourced from on-chain emission state.
 
 ---
 
@@ -28,11 +30,16 @@ monetarium-node
                                                                           │
                                             explorerUI.Store: p.BlockchainInfo = ...
                                                                           │
+   Postgres ──► SKACoinSupply (emitted CoinTypes) ──► dataSource ◄────────┤
+                + SKACoinEmissionHeight (per coin)                        │
+                                                                          │
    GET /parameters ──► ETagAndLastModifiedIntercept ──► ParametersPage ◄──┘
                                                           │
                     ┌─────────────────────────────────────┤
                     │ commonData(r): GetTip() [Postgres]   │ derive ExtendedParams
                     │   + exp.ChainParams                   │   + AddressPrefixes(params)
+                    │                                      │   + emissionHeights{} (PG)
+                    │                                      │   + buildSKACoinParams(...)
                     └─────────────────────────────────────┤
                                                           ▼
                                       templates.exec("parameters", {CommonPageData + ExtendedParams})
@@ -84,12 +91,23 @@ monetarium-node
   - `actualTicketPoolSize := int64(params.TicketPoolSize * params.TicketsPerBlock)`
   - `maxBlockSize`: under `pageData.RLock()`, `BlockchainInfo.MaxBlockSize` if
     non-nil, else `int64(params.MaximumBlockSizes[0])` (`:2150-2156`)
-  - `SKACoins := buildSKACoinParams(params)` — walks `params.SKACoins` in
-    `CoinType` order, cross-references `params.InitialSKATypes`, and
-    pre-formats all 18-decimal SKA atom amounts (`MaxSupply`,
-    `MinRelayTxFee`, `EmissionAmounts[]`) to plain decimal strings via
-    `formatAtomsAsCoinString` so no `*big.Int` crosses the template
-    boundary (`cmd/dcrdata/internal/explorer/parameters.go`).
+  - `emissionHeights map[uint8]int64` is built per request: call
+    `exp.dataSource.SKACoinSupply(ctx)` for the list of CoinTypes ever
+    observed on chain, skip those in `params.InitialSKATypes`, then call
+    `exp.dataSource.SKACoinEmissionHeight(ctx, ct)` per remaining CoinType
+    to learn the first main-chain block height where it was minted. Both
+    queries are **non-fatal**: on error the map is empty / partial and the
+    handler falls back to the static `Active` flag (graceful degradation,
+    see Section 5).
+  - `SKACoins := buildSKACoinParams(params, exp.Height(), emissionHeights)` —
+    walks `params.SKACoins` in `CoinType` order, cross-references
+    `params.InitialSKATypes`, and pre-formats all 18-decimal SKA atom
+    amounts (`MaxSupply`, `MinRelayTxFee`, `EmissionAmounts[]`) to plain
+    decimal strings via `formatAtomsAsCoinString` so no `*big.Int` crosses
+    the template boundary (`cmd/dcrdata/internal/explorer/parameters.go`).
+    For each non-InitiallyActive coin observed in `emissionHeights`, the
+    static `Active` flag is overridden against the chain tip — see SKA
+    runtime status below.
 
 ### commonData (shared header)
 
@@ -118,9 +136,15 @@ monetarium-node
 
 - **Location:** `cmd/dcrdata/internal/explorer/parameters.go`
   (`buildSKACoinParams`, `formatBigIntAsSKAString`, `formatBigIntWithCommas`).
+- **Signature:** `buildSKACoinParams(params *chaincfg.Params, chainHeight int64, emissionHeights map[uint8]int64) []types.SKACoinParam`.
+  `chainHeight` is the tip height (`exp.Height()`); `emissionHeights` maps
+  CoinTypes that have been observed on chain to their first main-chain
+  block height. Nil / empty `emissionHeights` is valid — the function falls
+  back to the static `Active` flag for every coin.
 - **Data structures:** `[]types.SKACoinParam` (defined in
   `explorer/types/explorertypes.go`; view-model: pre-formatted strings only,
-  no `*big.Int`).
+  no `*big.Int`). Status-bearing fields: `Active`, `InitiallyActive`,
+  `Pending`.
 - **Transformations:** sort `params.SKACoins` by `cointype.CoinType`,
   cross-reference `params.InitialSKATypes` for the `InitiallyActive` flag,
   and pre-format every 18-decimal SKA atom value via
@@ -129,6 +153,34 @@ monetarium-node
   commas. `AtomsPerCoin` is rendered as a plain comma-separated integer
   scale (e.g. `1,000,000,000,000,000,000`). `EmissionKey` is deliberately
   omitted (spec §9 — dev-stub).
+
+#### SKA runtime status — `Active` override + `Pending`
+
+For coins **not** in `InitialSKATypes` and **only** when `chainHeight >= 0`,
+`buildSKACoinParams` overrides the static `SKACoinConfig.Active` flag with
+on-chain emission state:
+
+| Condition                                            | Effective `Active` | `Pending` |
+| ---------------------------------------------------- | ------------------ | --------- |
+| Not present in `emissionHeights` (never emitted)     | static `c.Active`  | false     |
+| Present, `chainHeight < firstHeight + CoinbaseMaturity` | **false**       | **true**  |
+| Present, `chainHeight >= firstHeight + CoinbaseMaturity` | **true**        | false     |
+
+Notes:
+
+- The override is **one-way**: it can flip a static `Active: false` to
+  effective true (post-maturity) and a static `Active: true` to effective
+  false (still maturing). Mid-period, `Pending=true` always implies
+  effective `Active=false` — they are not independent.
+- `InitiallyActive` coins (SKA1 on every net) skip the override entirely.
+  Their static `Active` is the truth — they were live at genesis, no
+  maturation period to model.
+- The maturity gate uses `params.CoinbaseMaturity`. SKA emissions are
+  emission-class transactions gated by an agenda vote
+  (`activateska{n}` in `internal/blockchain/ska_emission.go`), not
+  literal coinbase tx; the coinbase-maturity number is reused here as the
+  "settle for reorg safety" window. If node-side emission-tx maturity ever
+  diverges from `CoinbaseMaturity`, this gate must move with it.
 
 ### Template
 
@@ -145,6 +197,26 @@ monetarium-node
   the pre-formatted strings from `ExtendedParams.SKACoins` directly — no
   formatter helper invoked in-template for SKA amounts, ensuring the
   `*big.Int → string` precision contract is enforced at the handler boundary.
+
+#### SKA per-coin header badge (4-state, order-sensitive)
+
+`parameters.tmpl:329` picks at most one badge per coin via a single
+`{{if}}{{else if}}{{else if}}{{end}}` chain. The order matters because
+`Pending=true` always coincides with effective `Active=false`; without
+`Pending` being checked first, a maturing coin would render as `inactive`.
+
+```gotemplate
+{{if $coin.Pending}}<span class="badge bg-warning ms-2 fs12">pending</span>
+{{else if not $coin.Active}}<span class="badge bg-secondary ms-2 fs12">inactive</span>
+{{else if not $coin.InitiallyActive}}<span class="badge bg-info ms-2 fs12">activated post-genesis</span>{{end}}
+```
+
+| `Pending` | effective `Active` | `InitiallyActive` | Badge                       |
+| --------- | ------------------ | ----------------- | --------------------------- |
+| true      | false              | *                 | **pending** (yellow)        |
+| false     | false              | *                 | **inactive** (grey)         |
+| false     | true               | true              | (none — normal coin)        |
+| false     | true               | false             | **activated post-genesis** (blue) |
 
 ### Route
 
@@ -198,6 +270,19 @@ monetarium-node
   ([core/constraints.md#C1](../../core/constraints.md#C1)).
 - **Static for process lifetime:** `exp.ChainParams` is never refreshed after
   startup; a node config change requires an explorer restart to reflect here.
+- **`SKACoinParam.Active` is runtime-effective for non-initial coins:**
+  the visible `Active` value on `/parameters` is *not* the raw
+  `SKACoinConfig.Active` flag for coins outside `InitialSKATypes`. It is
+  derived from `SKACoinSupply` + `SKACoinEmissionHeight` against
+  `exp.Height()` and `params.CoinbaseMaturity`. Anyone reading "is SKA{n}
+  active?" off the page is reading on-chain truth via this derivation,
+  not the genesis-config flag. The static flag is the silent fallback if
+  the Postgres queries fail.
+- **`exp.Height() < 0` (unsynced) disables the override.** While the
+  explorer is not yet synced past the chain tip, `chainHeight` may be
+  negative; `buildSKACoinParams` skips the override in that window so the
+  page falls back to the static `Active` flag rather than mislabel coins
+  using a half-built `emissionHeights` map.
 - **Network-name coupling (soft):** `AddressPrefixes` picks documented
   textual prefixes per `params.Name` (`mainnet`/`testnet*`/`simnet`/`regnet`)
   and falls back to the magic-byte hex for any other name. The table is
@@ -226,6 +311,20 @@ When modifying `/parameters` data, check:
   (`explorerroutes.go:2173`). The `types.SKACoinParam` shape is consumed by
   `parameters.tmpl` only — changing a field name there means updating both
   the type and the template.
+- `SKACoinParam.Pending` consumers: only the badge cascade at
+  `parameters.tmpl:329`. Adding a new status state (e.g. `expired`) means
+  changing four places at once: the chain.io / agenda-tracker source of
+  truth, the override logic in `buildSKACoinParams`, the field on
+  `SKACoinParam`, and the badge chain in the template (where new branches
+  must be inserted in the correct priority order — `Pending` precedes
+  `Active` for the same reason a new state must precede whichever existing
+  state it visually overrides).
+- `SKACoinEmissionHeight` callers: only `ParametersPage` (one call per
+  non-initial coin observed in `SKACoinSupply`). N+1 against the
+  `vouts`/`transactions` join; tolerable today because (a) page is
+  block-scoped ETag-cached and (b) testnet has only one such coin (SKA2).
+  If `params.SKACoins` grows or the cache scope changes, fold this into a
+  single `GROUP BY coin_type` query.
 
 **Indirect dependencies**
 
@@ -290,6 +389,29 @@ When modifying `/parameters` data, check:
   spec §9.
 - Expecting param edits at the node to appear without restarting the explorer
   (`exp.ChainParams` is captured once).
+- Treating `SKACoinParam.Active` as a static mirror of
+  `chaincfg.SKACoinConfig.Active` for non-initial coins. It is the
+  **runtime-effective** value derived from on-chain emission state and the
+  `CoinbaseMaturity` window. Reading it as "what the node config says" will
+  be wrong for any SKA{n>=2} that's been emitted, and reading "is this coin
+  available?" off the static flag will mislead during the maturation
+  period.
+- Reordering the badge `{{if}}{{else if}}{{else if}}{{end}}` chain at
+  `parameters.tmpl:329` without realising `Pending=true` always coincides
+  with effective `Active=false`. The current order — `Pending` → `not
+  Active` → `not InitiallyActive` — is load-bearing: if `Pending` is not
+  checked first, a maturing coin will silently render as `inactive` rather
+  than `pending`.
+- Adding a new SKA coin status state (e.g. `expired`, `paused`) without
+  inserting its badge branch in the correct priority order, or without
+  reflecting it in `buildSKACoinParams` runtime derivation. Both halves
+  must move together — a new field on `SKACoinParam` that is never set, or
+  a new badge branch that's masked by an earlier `{{else if}}`, are both
+  silent-failure modes.
+- Calling `SKACoinEmissionHeight` outside `ParametersPage` without
+  awareness of the N+1 pattern: one query per non-initial coin. Today this
+  is one extra round-trip on a block-scope-cached page; uncached or
+  per-tx-list callers would multiply that.
 
 ---
 
@@ -300,9 +422,19 @@ When modifying `/parameters` data, check:
 - `commonData`: `explorerroutes.go:2534-2572`
 - `AddressPrefixes` (+ per-net `addrPrefixSet` table):
   `explorer/types/explorertypes.go`
-- `SKACoinParam` view-model: `explorer/types/explorertypes.go`
+- `SKACoinParam` view-model (incl. `Pending` and `Active` semantics):
+  `explorer/types/explorertypes.go`
 - `buildSKACoinParams` (+ `formatBigIntAsSKAString`,
-  `formatBigIntWithCommas`): `cmd/dcrdata/internal/explorer/parameters.go`
+  `formatBigIntWithCommas`) and the runtime override / `Pending`
+  computation: `cmd/dcrdata/internal/explorer/parameters.go`
+- `emissionHeights` map construction in handler:
+  `cmd/dcrdata/internal/explorer/explorerroutes.go` `ParametersPage`
+- `explorerDataSource.SKACoinEmissionHeight` interface entry:
+  `cmd/dcrdata/internal/explorer/explorer.go`
+- Postgres backing: `ChainDB.SKACoinEmissionHeight`
+  (`db/dcrpg/pgblockchain.go`) + `SelectSKACoinEmissionHeight` SQL
+  (`db/dcrpg/internal/vinoutstmts.go`)
+- SKA per-coin badge cascade: `cmd/dcrdata/views/parameters.tmpl:329`
 - ChainParams capture: `cmd/dcrdata/internal/explorer/explorer.go:369-371`
 - `pageData` struct: `explorer.go:230-233`
 - `Store` (writes `BlockchainInfo`): `explorer.go:536-572` (assignment `:572`)

@@ -118,7 +118,7 @@ _The `/attack-cost` majority-attack calculator: a no-compute Go handler reads a 
 
 ### Parameters
 
-_The `/parameters` page: active-network consensus config. ~95% static `chaincfg.Params` captured once at startup; only `MaximumBlockSize` is dynamic (tip-only RPC `GetBlockChainInfo`). Dual param injection (`commonData.ChainParams` + handler `ExtendedParams`), block-scoped ETag cache, VAR-only subsidy rows._
+_The `/parameters` page: active-network consensus config. Mostly static `chaincfg.Params` captured once at startup; dynamic parts are `MaximumBlockSize` (tip-only RPC `GetBlockChainInfo`) and — for non-initial SKA coins — the runtime-derived `Active` / `Pending` status sourced from on-chain emission state (`SKACoinSupply` + `SKACoinEmissionHeight`, gated by `CoinbaseMaturity`). Dual param injection (`commonData.ChainParams` + handler `ExtendedParams`), block-scoped ETag cache, VAR-only subsidy rows._
 
 - flow (compact): code-analysis/parameters/flow.compact.md — high-level summary of the static-vs-dynamic split, dual injection, and silent/hard failure modes
 - flow (full): code-analysis/parameters/flow.full.md — detailed, step-by-step trace from node config/RPC → pageData → handler → template, with cross-layer deps and mutation impact
