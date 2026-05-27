@@ -42,7 +42,7 @@
         </td>
         <td class="text-end num" data-type="tx">{{.Transactions}}</td>
         <td class="text-end num" data-type="var-amount">{{.VARAmount}}</td>
-        <td class="text-end num" data-type="ska-amount">{{formatSKAAmountCell .SKAAmount (len .SKASubRows)}}</td>
+        <td class="text-end num" data-type="ska-amount">{{formatSKAAmountCell .SKAAmount (len .SKASubRows) .SKAActiveSubRows}}</td>
         <td class="text-end num d-none d-sm-table-cell d-md-none d-lg-table-cell" data-type="size">{{.FormattedBytes}}</td>
         <td class="text-end num" data-type="votes">{{.Voters}}</td>
         <td class="text-end num" data-type="tickets">{{.FreshStake}}</td>

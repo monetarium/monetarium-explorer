@@ -111,6 +111,9 @@ func TestBuildHomeBlockRows_VAROnly(t *testing.T) {
 	if r.SKAAmount != "" {
 		t.Errorf("expected empty SKAAmount for VAR-only block, got %q", r.SKAAmount)
 	}
+	if r.SKAActiveSubRows != 0 {
+		t.Errorf("expected SKAActiveSubRows == 0 for VAR-only block, got %d", r.SKAActiveSubRows)
+	}
 }
 
 // TestBuildHomeBlockRows_WithCoinRows verifies that CoinRows atom strings are
@@ -204,6 +207,63 @@ func TestBuildHomeBlockRows_MultipleSKATypes(t *testing.T) {
 	if r.SKAAmount != "50000000000000000000" {
 		t.Errorf("SKAAmount: got %q, want first SKA row's raw atoms %q",
 			r.SKAAmount, "50000000000000000000")
+	}
+	if r.SKAActiveSubRows != 2 {
+		t.Errorf("SKAActiveSubRows: got %d, want 2 (both SKA rows have TxCount > 0)",
+			r.SKAActiveSubRows)
+	}
+}
+
+// TestBuildHomeBlockRows_SKAActiveSubRows verifies that SKAActiveSubRows is
+// the count of SKA sub-rows with TxCount > 0 — what the "Σ K" cell shows.
+func TestBuildHomeBlockRows_SKAActiveSubRows(t *testing.T) {
+	tests := []struct {
+		name       string
+		coinRows   []types.CoinRowData
+		wantActive int
+	}{
+		{
+			name: "two SKA, neither has txs",
+			coinRows: []types.CoinRowData{
+				{CoinType: 0, Symbol: "VAR", TxCount: 1, Amount: "1000000000", Size: 200},
+				{CoinType: 1, Symbol: "SKA1", TxCount: 0, Amount: "0", Size: 0},
+				{CoinType: 2, Symbol: "SKA2", TxCount: 0, Amount: "0", Size: 0},
+			},
+			wantActive: 0,
+		},
+		{
+			name: "two SKA, only SKA2 has txs",
+			coinRows: []types.CoinRowData{
+				{CoinType: 0, Symbol: "VAR", TxCount: 1, Amount: "1000000000", Size: 200},
+				{CoinType: 1, Symbol: "SKA1", TxCount: 0, Amount: "0", Size: 0},
+				{CoinType: 2, Symbol: "SKA2", TxCount: 3, Amount: "5000000000000000000", Size: 150},
+			},
+			wantActive: 1,
+		},
+		{
+			name: "five SKA, two have txs",
+			coinRows: []types.CoinRowData{
+				{CoinType: 1, Symbol: "SKA1", TxCount: 4, Amount: "1", Size: 1},
+				{CoinType: 2, Symbol: "SKA2", TxCount: 0, Amount: "0", Size: 0},
+				{CoinType: 3, Symbol: "SKA3", TxCount: 0, Amount: "0", Size: 0},
+				{CoinType: 4, Symbol: "SKA4", TxCount: 7, Amount: "2", Size: 1},
+				{CoinType: 5, Symbol: "SKA5", TxCount: 0, Amount: "0", Size: 0},
+			},
+			wantActive: 2,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			b := &types.BlockBasic{Height: 50, CoinRows: tt.coinRows}
+			rows := buildHomeBlockRows([]*types.BlockBasic{b})
+			if len(rows) != 1 {
+				t.Fatalf("expected 1 row, got %d", len(rows))
+			}
+			if rows[0].SKAActiveSubRows != tt.wantActive {
+				t.Errorf("SKAActiveSubRows: got %d, want %d",
+					rows[0].SKAActiveSubRows, tt.wantActive)
+			}
+		})
 	}
 }
 
