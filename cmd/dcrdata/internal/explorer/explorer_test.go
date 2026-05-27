@@ -182,6 +182,9 @@ func (m *mockDataSource) SKACoinSupply(ctx context.Context) ([]*explorerTypes.SK
 func (m *mockDataSource) SKACoinEmissionHeight(ctx context.Context, coinType uint8) (int64, bool, error) {
 	return 0, false, nil
 }
+func (m *mockDataSource) SKACoinEmissionHeights(ctx context.Context, coinTypes []uint8) (map[uint8]int64, error) {
+	return nil, nil
+}
 func (m *mockDataSource) GetVoteTicketDataByBlock(ctx context.Context, blockHash string) ([]dbtypes.VoteTicketData, error) {
 	return nil, nil
 }

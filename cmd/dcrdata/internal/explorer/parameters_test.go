@@ -189,15 +189,21 @@ func TestBuildSKACoinParams_RuntimeOverride(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			heights := map[uint8]int64{2: tc.emissionHeight}
 			got := buildSKACoinParams(params, tc.chainHeight, heights)
-			if len(got) < 2 {
-				t.Fatal("expected at least 2 SKA entries")
+			found := -1
+			for i := range got {
+				if got[i].CoinType == 2 {
+					found = i
+					break
+				}
 			}
-			ska2 := got[1]
-			if ska2.Active != tc.wantActive {
-				t.Errorf("Active = %v, want %v", ska2.Active, tc.wantActive)
+			if found == -1 {
+				t.Fatal("expected SKA2 coin type 2")
 			}
-			if ska2.Pending != tc.wantPending {
-				t.Errorf("Pending = %v, want %v", ska2.Pending, tc.wantPending)
+			if got[found].Active != tc.wantActive {
+				t.Errorf("Active = %v, want %v", got[found].Active, tc.wantActive)
+			}
+			if got[found].Pending != tc.wantPending {
+				t.Errorf("Pending = %v, want %v", got[found].Pending, tc.wantPending)
 			}
 		})
 	}

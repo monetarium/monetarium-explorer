@@ -18,6 +18,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/lib/pq"
+
 	humanize "github.com/dustin/go-humanize"
 	"github.com/monetarium/monetarium-node/blockchain/stake"
 	"github.com/monetarium/monetarium-node/blockchain/standalone"
@@ -7593,6 +7595,34 @@ func (pgb *ChainDB) SKACoinEmissionHeight(ctx context.Context, coinType uint8) (
 		return 0, false, nil
 	}
 	return h.Int64, true, nil
+}
+
+// SKACoinEmissionHeights returns a map from coin type to its first observed
+// block height for the given coin types. Only coin types that have been seen on
+// chain are included in the returned map.
+func (pgb *ChainDB) SKACoinEmissionHeights(ctx context.Context, coinTypes []uint8) (map[uint8]int64, error) {
+	// pq.Array handles []int64 correctly as an integer array for PostgreSQL;
+	// []uint8 would be ambiguous (it is []byte).
+	intTypes := make([]int64, len(coinTypes))
+	for i, ct := range coinTypes {
+		intTypes[i] = int64(ct)
+	}
+	rows, err := pgb.db.QueryContext(ctx, internal.SelectSKACoinEmissionHeights, pq.Array(intTypes))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	heights := make(map[uint8]int64, len(coinTypes))
+	for rows.Next() {
+		var ct uint8
+		var h int64
+		if err := rows.Scan(&ct, &h); err != nil {
+			return nil, err
+		}
+		heights[ct] = h
+	}
+	return heights, rows.Err()
 }
 
 // coinRowsFromAmounts converts a CoinAmounts map to []CoinRowData for the

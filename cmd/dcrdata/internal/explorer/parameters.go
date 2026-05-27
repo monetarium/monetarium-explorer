@@ -52,6 +52,10 @@ func buildSKACoinParams(params *chaincfg.Params, chainHeight int64, emissionHeig
 		pending := false
 		if chainHeight >= 0 && !initiallyActive {
 			if firstHeight, observed := emissionHeights[uint8(ct)]; observed {
+				// CoinbaseMaturity is the canonical protocol constant for the
+				// number of blocks before a coinbase output can be spent. SKA
+				// emission outputs are coinbase-like (they create value
+				// ex-nihilo) and use the same maturity rule.
 				if chainHeight >= firstHeight+int64(params.CoinbaseMaturity) {
 					active = true
 				} else {

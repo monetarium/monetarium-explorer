@@ -2120,12 +2120,17 @@ func (exp *explorerUI) ParametersPage(w http.ResponseWriter, r *http.Request) {
 		for _, ct := range params.InitialSKATypes {
 			initial[uint8(ct)] = struct{}{}
 		}
+		nonInitial := make([]uint8, 0, len(supply))
 		for _, entry := range supply {
-			if _, ok := initial[entry.CoinType]; ok {
-				continue
+			if _, ok := initial[entry.CoinType]; !ok {
+				nonInitial = append(nonInitial, entry.CoinType)
 			}
-			if h, seen, err := exp.dataSource.SKACoinEmissionHeight(ctx, entry.CoinType); err == nil && seen {
-				emissionHeights[entry.CoinType] = h
+		}
+		if len(nonInitial) > 0 {
+			if heights, err := exp.dataSource.SKACoinEmissionHeights(ctx, nonInitial); err == nil {
+				for ct, h := range heights {
+					emissionHeights[ct] = h
+				}
 			}
 		}
 	}
