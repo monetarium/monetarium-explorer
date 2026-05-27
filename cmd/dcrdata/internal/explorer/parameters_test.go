@@ -159,7 +159,7 @@ func TestBuildSKACoinParams_OtherNets(t *testing.T) {
 }
 
 func TestBuildSKACoinParams_RuntimeOverride(t *testing.T) {
-	params := chaincfg.MainNetParams()
+	params := chaincfg.TestNet3Params()
 	maturity := int64(params.CoinbaseMaturity)
 
 	tests := []struct {

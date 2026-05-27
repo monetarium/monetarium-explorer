@@ -50,7 +50,7 @@ func buildSKACoinParams(params *chaincfg.Params, chainHeight int64, emissionHeig
 
 		active := c.Active
 		pending := false
-		if !initiallyActive {
+		if chainHeight >= 0 && !initiallyActive {
 			if firstHeight, observed := emissionHeights[uint8(ct)]; observed {
 				if chainHeight >= firstHeight+int64(params.CoinbaseMaturity) {
 					active = true
