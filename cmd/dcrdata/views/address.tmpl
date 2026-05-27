@@ -172,7 +172,7 @@
             <div class="d-flex flex-wrap justify-content-around align-items-start">
               <div class="loader-v2 loading" data-address-target="chartLoader"></div>
               <div class="btn-set secondary-card d-inline-flex flex-nowrap mx-2">
-                <span>Chart</span>
+                <span class="btn-set-label">Chart</span>
                 <select
                     id="address-chart-type"
                     class="chart-box d-inline-flex dropdown"
@@ -185,7 +185,7 @@
                 </select>
               </div>
               <div class="btn-set secondary-card d-inline-flex flex-nowrap mx-2">
-                <span>Coin</span>
+                <span class="btn-set-label">Coin</span>
                 {{- if gt (len .ActiveCoins) 1}}
                 <select
                     class="chart-box d-inline-flex dropdown"
@@ -228,7 +228,7 @@
                   data-address-target="zoom"
                   data-action="click->address#onZoom"
               >
-                <span>Zoom</span>
+                <span class="btn-set-label">Zoom</span>
                 <button class="btn-selected" name="all" data-fixed="1">All</button>
                 <button name="year">Year</button>
                 <button name="month">Month</button>
@@ -242,7 +242,7 @@
                   data-address-target="interval"
                   data-action="click->address#changeBin"
               >
-                  <span class="d-inline-flex pe-1">Group By </span>
+                  <span class="btn-set-label d-inline-flex pe-1">Group By </span>
                   <button name="year">Year</button>
                   <button class="btn-selected" name="month">Month</button>
                   <button name="week">Week</button>
