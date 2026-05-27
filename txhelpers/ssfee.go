@@ -10,6 +10,7 @@ import (
 	"github.com/monetarium/monetarium-explorer/api/rewardtypes"
 	"github.com/monetarium/monetarium-node/blockchain/stake"
 	"github.com/monetarium/monetarium-node/chaincfg"
+	"github.com/monetarium/monetarium-node/chaincfg/chainhash"
 	"github.com/monetarium/monetarium-node/wire"
 )
 
@@ -169,6 +170,13 @@ func blockSSFeeTotalsInternal(sTxs []*wire.MsgTx, determineType func(*wire.MsgTx
 		if isSKA {
 			for _, vin := range tx.TxIn {
 				if vin.SKAValueIn != nil {
+					// Skip coinbase inputs — they create value ex nihilo
+					// rather than transferring it, so they should not
+					// reduce the net. (SKA2 coinbase SSFee at emission.)
+					if vin.PreviousOutPoint.Index == wire.MaxPrevOutIndex &&
+						vin.PreviousOutPoint.Hash.IsEqual(&chainhash.Hash{}) {
+						continue
+					}
 					net.Sub(net, vin.SKAValueIn)
 				}
 			}
