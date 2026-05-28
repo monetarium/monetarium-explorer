@@ -1194,6 +1194,16 @@ const (
 	TxTypePoWReward     string = "PoW Reward"
 )
 
+// DB extension tx types mirroring db/dbtypes/types.go canonical constants.
+// Values ≥100 are dbtypes-only extensions to stake.TxType iota range (0–7).
+const (
+	txTypeBlockRewardPoS int = 101
+	txTypeBlockRewardPoW int = 102
+	txTypeSSFeePoS       int = 103
+	txTypeSSFeePoW       int = 104
+	txTypeTicketPurchase int = 105
+)
+
 // DetermineTxTypeString returns a string representing the transaction type
 // given a wire.MsgTx struct. If the caller does not know if treasure is active
 // for this txn, but the MsgTx is from from dcrd, it can be assumed to be valid
@@ -1233,15 +1243,15 @@ func TxTypeToString(txType int) string {
 	case stake.TxTypeSSFee:
 		return TxTypeSSFee
 	// DB extension subtypes (db/dbtypes/types.go)
-	case stake.TxType(101): // TxTypeBlockRewardPoS
+	case stake.TxType(txTypeBlockRewardPoS):
 		return TxTypeStakeReward
-	case stake.TxType(102): // TxTypeBlockRewardPoW
+	case stake.TxType(txTypeBlockRewardPoW):
 		return TxTypePoWReward
-	case stake.TxType(103): // TxTypeSSFeePoS
+	case stake.TxType(txTypeSSFeePoS):
 		return TxTypeSSFee
-	case stake.TxType(104): // TxTypeSSFeePoW
+	case stake.TxType(txTypeSSFeePoW):
 		return TxTypeSSFee
-	case stake.TxType(105): // TxTypeTicketPurchase
+	case stake.TxType(txTypeTicketPurchase):
 		return TxTypeTicket
 	default:
 		return TxTypeRegular

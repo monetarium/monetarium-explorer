@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"testing"
 	"time"
+
+	"github.com/monetarium/monetarium-explorer/txhelpers"
 )
 
 const (
@@ -365,6 +367,29 @@ func TestReduceAddressHistory_MixedCoin(t *testing.T) {
 // TestFormatSKACoins covers the label-free SKA atoms→coins formatter used by
 // the CSV export (the amount column must be a bare parseable number, with the
 // coin disambiguated by the separate coin_type column).
+// TestTxTypeToString_MatchesDBExtensions asserts that txhelpers.TxTypeToString
+// correctly maps the canonical db/dbtypes extension constants (101–105) to the
+// expected display strings. If a db/dbtypes constant value changes, this test
+// fails and signals that txhelpers must be updated too.
+func TestTxTypeToString_MatchesDBExtensions(t *testing.T) {
+	tests := []struct {
+		dbValue int16
+		want    string
+	}{
+		{TxTypeBlockRewardPoS, "Stake Reward"},
+		{TxTypeBlockRewardPoW, "PoW Reward"},
+		{TxTypeSSFeePoS, "Stake Fee"},
+		{TxTypeSSFeePoW, "Stake Fee"},
+		{TxTypeTicketPurchase, "Ticket"},
+	}
+	for _, tt := range tests {
+		got := txhelpers.TxTypeToString(int(tt.dbValue))
+		if got != tt.want {
+			t.Errorf("TxTypeToString(%d) = %q, want %q", tt.dbValue, got, tt.want)
+		}
+	}
+}
+
 func TestFormatSKACoins(t *testing.T) {
 	cases := []struct {
 		atoms string
