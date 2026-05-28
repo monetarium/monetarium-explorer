@@ -78,6 +78,24 @@ describe('MessageSocket', () => {
     expect(handler).toHaveBeenCalledWith('{"height":42}')
   })
 
+  test('discards an unparseable inbound frame without throwing or wedging the loop', () => {
+    ws.connect('ws://localhost/ws')
+    socket = instances[0]
+    const handler = vi.fn()
+    ws.registerEvtHandler('newblock', handler)
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    expect(() => socket.onmessage({ data: 'not json' })).not.toThrow()
+    expect(warn).toHaveBeenCalledTimes(1)
+    expect(handler).toHaveBeenCalledTimes(0)
+
+    // The next valid frame is still forwarded.
+    socket.onmessage({ data: envelope('newblock', '{"height":42}') })
+    expect(handler).toHaveBeenCalledTimes(1)
+
+    warn.mockRestore()
+  })
+
   test("emits 'open' on every open but 'reconnect' only from the second open onward", () => {
     ws.connect('ws://localhost/ws')
     socket = instances[0]

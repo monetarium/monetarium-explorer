@@ -137,7 +137,15 @@ class MessageSocket {
       // Any inbound frame proves the connection is alive; reset before parsing
       // so even a malformed frame counts.
       this.armLiveness()
-      const json = JSON.parse(evt.data)
+      let json
+      try {
+        json = JSON.parse(evt.data)
+      } catch {
+        // A malformed frame must not throw out of the message loop; drop it and
+        // keep processing subsequent frames.
+        console.warn('MessageSocket: discarding unparseable frame')
+        return
+      }
       forward(json.event, json.message, this.handlers)
     }
 

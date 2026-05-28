@@ -497,9 +497,11 @@ Record Pass/Fail/Blocked and notes in the tracking table (Section 9).
   cannot do. Use an intercepting WS proxy (e.g. `mitmproxy` with a script that
   rewrites a `/ws` text frame, or a one-off local relay) to deliver a malformed
   frame. If no such tooling is set up, mark Blocked/NA.
-- Expect: `onmessage` does `JSON.parse` with no try/catch, so a bad frame throws.
-  Confirm whether this wedges the socket or is shrugged off, and record the actual
-  behavior (this case exists to document the failure mode, not to assert a pass).
+- Expect: `onmessage` wraps `JSON.parse` in try/catch, so a malformed frame is
+  discarded with a `console.warn` ("MessageSocket: discarding unparseable frame")
+  and the loop keeps processing subsequent frames. Liveness is unaffected (the
+  watchdog re-arms before parsing). Confirm the warn fires and the next valid
+  frame still renders.
 
 #### WS-J2 — Oversized request
 
