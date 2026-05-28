@@ -305,9 +305,16 @@ export default class extends Controller {
       this.sortVotesTable()
       keyNav(evt, false, true)
     })
+
+    // On reconnect, re-request the full mempool so the table reflects any
+    // activity that happened while the socket was down.
+    this.reconnectUnsub = ws.registerEvtHandler('reconnect', () => {
+      ws.send('getmempooltxs', '')
+    })
   }
 
   disconnect() {
+    this.reconnectUnsub()
     ws.deregisterEvtHandlers('newtxs')
     ws.deregisterEvtHandlers('mempool')
     ws.deregisterEvtHandlers('getmempooltxsResp')

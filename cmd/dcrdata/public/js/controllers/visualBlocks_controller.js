@@ -363,12 +363,18 @@ export default class extends Controller {
       ws.send('getmempooltrimmed', '')
     })
 
+    // On reconnect, re-request the trimmed mempool snapshot we render from.
+    this.reconnectUnsub = ws.registerEvtHandler('reconnect', () => {
+      ws.send('getmempooltrimmed', '')
+    })
+
     this.refreshBlocksDisplay = this._refreshBlocksDisplay.bind(this)
     window.addEventListener('resize', this.refreshBlocksDisplay)
     setTimeout(this.refreshBlocksDisplay, 500)
   }
 
   disconnect() {
+    this.reconnectUnsub()
     ws.deregisterEvtHandlers('getmempooltrimmedResp')
     ws.deregisterEvtHandlers('mempool')
     globalEventBus.off('BLOCK_RECEIVED', this.handleVisualBlocksUpdate)

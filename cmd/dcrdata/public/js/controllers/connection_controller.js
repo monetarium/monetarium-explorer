@@ -29,6 +29,13 @@ export default class extends Controller {
     })
   }
 
+  disconnect() {
+    ws.deregisterEvtHandlers('open')
+    ws.deregisterEvtHandlers('close')
+    ws.deregisterEvtHandlers('error')
+    ws.deregisterEvtHandlers('ping')
+  }
+
   updateConnectionStatus(msg, connected) {
     if (connected) {
       this.indicatorTarget.classList.add('connected')
