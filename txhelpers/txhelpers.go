@@ -1190,6 +1190,8 @@ const (
 	TxTypeTreasurySpend string = "Treasury Spend"
 	TxTypeTreasuryAdd   string = "Treasury Add"
 	TxTypeSSFee         string = "Stake Fee"
+	TxTypeStakeReward   string = "Stake Reward"
+	TxTypePoWReward     string = "PoW Reward"
 )
 
 // DetermineTxTypeString returns a string representing the transaction type
@@ -1212,6 +1214,8 @@ func IsSSRtx(tx *wire.MsgTx) bool {
 
 // TxTypeToString returns a string representation of the provided transaction
 // type, which corresponds to the txn types defined for stake.TxType type.
+// Values 101-105 are db/dbtypes extensions (see db/dbtypes/types.go) for
+// split reward/fee/ticket subtypes stored in the addresses table.
 func TxTypeToString(txType int) string {
 	switch stake.TxType(txType) {
 	case stake.TxTypeSSGen:
@@ -1228,6 +1232,17 @@ func TxTypeToString(txType int) string {
 		return TxTypeTreasurybase
 	case stake.TxTypeSSFee:
 		return TxTypeSSFee
+	// DB extension subtypes (db/dbtypes/types.go)
+	case stake.TxType(101): // TxTypeBlockRewardPoS
+		return TxTypeStakeReward
+	case stake.TxType(102): // TxTypeBlockRewardPoW
+		return TxTypePoWReward
+	case stake.TxType(103): // TxTypeSSFeePoS
+		return TxTypeSSFee
+	case stake.TxType(104): // TxTypeSSFeePoW
+		return TxTypeSSFee
+	case stake.TxType(105): // TxTypeTicketPurchase
+		return TxTypeTicket
 	default:
 		return TxTypeRegular
 	}

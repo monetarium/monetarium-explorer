@@ -182,6 +182,37 @@ func testIsZeroHashP2PHKAddress(t *testing.T, expectedAddress string, params *ch
 	}
 }
 
+func TestTxTypeToString(t *testing.T) {
+	tests := []struct {
+		txType int
+		want   string
+	}{
+		// Original stake types
+		{0, TxTypeRegular},
+		{1, TxTypeTicket},
+		{2, TxTypeVote},
+		{3, TxTypeRevocation},
+		{4, TxTypeTreasuryAdd},
+		{5, TxTypeTreasurySpend},
+		{6, TxTypeTreasurybase},
+		{7, TxTypeSSFee},
+		// DB extension subtypes
+		{101, TxTypeStakeReward},
+		{102, TxTypePoWReward},
+		{103, TxTypeSSFee},
+		{104, TxTypeSSFee},
+		{105, TxTypeTicket},
+		// Unknown falls through to Regular
+		{99, TxTypeRegular},
+		{255, TxTypeRegular},
+	}
+	for _, tt := range tests {
+		if got := TxTypeToString(tt.txType); got != tt.want {
+			t.Errorf("TxTypeToString(%d) = %q, want %q", tt.txType, got, tt.want)
+		}
+	}
+}
+
 func TestFeeRate(t *testing.T) {
 	// Ensure invalid fee rate is -1.
 	if FeeRate(0, 0, 0) != -1 {
