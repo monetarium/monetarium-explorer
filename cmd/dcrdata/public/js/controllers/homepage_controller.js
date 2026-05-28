@@ -112,9 +112,15 @@ export default class extends Controller {
     })
     this.processBlock = this._processBlock.bind(this)
     globalEventBus.on('BLOCK_RECEIVED', this.processBlock)
+
+    // On reconnect, re-request the full mempool to refresh after downtime.
+    this.reconnectUnsub = ws.registerEvtHandler('reconnect', () => {
+      ws.send('getmempooltxs', '')
+    })
   }
 
   disconnect() {
+    this.reconnectUnsub()
     ws.deregisterEvtHandlers('newtxs')
     ws.deregisterEvtHandlers('mempool')
     ws.deregisterEvtHandlers('getmempooltxsResp')

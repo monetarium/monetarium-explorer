@@ -150,6 +150,15 @@ _The `/decodetx` page: a static HTML form whose handler carries no data; all int
 - patterns: code-analysis/decodetx/patterns.md — P1 form-shell over WS-RPC, P2 three-transport surface for the same node RPC, P3 multi-coin pass-through via opaque JSON
 - impact: code-analysis/decodetx/impact.md — R1 event-string drift across 5 sites, R2 oversize-request silent drop, R3 `/ws`/`/ps` dual-pipeline drift, R4 interface fan-out (+ mock), R5 latent SKA precision loss, R6 same-event success/error multiplexing, R7 shared receive loop, R8 legacy `/explorer/decodetx` redirect
 
+### WebSocket Transport
+
+_The explorer `/ws` real-time pipe shared by all live pages: `RootWebsocket` + `WebsocketHub` (server, migrated to `coder/websocket`) and the `partysocket`-based `MessageSocket` client wrapper. Owns the connection lifecycle, hub fan-out, `{event,message}` framing, RPC-over-WS (`<event>Resp`), synthetic `open`/`reconnect`/`close`/`error` events, two-layer outbound buffering, and 60 s keepalive — distinct from per-feature payload domains (mempool/visualblocks/decodetx/ticketpool) and from the separate pubsub `/ps` server._
+
+- flow (compact): code-analysis/websocket/flow.compact.md — one-line push/request flow, 7 transport patterns, constraints, mutation checklist
+- flow (full): code-analysis/websocket/flow.full.md — end-to-end trace: hub → 3-goroutine connection handler → wire envelope → partysocket client → consumers; event-id triple coupling; keepalive
+- patterns: code-analysis/websocket/patterns.md — envelope-and-dispatch + synthetic events, 3-goroutine/`connCtx` model, fan-out unregister-on-backpressure, RPC-over-WS, reconnect-driven re-request, two-layer buffering, new-tx batching
+- impact: code-analysis/websocket/impact.md — R1 event-name drift, R2 unwired push signal, R3 `/ws`↔`/ps`↔HTTP drift, R4 SKA-through-float, R5 backpressure change, R6 connCtx teardown, R7 keepalive removal, R8 size limits, R9 reconnect-recovery omissions, R10 queue overflow / malformed frame
+
 ### Ticketpool
 
 _The `/ticketpool` page: form-shell HTML + three live data channels (HTTP `/api/ticketpool/charts`, HTTP `/api/ticketpool/bydate/{tp}`, WS `getticketpooldata`→`Resp`). Server `Ticketpool` handler injects only `commonData`; `sigNewBlock` carries no ticket data, the JS controller re-requests on every `newblock`. One `PoolTicketsData` struct populated by three positional Scans; process-global stale-while-revalidate cache keyed `(interval, height)` with `trylock.Mutex` updater election and an inner retry loop to keep all three sub-charts at one block. VAR-only float64 pipeline (tickets are a VAR PoS instrument by chain design); same JSON field `mempool.price` carries two different semantics across REST vs WS — a C8 manifestation inside a single field._

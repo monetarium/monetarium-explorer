@@ -147,7 +147,9 @@ export default class extends Controller {
   }
 
   connect() {
-    ws.registerEvtHandler('newblock', () => {
+    // 'newblock' is also handled by the global producer in index.js, so keep
+    // the per-handler unsubscribe and remove only ours on disconnect.
+    this.newblockUnsub = ws.registerEvtHandler('newblock', () => {
       ws.send('getticketpooldata', this.bars)
     })
 
@@ -157,6 +159,12 @@ export default class extends Controller {
       }
       const data = JSON.parse(evt)
       this.processData(data)
+    })
+
+    // On reconnect, re-request the ticket pool data that may have changed while
+    // the socket was down.
+    this.reconnectUnsub = ws.registerEvtHandler('reconnect', () => {
+      ws.send('getticketpooldata', this.bars)
     })
 
     this.fetchAll()
@@ -199,11 +207,18 @@ export default class extends Controller {
   }
 
   disconnect() {
-    this.purchasesGraph.destroy()
-    this.priceGraph.destroy()
-
-    ws.deregisterEvtHandlers('ticketpool')
+    // Tear down websocket handlers first so a failure destroying a chart that
+    // never finished loading can't leak them. Use per-handler unsubscribe for
+    // 'newblock' (shared with the global producer); 'getticketpooldataResp' is
+    // private to this controller so a bulk clear is fine.
+    this.newblockUnsub()
+    this.reconnectUnsub()
     ws.deregisterEvtHandlers('getticketpooldataResp')
+
+    // initialize() is async; the graphs are still null until the dygraphs chunk
+    // resolves, so guard against an early disconnect.
+    this.purchasesGraph?.destroy()
+    this.priceGraph?.destroy()
   }
 
   onZoom(e) {

@@ -190,8 +190,18 @@ func (exp *explorerUI) RootWebsocket(w http.ResponseWriter, r *http.Request) {
 				inv := exp.MempoolInventory()
 
 				exp.pageData.RLock()
-				maxBlockSize := float64(exp.pageData.BlockchainInfo.MaxBlockSize)
-				subsidy := exp.pageData.HomeInfo.NBlockSubsidy
+				bci := exp.pageData.BlockchainInfo
+				home := exp.pageData.HomeInfo
+				if bci == nil || home == nil {
+					// First block not collected yet (startup window), so the data
+					// Trim needs isn't available. Skip; the client re-requests on
+					// the next mempool push or on reconnect.
+					exp.pageData.RUnlock()
+					log.Debugf("getmempooltrimmed requested before blockchain info is ready; skipping")
+					continue
+				}
+				maxBlockSize := float64(bci.MaxBlockSize)
+				subsidy := home.NBlockSubsidy
 				exp.pageData.RUnlock()
 
 				mempoolInfo := inv.Trim(maxBlockSize) // Trim internally locks the MempoolInfo.
