@@ -143,14 +143,24 @@ type BlockBasic struct {
 	// SKAAmount holds the raw atom amount of the first SKA row in CoinRows.
 	// Templates render the aggregate SKA cell via formatSKAAmountCell, which
 	// uses SKAAmount only when len(SKASubRows) == 1.
-	SKAAmount  string
-	SKASubRows []SKASubRow
+	SKAAmount string
+	// SKAActiveSubRows is the number of SKA sub-rows with TxCount > 0 — what
+	// the "Σ K" cell summary shows when len(SKASubRows) >= 2.
+	SKAActiveSubRows int
+	SKASubRows       []SKASubRow
 }
 
 // FlattenCoinRows populates the template-facing flattened fields (VARAmount,
-// VARTxCount, VARSize, SKAAmount, SKASubRows) from CoinRows. Call this after
-// setting CoinRows.
+// VARTxCount, VARSize, SKAAmount, SKASubRows, SKAActiveSubRows) from CoinRows.
+// Call this after setting CoinRows. Safe to call more than once on the same
+// BlockBasic — accumulators are reset on entry.
 func (b *BlockBasic) FlattenCoinRows() {
+	b.VARAmount = ""
+	b.VARTxCount = 0
+	b.VARSize = ""
+	b.SKAAmount = ""
+	b.SKAActiveSubRows = 0
+	b.SKASubRows = b.SKASubRows[:0]
 	for _, row := range b.CoinRows {
 		if row.CoinType == 0 {
 			b.VARAmount = row.Amount
@@ -167,6 +177,9 @@ func (b *BlockBasic) FlattenCoinRows() {
 				Amount:    row.Amount,
 				Size:      humanize.Bytes(uint64(row.Size)),
 			})
+			if row.TxCount > 0 {
+				b.SKAActiveSubRows++
+			}
 			if b.SKAAmount == "" {
 				b.SKAAmount = row.Amount
 			}
@@ -484,7 +497,9 @@ func (t *TxInfo) BlocksToTicketMaturity() (blocks int64) {
 	return t.TicketInfo.TicketMaturity + 1 - t.Confirmations
 }
 
-// TicketInfo is used to represent data shown for a sstx transaction.
+// TicketInfo is used to represent data shown for a sstx transaction. On a
+// revocation tx page, PoolStatus is also populated with the revoked ticket's
+// pool status (the other fields stay zero).
 type TicketInfo struct {
 	TicketMaturity       int64
 	TimeTillMaturity     float64 // Time before a particular ticket reaches maturity, in hours
@@ -1665,8 +1680,9 @@ type SKACoinParam struct {
 	Name              string
 	Symbol            string
 	Description       string
-	Active            bool // SKACoinConfig.Active
+	Active            bool // SKACoinConfig.Active, overridden at runtime if chain shows activation
 	InitiallyActive   bool // present in chaincfg.Params.InitialSKATypes
+	Pending           bool // true when emitted on chain but coinbase is still maturing
 	MaxSupply         string
 	AtomsPerCoin      string
 	MinRelayTxFee     string

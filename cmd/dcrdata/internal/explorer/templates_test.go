@@ -759,6 +759,114 @@ func TestSkaDecimalParts(t *testing.T) {
 	}
 }
 
+func TestCoinFeeRateDecimalParts(t *testing.T) {
+	tests := []struct {
+		name          string
+		atomStr       string
+		coinType      uint8
+		boldNumPlaces []int
+		expected      []string
+	}{
+		{
+			// VAR: 10000 atoms/kB = 0.0001 VAR/kB. Asserted as an exact
+			// literal so any drift in coinDecimalParts is caught here too.
+			name:     "VAR 10000 atoms/kB renders as 0.0001",
+			atomStr:  "10000",
+			coinType: 0,
+			expected: []string{"0", "0001", "0000"},
+		},
+		{
+			name:          "VAR bold-mode forwards variadic to coinDecimalParts",
+			atomStr:       "10000",
+			coinType:      0,
+			boldNumPlaces: []int{2},
+			expected:      []string{"0", "00", "01", "0000"},
+		},
+		{
+			// Issue #304 example: 0.545 SKA1/B.
+			// 0.545 SKA = 5.45e17 atoms (SKA has 18 decimals).
+			// atoms/kB = atoms/B * 1000 = 5.45e20 = "545" + 18 zeros.
+			// After helper /1000 -> 5.45e17 atoms/B -> skaDecimalParts:
+			//   dec = "545000000000000000" (18 chars)
+			//   right = "545", trailingZeros = "000000000000000" (15)
+			name:     "SKA fee rate produces 0.545 SKA1/B for issue example",
+			atomStr:  "545000000000000000000",
+			coinType: 1,
+			expected: []string{"0", "545", "000000000000000"},
+		},
+		{
+			name:          "SKA bold-mode forwards variadic to skaDecimalParts",
+			atomStr:       "545000000000000000000",
+			coinType:      1,
+			boldNumPlaces: []int{3},
+			expected:      []string{"0", "545", "", "000000000000000"},
+		},
+		{
+			name:     "SKA zero atoms/kB",
+			atomStr:  "0",
+			coinType: 1,
+			expected: []string{"0", "", ""},
+		},
+		{
+			name:     "SKA empty string (defensive)",
+			atomStr:  "",
+			coinType: 2,
+			expected: []string{"0", "", ""},
+		},
+		{
+			name:     "SKA non-numeric input falls through to skaDecimalParts parse-fail path",
+			atomStr:  "abc",
+			coinType: 1,
+			expected: []string{"abc", "", ""},
+		},
+		{
+			// Sub-kB precision below 1 atom/B is dropped by the big.Int /1000.
+			// 1500 atoms/kB -> 1 atom/B -> 1e-18 SKA -> dec = "000000000000000001".
+			name:     "SKA atoms/kB above 1000 truncates sub-atom remainder",
+			atomStr:  "1500",
+			coinType: 1,
+			expected: []string{"0", "000000000000000001", ""},
+		},
+		{
+			// Pins the documented truncation invariant: any value < 1000
+			// atoms/kB collapses to exactly 0 atoms/B and renders identically
+			// to a true-zero fee rate.
+			name:     "SKA atoms/kB below 1000 truncates to zero",
+			atomStr:  "999",
+			coinType: 1,
+			expected: []string{"0", "", ""},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := coinFeeRateDecimalParts(tt.atomStr, tt.coinType, false, tt.boldNumPlaces...)
+			if !reflect.DeepEqual(got, tt.expected) {
+				t.Errorf("unexpected result\nexpected: %#v\ngot:      %#v", tt.expected, got)
+			}
+		})
+	}
+}
+
+func TestCoinFeeRateUnit(t *testing.T) {
+	tests := []struct {
+		coinType uint8
+		expected string
+	}{
+		{coinType: 0, expected: "VAR/kB"},
+		{coinType: 1, expected: "SKA1/B"},
+		{coinType: 2, expected: "SKA2/B"},
+		{coinType: 255, expected: "SKA255/B"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.expected, func(t *testing.T) {
+			if got := coinFeeRateUnit(tt.coinType); got != tt.expected {
+				t.Errorf("coinFeeRateUnit(%d) = %q, want %q", tt.coinType, got, tt.expected)
+			}
+		})
+	}
+}
+
 func TestFloat64FormattingNoTrailing(t *testing.T) {
 	got := float64FormattingNoTrailing(3.2, 8, false, 2)
 
@@ -1059,82 +1167,105 @@ func TestFormatCoinAtoms_LargeSKA(t *testing.T) {
 }
 
 // TestFormatSKAAmountCell exercises the shared rule that drives the SKA
-// aggregate cell in both the Latest Blocks and Blocks tables, covering all
-// six scenarios from the spec. The rule is:
+// aggregate cell in both the Latest Blocks and Blocks tables. The rule is:
 //
-//	subRowCount == 0   → "—"
-//	subRowCount == 1   → formatCoinAtoms(skaAmount, 1)  (zero-value renders "0")
-//	subRowCount >= 2   → "Σ N"
+//	totalCount == 0   → "—"                              (no SKA issued)
+//	totalCount == 1   → formatCoinAtoms(skaAmount, 1)    (zero renders "0")
+//	totalCount >= 2   → "Σ K" where K = activeCount (SKA types with TxCount > 0)
+//
+// The producer side (viewmodel) precomputes activeCount; this helper only
+// renders. The Go and JS helpers must produce identical strings — see
+// public/js/helpers/coin_rows_helper.js.
 func TestFormatSKAAmountCell(t *testing.T) {
-	// One SKA = 1e18 atoms.
-	oneSKA := "1000000000000000000"
 	tests := []struct {
 		name        string
 		skaAmount   string
-		subRowCount int
+		totalCount  int
+		activeCount int
 		want        string
 	}{
 		{
-			name:        "scenario 1: no SKA issued",
-			skaAmount:   "",
-			subRowCount: 0,
-			want:        "—",
+			name:       "scenario 1: no SKA issued",
+			skaAmount:  "",
+			totalCount: 0,
+			want:       "—",
 		},
 		{
-			name:        "scenario 2: SKA1 issued, not in this block (zero-value row)",
-			skaAmount:   "0",
-			subRowCount: 1,
-			want:        "0",
+			name:       "scenario 2: SKA1 issued, not in this block (zero-value row)",
+			skaAmount:  "0",
+			totalCount: 1,
+			want:       "0",
 		},
 		{
 			name:        "scenario 3a: SKA1 present, 1 atom (~1e-18)",
 			skaAmount:   "1",
-			subRowCount: 1,
+			totalCount:  1,
+			activeCount: 1,
 			want:        formatCoinAtoms("1", 1),
 		},
 		{
 			name:        "scenario 3b: SKA1 present, 1.23 SKA",
 			skaAmount:   "1230000000000000000",
-			subRowCount: 1,
+			totalCount:  1,
+			activeCount: 1,
 			want:        "1.23",
 		},
 		{
 			name:        "scenario 3c: SKA1 present, 12,500 SKA",
 			skaAmount:   "12500000000000000000000",
-			subRowCount: 1,
+			totalCount:  1,
+			activeCount: 1,
 			want:        "12.5k",
 		},
 		{
 			name:        "scenario 4: SKA1 & SKA2 issued, neither in block",
 			skaAmount:   "0",
-			subRowCount: 2,
+			totalCount:  2,
+			activeCount: 0,
+			want:        "Σ 0",
+		},
+		{
+			name:        "scenario 5: SKA1 & SKA2 issued, only SKA1 has txs",
+			skaAmount:   "1000000000000000000",
+			totalCount:  2,
+			activeCount: 1,
+			want:        "Σ 1",
+		},
+		{
+			name:        "scenario 6: SKA1 & SKA2 issued, both have txs",
+			skaAmount:   "1000000000000000000",
+			totalCount:  2,
+			activeCount: 2,
 			want:        "Σ 2",
 		},
 		{
-			name:        "scenario 5: SKA1 & SKA2 issued, one present",
-			skaAmount:   oneSKA,
-			subRowCount: 2,
-			want:        "Σ 2",
-		},
-		{
-			name:        "scenario 6: SKA1 & SKA2 issued, both present",
-			skaAmount:   oneSKA,
-			subRowCount: 2,
-			want:        "Σ 2",
-		},
-		{
-			name:        "many SKA types",
+			name:        "five SKA types, none has txs",
 			skaAmount:   "0",
-			subRowCount: 5,
+			totalCount:  5,
+			activeCount: 0,
+			want:        "Σ 0",
+		},
+		{
+			name:        "five SKA types, three have txs",
+			skaAmount:   "0",
+			totalCount:  5,
+			activeCount: 3,
+			want:        "Σ 3",
+		},
+		{
+			name:        "five SKA types, all have txs",
+			skaAmount:   "0",
+			totalCount:  5,
+			activeCount: 5,
 			want:        "Σ 5",
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := formatSKAAmountCell(tt.skaAmount, tt.subRowCount)
+			got := formatSKAAmountCell(tt.skaAmount, tt.totalCount, tt.activeCount)
 			if got != tt.want {
-				t.Errorf("formatSKAAmountCell(%q, %d) = %q, want %q",
-					tt.skaAmount, tt.subRowCount, got, tt.want)
+				t.Errorf("formatSKAAmountCell(%q, %d, %d) = %q, want %q",
+					tt.skaAmount, tt.totalCount, tt.activeCount, got, tt.want)
 			}
 		})
 	}

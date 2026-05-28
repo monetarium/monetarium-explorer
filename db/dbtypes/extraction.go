@@ -88,7 +88,38 @@ func processTransactions(msgBlock *wire.MsgBlock, tree int8, chainParams *chainc
 
 	for txIndex, tx := range txs {
 		txType := txhelpers.DetermineTxType(tx)
+		// If the node classifies this as a regular transaction, check the scripts for ticket indicators.
+		if txType == stake.TxTypeRegular {
+			for _, txout := range tx.TxOut {
+				sc, _ := stdscript.ExtractAddrs(txout.Version, txout.PkScript, chainParams)
+				class := NewScriptClass(sc)
+				if class == SCStakeSubmission || class == SCStakeSubChange {
+					txType = stake.TxTypeSStx
+					break
+				}
+			}
+		}
 		isStake := txType != stake.TxTypeRegular
+
+		// Handle granular reward types for SSFee transactions.
+		// An SSFee tx is either all PoS (SF marker) or all PoW (MF marker).
+		if txType == stake.TxTypeSSFee {
+			marker := stake.SSFeeMarkerNone
+			for _, out := range tx.TxOut {
+				if m := stake.HasSSFeeMarker(out.PkScript); m != stake.SSFeeMarkerNone {
+					marker = m
+					break
+				}
+			}
+			if marker == stake.SSFeeMarkerStaker {
+				txType = stake.TxType(TxTypeSSFeePoS)
+			} else if marker == stake.SSFeeMarkerMiner {
+				txType = stake.TxType(TxTypeSSFeePoW)
+			}
+		} else if txType == stake.TxTypeSStx {
+			txType = stake.TxType(TxTypeTicketPurchase)
+		}
+
 		if isStake && !stakeTree {
 			fmt.Printf(" ***************** INCONSISTENT TREE: txn %v, type = %v", tx.TxHash(), txType)
 			continue
@@ -229,6 +260,15 @@ func processTransactions(msgBlock *wire.MsgBlock, tree int8, chainParams *chainc
 				Version:  txout.Version,
 				// Mixed only applies to VAR CoinJoin outputs.
 				Mixed: ct == cointype.CoinTypeVAR && mixDenom > 0 && mixDenom == txout.Value,
+			}
+
+			// Coinbase outputs are split between PoW (index 0) and PoS (index > 0).
+			if txhelpers.IsCoinBaseTx(tx) {
+				if io == 0 {
+					vout.TxType = TxTypeBlockRewardPoW
+				} else {
+					vout.TxType = TxTypeBlockRewardPoS
+				}
 			}
 			if ct == cointype.CoinTypeVAR {
 				vout.Value = uint64(txout.Value)

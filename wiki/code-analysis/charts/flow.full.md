@@ -59,7 +59,7 @@ PostgreSQL `vins.value_in` deltas → `pgb.coinSupply` fetcher (registered as a 
   - **Transformations:**
     - `skaCoinTypeFromChart(name)` (line 60) — parses `coin-supply/{N}` → 0 if not 1..255.
     - `isCoinSupplyChart(name)` (line 70) — collapses both legacy `coin-supply` and `coin-supply/{N}` for the switch dispatch (`switchKey` at line 528).
-    - VAR branch (line 688) — `circulationFunc(data)` (line 300) does `supplies[i] * atomsToDCR` (i.e. `*1e-8`), tracks `inflation` via `blockReward(h)` per block, projects 6 months into the future. Legend uses `intComma(y)` + 'VAR'.
+    - VAR branch (line 688) — `circulationFunc(data)` (line 300) does `supplies[i] * atomsToVAR` (i.e. `*1e-8`), tracks `inflation` via `blockReward(h)` per block, projects 6 months into the future. Legend uses `intComma(y)` + 'VAR'.
     - SKA branch (line 661-687) — multiplies the supply string by `1e-18` via `Number(s) * 1e-18` for the plotted line (precision-lossy, accepted by spec §5), but for the **legend** it pulls `this._skaSupplyRaw[i]` and renders via `formatSkaAtomsExact(raw)` (which calls `splitSkaAtomsNoTrailing` from `ska_helper.js`). The legend therefore preserves all 18 decimals (spec §4); the plotted Y value does not.
     - `legendFormatter` (line 136) — now logs `console.warn` for unknown chart types (added by `ddf17358`'s `default:` case at line 806).
 
@@ -111,7 +111,7 @@ When modifying chart data structures or pipelines, check ALL of:
 
 ### 7. Common Pitfalls
 
-- Reusing the VAR pipeline (`Blocks.NewAtoms`, `accumulate`, `*atomsToDCR`) for SKA coins — it overflows, loses precision, and bypasses the per-coin map.
+- Reusing the VAR pipeline (`Blocks.NewAtoms`, `accumulate`, `*atomsToVAR`) for SKA coins — it overflows, loses precision, and bypasses the per-coin map.
 - Adding a new chart format that omits `h` for time-axis SKA responses (regression risk; `a9db4b3b` was a fix for exactly this).
 - Computing cumulative supply on the frontend — already done in Go, doing it again in JS produces a double-summed series.
 - Mutating `SKASupply[coinType]` from outside `LoadSKASupplyForCoin` without coordinating with `charts.mtx` — the existing loader writes without `Lock`, relying on idempotence.
@@ -137,6 +137,7 @@ When modifying chart data structures or pipelines, check ALL of:
 - **Key commits:** `538d5cd1` initial SKA chart support; `3e6d14cf` per-SKA endpoints; `19a114c1` cumulative + height alignment; `a9db4b3b` `h` field on time-axis; `ddf17358` frontend integration & default-case logging; `4af1009f` test/mock additions.
 
 See also:
+
 - /wiki/code-analysis/page-rendering/patterns.md (shares-pattern-with: out-of-band shared page state — handler reads `pageData.HomeInfo.SKACoinSupply`; `*CommonPageData` embedding)
 - /wiki/code-analysis/page-rendering/impact.md (depends-on: `commonData` nil render crash)
 - /wiki/core/constraints.md (depends-on: C1 numeric precision & bifurcation — applies to the SKA pipeline `string`-end-to-end rule; C2 dual pipeline — VAR delta+`accumulate` vs SKA `*big.Int` cumulation; C7 centralized coin-type label rendering — `renderCoinType` / `coinSymbol`)

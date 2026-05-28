@@ -28,7 +28,6 @@ import (
 	ticketvotev1 "github.com/decred/politeia/politeiawww/api/ticketvote/v1"
 	"github.com/monetarium/monetarium-explorer/cmd/dcrdata/internal/middleware"
 	"github.com/monetarium/monetarium-explorer/db/dbtypes"
-	"github.com/monetarium/monetarium-explorer/exchanges"
 	"github.com/monetarium/monetarium-explorer/explorer/types"
 	"github.com/monetarium/monetarium-explorer/gov/agendas"
 	pitypes "github.com/monetarium/monetarium-explorer/gov/politeia/types"
@@ -155,16 +154,6 @@ func (exp *explorerUI) timeoutErrorPage(w http.ResponseWriter, err error, debugS
 	return
 }
 
-// For the exchange rates on the homepage
-type homeConversions struct {
-	ExchangeRate    *exchanges.Conversion
-	StakeDiff       *exchanges.Conversion
-	CoinSupply      *exchanges.Conversion
-	PowSplit        *exchanges.Conversion
-	TreasurySplit   *exchanges.Conversion
-	TreasuryBalance *exchanges.Conversion
-}
-
 // Home is the page handler for the "/" path.
 func (exp *explorerUI) Home(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -186,7 +175,6 @@ func (exp *explorerUI) Home(w http.ResponseWriter, r *http.Request) {
 	inv.RLock()
 	exp.pageData.RLock()
 
-	// Get fiat conversions if available
 	homeInfo := exp.pageData.HomeInfo
 	// Initialize LBlockTotal (subsidy + fees) if not yet set
 	// Use NBlockSubsidy for subsidy, MiningFeeAtoms will be 0 if not populated yet
@@ -195,30 +183,18 @@ func (exp *explorerUI) Home(w http.ResponseWriter, r *http.Request) {
 		homeInfo.LBlockTotal = dcrutil.Amount(homeInfo.NBlockSubsidy.PoW).ToCoin()
 		homeInfo.MiningFeeAtoms = 0
 	}
-	var conversions *homeConversions
-	xcBot := exp.xcBot
-	if xcBot != nil {
-		conversions = &homeConversions{
-			ExchangeRate: xcBot.Conversion(1.0),
-			StakeDiff:    xcBot.Conversion(homeInfo.StakeDiff),
-			CoinSupply:   xcBot.Conversion(dcrutil.Amount(homeInfo.CoinSupply).ToCoin()),
-			PowSplit:     xcBot.Conversion(dcrutil.Amount(homeInfo.NBlockSubsidy.PoW).ToCoin()),
-		}
-	}
 
 	str, err := exp.templates.exec("home", struct {
 		*CommonPageData
 		Info          *types.HomeInfo
 		Mempool       *types.MempoolInfo
 		Blocks        []HomeBlockRow
-		Conversions   *homeConversions
 		PercentChange float64
 	}{
 		CommonPageData: exp.commonData(r),
 		Info:           homeInfo,
 		Mempool:        inv,
 		Blocks:         buildHomeBlockRows(blocks),
-		Conversions:    conversions,
 		PercentChange:  homeInfo.PoolInfo.PercentTarget - 100,
 	})
 
@@ -758,17 +734,12 @@ func (exp *explorerUI) Block(w http.ResponseWriter, r *http.Request) {
 
 	pageData := struct {
 		*CommonPageData
-		Data           *types.BlockInfo
-		AltBlocks      []*dbtypes.BlockStatus
-		FiatConversion *exchanges.Conversion
+		Data      *types.BlockInfo
+		AltBlocks []*dbtypes.BlockStatus
 	}{
 		CommonPageData: exp.commonData(r),
 		Data:           data,
 		AltBlocks:      altBlocks,
-	}
-
-	if exp.xcBot != nil && time.Since(data.BlockTime.T) < time.Hour {
-		pageData.FiatConversion = exp.xcBot.Conversion(data.TotalSent)
 	}
 
 	str, err := exp.templates.exec("block", pageData)
@@ -1286,6 +1257,29 @@ func (exp *explorerUI) TxPage(w http.ResponseWriter, r *http.Request) {
 		}
 	} // tx.IsTicket()
 
+	// For a revocation the revoked ticket is referenced by the first input's
+	// previous outpoint, not the revocation tx's own hash.
+	if tx.IsRevocation() && len(tx.Vin) > 0 {
+		ticketHash := tx.Vin[0].Txid
+		zeroHash := (chainhash.Hash{}).String()
+		if ticketHash != "" && ticketHash != zeroHash {
+			_, poolStatus, err := exp.dataSource.PoolStatusForTicket(ctx, ticketHash)
+			if exp.timeoutErrorPage(w, err, "PoolStatusForTicket(revocation)") {
+				return
+			}
+			switch {
+			case errors.Is(err, dbtypes.ErrNoResult):
+				log.Warnf("Pool status not found for revoked ticket %s (revocation %s)",
+					ticketHash, hash)
+			case err != nil:
+				log.Errorf("Unable to retrieve pool status for revoked ticket %s (revocation %s): %v",
+					ticketHash, hash, err)
+			default:
+				tx.TicketInfo.PoolStatus = poolStatus.String()
+			}
+		}
+	}
+
 	// Find atomic swaps related to this tx.
 	swapsInfo, err := exp.txAtomicSwapsInfo(ctx, tx)
 	if err != nil {
@@ -1340,10 +1334,6 @@ func (exp *explorerUI) TxPage(w http.ResponseWriter, r *http.Request) {
 		HighlightInOut       string
 		HighlightInOutID     int64
 		SwapsFound           string
-		Conversions          struct {
-			Total *exchanges.Conversion
-			Fees  *exchanges.Conversion
-		}
 	}{
 		CommonPageData:       exp.commonData(r),
 		Data:                 tx,
@@ -1353,12 +1343,6 @@ func (exp *explorerUI) TxPage(w http.ResponseWriter, r *http.Request) {
 		HighlightInOut:       inout,
 		HighlightInOutID:     inoutid,
 		SwapsFound:           swapsInfo.Found,
-	}
-
-	// Get a fiat-converted value for the total and the fees.
-	if exp.xcBot != nil {
-		pageData.Conversions.Total = exp.xcBot.Conversion(tx.Total)
-		pageData.Conversions.Fees = exp.xcBot.Conversion(tx.Fee.ToCoin())
 	}
 
 	str, err := exp.templates.exec("tx", pageData)
@@ -1426,9 +1410,8 @@ type TreasuryInfo struct {
 	Transactions    []*dbtypes.TreasuryTx
 	NumTransactions int64 // len(Transactions) but int64 for dumb template
 
-	Balance          *dbtypes.TreasuryBalance
-	ConvertedBalance *exchanges.Conversion
-	TypeCount        int64
+	Balance   *dbtypes.TreasuryBalance
+	TypeCount int64
 }
 
 // TreasuryPage is the page handler for the "/treasury" path
@@ -1500,23 +1483,16 @@ func (exp *explorerUI) TreasuryPage(w http.ResponseWriter, r *http.Request) {
 		TypeCount:       typeCount,
 	}
 
-	xcBot := exp.xcBot
-	if xcBot != nil {
-		treasuryData.ConvertedBalance = xcBot.Conversion(math.Round(float64(treasuryBalance.Balance) / 1e8))
-	}
-
 	// Execute the HTML template.
 	linkTemplate := fmt.Sprintf("/treasury?start=%%d&n=%d&txntype=%v", limitN, txType)
 	pageData := struct {
 		*CommonPageData
-		Data        *TreasuryInfo
-		FiatBalance *exchanges.Conversion
-		Pages       []pageNumber
-		Mempool     *types.MempoolInfo
+		Data    *TreasuryInfo
+		Pages   []pageNumber
+		Mempool *types.MempoolInfo
 	}{
 		CommonPageData: exp.commonData(r),
 		Data:           treasuryData,
-		FiatBalance:    exp.xcBot.Conversion(dcrutil.Amount(treasuryBalance.Balance).ToCoin()),
 		Pages:          calcPages(int(typeCount), int(limitN), int(offset), linkTemplate),
 		Mempool:        exp.MempoolInventory(),
 	}
@@ -2145,6 +2121,7 @@ func (exp *explorerUI) NotFound(w http.ResponseWriter, r *http.Request) {
 // ParametersPage is the page handler for the "/parameters" path.
 func (exp *explorerUI) ParametersPage(w http.ResponseWriter, r *http.Request) {
 	params := exp.ChainParams
+	ctx := r.Context()
 	addrPrefix := types.AddressPrefixes(params)
 	actualTicketPoolSize := int64(params.TicketPoolSize * params.TicketsPerBlock)
 
@@ -2156,6 +2133,30 @@ func (exp *explorerUI) ParametersPage(w http.ResponseWriter, r *http.Request) {
 		maxBlockSize = int64(params.MaximumBlockSizes[0])
 	}
 	exp.pageData.RUnlock()
+
+	// Build an emission-heights map for non-InitiallyActive coin types that
+	// have been observed on chain. Errors are non-fatal — fall back to static
+	// config (which may show an incorrect "inactive" badge).
+	emissionHeights := make(map[uint8]int64, len(params.InitialSKATypes))
+	if supply, err := exp.dataSource.SKACoinSupply(ctx); err == nil {
+		initial := make(map[uint8]struct{}, len(params.InitialSKATypes))
+		for _, ct := range params.InitialSKATypes {
+			initial[uint8(ct)] = struct{}{}
+		}
+		nonInitial := make([]uint8, 0, len(supply))
+		for _, entry := range supply {
+			if _, ok := initial[entry.CoinType]; !ok {
+				nonInitial = append(nonInitial, entry.CoinType)
+			}
+		}
+		if len(nonInitial) > 0 {
+			if heights, err := exp.dataSource.SKACoinEmissionHeights(ctx, nonInitial); err == nil {
+				for ct, h := range heights {
+					emissionHeights[ct] = h
+				}
+			}
+		}
+	}
 
 	type ExtendedParams struct {
 		MaximumBlockSize     int64
@@ -2173,7 +2174,7 @@ func (exp *explorerUI) ParametersPage(w http.ResponseWriter, r *http.Request) {
 			MaximumBlockSize:     maxBlockSize,
 			AddressPrefix:        addrPrefix,
 			ActualTicketPoolSize: actualTicketPoolSize,
-			SKACoins:             buildSKACoinParams(params),
+			SKACoins:             buildSKACoinParams(params, exp.Height(), emissionHeights),
 		},
 	})
 
@@ -2512,26 +2513,6 @@ func (exp *explorerUI) HandleApiRequestsOnSync(w http.ResponseWriter, r *http.Re
 	io.WriteString(w, str)
 }
 
-// MarketPage is the page handler for the "/market" path.
-func (exp *explorerUI) MarketPage(w http.ResponseWriter, r *http.Request) {
-	str, err := exp.templates.exec("market", struct {
-		*CommonPageData
-		XcState *exchanges.ExchangeBotState
-	}{
-		CommonPageData: exp.commonData(r),
-		XcState:        exp.getExchangeState(),
-	})
-
-	if err != nil {
-		log.Errorf("Template execute failure: %v", err)
-		exp.StatusPage(w, defaultErrorCode, defaultErrorMessage, "", ExpStatusError)
-		return
-	}
-	w.Header().Set("Content-Type", "text/html")
-	w.WriteHeader(http.StatusOK)
-	io.WriteString(w, str)
-}
-
 // commonData grabs the common page data that is available to every page.
 // This is particularly useful for extras.tmpl, parts of which
 // are used on every page
@@ -2604,11 +2585,12 @@ const ellipsisHTML = "…"
 // the offset inserted using Sprintf.
 func calcPagesDesc(rows, pageSize, offset int, link string) pageNumbers {
 	nums := make(pageNumbers, 0, 11)
-	endIdx := rows / pageSize
-	if endIdx == 0 {
+	if rows == 0 {
 		return nums
 	}
-	pages := endIdx + 1
+	numPages := (rows + pageSize - 1) / pageSize
+	endIdx := numPages - 1
+	pages := numPages
 	currentPageIdx := (rows - offset) / pageSize
 	if pages > 10 {
 		nums = append(nums, makePageNumber(currentPageIdx == 0, fmt.Sprintf(link, rows), "1"))
@@ -2654,11 +2636,12 @@ func calcPages(rows, pageSize, offset int, link string) pageNumbers {
 		return pageNumbers{}
 	}
 	nums := make(pageNumbers, 0, 11)
-	endIdx := rows / pageSize
-	if endIdx == 0 {
+	if rows == 0 {
 		return nums
 	}
-	pages := endIdx + 1
+	numPages := (rows + pageSize - 1) / pageSize
+	endIdx := numPages - 1
+	pages := numPages
 	currentPageIdx := offset / pageSize
 
 	if pages > 10 {

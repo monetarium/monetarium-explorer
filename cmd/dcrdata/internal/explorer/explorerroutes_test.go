@@ -63,7 +63,6 @@ func TestStatusPageResponseCodes(t *testing.T) {
 		AppVersion:    "test",
 		DevPrefetch:   false,
 		Viewsfolder:   viewsPath,
-		XcBot:         nil,
 		Tracker:       nil,
 		AgendasSource: nil,
 		Proposals:     nil,
@@ -197,7 +196,7 @@ func TestPageNumbersDesc(t *testing.T) {
 		rows:     6,
 		pageSize: 10,
 		offset:   5,
-		expected: "",
+		expected: "1",
 		active:   "1",
 	})
 
@@ -338,7 +337,7 @@ func TestPageNumbers(t *testing.T) {
 		rows:     6,
 		pageSize: 10,
 		offset:   5,
-		expected: "",
+		expected: "1",
 		active:   "1",
 	})
 

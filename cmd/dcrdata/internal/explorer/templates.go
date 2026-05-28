@@ -394,6 +394,7 @@ func threeSigFigs(v float64) string {
 // skaDecimals is 10^18 — the number of SKA atoms per coin.
 var skaDecimals = new(big.Int).Exp(big.NewInt(10), big.NewInt(18), nil)
 var varDecimals = big.NewInt(1e8)
+var bytesPerKB = big.NewInt(1000)
 
 // parseInt64 parses a decimal atom string to int64, returning 0 on error.
 func parseInt64(s string) int64 {
@@ -502,6 +503,40 @@ func coinDecimalParts(atomStr string, coinType uint8, useCommas bool, boldNumPla
 	return skaDecimalParts(atomStr, useCommas, boldNumPlaces...)
 }
 
+// coinFeeRateDecimalParts renders a fee-rate value carried on the contract as
+// atoms/kB. VAR delegates to coinDecimalParts and is displayed as VAR/kB.
+// SKA divides the big.Int atoms/kB by 1000 (giving atoms/B) and renders via
+// skaDecimalParts so the headline number reads as SKA/B — chosen because SKA
+// 18-decimal fee rates are too small per kB to be legible. No float64
+// conversion on the SKA path.
+func coinFeeRateDecimalParts(atomsPerKB string, coinType uint8, useCommas bool, boldNumPlaces ...int) []string {
+	if coinType == 0 {
+		return coinDecimalParts(atomsPerKB, 0, useCommas, boldNumPlaces...)
+	}
+	return skaDecimalParts(skaAtomsPerKBToPerByte(atomsPerKB), useCommas, boldNumPlaces...)
+}
+
+// skaAtomsPerKBToPerByte converts an SKA fee-rate string from atoms/kB to
+// atoms/B using big.Int integer division. Sub-atom-per-byte remainder is
+// unrepresentable and dropped. Empty or non-numeric input is returned
+// unchanged so skaDecimalParts can render the safe ["0","",""] fallback.
+func skaAtomsPerKBToPerByte(atomsPerKB string) string {
+	n, ok := new(big.Int).SetString(atomsPerKB, 10)
+	if !ok {
+		return atomsPerKB
+	}
+	return n.Quo(n, bytesPerKB).String()
+}
+
+// coinFeeRateUnit returns the fee-rate unit suffix. VAR uses /kB (matching the
+// on-the-wire atoms/kB contract); SKA uses /B (paired with coinFeeRateDecimalParts).
+func coinFeeRateUnit(coinType uint8) string {
+	if coinType == 0 {
+		return "VAR/kB"
+	}
+	return coinSymbol(coinType) + "/B"
+}
+
 // formatCoinAtoms converts a raw atom string to a threeSigFigs-formatted coin
 // string. coinType 0 = VAR (8 decimal places), any other value = SKA (18
 // decimal places). This is the single call site for coin amount display — use
@@ -566,18 +601,20 @@ func orderedMempoolCoinStats(stats map[uint8]types.MempoolCoinStats) []MempoolCo
 // formatSKAAmountCell renders the aggregate SKA-amount table cell shared by
 // the Latest Blocks (home) and Blocks listing tables. The rule is:
 //
-//	subRowCount == 0   → "—"      (no SKA issued at all)
-//	subRowCount == 1   → formatted SKA1 amount (zero-value rows render "0")
-//	subRowCount >= 2   → "Σ N"    (count summary)
+//	totalCount == 0   → "—"                           (no SKA issued)
+//	totalCount == 1   → formatted amount (zero → "0")
+//	totalCount >= 2   → "Σ K" where K = activeCount (SKA types with txs in this block)
 //
-// skaAmount is the raw SKA atom string of the first SKA row and is only used
-// when subRowCount == 1. The Go (server-render) and JS (WebSocket live-update)
-// helpers must stay aligned — see public/js/helpers/coin_rows_helper.js.
-func formatSKAAmountCell(skaAmount string, subRowCount int) string {
+// totalCount is len(SKASubRows); activeCount is the precomputed count of
+// SKASubRows with TxCount > 0. skaAmount is the raw atom string of the first
+// SKA row and is only consulted when totalCount == 1. The Go (server-render)
+// and JS (WebSocket live-update) helpers must stay aligned — see
+// public/js/helpers/coin_rows_helper.js.
+func formatSKAAmountCell(skaAmount string, totalCount, activeCount int) string {
 	switch {
-	case subRowCount >= 2:
-		return fmt.Sprintf("Σ %d", subRowCount)
-	case subRowCount == 1:
+	case totalCount >= 2:
+		return fmt.Sprintf("Σ %d", activeCount)
+	case totalCount == 1:
 		return formatCoinAtoms(skaAmount, 1)
 	default:
 		return "—"
@@ -762,6 +799,10 @@ func makeTemplateFuncMap(params *chaincfg.Params) template.FuncMap {
 		"coinDecimalParts": func(atomStr string, coinType uint8, useCommas bool, boldNumPlaces ...int) []string {
 			return coinDecimalParts(atomStr, coinType, useCommas, boldNumPlaces...)
 		},
+		"coinFeeRateDecimalParts": func(atomsPerKB string, coinType uint8, useCommas bool, boldNumPlaces ...int) []string {
+			return coinFeeRateDecimalParts(atomsPerKB, coinType, useCommas, boldNumPlaces...)
+		},
+		"coinFeeRateUnit": coinFeeRateUnit,
 		"skaDecimalParts": func(atomStr string, useCommas bool, boldNumPlaces ...int) []string {
 			return skaDecimalParts(atomStr, useCommas, boldNumPlaces...)
 		},
@@ -858,13 +899,6 @@ func makeTemplateFuncMap(params *chaincfg.Params) template.FuncMap {
 		},
 		"toLowerCase": strings.ToLower,
 		"toTitleCase": titler.String,
-		"xcDisplayName": func(token string) string {
-			switch token {
-			case "dcrdex":
-				return "dex.decred.org"
-			}
-			return titler.String(token)
-		},
 		"prefixPath": func(prefix, path string) string {
 			if path == "" {
 				if strings.HasSuffix(prefix, "/") {

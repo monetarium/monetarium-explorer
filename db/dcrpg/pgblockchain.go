@@ -18,6 +18,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/lib/pq"
+
 	humanize "github.com/dustin/go-humanize"
 	"github.com/monetarium/monetarium-node/blockchain/stake"
 	"github.com/monetarium/monetarium-node/blockchain/standalone"
@@ -2486,14 +2488,6 @@ func (pgb *ChainDB) AddressHistory(ctx context.Context, address string, N, offse
 				Coins:   make(map[uint8]*dbtypes.CoinBalance),
 			}
 		}
-		if balance != nil && balance.Coins != nil {
-			if varBal, ok := balance.Coins[0]; ok {
-				balance.TotalSpent = varBal.TotalSpent
-				balance.TotalUnspent = varBal.TotalUnspent
-				balance.NumSpent = varBal.NumSpent
-				balance.NumUnspent = varBal.NumUnspent
-			}
-		}
 		return pagedRows, balance, nil
 	}
 
@@ -2553,7 +2547,7 @@ func (pgb *ChainDB) AddressHistory(ctx context.Context, address string, N, offse
 				Address: address,
 			}
 		} else {
-			addrInfo, fromStake, toStake := dbtypes.ReduceAddressHistory(addressRows)
+			addrInfo, _, _ := dbtypes.ReduceAddressHistory(addressRows)
 			if addrInfo == nil {
 				return addressRows, nil,
 					fmt.Errorf("ReduceAddressHistory failed. len(addressRows) = %d",
@@ -2564,8 +2558,6 @@ func (pgb *ChainDB) AddressHistory(ctx context.Context, address string, N, offse
 			// It already has correct Coins map (VAR + all SKA types).
 			balance = addrInfo.Balance
 			balance.Address = address
-			balance.FromStake = fromStake
-			balance.ToStake = toStake
 		}
 		// Update balance cache.
 		blockID := cache.NewBlockID(hash, height)
@@ -2579,16 +2571,6 @@ func (pgb *ChainDB) AddressHistory(ctx context.Context, address string, N, offse
 			balance = &dbtypes.AddressBalance{
 				Address: address,
 				Coins:   make(map[uint8]*dbtypes.CoinBalance),
-			}
-		}
-		// TODO: Remove flat VAR fields sync once frontend is updated for multi-coin support.
-		// Sync flat fields from Coins[0] for backward compatibility.
-		if balance != nil && balance.Coins != nil {
-			if varBal, ok := balance.Coins[0]; ok {
-				balance.TotalSpent = varBal.TotalSpent
-				balance.TotalUnspent = varBal.TotalUnspent
-				balance.NumSpent = varBal.NumSpent
-				balance.NumUnspent = varBal.NumUnspent
 			}
 		}
 	}
@@ -2682,15 +2664,6 @@ func (pgb *ChainDB) AddressData(ctx context.Context, address string, limitN, off
 			addrData.Balance = &dbtypes.AddressBalance{Address: address, Coins: make(map[uint8]*dbtypes.CoinBalance)}
 		} else if addrData.Balance.Coins == nil {
 			addrData.Balance.Coins = make(map[uint8]*dbtypes.CoinBalance)
-		}
-
-		// TODO: Remove flat VAR field sync once frontend uses Coins map directly.
-		// Sync flat fields from Coins[0] to keep template backward compatible.
-		if varBal, ok := addrData.Balance.Coins[0]; ok {
-			addrData.Balance.TotalSpent = varBal.TotalSpent
-			addrData.Balance.TotalUnspent = varBal.TotalUnspent
-			addrData.Balance.NumSpent = varBal.NumSpent
-			addrData.Balance.NumUnspent = varBal.NumUnspent
 		}
 
 		// Compute KnownTxns from the selected coin or all coins.
@@ -5514,8 +5487,9 @@ func (pgb *ChainDB) GetAPITransaction(ctx context.Context, txid *chainhash.Hash)
 	// Calculate high-precision total and fee.
 	if coinType == 0 { // VAR
 		tx.Total = strconv.FormatInt(int64(txhelpers.TotalVout(txraw.Vout)), 10)
-		fee, _ := txhelpers.TxFeeRate(msgTx)
+		fee, feeRate := txhelpers.TxFeeRate(msgTx)
 		tx.Fee = strconv.FormatInt(int64(fee), 10)
+		tx.FeeRateRaw = strconv.FormatInt(int64(feeRate), 10)
 	} else { // SKA
 		skaTotals := txhelpers.SKATotalsFromMsgTx(msgTx)
 		if total, ok := skaTotals[coinType]; ok {
@@ -6499,6 +6473,7 @@ func makeExplorerTxBasic(data *chainjson.TxRawResult, ticketPrice int64, msgTx *
 		fee, feeRate := txhelpers.TxFeeRate(msgTx)
 		tx.Fee, tx.FeeRate = fee, feeRate
 		tx.FeeRaw = strconv.FormatInt(int64(fee), 10)
+		tx.FeeRateRaw = strconv.FormatInt(int64(feeRate), 10)
 	} else { // SKA
 		// For SKA, Total is 0 in legacy float.
 		tx.Total = 0
@@ -6522,6 +6497,7 @@ func makeExplorerTxBasic(data *chainjson.TxRawResult, ticketPrice int64, msgTx *
 	case v0.IsCoinBase():
 		tx.Fee, tx.FeeRate = 0, 0
 		tx.FeeRaw = "0"
+		tx.FeeRateRaw = "0"
 		tx.Coinbase = true
 	case v0.Treasurybase:
 		tx.Treasurybase = true
@@ -6576,7 +6552,42 @@ func trimmedTxInfoFromMsgTx(txraw *chainjson.TxRawResult, ticketPrice int64, msg
 		VoutCount: len(txraw.Vout),
 		VoteValid: voteValid,
 		Voted:     txBasic.VoteInfo != nil,
+		CoinType:  txBasic.CoinType,
 	}
+
+	// Calculate high-precision fee and fee rate for all non-coinbase transactions
+	if !txBasic.Coinbase {
+		if txBasic.CoinType != 0 { // SKA
+			totalIn := new(big.Int)
+			for vi := range txraw.Vin {
+				if txraw.Vin[vi].SKAAmountIn == "" {
+					continue
+				}
+				if amt, ok := new(big.Int).SetString(txraw.Vin[vi].SKAAmountIn, 10); ok {
+					totalIn.Add(totalIn, amt)
+				}
+			}
+			totalOut := new(big.Int)
+			if txBasic.TotalRaw != "" {
+				totalOut.SetString(txBasic.TotalRaw, 10)
+			}
+			fee := new(big.Int).Sub(totalIn, totalOut)
+			if fee.Sign() < 0 {
+				fee.SetInt64(0)
+			}
+			tx.FeeRaw = fee.String()
+			if txSize := int64(msgTx.SerializeSize()); txSize > 0 {
+				rate := new(big.Int).Mul(fee, big.NewInt(1000))
+				rate.Quo(rate, big.NewInt(txSize))
+				tx.FeeRateRaw = rate.String()
+			}
+		} else { // VAR
+			fee, feeRate := txhelpers.TxFeeRate(msgTx)
+			tx.FeeRaw = strconv.FormatInt(int64(fee), 10)
+			tx.FeeRateRaw = strconv.FormatInt(int64(feeRate), 10)
+		}
+	}
+
 	return tx, txType
 }
 
@@ -6728,9 +6739,16 @@ func (pgb *ChainDB) GetExplorerBlock(ctx context.Context, hash string) *exptypes
 		case stake.TxTypeTAdd, stake.TxTypeTSpend, stake.TxTypeTreasuryBase:
 			treasury = append(treasury, stx)
 		case stake.TxTypeSSFee:
-			// Set CoinType from first output
 			if len(msgTx.TxOut) > 0 {
-				stx.CoinType = uint8(msgTx.TxOut[0].CoinType)
+				// Determine coin type from the first SKA payout output.
+				// TxOut[0] may be a zero-value OP_RETURN marker (CoinType 0).
+				for _, out := range msgTx.TxOut {
+					if out.CoinType.IsSKA() && out.SKAValue != nil {
+						stx.CoinType = uint8(out.CoinType)
+						break
+					}
+				}
+				stx.FeeRaw = ssFeeNetReward(msgTx).String()
 			}
 			stakeFees = append(stakeFees, stx)
 		}
@@ -6755,37 +6773,6 @@ func (pgb *ChainDB) GetExplorerBlock(ctx context.Context, hash string) *exptypes
 		for i := range tx.Vin {
 			if tx.Vin[i].IsCoinBase() {
 				exptx.Fee, exptx.FeeRate, exptx.Fees = 0.0, 0.0, 0.0
-			}
-		}
-
-		// SKA fee = sum(SKAAmountIn) - sum(outputs) in the tx's coin. The node
-		// includes per-input SKA atoms in the verbose tx, so this needs no DB
-		// lookup. makeExplorerTxBasic skips this because it has no access to
-		// vin.SKAAmountIn; do it here so the block page renders the right fee
-		// in the row's own coin instead of "0 VAR".
-		if exptx.CoinType != 0 && !exptx.Coinbase {
-			totalIn := new(big.Int)
-			for vi := range tx.Vin {
-				if tx.Vin[vi].SKAAmountIn == "" {
-					continue
-				}
-				if amt, ok := new(big.Int).SetString(tx.Vin[vi].SKAAmountIn, 10); ok {
-					totalIn.Add(totalIn, amt)
-				}
-			}
-			totalOut := new(big.Int)
-			if exptx.TotalRaw != "" {
-				totalOut.SetString(exptx.TotalRaw, 10)
-			}
-			fee := new(big.Int).Sub(totalIn, totalOut)
-			if fee.Sign() < 0 {
-				fee.SetInt64(0)
-			}
-			exptx.FeeRaw = fee.String()
-			if txSize := int64(msgTx.SerializeSize()); txSize > 0 {
-				rate := new(big.Int).Mul(fee, big.NewInt(1000))
-				rate.Quo(rate, big.NewInt(txSize))
-				exptx.FeeRateRaw = rate.String()
 			}
 		}
 
@@ -6816,9 +6803,13 @@ func (pgb *ChainDB) GetExplorerBlock(ctx context.Context, hash string) *exptypes
 		for _, tx := range txs {
 			// Coinbase transactions have no fee. The fee should be zero already
 			// (as in makeExplorerTxBasic), but intercept coinbase just in case.
-			// Note that this does not include stakebase transactions (votes),
-			// which can have a fee but are not required to.
 			if tx.Coinbase {
+				continue
+			}
+			// Exclude votes and stake fees from the header total.
+			// This is currently defense-in-depth — only block.Tx and block.Tickets
+			// are passed to getTotalFee, which never contain these types.
+			if tx.Type == txhelpers.TxTypeVote || tx.Type == txhelpers.TxTypeSSFee {
 				continue
 			}
 			if tx.Fee < 0 {
@@ -6840,8 +6831,7 @@ func (pgb *ChainDB) GetExplorerBlock(ctx context.Context, hash string) *exptypes
 	}
 	block.TotalSent = (getTotalSent(block.Tx) + getTotalSent(block.Treasury) + getTotalSent(block.Revs) +
 		getTotalSent(block.Tickets) + getTotalSent(block.Votes) + getTotalSent(block.StakeFees)).ToCoin()
-	block.MiningFee = (getTotalFee(block.Tx) + getTotalFee(block.Treasury) + getTotalFee(block.Revs) +
-		getTotalFee(block.Tickets) + getTotalFee(block.Votes)).ToCoin()
+	block.MiningFee = (getTotalFee(block.Tx) + getTotalFee(block.Tickets)).ToCoin()
 
 	// Aggregate fees per coin type (VAR from MiningFee, SKA from SSFeeTotalsByCoin)
 	feesMap := make(map[uint8]string)
@@ -6875,6 +6865,29 @@ func (pgb *ChainDB) GetExplorerBlock(ctx context.Context, hash string) *exptypes
 	pgb.lastExplorerBlock.Unlock()
 
 	return block
+}
+
+// ssFeeNetReward computes the net reward for an SSFee transaction as
+// Σoutputs − Σinputs.  This matches blockSSFeeTotalsInternal in
+// txhelpers/ssfee.go.  The per-element branches on SKAValueIn/SKAValue
+// are equivalent to a prior isSKA gate given the single-coin invariant.
+func ssFeeNetReward(msgTx *wire.MsgTx) *big.Int {
+	net := new(big.Int)
+	for _, vin := range msgTx.TxIn {
+		if vin.SKAValueIn != nil {
+			net.Sub(net, vin.SKAValueIn)
+		} else {
+			net.Sub(net, big.NewInt(vin.ValueIn))
+		}
+	}
+	for _, out := range msgTx.TxOut {
+		if out.CoinType.IsSKA() && out.SKAValue != nil {
+			net.Add(net, out.SKAValue)
+		} else {
+			net.Add(net, big.NewInt(out.Value))
+		}
+	}
+	return net
 }
 
 // GetExplorerBlocks creates an slice of exptypes.BlockBasic beginning at start
@@ -7600,6 +7613,34 @@ func (pgb *ChainDB) issuedSKACoinTypes(ctx context.Context) []uint8 {
 		types[i] = e.CoinType
 	}
 	return types
+}
+
+// SKACoinEmissionHeights returns a map from coin type to its first observed
+// block height for the given coin types. Only coin types that have been seen on
+// chain are included in the returned map.
+func (pgb *ChainDB) SKACoinEmissionHeights(ctx context.Context, coinTypes []uint8) (map[uint8]int64, error) {
+	// pq.Array handles []int64 correctly as an integer array for PostgreSQL;
+	// []uint8 would be ambiguous (it is []byte).
+	intTypes := make([]int64, len(coinTypes))
+	for i, ct := range coinTypes {
+		intTypes[i] = int64(ct)
+	}
+	rows, err := pgb.db.QueryContext(ctx, internal.SelectSKACoinEmissionHeights, pq.Array(intTypes))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	heights := make(map[uint8]int64, len(coinTypes))
+	for rows.Next() {
+		var ct uint8
+		var h int64
+		if err := rows.Scan(&ct, &h); err != nil {
+			return nil, err
+		}
+		heights[ct] = h
+	}
+	return heights, rows.Err()
 }
 
 // coinRowsFromAmounts converts a CoinAmounts map to []CoinRowData for the

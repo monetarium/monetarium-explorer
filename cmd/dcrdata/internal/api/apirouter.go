@@ -230,12 +230,6 @@ func NewAPIRouter(app *appContext, JSONIndent string, useRealIP, compressLarge b
 	})
 
 	mux.Route("/chart", func(r chi.Router) {
-		// Return default chart data (ticket price)
-		r.Route("/market/{token}", func(rd chi.Router) {
-			rd.Use(m.ExchangeTokenContext)
-			rd.With(m.StickWidthContext).Get("/candlestick/{bin}", app.getCandlestickChart)
-			rd.Get("/depth", app.getDepthChart)
-		})
 		// Handle coin-supply/N pattern (SKA coin types)
 		r.With(m.CoinSupplyChartTypeCtx).Get("/coin-supply/{charttype}", app.ChartTypeData)
 		// Handle standard single-segment chart types
@@ -253,15 +247,6 @@ func NewAPIRouter(app *appContext, JSONIndent string, useRealIP, compressLarge b
 		r.Get("/*", func(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "proposals not available", http.StatusGone)
 		})
-	})
-
-	mux.Route("/exchangerate", func(r chi.Router) {
-		r.Get("/", app.getExchangeRates)
-	})
-
-	mux.Route("/exchanges", func(r chi.Router) {
-		r.Get("/", app.getExchanges)
-		r.Get("/codes", app.getCurrencyCodes)
 	})
 
 	mux.NotFound(func(w http.ResponseWriter, r *http.Request) {

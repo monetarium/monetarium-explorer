@@ -126,16 +126,33 @@
                   {{- end}}
                 {{- end}}
               {{- end}}
-              {{- if and $varCB $balance.HasStakeOutputs}}
-                <div class="col-12 pb-2 fs14 text-secondary text-start">
-                    <span class="fw-bold">Stake spending</span>: {{printf "%.1f" (x100 $balance.FromStake)}}%
-                </div>
-              {{- end}}
-              {{- if and $varCB $balance.HasStakeInputs}}
-                <div class="col-12 pb-2 fs14 text-secondary text-start">
-                    <span class="fw-bold">Stake income</span>: {{printf "%.1f" (x100 $balance.ToStake)}}%
-                </div>
-              {{- end}}
+            {{- if .Balance.HasStakeOutputs}}
+              <div class="col-12 pb-2 fs14 text-secondary text-start">
+                <span class="fw-bold">Stake income</span>:
+                {{- range $ct := .ActiveCoins}}
+                  {{- $cb := index $balance.Coins $ct}}
+                  {{- if $cb}}
+                    {{- if gt $cb.FromStake 0.0}}
+                      {{printf "%.1f" (x100 $cb.FromStake)}}% {{coinSymbol $ct}}<br>
+                    {{- end}}
+                  {{- end}}
+                {{- end}}
+              </div>
+            {{- end}}
+            {{- if .Balance.HasStakeInputs}}
+              <div class="col-12 pb-2 fs14 text-secondary text-start">
+                <span class="fw-bold">Stake spending</span>:
+                {{- range $ct := .ActiveCoins}}
+                  {{- $cb := index $balance.Coins $ct}}
+                  {{- if $cb}}
+                    {{- if gt $cb.ToStake 0.0}}
+                      {{printf "%.1f" (x100 $cb.ToStake)}}% {{coinSymbol $ct}}<br>
+                    {{- end}}
+                  {{- end}}
+                {{- end}}
+              </div>
+            {{- end}}
+
           </div>
           {{/* <div class="row pb-3 fs16">
             <span class="col-24"><a href="{{$.Links.DownloadLink}}" title="Decred downloads" target="_blank" rel="noopener noreferrer">Get Decrediton</a>, the official desktop wallet.</span>
@@ -155,7 +172,7 @@
             <div class="d-flex flex-wrap justify-content-around align-items-start">
               <div class="loader-v2 loading" data-address-target="chartLoader"></div>
               <div class="btn-set secondary-card d-inline-flex flex-nowrap mx-2">
-                <span>Chart</span>
+                <span class="btn-set-label">Chart</span>
                 <select
                     id="address-chart-type"
                     class="chart-box d-inline-flex dropdown"
@@ -168,7 +185,7 @@
                 </select>
               </div>
               <div class="btn-set secondary-card d-inline-flex flex-nowrap mx-2">
-                <span>Coin</span>
+                <span class="btn-set-label">Coin</span>
                 {{- if gt (len .ActiveCoins) 1}}
                 <select
                     class="chart-box d-inline-flex dropdown"
@@ -211,7 +228,7 @@
                   data-address-target="zoom"
                   data-action="click->address#onZoom"
               >
-                <span>Zoom</span>
+                <span class="btn-set-label">Zoom</span>
                 <button class="btn-selected" name="all" data-fixed="1">All</button>
                 <button name="year">Year</button>
                 <button name="month">Month</button>
@@ -225,7 +242,7 @@
                   data-address-target="interval"
                   data-action="click->address#changeBin"
               >
-                  <span class="d-inline-flex pe-1">Group By </span>
+                  <span class="btn-set-label d-inline-flex pe-1">Group By </span>
                   <button name="year">Year</button>
                   <button class="btn-selected" name="month">Month</button>
                   <button name="week">Week</button>
@@ -251,7 +268,7 @@
             <div class="p-3 address_chart_wrap">
               <div class="expando monicon-expand" data-address-target="expando" data-action="click->address#toggleExpand"></div>
               <div class="py-5 fs16 d-none" data-address-target="noconfirms"></div>
-              <div class="text-start fs14 fw-bold text-secondary mb-1" data-address-target="chartTitle"></div>
+              <div class="text-start fs14 fw-bold text-secondary mt-n1 mb-1" data-address-target="chartTitle"></div>
               <div data-address-target="chart" class="address_chart"></div>
             </div>
           </div>

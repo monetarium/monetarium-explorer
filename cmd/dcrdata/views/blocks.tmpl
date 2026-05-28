@@ -107,7 +107,7 @@
             .Valid}}title="Regular transactions invalidated by stakeholders." {{end}}>{{.Transactions}}</td>
           <td class="text-center" data-type="var-amount">{{if .VARAmount}}{{formatCoinAtoms .VARAmount
             0}}{{else}}{{threeSigFigs .Total}}{{end}}</td>
-          <td class="text-center" data-type="ska-amount">{{formatSKAAmountCell .SKAAmount (len .SKASubRows)}}</td>
+          <td class="text-center" data-type="ska-amount">{{formatSKAAmountCell .SKAAmount (len .SKASubRows) .SKAActiveSubRows}}</td>
           <td class="text-center d-none d-sm-table-cell" data-type="size">{{.FormattedBytes}}</td>
           <td class="text-center d-none d-sm-table-cell" data-type="votes">{{.Voters}}</td>
           <td class="text-center d-none d-sm-table-cell" data-type="tickets">{{.FreshStake}}</td>

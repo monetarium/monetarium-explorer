@@ -20,7 +20,6 @@ import (
 	notify "github.com/monetarium/monetarium-explorer/cmd/dcrdata/internal/notification"
 
 	"github.com/monetarium/monetarium-explorer/db/dcrpg"
-	"github.com/monetarium/monetarium-explorer/exchanges"
 	"github.com/monetarium/monetarium-explorer/gov/agendas"
 	"github.com/monetarium/monetarium-explorer/gov/politeia"
 
@@ -71,7 +70,6 @@ var (
 	log           = backendLog.Logger("DATD")
 	iapiLog       = backendLog.Logger("IAPI")
 	pubsubLog     = backendLog.Logger("PUBS")
-	xcBotLog      = backendLog.Logger("XBOT")
 	agendasLog    = backendLog.Logger("AGDB")
 	proposalsLog  = backendLog.Logger("PRDB")
 )
@@ -91,7 +89,6 @@ func init() {
 	middleware.UseLogger(apiLog)
 	notify.UseLogger(notifyLog)
 	pubsub.UseLogger(pubsubLog)
-	exchanges.UseLogger(xcBotLog)
 	agendas.UseLogger(agendasLog)
 	politeia.UseLogger(proposalsLog)
 }
@@ -109,7 +106,6 @@ var subsystemLoggers = map[string]slog.Logger{
 	"IAPI": iapiLog,
 	"DATD": log,
 	"PUBS": pubsubLog,
-	"XBOT": xcBotLog,
 	"AGDB": agendasLog,
 	"PRDB": proposalsLog,
 }

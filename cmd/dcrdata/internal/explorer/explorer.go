@@ -32,7 +32,6 @@ import (
 	apitypes "github.com/monetarium/monetarium-explorer/api/types"
 	"github.com/monetarium/monetarium-explorer/blockdata"
 	"github.com/monetarium/monetarium-explorer/db/dbtypes"
-	"github.com/monetarium/monetarium-explorer/exchanges"
 	"github.com/monetarium/monetarium-explorer/explorer/types"
 	"github.com/monetarium/monetarium-explorer/gov/agendas"
 	pitypes "github.com/monetarium/monetarium-explorer/gov/politeia/types"
@@ -125,6 +124,7 @@ type explorerDataSource interface {
 	GetSummaryRange(ctx context.Context, idx0, idx1 int) []*apitypes.BlockDataBasic
 	VARCoinSupply(ctx context.Context) (*types.VARCoinSupply, error)
 	SKACoinSupply(ctx context.Context) ([]*types.SKACoinSupplyEntry, error)
+	SKACoinEmissionHeights(ctx context.Context, coinTypes []uint8) (map[uint8]int64, error)
 	GetBlockSKAFees(ctx context.Context, height int64) (map[uint8]string, error)
 	GetVoteTicketDataByBlock(ctx context.Context, blockHash string) ([]dbtypes.VoteTicketData, error)
 }
@@ -233,8 +233,6 @@ type explorerUI struct {
 	Version          string
 	NetName          string
 	MeanVotingBlocks int64
-	xcBot            *exchanges.ExchangeBot
-	xcDone           chan struct{}
 	// displaySyncStatusPage indicates if the sync status page is the only web
 	// page that should be accessible during DB synchronization.
 	displaySyncStatusPage atomic.Value
@@ -289,7 +287,6 @@ func (exp *explorerUI) StopWebsocketHub() {
 	}
 	log.Info("Stopping websocket hub.")
 	exp.wsHub.Stop()
-	close(exp.xcDone)
 }
 
 // ExplorerConfig is the configuration settings for explorerUI.
@@ -300,7 +297,6 @@ type ExplorerConfig struct {
 	AppVersion        string
 	DevPrefetch       bool
 	Viewsfolder       string
-	XcBot             *exchanges.ExchangeBot
 	AgendasSource     agendaBackend
 	Tracker           *agendas.VoteTracker
 	Proposals         PoliteiaBackend
@@ -322,8 +318,6 @@ func New(cfg *ExplorerConfig) *explorerUI {
 	exp.invs = new(types.MempoolInfo)
 	exp.Version = cfg.AppVersion
 	exp.devPrefetch = cfg.DevPrefetch
-	exp.xcBot = cfg.XcBot
-	exp.xcDone = make(chan struct{})
 	exp.agendasSource = cfg.AgendasSource
 	exp.voteTracker = cfg.Tracker
 	exp.proposals = cfg.Proposals
@@ -402,7 +396,7 @@ func New(cfg *ExplorerConfig) *explorerUI {
 		"rawtx", "status", "parameters", "agenda", "agendas", "charts",
 		"sidechains", "disapproved", "ticketpool", "visualblocks",
 		"windows", "timelisting", "addresstable", "proposals", "proposal",
-		"market", "insight_root", "attackcost", "treasury", "treasurytable", "verify_message"}
+		"insight_root", "attackcost", "treasury", "treasurytable", "verify_message"}
 
 	// Debug-only: load the dev_indicators template alongside the rest only when
 	// --reload-html is set. The corresponding route is registered in main.go
@@ -423,8 +417,6 @@ func New(cfg *ExplorerConfig) *explorerUI {
 	exp.wsHub = NewWebsocketHub()
 
 	go exp.wsHub.run()
-
-	go exp.watchExchanges()
 
 	return exp
 }
@@ -811,7 +803,7 @@ func (exp *explorerUI) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgB
 	// taken from the authoritative "MF"-marked SSFee split (issue #273). This
 	// mirrors the "Vote SKA Fee Reward" (PoS) derivation above so the HTTP and
 	// WebSocket paths stay consistent and no heuristic /2 or 100% guess is used.
-	var powRewardsBlockHeight int64
+	powRewardsBlockHeight := make(map[uint8]int64)
 	powRewardsMap := make(map[uint8]string)
 
 	// Prefer the current block; otherwise fall back to the most recent block
@@ -821,7 +813,7 @@ func (exp *explorerUI) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgB
 			continue
 		}
 		powRewardsMap[ct] = txhelpers.FormatSKAAtoms(split.PoW)
-		powRewardsBlockHeight = newBlockData.Height
+		powRewardsBlockHeight[ct] = newBlockData.Height
 	}
 	for i := len(sum30) - 1; i >= 0; i-- {
 		for ct, split := range sum30[i].SSFeeTotalsByCoin {
@@ -832,8 +824,8 @@ func (exp *explorerUI) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgB
 				continue
 			}
 			powRewardsMap[ct] = txhelpers.FormatSKAAtoms(split.PoW)
-			if powRewardsBlockHeight == 0 {
-				powRewardsBlockHeight = int64(sum30[i].Height)
+			if _, hasHeight := powRewardsBlockHeight[ct]; !hasHeight {
+				powRewardsBlockHeight[ct] = int64(sum30[i].Height)
 			}
 		}
 	}
@@ -845,24 +837,13 @@ func (exp *explorerUI) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgB
 				CoinType:    ct,
 				Symbol:      fmt.Sprintf("SKA%d", ct),
 				Amount:      amountStr,
-				BlockHeight: powRewardsBlockHeight,
+				BlockHeight: powRewardsBlockHeight[ct],
 			})
 		}
 		sort.Slice(powRewards, func(i, j int) bool { return powRewards[i].CoinType < powRewards[j].CoinType })
 		p.HomeInfo.PoWSKARewards = powRewards
 	} else {
 		p.HomeInfo.PoWSKARewards = nil
-	}
-
-	// If exchange monitoring is enabled, set the exchange rate.
-	if exp.xcBot != nil {
-		exchangeConversion := exp.xcBot.Conversion(1.0)
-		if exchangeConversion != nil {
-			conversion := types.Conversion(*exchangeConversion)
-			p.HomeInfo.ExchangeRate = &conversion
-		} else {
-			log.Errorf("No rate conversion available yet.")
-		}
 	}
 
 	p.Unlock()
@@ -982,76 +963,6 @@ func (exp *explorerUI) addRoutes() {
 	exp.Mux.Get("/decodetx", redirect("decodetx"))
 }
 
-func (exp *explorerUI) watchExchanges() {
-	if exp.xcBot == nil {
-		return
-	}
-	xcChans := exp.xcBot.UpdateChannels()
-
-	sendXcUpdate := func(isFiat bool, token, pair string, updater *exchanges.ExchangeState) {
-		xcState := exp.xcBot.State()
-		update := &WebsocketExchangeUpdate{
-			Updater: WebsocketMiniExchange{
-				Token:        token,
-				CurrencyPair: pair,
-				Price:        updater.Price,
-				Volume:       updater.Volume,
-				Change:       updater.Change,
-			},
-			IsFiatIndex: isFiat,
-			Index:       exp.xcBot.Index,
-			Price:       xcState.Price,
-			Volume:      xcState.Volume,
-			Indices:     make(map[string]float64),
-		}
-
-		// Other DCR pairs should also provide an index price for the quote
-		// asset.
-		update.Indices[string(exchanges.BTCIndex)] = xcState.BtcPrice
-		update.Indices[string(exchanges.USDTIndex)] = indexPrice(exchanges.USDTIndex, xcState.FiatIndices)
-
-		select {
-		case exp.wsHub.xcChan <- update:
-		default:
-			log.Warnf("Failed to send WebsocketExchangeUpdate on WebsocketHub channel")
-		}
-	}
-
-	for {
-		select {
-		case update := <-xcChans.Exchange:
-			sendXcUpdate(false, update.Token, string(update.CurrencyPair), update.State)
-		case update := <-xcChans.Index:
-			currencyIndices, found := exp.xcBot.State().FiatIndices[update.Token]
-			if !found {
-				log.Error("Index state not found when preparing websocket update")
-				continue
-			}
-
-			indexState, found := currencyIndices[update.CurrencyPair]
-			if !found {
-				log.Errorf("Index state not found for %s when preparing websocket update", update.CurrencyPair)
-				continue
-			}
-
-			sendXcUpdate(true, update.Token, string(update.CurrencyPair), indexState)
-
-		case <-xcChans.Quit:
-			log.Warnf("ExchangeBot has quit.")
-			return
-		case <-exp.xcDone:
-			return
-		}
-	}
-}
-
-func (exp *explorerUI) getExchangeState() *exchanges.ExchangeBotState {
-	if exp.xcBot == nil || exp.xcBot.IsFailed() {
-		return nil
-	}
-	return exp.xcBot.State()
-}
-
 // mempoolTime is the TimeDef that the transaction was received in DCRData, or
 // else a zero-valued TimeDef if no transaction is found.
 func (exp *explorerUI) mempoolTime(txid string) types.TimeDef {
@@ -1062,23 +973,6 @@ func (exp *explorerUI) mempoolTime(txid string) types.TimeDef {
 		return types.NewTimeDefFromUNIX(0)
 	}
 	return types.NewTimeDefFromUNIX(tx.Time)
-}
-
-// indexPrice is calculates the aggregate index price across all exchanges.
-func indexPrice(index exchanges.CurrencyPair, indices map[string]map[exchanges.CurrencyPair]*exchanges.ExchangeState) float64 {
-	var price, nSources float64
-	for _, currecncyIndices := range indices {
-		for pair, state := range currecncyIndices {
-			if pair == index {
-				price += state.Price
-				nSources++
-			}
-		}
-	}
-	if nSources == 0 {
-		return 0
-	}
-	return price / nSources
 }
 
 const letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
