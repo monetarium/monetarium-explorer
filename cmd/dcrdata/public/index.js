@@ -27,7 +27,7 @@ export function notifyNewBlock(newBlock) {
   if (window.Notification.permission !== 'granted') return
   const block = newBlock.block
   const newBlockNtfn = new window.Notification('New Monetarium Block Mined', {
-    body: `Block mined at height <b>${block.height}</b>`,
+    body: `Block mined at height ${block.height}`,
     icon: '/images/monetarium144x128.png',
     notifyError: (e) => console.error('Error showing notification:', e)
   })
