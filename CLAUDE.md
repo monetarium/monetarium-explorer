@@ -95,7 +95,7 @@ The data flow, from chain to user:
 3. **`db/dcrpg`** is the PostgreSQL backend (large package: schema, indexing, sync, charts, queries, upgrades). **`db/cache`** sits in front of it. **`db/dbtypes`** holds shared row/struct types.
 4. **`stakedb`** maintains the live ticket pool in a Badger KV store (separate from Postgres).
 5. **`mempool`** monitors mempool txs and emits typed events.
-6. **`txhelpers`** is the central place for tx/block parsing and reward math (`RewardsAtBlock`, `BlockSSFeeTotals`, `AvgSSFeeRate`). Reward calc is non-obvious — see [REWARDS_LOGIC.md](REWARDS_LOGIC.md) for the multi-coin (VAR + SKA{n}) model before changing anything in this area.
+6. **`txhelpers`** is the central place for tx/block parsing and reward math (`RewardsAtBlock`, `BlockSSFeeTotals`). Reward calc is non-obvious — see [wiki/core/staking-rewards.md](wiki/core/staking-rewards.md) (sections 3.1–3.2) for the multi-coin (VAR + SKA{n}) model before changing anything in this area.
 7. **`pubsub`** is the websocket pub/sub server — same data, push-style. Note: parts of the home-page reward calc are duplicated here (`pubsub/pubsubhub.go`) and in the explorer; if you change one, check the other.
 8. **`gov/agendas`** and **`gov/politeia`** are governance DBs (consensus deployments + proposals).
 9. **`cmd/dcrdata`** is the executable that wires everything together.
