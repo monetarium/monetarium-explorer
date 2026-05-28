@@ -79,10 +79,11 @@ Manual coverage: test plan WS-F4/I1/I2.
 
 ## R10 — Pre-connect queue overflow & malformed frames (silent)
 **Trigger:** issue >5 sends before `connect()` (oldest silently dropped,
-`maxQlength=5`); or a non-JSON inbound frame (`onmessage` does `JSON.parse` with no
-`try/catch`, [messagesocket_service.js:108-111](../../../cmd/dcrdata/public/js/services/messagesocket_service.js#L108-L111)).
-**Failure:** dropped early requests; a thrown parse error on a bad frame (behavior
-on the socket is undocumented — see test plan WS-J1).
+`maxQlength=5`); or a non-JSON inbound frame (`onmessage` wraps `JSON.parse` in a
+`try/catch`, [messagesocket_service.js:141-148](../../../cmd/dcrdata/public/js/services/messagesocket_service.js#L141-L148)).
+**Failure:** dropped early requests; a malformed frame is dropped with a
+`console.warn` and the message loop keeps processing subsequent frames (asserted by
+test plan WS-J1).
 
 See also:
 - /wiki/code-analysis/websocket/patterns.md (derived-from: these risks follow from P1–P7)

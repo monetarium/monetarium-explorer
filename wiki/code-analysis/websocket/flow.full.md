@@ -224,8 +224,9 @@ When modifying the transport, check:
 
 **Silent failures:** event-name drift; missing controller handler; oversize
 request dropped without reply ([:127-131](../../../cmd/dcrdata/internal/explorer/websockethandlers.go#L127-L131)); pre-connect queue overflow drops the oldest of >5 early
-sends; malformed inbound frame throws in `JSON.parse` (no `try/catch` in
-`onmessage`); missing `reconnect` re-request leaves stale UI after an outage.
+sends; malformed inbound frame dropped with a `console.warn` and the message loop
+continues ([:141-148](../../../cmd/dcrdata/public/js/services/messagesocket_service.js#L141-L148));
+missing `reconnect` re-request leaves stale UI after an outage.
 
 **Hard failures:** removing `connCtx` cancellation/`defer`s (goroutine + socket
 leak); a payload encoder panicking inside the send loop; a blocking spoke send
