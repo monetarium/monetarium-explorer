@@ -394,7 +394,7 @@ export default class extends Controller {
 
   makeTableUrl(txType, count, offset) {
     const root =
-      this.dcrAddress === 'treasury' ? 'treasurytable' : `addresstable/${this.dcrAddress}`
+      `addresstable/${this.dcrAddress}`
     return `/${root}?txntype=${txType}&n=${count}&start=${offset}${this.coinUrlSegment()}`
   }
 
@@ -510,12 +510,10 @@ export default class extends Controller {
     ctrl.paginationParams.pagesize = count
     ctrl.paginationParams.txntype = txType
     ctrl.setPageability()
-    if (ctrl.dcrAddress !== 'treasury') {
-      if (txType.indexOf('merged') === -1) {
-        this.mergedMsgTarget.classList.add('d-hide')
-      } else {
-        this.mergedMsgTarget.classList.remove('d-hide')
-      }
+    if (txType.indexOf('merged') === -1) {
+      this.mergedMsgTarget.classList.add('d-hide')
+    } else {
+      this.mergedMsgTarget.classList.remove('d-hide')
     }
     ctrl.tablePaginationParams = tableResponse.pages
     ctrl.setTablePaginationLinks()
@@ -567,7 +565,7 @@ export default class extends Controller {
     const txnType = ctrl.paginationParams.txntype
     let links = ''
 
-    const root = this.dcrAddress === 'treasury' ? 'treasury' : `address/${this.dcrAddress}`
+    const root = `address/${this.dcrAddress}`
     const coinSeg = this.coinUrlSegment()
 
     if (typeof offset !== 'undefined' && offset > 0) {
@@ -643,11 +641,8 @@ export default class extends Controller {
       return
     }
 
-    let url = `/api/treasury/io/${bin}`
-    if (this.dcrAddress !== 'treasury') {
-      const chartKey = chart === 'balance' ? 'amountflow' : chart
-      url = `/api/address/${ctrl.dcrAddress}/${chartKey}/${bin}?coin=${coin}`
-    }
+    const chartKey = chart === 'balance' ? 'amountflow' : chart
+    let url = `/api/address/${ctrl.dcrAddress}/${chartKey}/${bin}?coin=${coin}`
 
     const graphDataResponse = await requestJSON(url)
     ctrl.processData(chart, bin, graphDataResponse)

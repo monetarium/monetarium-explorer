@@ -40,10 +40,6 @@ func (noopDS) VotesInBlock(_ context.Context, _ string) (int16, error) { return 
 func (noopDS) TxHistoryData(_ context.Context, _ string, _ dbtypes.HistoryChart, _ dbtypes.TimeBasedGrouping, _ uint8) (*dbtypes.ChartsData, error) {
 	return nil, nil
 }
-func (noopDS) TreasuryBalance(_ context.Context) (*dbtypes.TreasuryBalance, error) { return nil, nil }
-func (noopDS) BinnedTreasuryIO(_ context.Context, _ dbtypes.TimeBasedGrouping) (*dbtypes.ChartsData, error) {
-	return nil, nil
-}
 func (noopDS) TicketPoolVisualization(_ context.Context, _ dbtypes.TimeBasedGrouping) (*dbtypes.PoolTicketsData, *dbtypes.PoolTicketsData, *dbtypes.PoolTicketsData, int64, error) {
 	return nil, nil, nil, 0, nil
 }

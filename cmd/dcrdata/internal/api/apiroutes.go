@@ -63,8 +63,6 @@ type DataSource interface {
 	VotesInBlock(ctx context.Context, hash string) (int16, error)
 	TxHistoryData(ctx context.Context, address string, addrChart dbtypes.HistoryChart,
 		chartGroupings dbtypes.TimeBasedGrouping, coinType uint8) (*dbtypes.ChartsData, error)
-	TreasuryBalance(context.Context) (*dbtypes.TreasuryBalance, error)
-	BinnedTreasuryIO(ctx context.Context, chartGroupings dbtypes.TimeBasedGrouping) (*dbtypes.ChartsData, error)
 	TicketPoolVisualization(ctx context.Context, interval dbtypes.TimeBasedGrouping) (
 		*dbtypes.PoolTicketsData, *dbtypes.PoolTicketsData, *dbtypes.PoolTicketsData, int64, error)
 	AgendaVotes(ctx context.Context, agendaID string, chartType int) (*dbtypes.AgendaVoteChoices, error)
@@ -344,26 +342,10 @@ func (c *appContext) coinSupply(w http.ResponseWriter, r *http.Request) {
 func (c *appContext) coinSupplyCirculating(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	var dcr bool
-	if dcrParam := r.URL.Query().Get("dcr"); dcrParam != "" {
-		var err error
-		dcr, err = strconv.ParseBool(dcrParam)
-		if err != nil {
-			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
-			return
-		}
-	}
-
 	supply := c.DataSource.CurrentCoinSupply(ctx)
 	if supply == nil {
 		apiLog.Error("Unable to get coin supply.")
 		http.Error(w, http.StatusText(422), 422)
-		return
-	}
-
-	if dcr {
-		coinSupply := dcrutil.Amount(supply.Mined).ToCoin()
-		writeJSONBytes(w, []byte(strconv.FormatFloat(coinSupply, 'f', 8, 64)))
 		return
 	}
 
@@ -1896,47 +1878,6 @@ func (c *appContext) getAddressTxAmountFlowData(w http.ResponseWriter, r *http.R
 	}
 	if err != nil {
 		log.Warnf("failed to get address (%s) history by amount flow: %v", address, err)
-		http.Error(w, http.StatusText(http.StatusUnprocessableEntity), http.StatusUnprocessableEntity)
-		return
-	}
-
-	writeJSON(w, data, m.GetIndentCtx(r))
-}
-
-func (c *appContext) getTreasuryBalance(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
-	treasuryBalance, err := c.DataSource.TreasuryBalance(ctx)
-	if err != nil {
-		log.Errorf("TreasuryBalance failed: %v", err)
-		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-		return
-	}
-
-	writeJSON(w, treasuryBalance, m.GetIndentCtx(r))
-}
-
-func (c *appContext) getTreasuryIO(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
-	chartGrouping := m.GetChartGroupingCtx(r)
-	if chartGrouping == "" {
-		http.Error(w, http.StatusText(http.StatusUnprocessableEntity), http.StatusUnprocessableEntity)
-		return
-	}
-	interval := dbtypes.TimeGroupingFromStr(chartGrouping)
-	if interval == dbtypes.UnknownGrouping {
-		http.Error(w, http.StatusText(http.StatusUnprocessableEntity), http.StatusUnprocessableEntity)
-		return
-	}
-	data, err := c.DataSource.BinnedTreasuryIO(ctx, interval)
-	if dbtypes.IsTimeoutErr(err) {
-		apiLog.Errorf("BinnedTreasuryIO: %v", err)
-		http.Error(w, "Database timeout.", http.StatusServiceUnavailable)
-		return
-	}
-	if err != nil {
-		log.Warnf("failed to get treasury i/o: %v", err)
 		http.Error(w, http.StatusText(http.StatusUnprocessableEntity), http.StatusUnprocessableEntity)
 		return
 	}

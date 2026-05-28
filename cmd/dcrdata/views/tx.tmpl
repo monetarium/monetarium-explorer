@@ -470,7 +470,7 @@
                                   {{template "hashElide" (hashlink . (print "/address/" .))}}
                                 {{end}}
                             {{else if .TreasurySpend}}
-                                <a href="/treasury">Treasury</a>
+                                Treasury
                             {{else}}
                                 N/A
                             {{end}}
@@ -537,7 +537,7 @@
                                 {{end}}
                             {{else if .OP_TADD}}
                               <div>
-                                <span class="break-word"><a href="/treasury">Treasury</a></span>
+                                <span class="break-word">Treasury</span>
                               </div>
                             {{end}}
                         </td>
@@ -604,27 +604,7 @@
             {{else}}
             <br>No recognized agenda votes in this transaction.
             {{end}}
-            <h5>Treasury Spend Choices</h5>
-            {{if gt (len .TSpends) 0}}
-            <table class="table">
-                <thead>
-                  <tr>
-                    <th>Treasury Spend Transaction</th>
-                    <th>Choice</th>
-                  </tr>
-                </thead>
-                <tbody>
-                    {{range .TSpends}}
-                    <tr>
-                        <td><a href="/tx/{{.TSpend}}">{{.TSpend}}</a></td>
-                        <td>{{.Choice}}</td>
-                    </tr>
-                    {{end}}
-                </tbody>
-            </table>
-            {{else}}
-            No treasury spend choices in this transaction.
-            {{end}}
+
         </div>
     </div>
     {{end}}

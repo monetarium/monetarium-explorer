@@ -11,7 +11,7 @@ let targets
 let targetsLength
 let currentIndex = 0
 let jumpToIndexOnLoad
-const keyNavCookieName = 'dcrdataKeyNav'
+const keyNavCookieName = 'monetariumKeyNav'
 let searchBar, keyNavToggle, menuToggle
 
 function bindElements() {

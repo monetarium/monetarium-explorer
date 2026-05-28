@@ -17,7 +17,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/monetarium/monetarium-node/blockchain/stake"
 	"github.com/monetarium/monetarium-node/chaincfg"
 	"github.com/monetarium/monetarium-node/chaincfg/chainhash"
 
@@ -1397,123 +1396,6 @@ func (exp *explorerUI) txAtomicSwapsInfo(ctx context.Context, tx *types.TxInfo) 
 	return txhelpers.MsgTxAtomicSwapsInfo(msgTx, outputSpenders, exp.ChainParams)
 }
 
-type TreasuryInfo struct {
-	Net string
-
-	// Page parameters
-	MaxTxLimit    int64
-	Path          string
-	Limit, Offset int64  // ?n=Limit&start=Offset
-	TxnType       string // ?txntype=TxnType
-
-	// TODO: tadd and tspend can be unconfirmed. tspend for a very long time.
-	// NumUnconfirmed is the number of unconfirmed txns
-	// NumUnconfirmed  int64
-	// UnconfirmedTxns []*dbtypes.TreasuryTx
-
-	// Transactions on the current page
-	Transactions    []*dbtypes.TreasuryTx
-	NumTransactions int64 // len(Transactions) but int64 for dumb template
-
-	Balance   *dbtypes.TreasuryBalance
-	TypeCount int64
-}
-
-// TreasuryPage is the page handler for the "/treasury" path
-func (exp *explorerUI) TreasuryPage(w http.ResponseWriter, r *http.Request) {
-	// Note: Monetarium does not have a treasury, so using empty address
-	ctx := context.WithValue(r.Context(), ctxAddress, "")
-	r = r.WithContext(ctx)
-	if queryVals := r.URL.Query(); queryVals.Get("txntype") == "" {
-		queryVals.Set("txntype", "tspend")
-		r.URL.RawQuery = queryVals.Encode()
-	}
-
-	limitN := defaultAddressRows
-	if nParam := r.URL.Query().Get("n"); nParam != "" {
-		val, err := strconv.ParseUint(nParam, 10, 64)
-		if err != nil {
-			exp.StatusPage(w, defaultErrorCode, "invalid n value", "", ExpStatusError)
-			return
-		}
-		if int64(val) > MaxTreasuryRows {
-			log.Warnf("TreasuryPage: requested up to %d address rows, "+
-				"limiting to %d", limitN, MaxTreasuryRows)
-			limitN = MaxTreasuryRows
-		} else {
-			limitN = int64(val)
-		}
-	}
-
-	// Number of txns to skip (OFFSET in database query). For UX reasons, the
-	// "start" URL query parameter is used.
-	var offset int64
-	if startParam := r.URL.Query().Get("start"); startParam != "" {
-		val, err := strconv.ParseUint(startParam, 10, 64)
-		if err != nil {
-			exp.StatusPage(w, defaultErrorCode, "invalid start value", "", ExpStatusError)
-			return
-		}
-		offset = int64(val)
-	}
-
-	// Transaction types to show.
-	txTypeStr := r.URL.Query().Get("txntype")
-	txType := parseTreasuryTransactionType(txTypeStr)
-
-	txns, err := exp.dataSource.TreasuryTxns(ctx, limitN, offset, txType)
-	if exp.timeoutErrorPage(w, err, "TreasuryTxns") {
-		return
-	} else if err != nil {
-		exp.StatusPage(w, defaultErrorCode, err.Error(), "", ExpStatusError)
-		return
-	}
-
-	// TreasuryBalance is not available in Monetarium (no treasury)
-	// Return empty balance for template compatibility
-	treasuryBalance := &dbtypes.TreasuryBalance{}
-
-	typeCount := treasuryTypeCount(treasuryBalance, txType)
-
-	treasuryData := &TreasuryInfo{
-		Net:             exp.ChainParams.Net.String(),
-		MaxTxLimit:      MaxTreasuryRows,
-		Path:            r.URL.Path,
-		Limit:           limitN,
-		Offset:          offset,
-		TxnType:         txTypeStr,
-		NumTransactions: int64(len(txns)),
-		Transactions:    txns,
-		Balance:         treasuryBalance,
-		TypeCount:       typeCount,
-	}
-
-	// Execute the HTML template.
-	linkTemplate := fmt.Sprintf("/treasury?start=%%d&n=%d&txntype=%v", limitN, txType)
-	pageData := struct {
-		*CommonPageData
-		Data    *TreasuryInfo
-		Pages   []pageNumber
-		Mempool *types.MempoolInfo
-	}{
-		CommonPageData: exp.commonData(r),
-		Data:           treasuryData,
-		Pages:          calcPages(int(typeCount), int(limitN), int(offset), linkTemplate),
-		Mempool:        exp.MempoolInventory(),
-	}
-	str, err := exp.templates.exec("treasury", pageData)
-	if err != nil {
-		log.Errorf("Template execute failure: %v", err)
-		exp.StatusPage(w, defaultErrorCode, defaultErrorMessage, "", ExpStatusError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "text/html")
-	w.Header().Set("Turbolinks-Location", r.URL.RequestURI())
-	w.WriteHeader(http.StatusOK)
-	io.WriteString(w, str)
-}
-
 // AddressPage is the page handler for the "/address" path.
 func (exp *explorerUI) AddressPage(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -1690,70 +1572,6 @@ func (exp *explorerUI) AddressTable(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// TreasuryTable is the handler for the "/treasurytable" path.
-func (exp *explorerUI) TreasuryTable(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
-	// Grab the URL query parameters
-	txType, limitN, offset, err := parseTreasuryParams(r)
-	if err != nil {
-		log.Errorf("TreasuryTable request error: %v", err)
-		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
-		return
-	}
-
-	txns, err := exp.dataSource.TreasuryTxns(ctx, limitN, offset, txType)
-	if exp.timeoutErrorPage(w, err, "TreasuryTxns") {
-		return
-	} else if err != nil {
-		exp.StatusPage(w, defaultErrorCode, err.Error(), "", ExpStatusError)
-		return
-	}
-
-	// TreasuryBalance is not available in Monetarium (no treasury)
-	bal := &dbtypes.TreasuryBalance{}
-
-	linkTemplate := "/treasury" + "?start=%d&n=" + strconv.FormatInt(limitN, 10) + "&txntype=" + fmt.Sprintf("%v", txType)
-
-	response := struct {
-		TxnCount int64        `json:"tx_count"`
-		HTML     string       `json:"html"`
-		Pages    []pageNumber `json:"pages"`
-	}{
-		TxnCount: treasuryTypeCount(bal, txType),
-		Pages:    calcPages(int(treasuryTypeCount(bal, txType)), int(limitN), int(offset), linkTemplate),
-	}
-
-	type txData struct {
-		Transactions []*dbtypes.TreasuryTx
-	}
-
-	response.HTML, err = exp.templates.exec("treasurytable", struct {
-		Data txData
-	}{
-		Data: txData{
-			Transactions: txns,
-		},
-	})
-	if err != nil {
-		log.Errorf("Template execute failure: %v", err)
-		http.Error(w, http.StatusText(http.StatusInternalServerError),
-			http.StatusInternalServerError)
-		return
-	}
-
-	log.Tracef(`"treasurytable" template HTML size: %.2f kiB (%v, %d)`,
-		float64(len(response.HTML))/1024.0, txType, len(txns))
-
-	w.Header().Set("Content-Type", "application/json")
-	enc := json.NewEncoder(w)
-	//enc.SetEscapeHTML(false)
-	err = enc.Encode(response)
-	if err != nil {
-		log.Debug(err)
-	}
-}
-
 // parseAddressParams parses tx filter parameters. Used by both /address and
 // /addresstable.
 func parseAddressParams(r *http.Request) (address string, txnType dbtypes.AddrTxnViewType, limitN, offsetAddrOuts int64, err error) {
@@ -1771,44 +1589,6 @@ func parseAddressParams(r *http.Request) (address string, txnType dbtypes.AddrTx
 	if txnType == dbtypes.AddrTxnUnknown {
 		err = fmt.Errorf("unknown txntype query value")
 	}
-	return
-}
-
-// treasuryTypeCount returns the tx count for the type treasury tx type. The
-// special value txType = -1 specifies all types combined.
-func treasuryTypeCount(treasuryBalance *dbtypes.TreasuryBalance, txType stake.TxType) int64 {
-	typedCount := treasuryBalance.TxCount
-	switch txType {
-	case stake.TxTypeTSpend:
-		typedCount = treasuryBalance.SpendCount
-	case stake.TxTypeTAdd:
-		typedCount = treasuryBalance.AddCount
-	case stake.TxTypeTreasuryBase:
-		typedCount = treasuryBalance.TBaseCount
-	}
-	return typedCount
-}
-
-// parseTreasuryTransactionType parses a treasury transaction type from a
-// string. If the provided string is not recognized as a treasury type, the
-// special value -1, representing "all", will be returned.
-func parseTreasuryTransactionType(txnTypeStr string) (txType stake.TxType) {
-	switch strings.ToLower(txnTypeStr) {
-	case "tspend":
-		return stake.TxTypeTSpend
-	case "tadd":
-		return stake.TxTypeTAdd
-	case "treasurybase":
-		return stake.TxTypeTreasuryBase
-	}
-	return stake.TxType(-1)
-}
-
-// parseTreasuryParams parses the tx filters for the treasury page. Used by both
-// TreasuryPage and TreasuryTable.
-func parseTreasuryParams(r *http.Request) (txType stake.TxType, limitN, offsetAddrOuts int64, err error) {
-	tType, limitN, offsetAddrOuts, err := parsePaginationParams(r)
-	txType = parseTreasuryTransactionType(tType)
 	return
 }
 

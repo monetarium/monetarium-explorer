@@ -2,7 +2,7 @@ import { setCookie } from './cookie_service'
 import globalEventBus from './event_bus_service'
 
 const sunIcon = document.getElementById('sun-icon')
-const darkBGCookieName = 'dcrdataDarkBG'
+const darkBGCookieName = 'monetariumDarkBG'
 
 export function darkEnabled() {
   return document.cookie.includes(darkBGCookieName)

@@ -63,10 +63,6 @@ const (
 
 	IndexOfHeightOnStatsTable = "uix_stats_height" // REMOVED
 
-	// treasury table
-
-	IndexOfTreasuryTableOnTxHash = "uix_treasury_tx_hash"
-	IndexOfTreasuryTableOnHeight = "idx_treasury_height"
 )
 
 // AddressesIndexNames are the names of the indexes on the addresses table.
@@ -102,6 +98,4 @@ var IndexDescriptions = map[string]string{
 	IndexOfMissesTableOnHashes:            "misses on ticket hash and block hash",
 	IndexOfAgendasTableOnName:             "agendas on agenda name",
 	IndexOfAgendaVotesTableOnRowIDs:       "agenda_votes on votes table row ID and agendas table row ID",
-	IndexOfTreasuryTableOnTxHash:          "treasury table on tx hash",
-	IndexOfTreasuryTableOnHeight:          "treasury table on block height",
 }

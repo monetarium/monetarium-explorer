@@ -2326,32 +2326,6 @@ func (a *AddressTx) Link() string {
 	return fmt.Sprintf("/tx/%s", a.TxID)
 }
 
-type TreasuryTx struct {
-	TxID        ChainHash
-	Type        int
-	Amount      int64
-	BlockHash   ChainHash
-	BlockHeight int64
-	BlockTime   TimeDef
-}
-
-// TreasuryBalance is the current balance, spent amount, and tx count for the
-// treasury.
-type TreasuryBalance struct {
-	Height         int64 `json:"height"`
-	MaturityHeight int64 `json:"maturity_height"`
-	Balance        int64 `json:"balance"`
-	TxCount        int64 `json:"output_count"`
-	AddCount       int64 `json:"add_count"`
-	Added          int64 `json:"added"`
-	SpendCount     int64 `json:"spend_count"`
-	Spent          int64 `json:"spent"`
-	TBaseCount     int64 `json:"tbase_count"`
-	TBase          int64 `json:"tbase"`
-	ImmatureCount  int64 `json:"immature_count"`
-	Immature       int64 `json:"immature"`
-}
-
 // AddressTransactions collects the transactions for an address as AddressTx
 // slices.
 type AddressTransactions struct {
