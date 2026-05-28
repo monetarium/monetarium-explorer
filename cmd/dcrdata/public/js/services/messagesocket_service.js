@@ -38,6 +38,15 @@ const reconnectOptions = {
   maxEnqueuedMessages: Infinity
 }
 
+// Client-side liveness watchdog. partysocket only reconnects when the browser
+// fires a close/error event, which never happens for a silently dropped socket
+// (offline tab, backgrounded iOS Safari, network partition): it lingers in OPEN
+// and the UI shows a stale "Connected". The server pushes an app-level `ping`
+// every 60 s, so any inbound frame is proof of life; if none arrives within this
+// window we force a reconnect, mirroring the server's own zombie-client
+// detection. 90 s = the 60 s server cadence plus grace for jitter.
+const livenessTimeout = 90000
+
 function forward(event, message, handlers) {
   const list = handlers[event]
   if (!list) return
@@ -55,6 +64,25 @@ class MessageSocket {
     this.preConnectQueue = []
     this.maxQlength = 5
     this.hasConnected = false
+    this.livenessTimer = undefined
+  }
+
+  // armLiveness (re)starts the silence watchdog. Called on open and on every
+  // inbound frame; a healthy connection resets it well within livenessTimeout.
+  armLiveness() {
+    if (this.connection === undefined) return
+    clearTimeout(this.livenessTimer)
+    this.livenessTimer = setTimeout(() => {
+      if (window.loggingDebug) console.log('WebSocket liveness timeout; forcing reconnect')
+      // Leave the watchdog disarmed: reconnect()'s close re-runs the normal
+      // backoff, and a successful open re-arms it. Re-arming here would reset
+      // partysocket's backoff on every timeout.
+      this.connection.reconnect()
+    }, livenessTimeout)
+  }
+
+  clearLiveness() {
+    clearTimeout(this.livenessTimer)
   }
 
   registerEvtHandler(eventID, handler) {
@@ -106,11 +134,15 @@ class MessageSocket {
 
     // unmarshal message, and forward the message to registered handlers
     this.connection.onmessage = (evt) => {
+      // Any inbound frame proves the connection is alive; reset before parsing
+      // so even a malformed frame counts.
+      this.armLiveness()
       const json = JSON.parse(evt.data)
       forward(json.event, json.message, this.handlers)
     }
 
     this.connection.onopen = () => {
+      this.armLiveness()
       forward('open', null, this.handlers)
       if (this.hasConnected) {
         forward('reconnect', null, this.handlers)
@@ -119,6 +151,9 @@ class MessageSocket {
     }
 
     this.connection.onclose = () => {
+      // partysocket now owns reconnection; disarm so the watchdog doesn't reset
+      // its backoff. The next open re-arms it.
+      this.clearLiveness()
       forward('close', null, this.handlers)
     }
 
@@ -129,6 +164,7 @@ class MessageSocket {
 
   // close terminates the connection without reconnecting (a clean close).
   close() {
+    this.clearLiveness()
     if (this.connection) this.connection.close()
   }
 }

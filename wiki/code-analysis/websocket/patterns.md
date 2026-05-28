@@ -73,6 +73,26 @@ the slice into each client's `newTxs` field
 **Constraint:** the broadcast carries a nil `Msg`; the per-client slice is the real
 payload — fan-out and per-client state are decoupled here.
 
+## P8 — Client-side liveness watchdog (counterpart to P2)
+partysocket only reconnects when the browser fires a `close`/`error` event. A
+**silently** dropped socket (offline tab, backgrounded iOS Safari, network
+partition) never gets one — it lingers in `OPEN`, partysocket never retries, and
+the UI shows a stale "Connected". The client mirrors the server's ping-based
+zombie detection (P2) with a passive watchdog: any inbound frame re-arms a timer
+([messagesocket_service.js:72-86](../../../cmd/dcrdata/public/js/services/messagesocket_service.js#L72-L86)),
+re-armed on `onopen`/`onmessage` and cleared on `onclose`/clean `close()`
+([:136-159](../../../cmd/dcrdata/public/js/services/messagesocket_service.js#L136-L159)).
+After `livenessTimeout` (90 s) of silence it forces `connection.reconnect()`,
+which drops the zombie and emits the synthetic `close` — surfacing the
+disconnect to the indicator (P1) and driving the re-request flow (P5). The
+watchdog stays **passive**: it never sends a client→server frame, so the
+"client sends no app-level pings" contract holds; the inbound app-level `ping`
+(broadcast every 60 s by P2's ticker) is the guaranteed proof-of-life that keeps
+it from firing on a healthy connection. **Constraint:** `livenessTimeout` must
+stay above the server's 60 s ping cadence (with margin) or healthy connections
+false-positive; the timeout handler must **not** re-arm (that would reset
+partysocket's backoff every cycle) — a successful `onopen` re-arms it instead.
+
 See also:
 - /wiki/code-analysis/websocket/impact.md (depends-on: these patterns define the mutation risks)
 - /wiki/code-analysis/decodetx/patterns.md (shares-pattern-with: RPC-over-WS)

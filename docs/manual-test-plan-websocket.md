@@ -55,6 +55,7 @@ Server (`cmd/dcrdata/internal/explorer/`):
 | Pre-connect send queue | max 5 messages, flushed on `connect()` (`preConnectQueue`, `maxQlength`) |
 | Server keepalive | RFC-6455 ping every 60 s; missed pong tears the connection down (`pingInterval`, ping goroutine) |
 | App-level `ping` event | broadcast every 60 s, `message` = connected client count (`sigPingAndUserCount`) |
+| Client liveness watchdog | ~90 s of inbound silence forces `partysocket.reconnect()` so silent drops surface as `close` (`livenessTimeout`) |
 | Server write timeout | 10 s per write (`wsWriteTimeout`) |
 | Read limit | 1 MiB per message (`SetReadLimit`) |
 | Origin policy | any origin accepted (`OriginPatterns: ["*"]`) |
@@ -203,9 +204,14 @@ Record Pass/Fail/Blocked and notes in the tracking table (Section 9).
 
 #### WS-B2 — Disconnected on drop
 
-- Steps: Toggle DevTools **Offline**.
+- Steps: Toggle DevTools **Offline** and wait up to ~90 s.
 - Expect: Console logs `Disconnected`; indicator switches to `disconnected`,
-  status text `Disconnected`. (Triggered by the `close`/`error` synthetic events.)
+  status text `Disconnected`. A silent offline drop sends no close frame, so the
+  browser's socket lingers in `OPEN` — detection comes from the **client liveness
+  watchdog** (`livenessTimeout` ≈ 90 s of inbound silence; the server pushes an
+  app-level `ping` every 60 s, so any healthy connection resets it). On timeout the
+  client forces `partysocket.reconnect()`, which emits the synthetic `close`. (A
+  server-originated drop — WS-E2 — fires `close`/`error` immediately instead.)
 
 #### WS-B3 — Back to connected on restore
 

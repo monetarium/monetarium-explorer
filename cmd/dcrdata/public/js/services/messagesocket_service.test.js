@@ -26,6 +26,10 @@ vi.mock('partysocket/ws', () => {
     close() {
       this.closed = true
     }
+
+    reconnect() {
+      this.reconnectCalls = (this.reconnectCalls || 0) + 1
+    }
   }
   return { default: FakeReconnectingWebSocket }
 })
@@ -127,6 +131,64 @@ describe('MessageSocket', () => {
 
       const pings = socket.sent.filter((p) => p.includes('"event":"ping"'))
       expect(pings).toHaveLength(0)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  test('forces a reconnect when the server goes silent past the liveness window', () => {
+    vi.useFakeTimers()
+    try {
+      ws.connect('ws://localhost/ws')
+      socket = instances[0]
+      socket.onopen()
+
+      // Inbound traffic within the window is proof of life (server pushes an
+      // app-level ping every 60 s), so the watchdog must not fire.
+      vi.advanceTimersByTime(60000)
+      socket.onmessage({ data: envelope('ping', '3') })
+      vi.advanceTimersByTime(60000)
+      expect(socket.reconnectCalls || 0).toBe(0)
+
+      // A silent drop: the browser never fires close, so without a watchdog the
+      // socket would linger in OPEN forever. The watchdog must force a reconnect.
+      vi.advanceTimersByTime(90000)
+      expect(socket.reconnectCalls).toBe(1)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  test('inbound pings keep the connection alive without reconnecting', () => {
+    vi.useFakeTimers()
+    try {
+      ws.connect('ws://localhost/ws')
+      socket = instances[0]
+      socket.onopen()
+
+      for (let i = 0; i < 5; i++) {
+        vi.advanceTimersByTime(60000)
+        socket.onmessage({ data: envelope('ping', String(i)) })
+      }
+      vi.advanceTimersByTime(60000)
+
+      expect(socket.reconnectCalls || 0).toBe(0)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  test('a clean close stops the liveness watchdog', () => {
+    vi.useFakeTimers()
+    try {
+      ws.connect('ws://localhost/ws')
+      socket = instances[0]
+      socket.onopen()
+
+      ws.close()
+      vi.advanceTimersByTime(120000)
+
+      expect(socket.reconnectCalls || 0).toBe(0)
     } finally {
       vi.useRealTimers()
     }
