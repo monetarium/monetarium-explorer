@@ -199,8 +199,8 @@ func TestTxTypeToString(t *testing.T) {
 		// DB extension subtypes (mirrors db/dbtypes/types.go)
 		{txTypeBlockRewardPoS, TxTypeStakeReward},
 		{txTypeBlockRewardPoW, TxTypePoWReward},
-		{txTypeSSFeePoS,       TxTypeSSFee},
-		{txTypeSSFeePoW,       TxTypeSSFee},
+		{txTypeSSFeePoS, TxTypeSSFee},
+		{txTypeSSFeePoW, TxTypeSSFee},
 		{txTypeTicketPurchase, TxTypeTicket},
 		// Unknown falls through to Regular
 		{99, TxTypeRegular},
