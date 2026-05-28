@@ -1,6 +1,6 @@
 {
   "name": "monetarium-explorer",
-  "version": "0.1",
+  "version": "1.0.0",
   "main": "index.js",
   "private": true,
   "sideEffects": [

@@ -62,7 +62,7 @@ Monetarium Explorer is a block explorer for the [Monetarium](https://monetarium.
 
 - [Go](https://golang.org) 1.21+
 - [Node.js](https://nodejs.org/en/download/) 16.x or later (build only, not runtime)
-- Running `monetarium-node` synchronized to the current best block
+- Running `monetarium-node` synchronized to the current best block (this release is built against `monetarium-node` v1.3.6)
 - PostgreSQL 13+
 
 ## Building
