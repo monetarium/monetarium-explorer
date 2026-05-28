@@ -96,7 +96,7 @@ export default class extends Controller {
           if (window.Notification.permission === 'granted') {
             const ntfn = new window.Notification('Blockchain Sync Complete', {
               body: msg,
-              icon: '/images/monetarium144x128.png'
+              icon: '/images/monetarium144x128.png?v=2'
             })
             setTimeout(() => ntfn.close(), 5000)
           }

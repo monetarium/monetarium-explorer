@@ -28,7 +28,7 @@ export function notifyNewBlock(newBlock) {
   const block = newBlock.block
   const newBlockNtfn = new window.Notification('New Monetarium Block Mined', {
     body: `Block mined at height ${block.height}`,
-    icon: '/images/monetarium144x128.png',
+    icon: '/images/monetarium144x128.png?v=2',
     notifyError: (e) => console.error('Error showing notification:', e)
   })
   setTimeout(() => newBlockNtfn.close(), 3000)
