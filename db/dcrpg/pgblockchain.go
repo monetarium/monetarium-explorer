@@ -5487,8 +5487,9 @@ func (pgb *ChainDB) GetAPITransaction(ctx context.Context, txid *chainhash.Hash)
 	// Calculate high-precision total and fee.
 	if coinType == 0 { // VAR
 		tx.Total = strconv.FormatInt(int64(txhelpers.TotalVout(txraw.Vout)), 10)
-		fee, _ := txhelpers.TxFeeRate(msgTx)
+		fee, feeRate := txhelpers.TxFeeRate(msgTx)
 		tx.Fee = strconv.FormatInt(int64(fee), 10)
+		tx.FeeRateRaw = strconv.FormatInt(int64(feeRate), 10)
 	} else { // SKA
 		skaTotals := txhelpers.SKATotalsFromMsgTx(msgTx)
 		if total, ok := skaTotals[coinType]; ok {
@@ -6472,6 +6473,7 @@ func makeExplorerTxBasic(data *chainjson.TxRawResult, ticketPrice int64, msgTx *
 		fee, feeRate := txhelpers.TxFeeRate(msgTx)
 		tx.Fee, tx.FeeRate = fee, feeRate
 		tx.FeeRaw = strconv.FormatInt(int64(fee), 10)
+		tx.FeeRateRaw = strconv.FormatInt(int64(feeRate), 10)
 	} else { // SKA
 		// For SKA, Total is 0 in legacy float.
 		tx.Total = 0
@@ -6495,6 +6497,7 @@ func makeExplorerTxBasic(data *chainjson.TxRawResult, ticketPrice int64, msgTx *
 	case v0.IsCoinBase():
 		tx.Fee, tx.FeeRate = 0, 0
 		tx.FeeRaw = "0"
+		tx.FeeRateRaw = "0"
 		tx.Coinbase = true
 	case v0.Treasurybase:
 		tx.Treasurybase = true

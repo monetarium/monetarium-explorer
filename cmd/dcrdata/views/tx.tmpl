@@ -230,7 +230,7 @@
                 <td class="text-end medium-sans text-nowrap pe-2 py-2">Version:</td>
                 <td class="text-start py-1 text-secondary">{{.Version}}</td>
                 <td class="text-end medium-sans text-nowrap pe-2 py-2">Rate:</td>
-                <td class="text-start py-1 text-secondary">{{if eq .CoinType 0}}{{.FeeRate}}/kB{{else}}{{.FeeRateRaw}} {{coinSymbol .CoinType}}/kB{{end}}</td>
+                <td class="text-start py-1 text-secondary">{{template "decimalParts" (coinFeeRateDecimalParts .FeeRateRaw .CoinType false)}} {{coinFeeRateUnit .CoinType}}</td>
               </tr>
               <tr>
                 <td class="text-end medium-sans text-nowrap pe-2 py-2">Size:</td>
