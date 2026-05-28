@@ -1257,6 +1257,29 @@ func (exp *explorerUI) TxPage(w http.ResponseWriter, r *http.Request) {
 		}
 	} // tx.IsTicket()
 
+	// For a revocation the revoked ticket is referenced by the first input's
+	// previous outpoint, not the revocation tx's own hash.
+	if tx.IsRevocation() && len(tx.Vin) > 0 {
+		ticketHash := tx.Vin[0].Txid
+		zeroHash := (chainhash.Hash{}).String()
+		if ticketHash != "" && ticketHash != zeroHash {
+			_, poolStatus, err := exp.dataSource.PoolStatusForTicket(ctx, ticketHash)
+			if exp.timeoutErrorPage(w, err, "PoolStatusForTicket(revocation)") {
+				return
+			}
+			switch {
+			case errors.Is(err, dbtypes.ErrNoResult):
+				log.Warnf("Pool status not found for revoked ticket %s (revocation %s)",
+					ticketHash, hash)
+			case err != nil:
+				log.Errorf("Unable to retrieve pool status for revoked ticket %s (revocation %s): %v",
+					ticketHash, hash, err)
+			default:
+				tx.TicketInfo.PoolStatus = poolStatus.String()
+			}
+		}
+	}
+
 	// Find atomic swaps related to this tx.
 	swapsInfo, err := exp.txAtomicSwapsInfo(ctx, tx)
 	if err != nil {
