@@ -118,7 +118,7 @@ Both APIs are served on the same port (default 7777). Endpoints accept `?indent=
 - **Exported names matter for tests/mocks**: e.g. `SkaCoinType` (exported) vs an unexported variant — past commits had to switch references and update mocks together. When you add anything coin-type-related, check `blockdata/`, `db/dcrpg/`, and `txhelpers/` mocks/fakes for matching updates.
 - **Cumulative vs per-block series**: SKA supply charts use cumulative supply aligned to block height (see recent commits on `test/ska-coin-supply-charts`). When adding new time-axis chart endpoints, include the `h` (height) field for alignment.
 - **Precision**: VAR uses 8 decimals — fits safely in `float64`, which is why `dcrutil.Amount.ToCoin() float64` is used for VAR throughout the codebase. SKA uses 18 decimals — **exceeds `float64`'s significand**, so SKA atoms must stay as `big.Int`-derived strings end-to-end (no `.ToCoin()` equivalent; no float conversion before the template boundary). Formatting helpers live in the explorer (`float64AsDecimalParts`, `FormatSKAPerVAR`, `FormatSKAAtoms`). Don't print raw atoms.
-- **PR/Issue title format** (per `docs/CONTRIBUTING.md`): `package/path: concise description`, e.g. `db/dcrpg: charts data updates could use incremental changes`.
+- **PR/Issue title format**: `package/path: concise description`, e.g. `db/dcrpg: charts data updates could use incremental changes`.
 
 ## Configuration
 

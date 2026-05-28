@@ -1098,7 +1098,7 @@ type DeletionSummary struct {
 	Blocks, Vins, Vouts, Addresses, Transactions int64
 	VoutSpendTxIDs                               int64
 	Tickets, Votes, Misses                       int64
-	Treasury, Swaps                              int64
+	Swaps                                        int64
 	Timings                                      *DeletionSummary // durations
 }
 
@@ -1114,7 +1114,6 @@ func (s DeletionSummary) String() string {
 		summary += fmt.Sprintf("%9d Tickets purged\n", s.Tickets)
 		summary += fmt.Sprintf("%9d Votes purged\n", s.Votes)
 		summary += fmt.Sprintf("%9d Misses purged\n", s.Misses)
-		summary += fmt.Sprintf("%9d Treasury transactions purged\n", s.Treasury)
 		summary += fmt.Sprintf("%9d Swaps purged", s.Swaps)
 		return summary
 	}
@@ -1128,7 +1127,6 @@ func (s DeletionSummary) String() string {
 	summary += fmt.Sprintf("%9d Tickets purged in %v\n", s.Tickets, time.Duration(s.Timings.Tickets))
 	summary += fmt.Sprintf("%9d Votes purged in %v\n", s.Votes, time.Duration(s.Timings.Votes))
 	summary += fmt.Sprintf("%9d Misses purged in %v\n", s.Misses, time.Duration(s.Timings.Misses))
-	summary += fmt.Sprintf("%9d Treasury transactions purged in %v\n", s.Treasury, time.Duration(s.Timings.Treasury))
 	summary += fmt.Sprintf("%9d Swaps purged in %v", s.Swaps, time.Duration(s.Timings.Swaps))
 	return summary
 }
@@ -1150,7 +1148,6 @@ func (ds DeletionSummarySlice) Reduce() DeletionSummary {
 		s.Tickets += ds[i].Tickets
 		s.Votes += ds[i].Votes
 		s.Misses += ds[i].Misses
-		s.Treasury += ds[i].Treasury
 		s.Swaps += ds[i].Swaps
 		if ds[i].Timings != nil {
 			timings = append(timings, *ds[i].Timings)
