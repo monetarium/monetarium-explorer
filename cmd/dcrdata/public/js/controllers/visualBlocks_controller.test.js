@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('@hotwired/stimulus', () => ({
   Controller: class {
@@ -12,11 +12,19 @@ vi.mock('../services/event_bus_service', () => ({
   default: { on: vi.fn(), off: vi.fn() }
 }))
 
+const wsRegistered = {}
+const wsSend = vi.fn()
+
 vi.mock('../services/messagesocket_service', () => ({
   default: {
-    registerEvtHandler: vi.fn(),
+    registerEvtHandler: vi.fn((event, handler) => {
+      const unsub = vi.fn()
+      ;(wsRegistered[event] = wsRegistered[event] || []).push({ handler, unsub })
+      return unsub
+    }),
+    deregisterEvtHandler: vi.fn(),
     deregisterEvtHandlers: vi.fn(),
-    send: vi.fn()
+    send: wsSend
   }
 }))
 
@@ -314,5 +322,35 @@ describe('normaliseWsBlock (WS wire shape regression)', () => {
     expect(tile.Votes[0].VinCount).toBe(1)
     expect(tile.Votes[0].VoutCount).toBe(2)
     expect(tile.Votes[1].Voted).toBe(false)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Reconnect resync — after a dropped socket comes back, the controller must
+// re-request the trimmed mempool it draws from, and clean up its handler.
+// ---------------------------------------------------------------------------
+
+describe('visualBlocks reconnect resync', () => {
+  beforeEach(() => {
+    for (const key of Object.keys(wsRegistered)) delete wsRegistered[key]
+    wsSend.mockClear()
+  })
+
+  it("re-requests the trimmed mempool on 'reconnect'", () => {
+    const c = new mod.default()
+    c.connect()
+
+    expect(wsRegistered.reconnect).toHaveLength(1)
+    wsRegistered.reconnect[0].handler()
+
+    expect(wsSend).toHaveBeenCalledWith('getmempooltrimmed', '')
+  })
+
+  it("removes its own 'reconnect' handler on disconnect", () => {
+    const c = new mod.default()
+    c.connect()
+    c.disconnect()
+
+    expect(wsRegistered.reconnect[0].unsub).toHaveBeenCalledTimes(1)
   })
 })

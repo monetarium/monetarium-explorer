@@ -313,7 +313,12 @@ func (exp *explorerUI) VisualBlocks(w http.ResponseWriter, r *http.Request) {
 	trimmedBlocks := make([]*types.TrimmedBlockInfo, 0, len(blocks))
 
 	exp.pageData.RLock()
-	maxBlockSize := float64(exp.pageData.BlockchainInfo.MaxBlockSize)
+	// BlockchainInfo is nil until the first block is collected; fall back to the
+	// default max block size during the startup window (mirrors StoreMPData).
+	maxBlockSize := 393216.0
+	if exp.pageData.BlockchainInfo != nil && exp.pageData.BlockchainInfo.MaxBlockSize > 0 {
+		maxBlockSize = float64(exp.pageData.BlockchainInfo.MaxBlockSize)
+	}
 	issuedSKA := make([]uint8, 0, len(exp.pageData.HomeInfo.SKACoinSupply))
 	for _, entry := range exp.pageData.HomeInfo.SKACoinSupply {
 		issuedSKA = append(issuedSKA, entry.CoinType)
@@ -2681,7 +2686,12 @@ func calcPages(rows, pageSize, offset int, link string) pageNumbers {
 func (exp *explorerUI) AttackCost(w http.ResponseWriter, r *http.Request) {
 	exp.pageData.RLock()
 
-	height := exp.pageData.BlockInfo.Height
+	// BlockInfo.BlockBasic (which Height is promoted from) is nil until the first
+	// block is collected; leave height at 0 during the startup window.
+	var height int64
+	if exp.pageData.BlockInfo.BlockBasic != nil {
+		height = exp.pageData.BlockInfo.Height
+	}
 	ticketPoolValue := exp.pageData.HomeInfo.PoolInfo.Value
 	ticketPoolSize := exp.pageData.HomeInfo.PoolInfo.Size
 	ticketPrice := exp.pageData.HomeInfo.StakeDiff
