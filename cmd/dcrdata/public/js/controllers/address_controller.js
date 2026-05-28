@@ -393,8 +393,7 @@ export default class extends Controller {
   }
 
   makeTableUrl(txType, count, offset) {
-    const root =
-      `addresstable/${this.dcrAddress}`
+    const root = `addresstable/${this.dcrAddress}`
     return `/${root}?txntype=${txType}&n=${count}&start=${offset}${this.coinUrlSegment()}`
   }
 
@@ -642,7 +641,7 @@ export default class extends Controller {
     }
 
     const chartKey = chart === 'balance' ? 'amountflow' : chart
-    let url = `/api/address/${ctrl.dcrAddress}/${chartKey}/${bin}?coin=${coin}`
+    const url = `/api/address/${ctrl.dcrAddress}/${chartKey}/${bin}?coin=${coin}`
 
     const graphDataResponse = await requestJSON(url)
     ctrl.processData(chart, bin, graphDataResponse)
