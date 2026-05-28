@@ -17,7 +17,7 @@ let Dygraph // lazy loaded on connect
 
 const aDay = 86400 * 1000 // in milliseconds
 const aMonth = 30 // in days
-const atomsToDCR = 1e-8
+const atomsToVAR = 1e-8
 const windowScales = ['ticket-price', 'pow-difficulty', 'missed-votes']
 const hybridScales = ['privacy-participation']
 const lineScales = ['ticket-price', 'privacy-participation']
@@ -237,7 +237,7 @@ function anonymitySetFunc(data) {
           start = i
         }
         end = i
-        return [i, y * atomsToDCR]
+        return [i, y * atomsToVAR]
       })
     } else {
       d = data.anonymitySet.map((y, i) => {
@@ -245,7 +245,7 @@ function anonymitySetFunc(data) {
           start = i
         }
         end = data.h[i]
-        return [data.h[i], y * atomsToDCR]
+        return [data.h[i], y * atomsToVAR]
       })
     }
   } else {
@@ -254,15 +254,15 @@ function anonymitySetFunc(data) {
         start = t * 1000
       }
       end = t * 1000
-      return [new Date(t * 1000), data.anonymitySet[i] * atomsToDCR]
+      return [new Date(t * 1000), data.anonymitySet[i] * atomsToVAR]
     })
   }
   return { data: d, limits: [start, end] }
 }
 
 function ticketPriceFunc(data) {
-  if (data.t) return zipWindowTvYZ(data.t, data.price, data.count, atomsToDCR)
-  return zipWindowHvYZ(data.price, data.count, data.window, atomsToDCR)
+  if (data.t) return zipWindowTvYZ(data.t, data.price, data.count, atomsToVAR)
+  return zipWindowHvYZ(data.price, data.count, data.window, atomsToVAR)
 }
 
 function poolSizeFunc(data) {
@@ -282,8 +282,8 @@ function poolSizeFunc(data) {
 }
 
 function percentStakedFunc(data) {
-  rawCoinSupply = data.circulation.map((v) => v * atomsToDCR)
-  rawPoolValue = data.poolval.map((v) => v * atomsToDCR)
+  rawCoinSupply = data.circulation.map((v) => v * atomsToVAR)
+  rawPoolValue = data.poolval.map((v) => v * atomsToVAR)
   const ys = rawPoolValue.map((v, i) => [(v / rawCoinSupply[i]) * 100])
   if (data.axis === 'height') {
     if (data.bin === 'block') return zipIvY(ys)
@@ -303,7 +303,7 @@ function circulationFunc(chartData) {
   const addDough = (newHeight) => {
     while (h < newHeight) {
       h++
-      yMax += blockReward(h) * atomsToDCR
+      yMax += blockReward(h) * atomsToVAR
     }
   }
   const heights = chartData.h
@@ -324,7 +324,7 @@ function circulationFunc(chartData) {
     const height = hFunc(i)
     addDough(height)
     inflation.push(yMax)
-    return [xFunc(i), supplies[i] * atomsToDCR, null]
+    return [xFunc(i), supplies[i] * atomsToVAR, null]
   })
 
   const dailyBlocks = aDay / avgBlockTime
@@ -549,7 +549,7 @@ export default class extends Controller {
           valueRange: [0, windowSize * 20 * 8],
           axisLabelFormatter: (y) => Math.round(y)
         }
-        yFormatter = customYFormatter((y) => `${y.toFixed(8)} DCR`)
+        yFormatter = customYFormatter((y) => `${y.toFixed(8)} VAR`)
         break
 
       case 'ticket-pool-size': // pool size graph
@@ -595,28 +595,28 @@ export default class extends Controller {
         yFormatter = (div, data, i) => {
           addLegendEntryFmt(div, data.series[0], (y) => `${y.toFixed(4)}%`)
           div.appendChild(
-            legendEntry(`${legendMarker()} Ticket Pool Value: ${intComma(rawPoolValue[i])} DCR`)
+            legendEntry(`${legendMarker()} Ticket Pool Value: ${intComma(rawPoolValue[i])} VAR`)
           )
           div.appendChild(
-            legendEntry(`${legendMarker()} Coin Supply: ${intComma(rawCoinSupply[i])} DCR`)
+            legendEntry(`${legendMarker()} Coin Supply: ${intComma(rawCoinSupply[i])} VAR`)
           )
         }
         break
 
       case 'ticket-pool-value': // pool value graph
-        d = zip2D(data, data.poolval, atomsToDCR)
+        d = zip2D(data, data.poolval, atomsToVAR)
         assign(
           gOptions,
           mapDygraphOptions(
             d,
             [xlabel, 'Ticket Pool Value'],
             true,
-            'Ticket Pool Value (DCR)',
+            'Ticket Pool Value (VAR)',
             true,
             false
           )
         )
-        yFormatter = customYFormatter((y) => `${intComma(y)} DCR`)
+        yFormatter = customYFormatter((y) => `${intComma(y)} VAR`)
         break
 
       case 'block-size': // block size graph
@@ -720,10 +720,10 @@ export default class extends Controller {
         break
 
       case 'fees': // block fee graph
-        d = zip2D(data, data.fees, atomsToDCR)
+        d = zip2D(data, data.fees, atomsToVAR)
         assign(
           gOptions,
-          mapDygraphOptions(d, [xlabel, 'Total Fee'], false, 'Total Fee (DCR)', true, false)
+          mapDygraphOptions(d, [xlabel, 'Total Fee'], false, 'Total Fee (VAR)', true, false)
         )
         break
 
@@ -734,11 +734,11 @@ export default class extends Controller {
         const label = 'Mix Rate'
         assign(
           gOptions,
-          mapDygraphOptions(d.data, [xlabel, label], false, `${label} (DCR)`, true, false)
+          mapDygraphOptions(d.data, [xlabel, label], false, `${label} (VAR)`, true, false)
         )
 
         yFormatter = (div, data, _i) => {
-          addLegendEntryFmt(div, data.series[0], (y) => (y > 0 ? intComma(y) : '0 DCR'))
+          addLegendEntryFmt(div, data.series[0], (y) => (y > 0 ? intComma(y) : '0 VAR'))
         }
         break
       }

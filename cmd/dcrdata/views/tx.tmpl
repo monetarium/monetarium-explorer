@@ -604,8 +604,8 @@
             {{else}}
             <br>No recognized agenda votes in this transaction.
             {{end}}
-            {{if gt (len .TSpends) 0}}
             <h5>Treasury Spend Choices</h5>
+            {{if gt (len .TSpends) 0}}
             <table class="table">
                 <thead>
                   <tr>
@@ -622,6 +622,8 @@
                     {{end}}
                 </tbody>
             </table>
+            {{else}}
+            No treasury spend choices in this transaction.
             {{end}}
         </div>
     </div>
