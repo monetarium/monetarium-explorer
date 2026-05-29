@@ -9,15 +9,16 @@ import (
 	"github.com/monetarium/monetarium-node/wire"
 )
 
-// emptyTx is a placeholder for the coinbase transaction at index 0.
-// Real coinbase txs create value ex nihilo; BlockSKAFees skips index 0.
-var emptyTx = wire.NewMsgTx()
+// newEmptyTx returns a fresh empty transaction for the coinbase slot at
+// index 0. A package-level shared pointer would be dangerous — any test
+// that mutates it would corrupt subsequent tests.
+func newEmptyTx() *wire.MsgTx { return wire.NewMsgTx() }
 
 // mockBlock builds a wire.MsgBlock with the given regular transactions,
 // inserting an empty placeholder at index 0 (coinbase slot).
 func mockBlock(txs ...*wire.MsgTx) *wire.MsgBlock {
 	blk := &wire.MsgBlock{}
-	blk.Transactions = append([]*wire.MsgTx{emptyTx}, txs...)
+	blk.Transactions = append([]*wire.MsgTx{newEmptyTx()}, txs...)
 	return blk
 }
 
