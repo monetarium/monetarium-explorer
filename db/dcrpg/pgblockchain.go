@@ -173,7 +173,7 @@ func (u *utxoStore) Peek(txHash dbtypes.ChainHash, txIndex uint32) *dbtypes.UTXO
 	return txVals[txIndex]
 }
 
-func (u *utxoStore) set(txHash dbtypes.ChainHash, txIndex uint32, voutDbID int64, addrs []string, val int64, mixed bool, coinType uint8) {
+func (u *utxoStore) set(txHash dbtypes.ChainHash, txIndex uint32, voutDbID int64, addrs []string, val int64, mixed bool, coinType uint8, skaValue string) {
 	txUTXOVals, ok := u.c[txHash]
 	if !ok {
 		u.c[txHash] = map[uint32]*dbtypes.UTXOData{
@@ -183,6 +183,7 @@ func (u *utxoStore) set(txHash dbtypes.ChainHash, txIndex uint32, voutDbID int64
 				Mixed:     mixed,
 				VoutDbID:  voutDbID,
 				CoinType:  coinType,
+				SKAValue:  skaValue,
 			},
 		}
 	} else {
@@ -192,16 +193,17 @@ func (u *utxoStore) set(txHash dbtypes.ChainHash, txIndex uint32, voutDbID int64
 			Mixed:     mixed,
 			VoutDbID:  voutDbID,
 			CoinType:  coinType,
+			SKAValue:  skaValue,
 		}
 	}
 }
 
 // Set stores the addresses and amount in a UTXOData entry in the cache for the
 // given outpoint.
-func (u *utxoStore) Set(txHash dbtypes.ChainHash, txIndex uint32, voutDbID int64, addrs []string, val int64, mixed bool, coinType uint8) {
+func (u *utxoStore) Set(txHash dbtypes.ChainHash, txIndex uint32, voutDbID int64, addrs []string, val int64, mixed bool, coinType uint8, skaValue string) {
 	u.Lock()
 	defer u.Unlock()
-	u.set(txHash, txIndex, voutDbID, addrs, val, mixed, coinType)
+	u.set(txHash, txIndex, voutDbID, addrs, val, mixed, coinType, skaValue)
 }
 
 // Reinit re-initializes the utxoStore with the given UTXOs.
@@ -216,7 +218,7 @@ func (u *utxoStore) Reinit(utxos []dbtypes.UTXO) {
 	prealloc := 2 * len(utxos) / 3
 	u.c = make(map[dbtypes.ChainHash]map[uint32]*dbtypes.UTXOData, prealloc)
 	for i := range utxos {
-		u.set(utxos[i].TxHash, utxos[i].TxIndex, utxos[i].VoutDbID, utxos[i].Addresses, utxos[i].Value, utxos[i].Mixed, utxos[i].CoinType)
+		u.set(utxos[i].TxHash, utxos[i].TxIndex, utxos[i].VoutDbID, utxos[i].Addresses, utxos[i].Value, utxos[i].Mixed, utxos[i].CoinType, utxos[i].SKAValue)
 	}
 }
 
@@ -4234,7 +4236,7 @@ txns:
 				}
 				// Remember this for insertSpendingAddressRow.
 				pgb.utxoCache.Set(vin.PrevTxHash, vin.PrevTxIndex,
-					utxo.VoutDbID, utxo.Addresses, utxo.Value, utxo.Mixed, utxo.CoinType)
+					utxo.VoutDbID, utxo.Addresses, utxo.Value, utxo.Mixed, utxo.CoinType, utxo.SKAValue)
 			}
 			if !utxo.Mixed {
 				continue txns
@@ -4609,13 +4611,14 @@ func (pgb *ChainDB) updateUtxoCache(dbVouts [][]*dbtypes.Vout, txns []*dbtypes.T
 					Mixed:     vout.Mixed,
 					VoutDbID:  voutDbID,
 					CoinType:  vout.CoinType,
+					SKAValue:  vout.SKAValue,
 				},
 			})
 		}
 
 		// Store each output of this transaction in the UTXO cache.
 		for _, utxo := range utxos {
-			pgb.utxoCache.Set(utxo.TxHash, utxo.TxIndex, utxo.VoutDbID, utxo.Addresses, utxo.Value, utxo.Mixed, utxo.CoinType)
+			pgb.utxoCache.Set(utxo.TxHash, utxo.TxIndex, utxo.VoutDbID, utxo.Addresses, utxo.Value, utxo.Mixed, utxo.CoinType, utxo.SKAValue)
 		}
 	}
 }
