@@ -23,7 +23,7 @@ A lot of legacy `dcrdata` / `dcrd` naming still exists in code, paths, configs (
 
 ## Multi-module workspace (important)
 
-This repo contains **8 separate Go modules**, not a single one. Tools that operate on the whole repo iterate them in a specific order so that `go mod tidy` cascades correctly:
+This repo contains **7 separate Go modules**, not a single one. Tools that operate on the whole repo iterate them in a specific order so that `go mod tidy` cascades correctly:
 
 ```
 ./go.mod                          (root: blockdata, mempool, stakedb, pubsub, txhelpers, …)
@@ -31,7 +31,6 @@ This repo contains **8 separate Go modules**, not a single one. Tools that opera
 ./db/dcrpg/go.mod
 ./cmd/dcrdata/go.mod              (the executable)
 ./pubsub/democlient/go.mod
-./cmd/swapscan-btc/go.mod
 ./testutil/dbload/go.mod
 ./testutil/apiload/go.mod
 ```

@@ -770,6 +770,12 @@ func _main(ctx context.Context) error {
 		withCache.Get("/disapproved", explore.DisapprovedBlocks)
 		withCache.Get("/mempool", explore.Mempool)
 		withCache.Get("/charts", explore.Charts)
+		withCache.Get("/treasury", func(w http.ResponseWriter, r *http.Request) {
+			http.Error(w, "treasury not available", http.StatusGone)
+		})
+		withCache.Get("/treasurytable", func(w http.ResponseWriter, r *http.Request) {
+			http.Error(w, "treasury not available", http.StatusGone)
+		})
 		withCache.Get("/parameters", explore.ParametersPage)
 		withCache.Get("/agendas", func(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "agendas not available", http.StatusGone)
