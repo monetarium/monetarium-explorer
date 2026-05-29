@@ -9,10 +9,15 @@ import (
 	"github.com/monetarium/monetarium-node/wire"
 )
 
-// mockBlock builds a wire.MsgBlock with the given regular transactions.
+// emptyTx is a placeholder for the coinbase transaction at index 0.
+// Real coinbase txs create value ex nihilo; BlockSKAFees skips index 0.
+var emptyTx = wire.NewMsgTx()
+
+// mockBlock builds a wire.MsgBlock with the given regular transactions,
+// inserting an empty placeholder at index 0 (coinbase slot).
 func mockBlock(txs ...*wire.MsgTx) *wire.MsgBlock {
 	blk := &wire.MsgBlock{}
-	blk.Transactions = txs
+	blk.Transactions = append([]*wire.MsgTx{emptyTx}, txs...)
 	return blk
 }
 
@@ -224,7 +229,9 @@ func TestBlockSKAPoWRewards_SKAOnly(t *testing.T) {
 	coinbase.AddTxOut(wire.NewTxOutSKA(skaBig, cointype.CoinType(1), nil)) // SKA1 reward
 	coinbase.AddTxOut(wire.NewTxOutSKA(skaBig, cointype.CoinType(2), nil)) // SKA2 reward
 
-	got := BlockSKAPoWRewards(mockBlock(coinbase))
+	blk := &wire.MsgBlock{}
+	blk.Transactions = []*wire.MsgTx{coinbase}
+	got := BlockSKAPoWRewards(blk)
 	if got == nil {
 		t.Fatal("expected non-nil SKAPoWRewards")
 	}
@@ -246,7 +253,9 @@ func TestBlockSKAPoWRewards_NoSKA(t *testing.T) {
 	coinbase := wire.NewMsgTx()
 	coinbase.AddTxOut(wire.NewTxOut(100_000_000, nil)) // Only VAR
 
-	got := BlockSKAPoWRewards(mockBlock(coinbase))
+	blk := &wire.MsgBlock{}
+	blk.Transactions = []*wire.MsgTx{coinbase}
+	got := BlockSKAPoWRewards(blk)
 	if got != nil {
 		t.Errorf("expected nil for block without SKA rewards, got %v", got)
 	}
@@ -268,7 +277,11 @@ func TestBlockSKAPoWRewards_Summing(t *testing.T) {
 	coinbase.AddTxOut(wire.NewTxOutSKA(amt1, cointype.CoinType(1), nil))
 	coinbase.AddTxOut(wire.NewTxOutSKA(amt2, cointype.CoinType(1), nil))
 
-	got := BlockSKAPoWRewards(mockBlock(coinbase))
+	// BlockSKAPoWRewards reads Transactions[0] (the coinbase) directly.
+	// Do NOT use mockBlock() which inserts a dummy placeholder at index 0.
+	blk := &wire.MsgBlock{}
+	blk.Transactions = []*wire.MsgTx{coinbase}
+	got := BlockSKAPoWRewards(blk)
 	if got == nil {
 		t.Fatal("expected non-nil SKAPoWRewards")
 	}

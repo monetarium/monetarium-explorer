@@ -552,8 +552,13 @@ func BlockSKAFees(msgBlock *wire.MsgBlock) map[uint8]string {
 
 	skaFees := make(map[uint8]*big.Int)
 
-	// Process regular transactions (Transactions, not STransactions)
-	for _, tx := range msgBlock.Transactions {
+	// Process regular transactions (Transactions, not STransactions).
+	// Skip the coinbase transaction (i == 0) — its value is created
+	// ex nihilo, not transferred from prior UTXOs.
+	for i, tx := range msgBlock.Transactions {
+		if i == 0 {
+			continue
+		}
 		var inputSKA, outputSKA big.Int
 
 		// Sum SKA inputs
