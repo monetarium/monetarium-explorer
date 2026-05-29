@@ -13,7 +13,6 @@ import (
 	"github.com/monetarium/monetarium-explorer/blockdata"
 	"github.com/monetarium/monetarium-explorer/db/dbtypes"
 	explorerTypes "github.com/monetarium/monetarium-explorer/explorer/types"
-	"github.com/monetarium/monetarium-node/blockchain/stake"
 	"github.com/monetarium/monetarium-node/chaincfg"
 	"github.com/monetarium/monetarium-node/chaincfg/chainhash"
 	chainjson "github.com/monetarium/monetarium-node/rpc/jsonrpc/types"
@@ -49,12 +48,6 @@ func (m *mockDataSource) SpendingTransactions(ctx context.Context, fundingTxID s
 }
 func (m *mockDataSource) PoolStatusForTicket(ctx context.Context, txid string) (dbtypes.TicketSpendType, dbtypes.TicketPoolStatus, error) {
 	return 0, 0, nil
-}
-func (m *mockDataSource) TreasuryBalance(context.Context) (*dbtypes.TreasuryBalance, error) {
-	return nil, nil
-}
-func (m *mockDataSource) TreasuryTxns(ctx context.Context, n, offset int64, txType stake.TxType) ([]*dbtypes.TreasuryTx, error) {
-	return nil, nil
 }
 func (m *mockDataSource) AddressHistory(ctx context.Context, address string, N, offset int64, txnType dbtypes.AddrTxnViewType, coinType uint8) ([]*dbtypes.AddressRow, *dbtypes.AddressBalance, error) {
 	return nil, nil, nil

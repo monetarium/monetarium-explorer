@@ -22,7 +22,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/monetarium/monetarium-node/blockchain/stake"
 	"github.com/monetarium/monetarium-node/chaincfg"
 	"github.com/monetarium/monetarium-node/chaincfg/chainhash"
 	"github.com/monetarium/monetarium-node/dcrutil"
@@ -62,8 +61,6 @@ const (
 	// on the address page table.
 	MaxAddressRows int64 = 160
 
-	MaxTreasuryRows int64 = 200
-
 	testnetNetName = "Testnet"
 )
 
@@ -78,8 +75,6 @@ type explorerDataSource interface {
 	SpendingTransaction(ctx context.Context, fundingTx string, vout uint32) (string, uint32, error)
 	SpendingTransactions(ctx context.Context, fundingTxID string) ([]string, []uint32, []uint32, error)
 	PoolStatusForTicket(ctx context.Context, txid string) (dbtypes.TicketSpendType, dbtypes.TicketPoolStatus, error)
-	TreasuryBalance(context.Context) (*dbtypes.TreasuryBalance, error)
-	TreasuryTxns(ctx context.Context, n, offset int64, txType stake.TxType) ([]*dbtypes.TreasuryTx, error)
 	AddressHistory(ctx context.Context, address string, N, offset int64, txnType dbtypes.AddrTxnViewType, coinType uint8) ([]*dbtypes.AddressRow, *dbtypes.AddressBalance, error)
 	AddressData(ctx context.Context, address string, N, offset int64, txnType dbtypes.AddrTxnViewType, coinType uint8) (*dbtypes.AddressInfo, error)
 	DevBalance(ctx context.Context) (*dbtypes.AddressBalance, error)
@@ -396,7 +391,7 @@ func New(cfg *ExplorerConfig) *explorerUI {
 		"rawtx", "status", "parameters", "agenda", "agendas", "charts",
 		"sidechains", "disapproved", "ticketpool", "visualblocks",
 		"windows", "timelisting", "addresstable", "proposals", "proposal",
-		"insight_root", "attackcost", "treasury", "treasurytable", "verify_message"}
+		"insight_root", "attackcost", "verify_message"}
 
 	// Debug-only: load the dev_indicators template alongside the rest only when
 	// --reload-html is set. The corresponding route is registered in main.go

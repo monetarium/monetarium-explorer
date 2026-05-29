@@ -520,8 +520,6 @@ func (pgb *ChainDB) SyncChainDB(ctx context.Context, client rpcutils.BlockFetche
 		}
 	}
 
-	// Caller should pre-fetch treasury balance when ready.
-
 	if barLoad != nil {
 		barID := dbtypes.InitialDBLoad
 		if updateAllAddresses {
