@@ -6788,6 +6788,11 @@ func (pgb *ChainDB) GetExplorerBlock(ctx context.Context, hash string) *exptypes
 func ssFeeNetReward(msgTx *wire.MsgTx) *big.Int {
 	net := new(big.Int)
 	for _, vin := range msgTx.TxIn {
+		// Coinbase inputs create value ex nihilo — don't subtract them.
+		if vin.PreviousOutPoint.Index == wire.MaxPrevOutIndex &&
+			vin.PreviousOutPoint.Hash.IsEqual(&chainhash.Hash{}) {
+			continue
+		}
 		if vin.SKAValueIn != nil {
 			net.Sub(net, vin.SKAValueIn)
 		} else {
