@@ -190,7 +190,7 @@ npm test               # Vitest unit tests
 
 ### Step 1: Start monetarium-node on testnet3
 
-Create `~/.monetarium/monetarium-node.conf`: (macOS: ~/Library/Application Support/Monetarium/)
+Create `~/.monetarium/monetarium.conf`: (macOS: ~/Library/Application Support/Monetarium/)
 
 ```ini
 testnet=1
