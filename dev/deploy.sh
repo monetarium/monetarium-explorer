@@ -393,11 +393,18 @@ ok "Services configured"
 title "═══ DEPLOYMENT SUMMARY ═══"
 
 echo
-echo -e "  ${BOLD}Configuration files created:${NC}"
+echo -e "  ${BOLD}Configuration files:${NC}"
 echo -e "    ${DIM}•${NC} $NODE_CONF"
 echo -e "    ${DIM}•${NC} $EXPLORER_CONF"
 echo -e "    ${DIM}•${NC} $NGINX_SITE"
 echo
+
+if [ -f "$EXPLORER_CONF" ]; then
+  echo -e "  ${YELLOW}⚠ Config files exist from a previous run.${NC}"
+  echo -e "  ${DIM}  Active credentials are inside${NC} ${BOLD}$EXPLORER_CONF${NC}${DIM}.${NC}"
+  echo -e "  ${DIM}  Values below are from this run and may be stale.${NC}"
+  echo
+fi
 
 echo -e "  ${BOLD}PostgreSQL credentials:${NC}"
 echo -e "    ${DIM}•${NC} User:     $PG_USER"
