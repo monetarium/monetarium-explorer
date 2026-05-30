@@ -22,7 +22,7 @@ MONETARIUM_RPC_PASS=""
 MONETARIUM_RPC_HOST="127.0.0.1"
 MONETARIUM_RPC_PORT="19500"          # mainnet: 19500, testnet: 19509
 MONETARIUM_DATA_DIR="$HOME/.monetarium"
-MONETARIUM_RPC_CERT="$MONETARIUM_DATA_DIR/rpc.cert"
+# Note: RPC cert path is hardcoded in the config template (container path), not this var.
 
 # PostgreSQL
 PG_USER="monetarium_explorer"
@@ -62,15 +62,6 @@ skip()  { echo -e "  ${YELLOW}−${NC} $*"; }
 warn()  { echo -e "  ${YELLOW}⚠${NC} $*"; }
 err()   { echo -e "  ${RED}✗${NC} $*" >&2; exit 1; }
 title() { echo -e "\n${BOLD}── $*${NC}"; }
-
-pg_rewrite_connstr() {
-  # Detect TCP vs socket. PGHOST with a / is a socket path, otherwise TCP.
-  if echo "$PG_HOST" | grep -q '/'; then
-    echo "$PG_HOST"
-  else
-    echo "${PG_HOST%%:*}:${PG_PORT}"
-  fi
-}
 
 PG_BIND="${PG_HOST%%:*}"
 PG_IS_SOCKET=false
@@ -386,7 +377,7 @@ ok "/etc/systemd/system/monetarium-explorer.service"
 title "9/9 — Enabling services"
 
 sudo systemctl enable --now monetarium-explorer 2>/dev/null || warn "Explorer service not started (image not pulled yet)"
-sudo systemctl reload nginx 2>/dev/null || sudo systemctl start nginx
+sudo nginx -t && sudo systemctl reload nginx 2>/dev/null || sudo systemctl start nginx
 
 if [ -n "$DOMAIN" ]; then
   title "  → Running certbot for $DOMAIN"
