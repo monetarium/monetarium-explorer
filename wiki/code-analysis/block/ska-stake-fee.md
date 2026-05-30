@@ -138,3 +138,72 @@ Extracted as a package-level helper `ssFeeNetReward` in `pgblockchain.go` and te
 | Zero reward | `SKAValueIn=5e18` | `SKAValue=5e18` | `0` |
 
 The helper's per-element `SKAValueIn`/`SKAValue` branching rather than a prior `isSKA` gate matches the same result given the single-coin-per-tx invariant, and the comment calls out the equivalence.
+
+---
+
+## Follow-up: header fee halving, fee-rate unit, and a TxType column
+
+Three further defects on the same `/block/{hash}` Stake Fees table and block header
+were fixed on `fix/block-fee-header-sfa` (commit `839175fa`, with a fee-rate
+adjustment in `780ffc35` and styling in `856f4be4`/`53647112`).
+
+### 1. VAR fee pool was halved in the block header (`FeesByCoin`)
+
+The header `FeesByCoin` is assembled in `GetExplorerBlock` from a `feesMap`:
+VAR (`ct==0`) is sourced from `block.MiningFee` (the full block fee pool), then SKA
+coin types are added from `SSFeeTotalsByCoin` (`skaFeeTotals`). The SKA loop
+iterated **all** coin types, including `ct==0`, so VAR's full fee pool was
+overwritten by `split.PoW + split.PoS` — only the staker's 50% share — halving the
+displayed VAR fee.
+
+Fix: `continue` on `ct==0` inside the `skaFeeTotals` loop, leaving VAR sourced
+exclusively from `MiningFee`.
+
+```go
+// db/dcrpg/pgblockchain.go — GetExplorerBlock
+for ct, split := range skaFeeTotals {
+    if ct == 0 {
+        continue // VAR already sourced from MiningFee above; don't overwrite with the 50% staker share
+    }
+    ...
+}
+```
+
+This is a **header** correctness fix, distinct from the per-tx `FeeRaw` fix above:
+the per-tx "Rewards" column was already correct, but the aggregate VAR fee in the
+block header was wrong.
+
+### 2. SKA fee-rate unit: atoms/kB → atoms/B (`SKA<n>/B`)
+
+The fee-rate value travels on the wire as **atoms/kB**. For VAR that is rendered
+directly as `VAR/kB`. For SKA the 18-decimal atoms/kB number is too small per kB to
+be legible, so the SKA path now divides by 1000 (integer `big.Int` division) and
+renders as `SKA<n>/B`.
+
+- `coinFeeRateDecimalParts` (SKA branch) wraps the value in a new
+  `skaAtomsPerKBToPerByte` helper before `skaDecimalParts`. Sub-atom-per-byte
+  remainder is unrepresentable and dropped; empty/non-numeric input passes through
+  unchanged for the safe `["0","",""]` fallback.
+- `coinFeeRateUnit` returns `VAR/kB` for VAR and `<symbol>/B` for SKA.
+
+Note: a separate SKA-fee-rate unit revision (`SKA<n>/kB`) was in flight by another
+team member; `780ffc35` deliberately restored the `/1000` + `/B` behaviour here so
+the two efforts don't collide. Treat the `/B` unit as the current code state, not a
+settled decision.
+
+### 3. SF/MF marker exposed as a TxType column
+
+Each SSFee transaction carries an SSFee marker in an output `pkScript` indicating
+whether it is the **staker** payout (`SF`) or the **miner** payout (`MF`) — the same
+SF/MF split described in [staking-rewards](../../core/staking-rewards.md) §3.2.
+
+- `explorer/types/explorertypes.go`: `TrimmedTxInfo` gains
+  `SSFeeMarker string` (`"SF"`/`"MF"`, json `ssfee_marker,omitempty`).
+- `GetExplorerBlock` (SSFee case): scans `msgTx.TxOut` with
+  `stake.HasSSFeeMarker(out.PkScript)`, mapping `SSFeeMarkerStaker`→`"SF"` and
+  `SSFeeMarkerMiner`→`"MF"`. If no marker is found (should never happen for a valid
+  SSFee tx) it logs a warning and defaults to `"SF"` as the safer assumption.
+- `cmd/dcrdata/views/block.tmpl`: the Stake Fees table gains a trailing **TxType**
+  column rendering `{{.SSFeeMarker}}` (`mono fs15 text-end`, matching the Size
+  column).
+

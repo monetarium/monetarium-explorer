@@ -6666,6 +6666,26 @@ func (pgb *ChainDB) GetExplorerBlock(ctx context.Context, hash string) *exptypes
 					}
 				}
 				stx.FeeRaw = ssFeeNetReward(msgTx).String()
+
+				// Detect SSFee marker (SF = staker reward, MF = miner reward).
+				marker := stake.SSFeeMarkerNone
+				for _, out := range msgTx.TxOut {
+					if m := stake.HasSSFeeMarker(out.PkScript); m != stake.SSFeeMarkerNone {
+						marker = m
+						break
+					}
+				}
+				switch marker {
+				case stake.SSFeeMarkerStaker:
+					stx.SSFeeMarker = "SF"
+				case stake.SSFeeMarkerMiner:
+					stx.SSFeeMarker = "MF"
+				default:
+					// No marker found — should never happen for a valid
+					// SSFee tx. Default to SF as the safer assumption.
+					log.Warnf("SSFee tx %s has no detectable marker, defaulting to SF", stx.TxID)
+					stx.SSFeeMarker = "SF"
+				}
 			}
 			stakeFees = append(stakeFees, stx)
 		}
@@ -6757,9 +6777,14 @@ func (pgb *ChainDB) GetExplorerBlock(ctx context.Context, hash string) *exptypes
 	if miningFeeAtoms > 0 {
 		feesMap[0] = strconv.FormatInt(miningFeeAtoms, 10)
 	}
-	// SKA fees from SSFeeTotalsByCoin (stake fee distribution)
+	// SKA fees from SSFeeTotalsByCoin (stake fee distribution).
+	// VAR (ct==0) is already sourced from MiningFee above — skip it here
+	// to avoid overwriting the full fee pool with only the staker's 50% share.
 	if skaFeeTotals != nil {
 		for ct, split := range skaFeeTotals {
+			if ct == 0 {
+				continue
+			}
 			total := new(big.Int)
 			if split.PoW != nil {
 				total.Add(total, split.PoW)
