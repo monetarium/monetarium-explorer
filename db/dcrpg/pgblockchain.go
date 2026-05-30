@@ -6681,7 +6681,9 @@ func (pgb *ChainDB) GetExplorerBlock(ctx context.Context, hash string) *exptypes
 				case stake.SSFeeMarkerMiner:
 					stx.SSFeeMarker = "MF"
 				default:
-					// VAR SSFee transactions are always staker rewards.
+					// No marker found — should never happen for a valid
+					// SSFee tx. Default to SF as the safer assumption.
+					log.Warnf("SSFee tx %s has no detectable marker, defaulting to SF", stx.TxID)
 					stx.SSFeeMarker = "SF"
 				}
 			}
