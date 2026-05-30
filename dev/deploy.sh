@@ -63,11 +63,9 @@ warn()  { echo -e "  ${YELLOW}⚠${NC} $*"; }
 err()   { echo -e "  ${RED}✗${NC} $*" >&2; exit 1; }
 title() { echo -e "\n${BOLD}── $*${NC}"; }
 
-PG_BIND="${PG_HOST%%:*}"
 PG_IS_SOCKET=false
 if echo "$PG_HOST" | grep -q '/'; then
   PG_IS_SOCKET=true
-  PG_BIND=""
 fi
 
 if [ "$NETWORK" = "testnet" ]; then
