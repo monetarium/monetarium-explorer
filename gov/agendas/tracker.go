@@ -266,9 +266,6 @@ func (tracker *VoteTracker) fetchBlocks(voteInfo *chainjson.GetVoteInfoResult) (
 		return nil, 0, err
 	}
 	blockCount := len(r.StakeVersions)
-	if blockCount != blocksToRequest {
-		return nil, 0, fmt.Errorf("Unexpected number of blocks returns from GetStakeVersions. Asked for %d, received %d", blocksToRequest, blockCount)
-	}
 	blocks := make([]int32, blockCount)
 	var block chainjson.StakeVersions
 	for i := 0; i < blockCount; i++ {
@@ -285,6 +282,9 @@ func (tracker *VoteTracker) refreshSVIs(voteInfo *chainjson.GetVoteInfoResult) (
 	// blocksInCurrentSVI := int32(blocksInCurrentRCI % params.StakeVersionInterval)
 	if blocksInCurrentRCI%tracker.params.StakeVersionInterval > 0 {
 		svis++
+	}
+	if svis < 1 {
+		svis = 1
 	}
 	si, err := tracker.node.GetStakeVersionInfo(context.TODO(), svis)
 	if err != nil {
