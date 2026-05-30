@@ -394,7 +394,6 @@ func threeSigFigs(v float64) string {
 // skaDecimals is 10^18 — the number of SKA atoms per coin.
 var skaDecimals = new(big.Int).Exp(big.NewInt(10), big.NewInt(18), nil)
 var varDecimals = big.NewInt(1e8)
-var bytesPerKB = big.NewInt(1000)
 
 // parseInt64 parses a decimal atom string to int64, returning 0 on error.
 func parseInt64(s string) int64 {
@@ -505,36 +504,21 @@ func coinDecimalParts(atomStr string, coinType uint8, useCommas bool, boldNumPla
 
 // coinFeeRateDecimalParts renders a fee-rate value carried on the contract as
 // atoms/kB. VAR delegates to coinDecimalParts and is displayed as VAR/kB.
-// SKA divides the big.Int atoms/kB by 1000 (giving atoms/B) and renders via
-// skaDecimalParts so the headline number reads as SKA/B — chosen because SKA
-// 18-decimal fee rates are too small per kB to be legible. No float64
-// conversion on the SKA path.
+// SKA renders via skaDecimalParts directly (atoms/kB) and is displayed as
+// SKA<n>/kB. No float64 conversion on the SKA path.
 func coinFeeRateDecimalParts(atomsPerKB string, coinType uint8, useCommas bool, boldNumPlaces ...int) []string {
 	if coinType == 0 {
 		return coinDecimalParts(atomsPerKB, 0, useCommas, boldNumPlaces...)
 	}
-	return skaDecimalParts(skaAtomsPerKBToPerByte(atomsPerKB), useCommas, boldNumPlaces...)
+	return skaDecimalParts(atomsPerKB, useCommas, boldNumPlaces...)
 }
 
-// skaAtomsPerKBToPerByte converts an SKA fee-rate string from atoms/kB to
-// atoms/B using big.Int integer division. Sub-atom-per-byte remainder is
-// unrepresentable and dropped. Empty or non-numeric input is returned
-// unchanged so skaDecimalParts can render the safe ["0","",""] fallback.
-func skaAtomsPerKBToPerByte(atomsPerKB string) string {
-	n, ok := new(big.Int).SetString(atomsPerKB, 10)
-	if !ok {
-		return atomsPerKB
-	}
-	return n.Quo(n, bytesPerKB).String()
-}
-
-// coinFeeRateUnit returns the fee-rate unit suffix. VAR uses /kB (matching the
-// on-the-wire atoms/kB contract); SKA uses /B (paired with coinFeeRateDecimalParts).
+// coinFeeRateUnit returns the fee-rate unit suffix.
 func coinFeeRateUnit(coinType uint8) string {
 	if coinType == 0 {
 		return "VAR/kB"
 	}
-	return coinSymbol(coinType) + "/B"
+	return coinSymbol(coinType) + "/kB"
 }
 
 // formatCoinAtoms converts a raw atom string to a threeSigFigs-formatted coin

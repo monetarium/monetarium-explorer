@@ -377,6 +377,7 @@ type TrimmedTxInfo struct {
 	VoutCount    int     `json:"vout_count"`
 	CoinType     uint8   `json:"coin_type,omitempty"`     // 0=VAR, 1-255=SKAn for stake fees; for revocations, set when processing
 	TicketStatus string  `json:"ticket_status,omitempty"` // Pool status for revocations: "voted", "missed", "expired"
+	SSFeeMarker  string  `json:"ssfee_marker,omitempty"`  // "SF" or "MF" for TxTypeSSFee transactions
 }
 
 // TxInfo models data needed for display on the tx page

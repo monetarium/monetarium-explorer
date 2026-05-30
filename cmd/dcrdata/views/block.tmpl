@@ -359,6 +359,7 @@
 					<th class="text-end">Total</th>
 					<th class="text-end">Rewards</th>
 					<th class="text-end">Size</th>
+					<th class="text-end">TxType</th>
 				</tr>
 			</thead>
 			<tbody>
@@ -374,6 +375,7 @@
 						{{template "decimalParts" (coinDecimalParts .FeeRaw .CoinType false)}} {{coinSymbol .CoinType}}
 					</td>
 					<td class="mono fs15 text-end">{{.FormattedSize}}</td>
+					<td class="text-end">{{.SSFeeMarker}}</td>
 				</tr>
 			{{- end}}
 			</tbody>
