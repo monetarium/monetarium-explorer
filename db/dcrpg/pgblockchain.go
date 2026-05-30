@@ -173,7 +173,7 @@ func (u *utxoStore) Peek(txHash dbtypes.ChainHash, txIndex uint32) *dbtypes.UTXO
 	return txVals[txIndex]
 }
 
-func (u *utxoStore) set(txHash dbtypes.ChainHash, txIndex uint32, voutDbID int64, addrs []string, val int64, mixed bool, coinType uint8) {
+func (u *utxoStore) set(txHash dbtypes.ChainHash, txIndex uint32, voutDbID int64, addrs []string, val int64, mixed bool, coinType uint8, skaValue string) {
 	txUTXOVals, ok := u.c[txHash]
 	if !ok {
 		u.c[txHash] = map[uint32]*dbtypes.UTXOData{
@@ -183,6 +183,7 @@ func (u *utxoStore) set(txHash dbtypes.ChainHash, txIndex uint32, voutDbID int64
 				Mixed:     mixed,
 				VoutDbID:  voutDbID,
 				CoinType:  coinType,
+				SKAValue:  skaValue,
 			},
 		}
 	} else {
@@ -192,16 +193,17 @@ func (u *utxoStore) set(txHash dbtypes.ChainHash, txIndex uint32, voutDbID int64
 			Mixed:     mixed,
 			VoutDbID:  voutDbID,
 			CoinType:  coinType,
+			SKAValue:  skaValue,
 		}
 	}
 }
 
 // Set stores the addresses and amount in a UTXOData entry in the cache for the
 // given outpoint.
-func (u *utxoStore) Set(txHash dbtypes.ChainHash, txIndex uint32, voutDbID int64, addrs []string, val int64, mixed bool, coinType uint8) {
+func (u *utxoStore) Set(txHash dbtypes.ChainHash, txIndex uint32, voutDbID int64, addrs []string, val int64, mixed bool, coinType uint8, skaValue string) {
 	u.Lock()
 	defer u.Unlock()
-	u.set(txHash, txIndex, voutDbID, addrs, val, mixed, coinType)
+	u.set(txHash, txIndex, voutDbID, addrs, val, mixed, coinType, skaValue)
 }
 
 // Reinit re-initializes the utxoStore with the given UTXOs.
@@ -216,7 +218,7 @@ func (u *utxoStore) Reinit(utxos []dbtypes.UTXO) {
 	prealloc := 2 * len(utxos) / 3
 	u.c = make(map[dbtypes.ChainHash]map[uint32]*dbtypes.UTXOData, prealloc)
 	for i := range utxos {
-		u.set(utxos[i].TxHash, utxos[i].TxIndex, utxos[i].VoutDbID, utxos[i].Addresses, utxos[i].Value, utxos[i].Mixed, utxos[i].CoinType)
+		u.set(utxos[i].TxHash, utxos[i].TxIndex, utxos[i].VoutDbID, utxos[i].Addresses, utxos[i].Value, utxos[i].Mixed, utxos[i].CoinType, utxos[i].SKAValue)
 	}
 }
 
@@ -2041,45 +2043,6 @@ func (pgb *ChainDB) TSpendVotes(ctx context.Context, tspendID *chainhash.Hash) (
 	return &tsv, nil
 }
 
-// TreasuryBalance calculates the *dbtypes.TreasuryBalance.
-func (pgb *ChainDB) TreasuryBalance(ctx context.Context) (*dbtypes.TreasuryBalance, error) {
-	_, tipHeight := pgb.BestBlock()
-	return &dbtypes.TreasuryBalance{Height: tipHeight}, nil
-}
-
-// TreasuryTxns fetches filtered treasury transactions.
-func (pgb *ChainDB) TreasuryTxns(ctx context.Context, n, offset int64, txType stake.TxType) ([]*dbtypes.TreasuryTx, error) {
-	var rows *sql.Rows
-	var err error
-	switch txType {
-	case -1:
-		rows, err = pgb.db.QueryContext(ctx, internal.SelectTreasuryTxns, n, offset)
-	default:
-		rows, err = pgb.db.QueryContext(ctx, internal.SelectTypedTreasuryTxns, txType, n, offset)
-	}
-
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var txns []*dbtypes.TreasuryTx
-	for rows.Next() {
-		var tx dbtypes.TreasuryTx
-		var mainchain bool
-		err = rows.Scan(&tx.TxID, &tx.Type, &tx.Amount, &tx.BlockHash, &tx.BlockHeight, &tx.BlockTime, &mainchain)
-		if err != nil {
-			return nil, err
-		}
-		txns = append(txns, &tx)
-	}
-
-	if err = rows.Err(); err != nil {
-		return nil, err
-	}
-	return txns, nil
-}
-
 func (pgb *ChainDB) updateProjectFundCache(ctx context.Context) error {
 	_, _, err := pgb.AddressHistoryAll(ctx, pgb.devAddress, 1, 0)
 	if err != nil && !IsRetryError(err) {
@@ -3390,16 +3353,6 @@ func (pgb *ChainDB) TxHistoryData(ctx context.Context, address string, addrChart
 	return
 }
 
-func (pgb *ChainDB) BinnedTreasuryIO(ctx context.Context, chartGroupings dbtypes.TimeBasedGrouping) (*dbtypes.ChartsData, error) {
-	if chartGroupings >= dbtypes.NumIntervals {
-		return nil, fmt.Errorf("invalid time grouping %d", chartGroupings)
-	}
-	timeInterval := chartGroupings.String()
-	ctx, cancel := context.WithTimeout(ctx, pgb.queryTimeout)
-	defer cancel()
-	return binnedTreasuryIO(ctx, pgb.db, timeInterval)
-}
-
 // TicketsByPrice returns chart data for tickets grouped by price. maturityBlock
 // is used to define when tickets are considered live.
 func (pgb *ChainDB) TicketsByPrice(ctx context.Context, maturityBlock int64) (*dbtypes.PoolTicketsData, error) {
@@ -3695,7 +3648,7 @@ func (pgb *ChainDB) TipToSideChain(mainRoot string) (tipHashStr string, blocksMo
 	tipHash := dbtypes.ChainHash(*pgb.BestBlockHash())
 	tipHashStr = tipHash.String()
 	addresses := make(map[string]struct{})
-	var txnsUpdated, vinsUpdated, votesUpdated, ticketsUpdated, treasuryTxnsUpdates, addrsUpdated int64
+	var txnsUpdated, vinsUpdated, votesUpdated, ticketsUpdated, addrsUpdated int64
 	for tipHashStr != mainRoot {
 		log.Infof("TipToSideChain: tipHashStr = %v, mainRoot = %v", tipHashStr, mainRoot)
 		// 1. Block. Set is_mainchain=false on the tip block, return hash of
@@ -3777,16 +3730,6 @@ func (pgb *ChainDB) TipToSideChain(mainRoot string) (tipHashStr string, blocksMo
 		ticketsUpdated += rowsUpdated
 		log.Debugf("UpdateTicketsMainchain: %v", time.Since(now))
 
-		// 8. Treasury. Sets is_mainchain=false on all entries in the tip block.
-		now = time.Now()
-		rowsUpdated, err = updateTreasuryMainchain(pgb.db, tipHash, false)
-		if err != nil {
-			log.Errorf("Failed to set tickets in block %s as sidechain: %v",
-				tipHash, err)
-		}
-		treasuryTxnsUpdates += rowsUpdated
-		log.Debugf("UpdateTreasuryMainchain: %v", time.Since(now))
-
 		// move on to next block
 		tipHash = previousHash
 		tipHashStr = tipHash.String()
@@ -3809,8 +3752,8 @@ func (pgb *ChainDB) TipToSideChain(mainRoot string) (tipHashStr string, blocksMo
 		log.Debugf("Cleared cache of %d of %d addresses in orphaned transactions.", numCleared, len(addrs))
 	}
 
-	log.Debugf("Reorg orphaned: %d blocks, %d txns, %d vins, %d addresses, %d votes, %d tickets, %d treasury txns",
-		blocksMoved, txnsUpdated, vinsUpdated, addrsUpdated, votesUpdated, ticketsUpdated, treasuryTxnsUpdates)
+	log.Debugf("Reorg orphaned: %d blocks, %d txns, %d vins, %d addresses, %d votes, %d tickets",
+		blocksMoved, txnsUpdated, vinsUpdated, addrsUpdated, votesUpdated, ticketsUpdated)
 
 	return
 }
@@ -3952,11 +3895,6 @@ func (pgb *ChainDB) StoreBlock(msgBlock *wire.MsgBlock, isValid, isMainchain,
 	affectedAddresses := resReg.addresses
 	for ad := range resStk.addresses {
 		affectedAddresses[ad] = struct{}{}
-	}
-	if txhelpers.IsTreasuryActive(pgb.chainParams.Net, int64(dbBlock.Height)) {
-		if _, devChange := affectedAddresses[pgb.devAddress]; devChange {
-			log.Infof("Transaction affecting legacy treasury detected.")
-		}
 	}
 	// Put them in a slice.
 	addresses := make([]string, 0, len(affectedAddresses))
@@ -4136,7 +4074,7 @@ func (pgb *ChainDB) updateLastBlock(msgBlock *wire.MsgBlock, isMainchain bool) e
 			log.Debugf("Cleared cache of %d of %d addresses in disapproved transactions.", numCleared, len(addrs))
 		}
 
-		// NOTE: Updating the tickets, votes, misses, and treasury tables is not
+		// NOTE: Updating the tickets, votes, and misses tables is not
 		// necessary since the stake tree is not subject to stakeholder
 		// approval.
 	}
@@ -4298,7 +4236,7 @@ txns:
 				}
 				// Remember this for insertSpendingAddressRow.
 				pgb.utxoCache.Set(vin.PrevTxHash, vin.PrevTxIndex,
-					utxo.VoutDbID, utxo.Addresses, utxo.Value, utxo.Mixed, utxo.CoinType)
+					utxo.VoutDbID, utxo.Addresses, utxo.Value, utxo.Mixed, utxo.CoinType, utxo.SKAValue)
 			}
 			if !utxo.Mixed {
 				continue txns
@@ -4404,14 +4342,6 @@ txns:
 			pgb.chainParams, pgb.ChainInfo())
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			log.Error("insertVotes:", err)
-			txRes.err = err
-			return txRes
-		}
-
-		// Treasury txns.
-		err = insertTreasuryTxns(pgb.db, dbTransactions, pgb.dupChecks, updateExistingRecords)
-		if err != nil && !errors.Is(err, sql.ErrNoRows) {
-			log.Error("insertTreasuryTxns:", err)
 			txRes.err = err
 			return txRes
 		}
@@ -4529,8 +4459,6 @@ txns:
 		}
 	} // isStake
 
-	treasuryActive := txhelpers.IsTreasuryActive(pgb.chainParams.Net, height)
-
 	wg.Wait()
 
 	// Begin a database transaction to insert spending address rows, and (if
@@ -4554,9 +4482,6 @@ txns:
 	txRes.numAddresses = int64(totalAddressRows)
 	txRes.addresses = make(map[string]struct{})
 	for _, ad := range dbAddressRowsFlat {
-		if treasuryActive && ad.Address == pgb.devAddress {
-			log.Debugf("Transaction paying to legacy treasury: %v", ad.TxHash)
-		}
 		txRes.addresses[ad.Address] = struct{}{}
 	}
 
@@ -4565,8 +4490,6 @@ txns:
 		txVins := dbTxVins[it]
 		txDbID := txDbIDs[it] // for the newly-spent TXOs in the vouts table
 		voutDbIDs := make([]int64, 0, len(txVins))
-		var spendLegacyTreasury bool
-
 		for iv := range txVins {
 			// Transaction that spends an outpoint paying to >=0 addresses
 			vin := &txVins[iv]
@@ -4603,9 +4526,6 @@ txns:
 			}
 			txRes.numAddresses += int64(len(fromAddrs))
 			for i := range fromAddrs {
-				if treasuryActive && !spendLegacyTreasury && fromAddrs[i] == pgb.devAddress {
-					spendLegacyTreasury = true
-				}
 				txRes.addresses[fromAddrs[i]] = struct{}{}
 			}
 			voutDbIDs = append(voutDbIDs, voutDbID)
@@ -4613,10 +4533,6 @@ txns:
 			if mixedVout && tx.IsValid && isMainchain {
 				mixDiff -= vin.ValueIn
 			}
-		}
-
-		if spendLegacyTreasury {
-			log.Debugf("Transaction spending from legacy treasury: %v", tx.TxID)
 		}
 
 		// NOTE: vouts.spend_tx_row_id is not updated if this is a side chain
@@ -4695,13 +4611,14 @@ func (pgb *ChainDB) updateUtxoCache(dbVouts [][]*dbtypes.Vout, txns []*dbtypes.T
 					Mixed:     vout.Mixed,
 					VoutDbID:  voutDbID,
 					CoinType:  vout.CoinType,
+					SKAValue:  vout.SKAValue,
 				},
 			})
 		}
 
 		// Store each output of this transaction in the UTXO cache.
 		for _, utxo := range utxos {
-			pgb.utxoCache.Set(utxo.TxHash, utxo.TxIndex, utxo.VoutDbID, utxo.Addresses, utxo.Value, utxo.Mixed, utxo.CoinType)
+			pgb.utxoCache.Set(utxo.TxHash, utxo.TxIndex, utxo.VoutDbID, utxo.Addresses, utxo.Value, utxo.Mixed, utxo.CoinType, utxo.SKAValue)
 		}
 	}
 }
@@ -6749,6 +6666,26 @@ func (pgb *ChainDB) GetExplorerBlock(ctx context.Context, hash string) *exptypes
 					}
 				}
 				stx.FeeRaw = ssFeeNetReward(msgTx).String()
+
+				// Detect SSFee marker (SF = staker reward, MF = miner reward).
+				marker := stake.SSFeeMarkerNone
+				for _, out := range msgTx.TxOut {
+					if m := stake.HasSSFeeMarker(out.PkScript); m != stake.SSFeeMarkerNone {
+						marker = m
+						break
+					}
+				}
+				switch marker {
+				case stake.SSFeeMarkerStaker:
+					stx.SSFeeMarker = "SF"
+				case stake.SSFeeMarkerMiner:
+					stx.SSFeeMarker = "MF"
+				default:
+					// No marker found — should never happen for a valid
+					// SSFee tx. Default to SF as the safer assumption.
+					log.Warnf("SSFee tx %s has no detectable marker, defaulting to SF", stx.TxID)
+					stx.SSFeeMarker = "SF"
+				}
 			}
 			stakeFees = append(stakeFees, stx)
 		}
@@ -6840,9 +6777,14 @@ func (pgb *ChainDB) GetExplorerBlock(ctx context.Context, hash string) *exptypes
 	if miningFeeAtoms > 0 {
 		feesMap[0] = strconv.FormatInt(miningFeeAtoms, 10)
 	}
-	// SKA fees from SSFeeTotalsByCoin (stake fee distribution)
+	// SKA fees from SSFeeTotalsByCoin (stake fee distribution).
+	// VAR (ct==0) is already sourced from MiningFee above — skip it here
+	// to avoid overwriting the full fee pool with only the staker's 50% share.
 	if skaFeeTotals != nil {
 		for ct, split := range skaFeeTotals {
+			if ct == 0 {
+				continue
+			}
 			total := new(big.Int)
 			if split.PoW != nil {
 				total.Add(total, split.PoW)
@@ -6874,6 +6816,11 @@ func (pgb *ChainDB) GetExplorerBlock(ctx context.Context, hash string) *exptypes
 func ssFeeNetReward(msgTx *wire.MsgTx) *big.Int {
 	net := new(big.Int)
 	for _, vin := range msgTx.TxIn {
+		// Coinbase inputs create value ex nihilo — don't subtract them.
+		if vin.PreviousOutPoint.Index == wire.MaxPrevOutIndex &&
+			vin.PreviousOutPoint.Hash.IsEqual(&chainhash.Hash{}) {
+			continue
+		}
 		if vin.SKAValueIn != nil {
 			net.Sub(net, vin.SKAValueIn)
 		} else {

@@ -23,7 +23,7 @@ A lot of legacy `dcrdata` / `dcrd` naming still exists in code, paths, configs (
 
 ## Multi-module workspace (important)
 
-This repo contains **8 separate Go modules**, not a single one. Tools that operate on the whole repo iterate them in a specific order so that `go mod tidy` cascades correctly:
+This repo contains **7 separate Go modules**, not a single one. Tools that operate on the whole repo iterate them in a specific order so that `go mod tidy` cascades correctly:
 
 ```
 ./go.mod                          (root: blockdata, mempool, stakedb, pubsub, txhelpers, …)
@@ -31,7 +31,6 @@ This repo contains **8 separate Go modules**, not a single one. Tools that opera
 ./db/dcrpg/go.mod
 ./cmd/dcrdata/go.mod              (the executable)
 ./pubsub/democlient/go.mod
-./cmd/swapscan-btc/go.mod
 ./testutil/dbload/go.mod
 ./testutil/apiload/go.mod
 ```
@@ -95,7 +94,7 @@ The data flow, from chain to user:
 3. **`db/dcrpg`** is the PostgreSQL backend (large package: schema, indexing, sync, charts, queries, upgrades). **`db/cache`** sits in front of it. **`db/dbtypes`** holds shared row/struct types.
 4. **`stakedb`** maintains the live ticket pool in a Badger KV store (separate from Postgres).
 5. **`mempool`** monitors mempool txs and emits typed events.
-6. **`txhelpers`** is the central place for tx/block parsing and reward math (`RewardsAtBlock`, `BlockSSFeeTotals`, `AvgSSFeeRate`). Reward calc is non-obvious — see [REWARDS_LOGIC.md](REWARDS_LOGIC.md) for the multi-coin (VAR + SKA{n}) model before changing anything in this area.
+6. **`txhelpers`** is the central place for tx/block parsing and reward math (`RewardsAtBlock`, `BlockSSFeeTotals`). Reward calc is non-obvious — see [wiki/core/staking-rewards.md](wiki/core/staking-rewards.md) (sections 3.1–3.2) for the multi-coin (VAR + SKA{n}) model before changing anything in this area.
 7. **`pubsub`** is the websocket pub/sub server — same data, push-style. Note: parts of the home-page reward calc are duplicated here (`pubsub/pubsubhub.go`) and in the explorer; if you change one, check the other.
 8. **`gov/agendas`** and **`gov/politeia`** are governance DBs (consensus deployments + proposals).
 9. **`cmd/dcrdata`** is the executable that wires everything together.
@@ -118,7 +117,7 @@ Both APIs are served on the same port (default 7777). Endpoints accept `?indent=
 - **Exported names matter for tests/mocks**: e.g. `SkaCoinType` (exported) vs an unexported variant — past commits had to switch references and update mocks together. When you add anything coin-type-related, check `blockdata/`, `db/dcrpg/`, and `txhelpers/` mocks/fakes for matching updates.
 - **Cumulative vs per-block series**: SKA supply charts use cumulative supply aligned to block height (see recent commits on `test/ska-coin-supply-charts`). When adding new time-axis chart endpoints, include the `h` (height) field for alignment.
 - **Precision**: VAR uses 8 decimals — fits safely in `float64`, which is why `dcrutil.Amount.ToCoin() float64` is used for VAR throughout the codebase. SKA uses 18 decimals — **exceeds `float64`'s significand**, so SKA atoms must stay as `big.Int`-derived strings end-to-end (no `.ToCoin()` equivalent; no float conversion before the template boundary). Formatting helpers live in the explorer (`float64AsDecimalParts`, `FormatSKAPerVAR`, `FormatSKAAtoms`). Don't print raw atoms.
-- **PR/Issue title format** (per `docs/CONTRIBUTING.md`): `package/path: concise description`, e.g. `db/dcrpg: charts data updates could use incremental changes`.
+- **PR/Issue title format**: `package/path: concise description`, e.g. `db/dcrpg: charts data updates could use incremental changes`.
 
 ## Configuration
 

@@ -87,12 +87,6 @@ func TestNewColumnsPresent(t *testing.T) {
 	}
 }
 
-func TestTreasuryTableRemoved(t *testing.T) {
-	if strings.Contains(CreateTreasuryTable, "CREATE TABLE") {
-		t.Error("CreateTreasuryTable should not create a real table")
-	}
-}
-
 // countSelectColumns counts the top-level columns in the outer SELECT list.
 // Uses LastIndex to find the outer query's SELECT/FROM pair, skipping any CTE's inner SELECT/FROM.
 // Handles commas inside parentheses (e.g. COALESCE, CASE) by only counting commas at depth 0.

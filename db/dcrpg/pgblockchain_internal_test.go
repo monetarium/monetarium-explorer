@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/monetarium/monetarium-node/chaincfg"
+	"github.com/monetarium/monetarium-node/chaincfg/chainhash"
 	chainjson "github.com/monetarium/monetarium-node/rpc/jsonrpc/types"
 	"github.com/monetarium/monetarium-node/wire"
 )
@@ -57,6 +58,23 @@ func TestSSFeeNetReward(t *testing.T) {
 				},
 			},
 			want: "0",
+		},
+		{
+			name: "coinbase SKA input skipped",
+			msgTx: &wire.MsgTx{
+				Version: 1,
+				TxIn: []*wire.TxIn{{
+					PreviousOutPoint: wire.OutPoint{
+						Hash:  chainhash.Hash{},
+						Index: wire.MaxPrevOutIndex,
+					},
+					SKAValueIn: big.NewInt(2382000000000000000),
+				}},
+				TxOut: []*wire.TxOut{
+					{CoinType: 1, SKAValue: big.NewInt(2382000000000000000)},
+				},
+			},
+			want: "2382000000000000000",
 		},
 	}
 

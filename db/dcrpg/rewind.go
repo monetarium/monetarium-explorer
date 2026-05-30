@@ -59,13 +59,6 @@ func deleteTicketsForBlock(dbTx SqlExecutor, hash dbtypes.ChainHash) (rowsDelete
 	return sqlExec(dbTx, internal.DeleteTickets, "failed to delete tickets", hash)
 }
 
-func deleteTreasuryTxnsForBlock(dbTx SqlExecutor, hash dbtypes.ChainHash) (rowsDeleted int64, err error) {
-	if internal.DeleteTreasuryTxns == "" {
-		return 0, nil
-	}
-	return sqlExec(dbTx, internal.DeleteTreasuryTxns, "failed to delete treasury txns", hash)
-}
-
 func deleteSwapsForBlockHeight(dbTx SqlExecutor, height int64) (rowsDeleted int64, err error) {
 	return sqlExec(dbTx, internal.DeleteSwaps, "failed to delete swaps", height)
 }
@@ -238,14 +231,6 @@ func deleteBlockData(ctx context.Context, db *sql.DB, hash dbtypes.ChainHash, he
 		return
 	}
 	res.Timings.Misses = int64(time.Since(start))
-
-	start = time.Now()
-	if res.Treasury, err = deleteTreasuryTxnsForBlock(dbTx, hash); err != nil {
-		err = fmt.Errorf(`deleteTreasuryTxnsForBlock failed with "%v". Rollback: %v`,
-			err, dbTx.Rollback())
-		return
-	}
-	res.Timings.Treasury = int64(time.Since(start))
 
 	start = time.Now()
 	if res.Swaps, err = deleteSwapsForBlockHeight(dbTx, height); err != nil {

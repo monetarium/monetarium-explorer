@@ -330,34 +330,6 @@ func DeindexAgendaVotesTableOnAgendaID(db *sql.DB) (err error) {
 	return
 }
 
-// IndexTreasuryTableOnTxHash creates the index for the treasury table over
-// tx_hash.
-func IndexTreasuryTableOnTxHash(db *sql.DB) (err error) {
-	_, err = db.Exec(internal.IndexTreasuryOnTxHash)
-	return
-}
-
-// DeindexTreasuryTableOnTxHash drops the index for the treasury table over tx
-// hash.
-func DeindexTreasuryTableOnTxHash(db *sql.DB) (err error) {
-	_, err = db.Exec(internal.DeindexTreasuryOnTxHash)
-	return
-}
-
-// IndexTreasuryTableOnHeight creates the index for the treasury table over
-// block height.
-func IndexTreasuryTableOnHeight(db *sql.DB) (err error) {
-	_, err = db.Exec(internal.IndexTreasuryOnBlockHeight)
-	return
-}
-
-// DeindexTreasuryTableOnHeight drops the index for the treasury table over
-// block height.
-func DeindexTreasuryTableOnHeight(db *sql.DB) (err error) {
-	_, err = db.Exec(internal.DeindexTreasuryOnBlockHeight)
-	return
-}
-
 // IndexSwapsTableOnHeight creates the index for the swaps table over spend
 // block height.
 func IndexSwapsTableOnHeight(db *sql.DB) (err error) {
@@ -486,10 +458,6 @@ func (pgb *ChainDB) DeindexAll() error {
 		// stats table
 		{DeindexStatsTableOnHeight},
 
-		// treasury table
-		{DeindexTreasuryTableOnTxHash},
-		{DeindexTreasuryTableOnHeight},
-
 		// swaps table
 		{DeindexSwapsTableOnHeight},
 	}
@@ -560,10 +528,6 @@ func (pgb *ChainDB) IndexAll(barLoad chan *dbtypes.ProgressBarLoad) error {
 
 		// stats table
 		// {Msg: "stats table on height", IndexFunc: IndexStatsTableOnHeight}, // redundant with UNIQUE constraint in table def
-
-		// treasury table
-		{Msg: "treasury on tx hash", IndexFunc: IndexTreasuryTableOnTxHash},
-		{Msg: "treasury on block height", IndexFunc: IndexTreasuryTableOnHeight},
 
 		// swaps table
 		{Msg: "swaps on spend height", IndexFunc: IndexSwapsTableOnHeight},

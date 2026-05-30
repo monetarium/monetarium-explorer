@@ -1066,9 +1066,9 @@ func _main(ctx context.Context) error {
 		return fmt.Errorf("RPC client error: %v (%v)", cerr.Error(), cerr.Cause())
 	}
 
-	// Update the treasury balance, and clear any cached address data in case
-	// the sync status page not intercepting requests (see SyncStatusLimit).
-	_ = chainDB.FreshenAddressCaches(true, nil) // async treasury queries, no error
+	// Clear any cached address data in case the sync status page is not
+	// intercepting requests (see SyncStatusLimit).
+	_ = chainDB.FreshenAddressCaches(true, nil)
 
 	log.Infof("All ready, at height %d.", chainDBHeight)
 	explore.SetDBsSyncing(false) // let explorer.Store do final updates
