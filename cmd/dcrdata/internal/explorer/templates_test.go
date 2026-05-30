@@ -783,20 +783,29 @@ func TestCoinFeeRateDecimalParts(t *testing.T) {
 			expected:      []string{"0", "00", "01", "0000"},
 		},
 		{
-			// Issue #304 example: 0.545 SKA1/B.
-			// 0.545 SKA = 5.45e17 atoms (SKA has 18 decimals).
-			// atoms/kB = atoms/B * 1000 = 5.45e20 = "545" + 18 zeros.
-			// After helper /1000 -> 5.45e17 atoms/B -> skaDecimalParts:
-			//   dec = "545000000000000000" (18 chars)
+			// Issue #360 example: 4.247104247104247 SKA1/kB.
+			// On-the-wire fee rate is 4247104247104247000 atoms/kB.
+			// Rendered directly (no /1000 to atoms/B) via skaDecimalParts:
+			//   intPart = 4, fracPart = 247104247104247000
+			//   dec = "247104247104247000" (18 chars)
+			//   right = "247104247104247", trailingZeros = "000"
+			name:     "SKA fee rate renders atoms/kB directly for issue #360 example",
+			atomStr:  "4247104247104247000",
+			coinType: 1,
+			expected: []string{"4", "247104247104247", "000"},
+		},
+		{
+			// 0.545 SKA/kB = 5.45e17 atoms/kB, rendered directly:
+			//   intPart = 0, dec = "545000000000000000" (18 chars)
 			//   right = "545", trailingZeros = "000000000000000" (15)
-			name:     "SKA fee rate produces 0.545 SKA1/B for issue example",
-			atomStr:  "545000000000000000000",
+			name:     "SKA fractional fee rate renders atoms/kB directly",
+			atomStr:  "545000000000000000",
 			coinType: 1,
 			expected: []string{"0", "545", "000000000000000"},
 		},
 		{
 			name:          "SKA bold-mode forwards variadic to skaDecimalParts",
-			atomStr:       "545000000000000000000",
+			atomStr:       "545000000000000000",
 			coinType:      1,
 			boldNumPlaces: []int{3},
 			expected:      []string{"0", "545", "", "000000000000000"},
@@ -820,21 +829,22 @@ func TestCoinFeeRateDecimalParts(t *testing.T) {
 			expected: []string{"abc", "", ""},
 		},
 		{
-			// Sub-kB precision below 1 atom/B is dropped by the big.Int /1000.
-			// 1500 atoms/kB -> 1 atom/B -> 1e-18 SKA -> dec = "000000000000000001".
-			name:     "SKA atoms/kB above 1000 truncates sub-atom remainder",
+			// Sub-kB atoms/kB values are now rendered directly with full
+			// 18-decimal precision (the old /1000 atoms/B truncation is gone).
+			// 1500 atoms/kB -> dec = "000000000000001500" -> right keeps the
+			// significant digits, trailingZeros captures the two trailing zeros.
+			name:     "SKA small atoms/kB renders full precision (no truncation)",
 			atomStr:  "1500",
 			coinType: 1,
-			expected: []string{"0", "000000000000000001", ""},
+			expected: []string{"0", "0000000000000015", "00"},
 		},
 		{
-			// Pins the documented truncation invariant: any value < 1000
-			// atoms/kB collapses to exactly 0 atoms/B and renders identically
-			// to a true-zero fee rate.
-			name:     "SKA atoms/kB below 1000 truncates to zero",
+			// A value the old code truncated to zero now renders its true
+			// sub-atom-per-byte magnitude directly.
+			name:     "SKA atoms/kB below 1000 renders nonzero",
 			atomStr:  "999",
 			coinType: 1,
-			expected: []string{"0", "", ""},
+			expected: []string{"0", "000000000000000999", ""},
 		},
 	}
 
@@ -854,9 +864,9 @@ func TestCoinFeeRateUnit(t *testing.T) {
 		expected string
 	}{
 		{coinType: 0, expected: "VAR/kB"},
-		{coinType: 1, expected: "SKA1/B"},
-		{coinType: 2, expected: "SKA2/B"},
-		{coinType: 255, expected: "SKA255/B"},
+		{coinType: 1, expected: "SKA1/kB"},
+		{coinType: 2, expected: "SKA2/kB"},
+		{coinType: 255, expected: "SKA255/kB"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.expected, func(t *testing.T) {
