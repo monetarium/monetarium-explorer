@@ -207,6 +207,7 @@ fi
 
 title "6/9 — Writing monetarium-explorer.conf"
 
+CONFIG_EXISTED=false; [ -f "$EXPLORER_CONFIG_DIR/monetarium-explorer.conf" ] && CONFIG_EXISTED=true
 EXPLORER_CONF="$EXPLORER_CONFIG_DIR/monetarium-explorer.conf"
 if [ -f "$EXPLORER_CONF" ]; then
   skip "$EXPLORER_CONF already exists"
@@ -399,7 +400,7 @@ echo -e "    ${DIM}•${NC} $EXPLORER_CONF"
 echo -e "    ${DIM}•${NC} $NGINX_SITE"
 echo
 
-if [ -f "$EXPLORER_CONF" ]; then
+if $CONFIG_EXISTED; then
   echo -e "  ${YELLOW}⚠ Config files exist from a previous run.${NC}"
   echo -e "  ${DIM}  Active credentials are inside${NC} ${BOLD}$EXPLORER_CONF${NC}${DIM}.${NC}"
   echo -e "  ${DIM}  Values below are from this run and may be stale.${NC}"
