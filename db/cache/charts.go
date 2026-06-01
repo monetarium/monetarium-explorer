@@ -145,7 +145,7 @@ const (
 // cacheVersion helps detect when the cache data stored has changed its
 // structure or content. A change on the cache version results to recomputing
 // all the charts data a fresh thereby making the cache to hold the latest changes.
-var cacheVersion = semver.NewSemver(6, 1, 1)
+var cacheVersion = semver.NewSemver(6, 2, 0)
 
 // versionedCacheData defines the cache data contents to be written into a .gob file.
 type versionedCacheData struct {
