@@ -766,7 +766,7 @@ export default class extends Controller {
       case 'chainwork': // Total chainwork over time
         d = zip2D(data, data.work)
         {
-          const max = data.work.length ? Math.max(...data.work) : 0
+          const max = data.work.length ? data.work.reduce((a, b) => Math.max(a, b), 0) : 0
           const p = unitPrefix(max)
           const label = p ? `Cumulative Chainwork (${p}H)` : 'Cumulative Chainwork'
           assign(gOptions, mapDygraphOptions(d, [xlabel, label], false, label, true, false))
@@ -778,7 +778,7 @@ export default class extends Controller {
       case 'hashrate': // Network hashrate over time
         d = zip2D(data, data.rate, 1, data.offset)
         {
-          const max = data.rate.length ? Math.max(...data.rate) : 0
+          const max = data.rate.length ? data.rate.reduce((a, b) => Math.max(a, b), 0) : 0
           const p = unitPrefix(max)
           const label = p ? `Network Hashrate (${p}H/s)` : 'Network Hashrate'
           assign(gOptions, mapDygraphOptions(d, [xlabel, label], false, label, true, false))
