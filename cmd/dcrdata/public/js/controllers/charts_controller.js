@@ -15,20 +15,17 @@ import { darkEnabled } from '../services/theme_service'
 let selectedChart
 let Dygraph // lazy loaded on connect
 
-const aDay = 86400 * 1000 // in milliseconds
-const aMonth = 30 // in days
 const atomsToVAR = 1e-8
 const windowScales = ['ticket-price', 'pow-difficulty', 'missed-votes']
 const hybridScales = ['privacy-participation']
 const lineScales = ['ticket-price', 'privacy-participation']
 const modeScales = ['ticket-price']
-const multiYAxisChart = ['ticket-price', 'coin-supply', 'privacy-participation']
+const multiYAxisChart = ['ticket-price', 'privacy-participation']
 // index 0 represents y1 and 1 represents y2 axes.
 const yValueRanges = { 'ticket-price': [1] }
 const chainworkUnits = ['H', 'kH', 'MH', 'GH', 'TH', 'PH', 'EH', 'ZH', 'YH']
 const hashrateUnits = ['H/s', 'kH/s', 'MH/s', 'GH/s', 'TH/s', 'PH/s', 'EH/s']
-let ticketPoolSizeTarget, premine, stakeValHeight, stakeShare
-let baseSubsidy, subsidyInterval, subsidyExponent, windowSize, avgBlockTime
+let ticketPoolSizeTarget, windowSize, avgBlockTime
 let rawCoinSupply, rawPoolValue
 let yFormatter, legendEntry, legendMarker, legendElement
 
@@ -112,15 +109,6 @@ function unitPrefix(value) {
   if (value <= 0) return ''
   const i = Math.max(0, Math.min(Math.floor(Math.log10(value) / 3), 8))
   return ['', 'k', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y'][i]
-}
-
-function blockReward(height) {
-  if (height >= stakeValHeight) {
-    return baseSubsidy * Math.pow(subsidyExponent, Math.floor(height / subsidyInterval))
-  }
-  if (height > 1) return baseSubsidy * (1 - stakeShare)
-  if (height === 1) return premine
-  return 0
 }
 
 function addLegendEntryFmt(div, series, fmt) {
@@ -304,55 +292,19 @@ function powDiffFunc(data) {
 }
 
 function circulationFunc(chartData) {
-  let yMax = 0
-  let h = -1
-  const addDough = (newHeight) => {
-    while (h < newHeight) {
-      h++
-      yMax += blockReward(h) * atomsToVAR
-    }
-  }
   const heights = chartData.h
   const times = chartData.t
   const supplies = chartData.supply
   const isHeightAxis = chartData.axis === 'height'
-  let xFunc, hFunc
+  let xFunc
   if (chartData.bin === 'day') {
     xFunc = isHeightAxis ? (i) => heights[i] : (i) => new Date(times[i] * 1000)
-    hFunc = (i) => heights[i]
   } else {
     xFunc = isHeightAxis ? (i) => i : (i) => new Date(times[i] * 1000)
-    hFunc = (i) => i
   }
 
-  const inflation = []
-  const data = map(supplies, (n, i) => {
-    const height = hFunc(i)
-    addDough(height)
-    inflation.push(yMax)
-    return [xFunc(i), supplies[i] * atomsToVAR, null]
-  })
-
-  const dailyBlocks = aDay / avgBlockTime
-  const lastPt = data[data.length - 1]
-  let x = lastPt[0]
-  // Set yMax to the start at last actual supply for the prediction line.
-  yMax = lastPt[1]
-  if (!isHeightAxis) x = x.getTime()
-  xFunc = isHeightAxis
-    ? (xx) => xx
-    : (xx) => {
-        return new Date(xx)
-      }
-  const xIncrement = isHeightAxis ? dailyBlocks : aDay
-  const projection = 6 * aMonth
-  data.push([xFunc(x), null, yMax, null])
-  for (let i = 1; i <= projection; i++) {
-    addDough(h + dailyBlocks)
-    x += xIncrement
-    data.push([xFunc(x), null, yMax])
-  }
-  return { data, inflation }
+  const data = map(supplies, (n, i) => [xFunc(i), n * atomsToVAR])
+  return { data }
 }
 
 function missedVotesFunc(data) {
@@ -403,13 +355,6 @@ export default class extends Controller {
   async connect() {
     this.query = new TurboQuery()
     ticketPoolSizeTarget = parseInt(this.data.get('tps'))
-    premine = parseInt(this.data.get('premine'))
-    stakeValHeight = parseInt(this.data.get('svh'))
-    stakeShare = parseInt(this.data.get('pos')) / 10.0
-    baseSubsidy = parseInt(this.data.get('bs'))
-    subsidyInterval = parseInt(this.data.get('sri'))
-    subsidyExponent =
-      parseFloat(this.data.get('mulSubsidy')) / parseFloat(this.data.get('divSubsidy'))
     windowSize = parseInt(this.data.get('windowSize'))
     avgBlockTime = parseInt(this.data.get('blockTime')) * 1000
     legendElement = this.labelsTarget
@@ -520,8 +465,7 @@ export default class extends Controller {
       y2label: null,
       stepPlot: this.settings.mode === 'stepped',
       axes: {},
-      series: null,
-      inflation: null
+      series: null
     }
     rawPoolValue = []
     rawCoinSupply = []
@@ -694,34 +638,10 @@ export default class extends Controller {
         d = circulationFunc(data)
         assign(
           gOptions,
-          mapDygraphOptions(
-            d.data,
-            [xlabel, 'Coin Supply', 'Inflation Limit'],
-            true,
-            'Coin Supply (VAR)',
-            true,
-            false
-          )
+          mapDygraphOptions(d.data, [xlabel, 'Coin Supply'], true, 'Coin Supply (VAR)', true, false)
         )
-        gOptions.y2label = 'Inflation Limit'
-        gOptions.series = {
-          'Inflation Limit': {
-            strokePattern: [5, 5],
-            color: '#888',
-            strokeWidth: 1.5
-          }
-        }
-        gOptions.inflation = d.inflation
-        yFormatter = (div, data, i) => {
+        yFormatter = (div, data, _i) => {
           addLegendEntryFmt(div, data.series[0], (y) => `${intComma(y)} VAR`)
-          if (i < d.inflation.length) {
-            const predicted = d.inflation[i]
-            const unminted = predicted - data.series[0].y
-            const change = ((unminted / predicted) * 100).toFixed(2)
-            div.appendChild(
-              legendEntry(`${legendMarker()} Unminted: ${intComma(unminted)} VAR (${change}%)`)
-            )
-          }
         }
         break
 
@@ -761,6 +681,11 @@ export default class extends Controller {
             false
           )
         )
+        {
+          const vals = data.duration.slice().sort((a, b) => a - b)
+          const maxY = vals[Math.floor(vals.length * 0.99)] || vals[vals.length - 1]
+          gOptions.axes.y = { valueRange: [0, maxY] }
+        }
         break
 
       case 'chainwork': // Total chainwork over time
