@@ -492,7 +492,7 @@ export default class extends Controller {
     if (this.settings.axis) this.setAxis(this.settings.axis) // set first
     if (this.settings.scale === 'log') this.setScale(this.settings.scale)
     if (this.settings.zoom) this.setZoom(this.settings.zoom)
-    this.setBin(this.settings.bin ? this.settings.bin : 'day')
+    this.setBin(this.settings.bin ? this.settings.bin : 'block')
     this.setMode(this.settings.mode ? this.settings.mode : 'smooth')
 
     const ogLegendGenerator = Dygraph.Plugins.Legend.generateLegendHTML
