@@ -768,7 +768,7 @@ export default class extends Controller {
         {
           const max = data.work.length ? data.work.reduce((a, b) => Math.max(a, b), 0) : 0
           const p = unitPrefix(max)
-          const label = p ? `Cumulative Chainwork (${p}H)` : 'Cumulative Chainwork'
+          const label = p ? `Cumulative Chainwork (${p}H)` : 'Cumulative Chainwork (H)'
           assign(gOptions, mapDygraphOptions(d, [xlabel, label], false, label, true, false))
         }
         gOptions.axes.y = { valueRange: [null, null] }
@@ -780,7 +780,7 @@ export default class extends Controller {
         {
           const max = data.rate.length ? data.rate.reduce((a, b) => Math.max(a, b), 0) : 0
           const p = unitPrefix(max)
-          const label = p ? `Network Hashrate (${p}H/s)` : 'Network Hashrate'
+          const label = p ? `Network Hashrate (${p}H/s)` : 'Network Hashrate (H/s)'
           assign(gOptions, mapDygraphOptions(d, [xlabel, label], false, label, true, false))
         }
         gOptions.axes.y = { valueRange: [null, null] }
