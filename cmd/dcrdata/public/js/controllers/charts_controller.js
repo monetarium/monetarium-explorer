@@ -110,7 +110,7 @@ function withBigUnits(v, units) {
 
 function unitPrefix(value) {
   if (value <= 0) return ''
-  const i = Math.min(Math.floor(Math.log10(value) / 3), 8)
+  const i = Math.max(0, Math.min(Math.floor(Math.log10(value) / 3), 8))
   return ['', 'k', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y'][i]
 }
 
