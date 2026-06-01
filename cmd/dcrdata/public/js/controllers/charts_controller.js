@@ -465,8 +465,7 @@ export default class extends Controller {
       y2label: null,
       stepPlot: this.settings.mode === 'stepped',
       axes: {},
-      series: null,
-      inflation: null
+      series: null
     }
     rawPoolValue = []
     rawCoinSupply = []
