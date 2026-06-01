@@ -761,6 +761,11 @@ export default class extends Controller {
             false
           )
         )
+        {
+          const vals = data.duration.slice().sort((a, b) => a - b)
+          const maxY = vals[Math.floor(vals.length * 0.99)] || vals[vals.length - 1]
+          gOptions.axes.y = { valueRange: [0, maxY] }
+        }
         break
 
       case 'chainwork': // Total chainwork over time
