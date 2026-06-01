@@ -4,16 +4,9 @@
 {{template "html-head" headData .CommonPageData "Monetarium Charts"}}
     {{template "navbar" . }}
 
-    <div data-controller="charts"
-         data-charts-tps="{{.TargetPoolSize}}"
-         data-charts-svh="{{.ChainParams.StakeValidationHeight}}"
-         data-charts-pos="{{.ChainParams.StakeRewardProportion}}"
-         data-charts-premine="{{.Premine}}"
-         data-charts-bs="{{.ChainParams.BaseSubsidy}}"
-         data-charts-sri="{{.ChainParams.SubsidyReductionInterval}}"
-         data-charts-mul-subsidy="{{.ChainParams.MulSubsidy}}"
-         data-charts-div-subsidy="{{.ChainParams.DivSubsidy}}"
-         data-charts-window-size="{{.ChainParams.StakeDiffWindowSize}}"
+     <div data-controller="charts"
+          data-charts-tps="{{.TargetPoolSize}}"
+          data-charts-window-size="{{.ChainParams.StakeDiffWindowSize}}"
          data-charts-block-time="{{.ChainParams.TargetTimePerBlock.Seconds}}">
 
         <div class="container main">
