@@ -3420,9 +3420,6 @@ func retrieveChartBlocks(ctx context.Context, db *sql.DB, charts *cache.ChartDat
 func appendChartBlocks(charts *cache.ChartData, rows *sql.Rows) error {
 	defer closeRows(rows)
 
-	// In order to store chainwork values as uint64, they are represented
-	// as exahash (10^18) for work, and terahash/s (10^12) for hashrate.
-	bigExa := big.NewInt(int64(1e18))
 	badRows := 0
 	// badRow is used to log chainwork errors without returning an error from
 	// retrieveChartBlocks.
@@ -3443,21 +3440,13 @@ func appendChartBlocks(charts *cache.ChartData, rows *sql.Rows) error {
 			return err
 		}
 
-		// bigwork := new(big.Int).SetBytes(work)
 		bigwork, ok := new(big.Int).SetString(workhex, 16)
 		if !ok {
 			badRow()
 			continue
 		}
-		bigwork.Div(bigwork, bigExa)
-		if !bigwork.IsUint64() {
-			badRow()
-			// Something is wrong, but pretend that no work was done to keep the
-			// datasets sized properly.
-			bigwork = big.NewInt(int64(blocks.Chainwork[len(blocks.Chainwork)-1]))
-		}
 		blocks.Height = append(blocks.Height, height)
-		blocks.Chainwork = append(blocks.Chainwork, bigwork.Uint64())
+		blocks.Chainwork = append(blocks.Chainwork, bigwork)
 		blocks.TxCount = append(blocks.TxCount, count)
 		blocks.Time = append(blocks.Time, uint64(timeDef.T.Unix()))
 		blocks.BlockSize = append(blocks.BlockSize, size)
