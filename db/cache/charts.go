@@ -145,7 +145,7 @@ const (
 // cacheVersion helps detect when the cache data stored has changed its
 // structure or content. A change on the cache version results to recomputing
 // all the charts data a fresh thereby making the cache to hold the latest changes.
-var cacheVersion = semver.NewSemver(6, 1, 1)
+var cacheVersion = semver.NewSemver(6, 2, 0)
 
 // versionedCacheData defines the cache data contents to be written into a .gob file.
 type versionedCacheData struct {
@@ -227,6 +227,33 @@ func newChartFloats(size int) ChartFloats {
 	return make([]float64, 0, size)
 }
 
+// ChartBigInts is a slice of big ints. It satisfies the lengther interface.
+type ChartBigInts []*big.Int
+
+// Length returns the length of data. Satisfies the lengther interface.
+func (data ChartBigInts) Length() int {
+	return len(data)
+}
+
+// Truncate makes a subset of the underlying dataset. It satisfies the lengther
+// interface.
+func (data ChartBigInts) Truncate(l int) lengther {
+	return data[:l]
+}
+
+// If the data is longer than max, return a subset of length max.
+func (data ChartBigInts) snip(max int) ChartBigInts {
+	if len(data) < max {
+		max = len(data)
+	}
+	return data[:max]
+}
+
+// A constructor for a sized ChartBigInts.
+func newChartBigInts(size int) ChartBigInts {
+	return make(ChartBigInts, 0, size)
+}
+
 // ChartUints is a slice of uints. It satisfies the lengther interface, and
 // provides methods for taking averages or sums of segments.
 type ChartUints []uint64
@@ -292,7 +319,7 @@ type zoomSet struct {
 	BlockSize    ChartUints
 	TxCount      ChartUints
 	NewAtoms     ChartUints
-	Chainwork    ChartUints
+	Chainwork    ChartBigInts
 	Fees         ChartUints
 	TotalMixed   ChartUints
 	AnonymitySet ChartUints
@@ -336,7 +363,7 @@ func newBlockSet(size int) *zoomSet {
 		BlockSize:    newChartUints(size),
 		TxCount:      newChartUints(size),
 		NewAtoms:     newChartUints(size),
-		Chainwork:    newChartUints(size),
+		Chainwork:    newChartBigInts(size),
 		Fees:         newChartUints(size),
 		TotalMixed:   newChartUints(size),
 		AnonymitySet: newChartUints(size),
@@ -397,7 +424,7 @@ type ChartGobject struct {
 	BlockSize    ChartUints
 	TxCount      ChartUints
 	NewAtoms     ChartUints
-	Chainwork    ChartUints
+	Chainwork    ChartBigInts
 	Fees         ChartUints
 	WindowTime   ChartUints
 	PowDiff      ChartFloats
@@ -1243,32 +1270,43 @@ func blockchainSizeChart(charts *ChartData, bin binLevel, axis axisType) ([]byte
 	return nil, InvalidBinErr
 }
 
+func bigIntsToFloats(data ChartBigInts) ChartFloats {
+	out := make(ChartFloats, len(data))
+	for i, v := range data {
+		f, _ := new(big.Float).SetInt(v).Float64()
+		out[i] = f
+	}
+	return out
+}
+
 func chainWorkChart(charts *ChartData, bin binLevel, axis axisType) ([]byte, error) {
 	seed := binAxisSeed(bin, axis)
 	switch bin {
 	case BlockBin:
+		work := bigIntsToFloats(charts.Blocks.Chainwork)
 		switch axis {
 		case HeightAxis:
 			return encode(lengtherMap{
-				workKey: charts.Blocks.Chainwork,
+				workKey: work,
 			}, seed)
 		default:
 			return encode(lengtherMap{
 				timeKey: charts.Blocks.Time,
-				workKey: charts.Blocks.Chainwork,
+				workKey: work,
 			}, seed)
 		}
 	case DayBin:
+		work := bigIntsToFloats(charts.Days.Chainwork)
 		switch axis {
 		case HeightAxis:
 			return encode(lengtherMap{
 				heightKey: charts.Days.Height,
-				workKey:   charts.Days.Chainwork,
+				workKey:   work,
 			}, seed)
 		default:
 			return encode(lengtherMap{
 				timeKey: charts.Days.Time,
-				workKey: charts.Days.Chainwork,
+				workKey: work,
 			}, seed)
 		}
 	}
@@ -1356,14 +1394,14 @@ func durationBTWChart(charts *ChartData, bin binLevel, axis axisType) ([]byte, e
 // is HashrateAvgLength shorter than the provided chainwork. A time slice is
 // required as well, and a truncated time slice with the same length as the
 // hashrate slice is returned.
-func hashrate(time, chainwork ChartUints) (ChartUints, ChartUints) {
+func hashrate(time ChartUints, chainwork ChartBigInts) (ChartUints, ChartFloats) {
 	hrLen := len(chainwork) - HashrateAvgLength
 	if hrLen <= 0 {
-		return newChartUints(0), newChartUints(0)
+		return newChartUints(0), newChartFloats(0)
 	}
 	t := make(ChartUints, 0, hrLen)
-	y := make(ChartUints, 0, hrLen)
-	var rotator [HashrateAvgLength]uint64
+	y := make(ChartFloats, 0, hrLen)
+	var rotator [HashrateAvgLength]*big.Int
 	for i, work := range chainwork {
 		idx := i % HashrateAvgLength
 		rotator[idx] = work
@@ -1372,8 +1410,13 @@ func hashrate(time, chainwork ChartUints) (ChartUints, ChartUints) {
 			lastTime := time[i-HashrateAvgLength]
 			thisTime := time[i]
 			t = append(t, thisTime)
-			// 1e6: exahash -> terahash/s
-			y = append(y, (work-lastWork)*1e6/(thisTime-lastTime))
+			workDiff := new(big.Int).Sub(work, lastWork)
+			rate := new(big.Float).Quo(
+				new(big.Float).SetInt(workDiff),
+				new(big.Float).SetUint64(thisTime-lastTime),
+			)
+			f, _ := rate.Float64()
+			y = append(y, f)
 		}
 	}
 	return t, y
@@ -1383,12 +1426,12 @@ func hashrate(time, chainwork ChartUints) (ChartUints, ChartUints) {
 // Since hashrates are based on a difference, the returned arrays will be 1
 // element fewer than the number of days. A truncated time slice with the same
 // length as the hashrate slice is returned.
-func dailyHashrate(time, chainwork ChartUints) (ChartUints, ChartUints) {
+func dailyHashrate(time ChartUints, chainwork ChartBigInts) (ChartUints, ChartFloats) {
 	if len(time) == 0 || len(chainwork) == 0 {
-		return ChartUints{}, ChartUints{}
+		return ChartUints{}, ChartFloats{}
 	}
-	times := make([]uint64, 0, len(time)-1)
-	rates := make([]uint64, 0, len(time)-1)
+	times := make(ChartUints, 0, len(time)-1)
+	rates := make(ChartFloats, 0, len(time)-1)
 	var dupes int
 	for i, t := range time[1:] {
 		tDiff := int64(t - time[i])
@@ -1396,8 +1439,13 @@ func dailyHashrate(time, chainwork ChartUints) (ChartUints, ChartUints) {
 			tDiff = aDay
 			dupes++
 		}
-		workDiff := chainwork[i+1] - chainwork[i]
-		rates = append(rates, (workDiff)*1e6/uint64(tDiff))
+		workDiff := new(big.Int).Sub(chainwork[i+1], chainwork[i])
+		rate := new(big.Float).Quo(
+			new(big.Float).SetInt(workDiff),
+			new(big.Float).SetUint64(uint64(tDiff)),
+		)
+		f, _ := rate.Float64()
+		rates = append(rates, f)
 		times = append(times, t)
 	}
 	if dupes > 0 {

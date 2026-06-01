@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -56,7 +57,7 @@ func TestChartsCache(t *testing.T) {
 		charts.Blocks.BlockSize = append(charts.Blocks.BlockSize, v)
 		charts.Blocks.TxCount = append(charts.Blocks.TxCount, v)
 		charts.Blocks.NewAtoms = append(charts.Blocks.NewAtoms, v)
-		charts.Blocks.Chainwork = append(charts.Blocks.Chainwork, v)
+		charts.Blocks.Chainwork = append(charts.Blocks.Chainwork, new(big.Int).SetUint64(v))
 		charts.Blocks.Fees = append(charts.Blocks.Fees, v)
 		charts.Blocks.TotalMixed = append(charts.Blocks.TotalMixed, v)
 		charts.Blocks.AnonymitySet = append(charts.Blocks.AnonymitySet, v)
@@ -68,9 +69,22 @@ func TestChartsCache(t *testing.T) {
 	}
 
 	seedUints := ChartUints{1, 2, 3, 4, 5, 6}
+	seedBigInts := ChartBigInts{
+		new(big.Int).SetUint64(1),
+		new(big.Int).SetUint64(2),
+		new(big.Int).SetUint64(3),
+		new(big.Int).SetUint64(4),
+		new(big.Int).SetUint64(5),
+		new(big.Int).SetUint64(6),
+	}
 	seedTimes := ChartUints{1, 2 + aDay, 3 + aDay, 4 + 2*aDay, 5 + 2*aDay, 6 + 3*aDay}
 	uintDaysAvg := ChartUints{1, 2, 4}
 	uintDaysSum := ChartUints{1, 5, 9}
+	dayChainwork := ChartBigInts{
+		new(big.Int).SetUint64(2),
+		new(big.Int).SetUint64(4),
+		new(big.Int).SetUint64(6),
+	}
 
 	resetCharts := func() {
 		charts = NewChartData(ctx, 0, chaincfg.MainNetParams())
@@ -138,7 +152,7 @@ func TestChartsCache(t *testing.T) {
 		comp("BlockSize before read", charts.Blocks.BlockSize, seedUints, false)
 		comp("TxCount before read", charts.Blocks.TxCount, seedUints, false)
 		comp("NewAtoms before read", charts.Blocks.NewAtoms, seedUints, false)
-		comp("Chainwork before read", charts.Blocks.Chainwork, seedUints, false)
+		comp("Chainwork before read", charts.Blocks.Chainwork, seedBigInts, false)
 		comp("Fees before read", charts.Blocks.Fees, seedUints, false)
 		comp("TotalMixed before read", charts.Blocks.TotalMixed, seedUints, false)
 		comp("AnonymitySet before read", charts.Blocks.AnonymitySet, seedUints, false)
@@ -155,7 +169,7 @@ func TestChartsCache(t *testing.T) {
 		comp("BlockSize after read", charts.Blocks.BlockSize, seedUints, true)
 		comp("TxCount after read", charts.Blocks.TxCount, seedUints, true)
 		comp("NewAtoms after read", charts.Blocks.NewAtoms, seedUints, true)
-		comp("Chainwork after read", charts.Blocks.Chainwork, seedUints, true)
+		comp("Chainwork after read", charts.Blocks.Chainwork, seedBigInts, true)
 		comp("Fees after read", charts.Blocks.Fees, seedUints, true)
 		comp("TotalMissed after read", charts.Blocks.TotalMixed, seedUints, true)
 		comp("AnonymitySet after read", charts.Blocks.AnonymitySet, seedUints, true)
@@ -168,7 +182,7 @@ func TestChartsCache(t *testing.T) {
 		comp("TxCount after Lengthen", charts.Days.TxCount, uintDaysSum, true)
 		comp("NewAtoms after Lengthen", charts.Days.NewAtoms, uintDaysSum, true)
 		// Chainwork will just be the last entry from each day
-		comp("Chainwork after Lengthen", charts.Days.Chainwork, ChartUints{2, 4, 6}, true)
+		comp("Chainwork after Lengthen", charts.Days.Chainwork, dayChainwork, true)
 		comp("Fees after Lengthen", charts.Days.Fees, uintDaysSum, true)
 		comp("TotalMixed after Lengthen", charts.Days.TotalMixed, uintDaysSum, true)
 		comp("AnonymitySet after Lengthen", charts.Days.AnonymitySet, uintDaysAvg, true)
@@ -265,6 +279,9 @@ func TestChartReorg(t *testing.T) {
 	defer shutdown()
 	newFloats := func() ChartFloats { return ChartFloats{1, 2, 3} }
 	newUints := func() ChartUints { return ChartUints{1, 2, 3} }
+	newBigInts := func() ChartBigInts {
+		return ChartBigInts{big.NewInt(1), big.NewInt(2), big.NewInt(3)}
+	}
 	charts := &ChartData{
 		ctx: ctx,
 	}
@@ -286,7 +303,7 @@ func TestChartReorg(t *testing.T) {
 			BlockSize: newUints(),
 			TxCount:   newUints(),
 			NewAtoms:  newUints(),
-			Chainwork: newUints(),
+			Chainwork: newBigInts(),
 			Fees:      newUints(),
 		}
 		charts.Blocks = &zoomSet{
@@ -297,7 +314,7 @@ func TestChartReorg(t *testing.T) {
 			BlockSize:  newUints(),
 			TxCount:    newUints(),
 			NewAtoms:   newUints(),
-			Chainwork:  newUints(),
+			Chainwork:  newBigInts(),
 			Fees:       newUints(),
 			TotalMixed: newUints(),
 		}
