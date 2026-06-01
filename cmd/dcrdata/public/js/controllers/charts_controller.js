@@ -25,8 +25,8 @@ const modeScales = ['ticket-price']
 const multiYAxisChart = ['ticket-price', 'coin-supply', 'privacy-participation']
 // index 0 represents y1 and 1 represents y2 axes.
 const yValueRanges = { 'ticket-price': [1] }
-const chainworkUnits = ['exahash', 'zettahash', 'yottahash']
-const hashrateUnits = ['Th/s', 'Ph/s', 'Eh/s']
+const chainworkUnits = ['H', 'kH', 'MH', 'GH', 'TH', 'PH', 'EH', 'ZH', 'YH']
+const hashrateUnits = ['H/s', 'kH/s', 'MH/s', 'GH/s', 'TH/s', 'PH/s', 'EH/s']
 let ticketPoolSizeTarget, premine, stakeValHeight, stakeShare
 let baseSubsidy, subsidyInterval, subsidyExponent, windowSize, avgBlockTime
 let rawCoinSupply, rawPoolValue
@@ -104,8 +104,14 @@ function axesToRestoreYRange(chartName, origYRange, newYRange) {
 }
 
 function withBigUnits(v, units) {
-  const i = v === 0 ? 0 : Math.floor(Math.log10(v) / 3)
+  const i = v === 0 ? 0 : Math.max(0, Math.min(Math.floor(Math.log10(v) / 3), units.length - 1))
   return `${(v / Math.pow(1000, i)).toFixed(3)} ${units[i]}`
+}
+
+function unitPrefix(value) {
+  if (value <= 0) return ''
+  const i = Math.max(0, Math.min(Math.floor(Math.log10(value) / 3), 8))
+  return ['', 'k', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y'][i]
 }
 
 function blockReward(height) {
@@ -492,7 +498,7 @@ export default class extends Controller {
     if (this.settings.axis) this.setAxis(this.settings.axis) // set first
     if (this.settings.scale === 'log') this.setScale(this.settings.scale)
     if (this.settings.zoom) this.setZoom(this.settings.zoom)
-    this.setBin(this.settings.bin ? this.settings.bin : 'day')
+    this.setBin(this.settings.bin ? this.settings.bin : 'block')
     this.setMode(this.settings.mode ? this.settings.mode : 'smooth')
 
     const ogLegendGenerator = Dygraph.Plugins.Legend.generateLegendHTML
@@ -759,34 +765,26 @@ export default class extends Controller {
 
       case 'chainwork': // Total chainwork over time
         d = zip2D(data, data.work)
-        assign(
-          gOptions,
-          mapDygraphOptions(
-            d,
-            [xlabel, 'Cumulative Chainwork (exahash)'],
-            false,
-            'Cumulative Chainwork (exahash)',
-            true,
-            false
-          )
-        )
+        {
+          const max = data.work.length ? data.work.reduce((a, b) => Math.max(a, b), 0) : 0
+          const p = unitPrefix(max)
+          const label = p ? `Cumulative Chainwork (${p}H)` : 'Cumulative Chainwork (H)'
+          assign(gOptions, mapDygraphOptions(d, [xlabel, label], false, label, true, false))
+        }
+        gOptions.axes.y = { valueRange: [null, null] }
         yFormatter = customYFormatter((y) => withBigUnits(y, chainworkUnits))
         break
 
-      case 'hashrate': // Total chainwork over time
-        d = zip2D(data, data.rate, 1e-3, data.offset)
-        assign(
-          gOptions,
-          mapDygraphOptions(
-            d,
-            [xlabel, 'Network Hashrate (petahash/s)'],
-            false,
-            'Network Hashrate (petahash/s)',
-            true,
-            false
-          )
-        )
-        yFormatter = customYFormatter((y) => withBigUnits(y * 1e3, hashrateUnits))
+      case 'hashrate': // Network hashrate over time
+        d = zip2D(data, data.rate, 1, data.offset)
+        {
+          const max = data.rate.length ? data.rate.reduce((a, b) => Math.max(a, b), 0) : 0
+          const p = unitPrefix(max)
+          const label = p ? `Network Hashrate (${p}H/s)` : 'Network Hashrate (H/s)'
+          assign(gOptions, mapDygraphOptions(d, [xlabel, label], false, label, true, false))
+        }
+        gOptions.axes.y = { valueRange: [null, null] }
+        yFormatter = customYFormatter((y) => withBigUnits(y, hashrateUnits))
         break
 
       case 'missed-votes':
