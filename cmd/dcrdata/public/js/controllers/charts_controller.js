@@ -104,7 +104,7 @@ function axesToRestoreYRange(chartName, origYRange, newYRange) {
 }
 
 function withBigUnits(v, units) {
-  const i = v === 0 ? 0 : Math.floor(Math.log10(v) / 3)
+  const i = v === 0 ? 0 : Math.min(Math.floor(Math.log10(v) / 3), units.length - 1)
   return `${(v / Math.pow(1000, i)).toFixed(3)} ${units[i]}`
 }
 
