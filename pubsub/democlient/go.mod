@@ -8,8 +8,8 @@ require (
 	github.com/decred/slog v1.2.0
 	github.com/jessevdk/go-flags v1.5.0
 	github.com/monetarium/monetarium-explorer v0.0.0
-	github.com/monetarium/monetarium-node/chaincfg v1.3.6
-	github.com/monetarium/monetarium-node/txscript v1.3.6
+	github.com/monetarium/monetarium-node/chaincfg v1.3.10
+	github.com/monetarium/monetarium-node/txscript v1.3.10
 	gopkg.in/AlecAivazis/survey.v1 v1.8.7
 )
 
@@ -32,21 +32,21 @@ require (
 	github.com/mattn/go-colorable v0.1.8 // indirect
 	github.com/mattn/go-isatty v0.0.12 // indirect
 	github.com/mgutz/ansi v0.0.0-20170206155736-9520e82c474b // indirect
-	github.com/monetarium/monetarium-node/blockchain/stake v1.3.6 // indirect
-	github.com/monetarium/monetarium-node/blockchain/standalone v1.3.6 // indirect
-	github.com/monetarium/monetarium-node/chaincfg/chainhash v1.3.6 // indirect
-	github.com/monetarium/monetarium-node/cointype v1.3.6 // indirect
-	github.com/monetarium/monetarium-node/crypto/blake256 v1.3.6 // indirect
-	github.com/monetarium/monetarium-node/crypto/rand v1.3.6 // indirect
-	github.com/monetarium/monetarium-node/crypto/ripemd160 v1.3.6 // indirect
-	github.com/monetarium/monetarium-node/database v1.3.6 // indirect
-	github.com/monetarium/monetarium-node/dcrec v1.3.6 // indirect
-	github.com/monetarium/monetarium-node/dcrec/edwards v1.3.6 // indirect
-	github.com/monetarium/monetarium-node/dcrec/secp256k1 v1.3.6 // indirect
-	github.com/monetarium/monetarium-node/dcrjson v1.3.6 // indirect
-	github.com/monetarium/monetarium-node/dcrutil v1.3.6 // indirect
-	github.com/monetarium/monetarium-node/rpc/jsonrpc/types v1.3.6 // indirect
-	github.com/monetarium/monetarium-node/wire v1.3.6 // indirect
+	github.com/monetarium/monetarium-node/blockchain/stake v1.3.10 // indirect
+	github.com/monetarium/monetarium-node/blockchain/standalone v1.3.10 // indirect
+	github.com/monetarium/monetarium-node/chaincfg/chainhash v1.3.10 // indirect
+	github.com/monetarium/monetarium-node/cointype v1.3.10 // indirect
+	github.com/monetarium/monetarium-node/crypto/blake256 v1.3.10 // indirect
+	github.com/monetarium/monetarium-node/crypto/rand v1.3.10 // indirect
+	github.com/monetarium/monetarium-node/crypto/ripemd160 v1.3.10 // indirect
+	github.com/monetarium/monetarium-node/database v1.3.10 // indirect
+	github.com/monetarium/monetarium-node/dcrec v1.3.10 // indirect
+	github.com/monetarium/monetarium-node/dcrec/edwards v1.3.10 // indirect
+	github.com/monetarium/monetarium-node/dcrec/secp256k1 v1.3.10 // indirect
+	github.com/monetarium/monetarium-node/dcrjson v1.3.10 // indirect
+	github.com/monetarium/monetarium-node/dcrutil v1.3.10 // indirect
+	github.com/monetarium/monetarium-node/rpc/jsonrpc/types v1.3.10 // indirect
+	github.com/monetarium/monetarium-node/wire v1.3.10 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/syndtr/goleveldb v1.0.1-0.20210819022825-2ae1ddf74ef7 // indirect
 	golang.org/x/crypto v0.33.0 // indirect
