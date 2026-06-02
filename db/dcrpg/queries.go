@@ -3466,6 +3466,14 @@ func appendChartBlocks(charts *cache.ChartData, rows *sql.Rows) error {
 			chainLen, len(blocks.Time), len(blocks.TxCount))
 	}
 
+	// Collapse an abnormally large genesis→block-1 gap so all time-axis charts
+	// begin at real network start. The alignment check above (len-1 == last
+	// height) means the accumulated series is contiguous from height 0, so
+	// blocks.Time[0] is genesis; blocks.Time is the shared slice persisted to
+	// the gob. Genesis-only and self-no-op, so it stays correct across
+	// incremental syncs and restarts (see NormalizeGenesisBlockTime).
+	cache.NormalizeGenesisBlockTime(blocks.Time)
+
 	return nil
 }
 

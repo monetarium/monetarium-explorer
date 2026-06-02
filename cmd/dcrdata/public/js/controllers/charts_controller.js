@@ -681,11 +681,12 @@ export default class extends Controller {
             false
           )
         )
-        {
-          const vals = data.duration.slice().sort((a, b) => a - b)
-          const maxY = vals[Math.floor(vals.length * 0.99)] || vals[vals.length - 1]
-          gOptions.axes.y = { valueRange: [0, maxY] }
-        }
+        // Anchor the Y-axis floor at 0 (durations are non-negative) but leave the
+        // top unbounded, so genuine large gaps still render at full height and
+        // zoomed-in views keep an honest baseline. The genesis pre-launch gap is
+        // corrected server-side (NormalizeGenesisBlockTime), so the previous
+        // 99th-percentile outlier clamp is no longer needed.
+        gOptions.axes.y = { valueRange: [0, null] }
         break
 
       case 'chainwork': // Total chainwork over time
