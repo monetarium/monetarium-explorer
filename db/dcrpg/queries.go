@@ -3457,6 +3457,8 @@ func appendChartBlocks(charts *cache.ChartData, rows *sql.Rows) error {
 	if badRows > 0 {
 		log.Errorf("%d rows have invalid chainwork values.", badRows)
 	}
+	// Genesis gap normalization: no-op after first rebuild, since Time[0] is
+	// already set 1s before Time[1] and the threshold (3600s) is not exceeded.
 	if len(blocks.Time) >= 2 && blocks.Time[1] > blocks.Time[0]+3600 {
 		blocks.Time[0] = blocks.Time[1] - 1
 	}
