@@ -1,9 +1,11 @@
 #!/usr/bin/env node
 
 import fs from 'fs';
+import path from 'path';
 import readline from 'readline';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
+import { fileURLToPath } from 'url';
 
 const execFileAsync = promisify(execFile);
 const setTimeoutPromise = promisify(setTimeout);
@@ -11,24 +13,62 @@ const setTimeoutPromise = promisify(setTimeout);
 // =============================
 // Config
 // =============================
-const REPO = process.env.REPO || 'monetarium/monetarium-explorer';
-const MILESTONE = process.env.MILESTONE || 'v1';
-
 const args = process.argv.slice(2);
 
-const fileIndex = args.indexOf('--file');
-const fileArg = fileIndex !== -1 ? args[fileIndex + 1] : null;
-if (fileIndex !== -1 && (!fileArg || fileArg.startsWith('--'))) {
-  throw new Error('--file requires a value');
-}
-const TASKS_FILE = fileArg || 'tasks.json';
+// Read a `--name value` flag; throws if the flag is present without a value.
+const flagValue = (name) => {
+  const i = args.indexOf(name);
+  if (i === -1) return null;
+  const value = args[i + 1];
+  if (!value || value.startsWith('--')) {
+    throw new Error(`${name} requires a value`);
+  }
+  return value;
+};
+
+// Committed team defaults live in config.json next to this script (resolved by
+// script location, not cwd). Precedence per setting:
+//   CLI flag (--repo/--milestone) > env var (REPO/MILESTONE) > config.json > built-in
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const loadConfig = () => {
+  const configPath = path.join(__dirname, 'config.json');
+  if (!fs.existsSync(configPath)) return {};
+  try {
+    return JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+  } catch (e) {
+    // Runs at module load, before the error handlers/logger below are wired up,
+    // so format the message here rather than throwing a raw stack trace.
+    console.error(`❌ Fatal Error: failed to parse ${configPath}: ${e.message}`);
+    process.exit(1);
+  }
+};
+const config = loadConfig();
+
+// All transient files (tasks.json, resume state, log, archive) live in one
+// gitignored dir next to the script — a single .gitignore entry, and their
+// location stays deterministic regardless of the cwd you run from.
+const runtimeDir = path.join(__dirname, '.local');
+fs.mkdirSync(runtimeDir, { recursive: true });
+
+const REPO =
+  flagValue('--repo') ||
+  process.env.REPO ||
+  config.repo ||
+  'monetarium/monetarium-explorer';
+const MILESTONE =
+  flagValue('--milestone') ||
+  process.env.MILESTONE ||
+  config.milestone ||
+  'v1';
+
+const TASKS_FILE = flagValue('--file') || path.join(runtimeDir, 'tasks.json');
 
 const DRY_RUN = args.includes('--dry-run');
 const RESUME = args.includes('--resume');
 const AUTO_CONFIRM = args.includes('-y') || args.includes('--yes');
 
-const STATE_FILE = '.create_issues_state.json';
-const LOG_FILE = 'create_issues.log';
+const STATE_FILE = path.join(runtimeDir, '.create_issues_state.json');
+const LOG_FILE = path.join(runtimeDir, 'create_issues.log');
 
 // =============================
 // Logging
@@ -148,6 +188,23 @@ const saveState = (state) => {
   fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
 };
 
+// After a successful live run, move the consumed tasks file into archive/ so the
+// default slot is empty for the next batch (file present = a draft is pending).
+// Best-effort: a failure here must not fail an otherwise-successful run.
+const archiveTasksFile = () => {
+  if (!fs.existsSync(TASKS_FILE)) return;
+  try {
+    const archiveDir = path.join(runtimeDir, 'archive');
+    fs.mkdirSync(archiveDir, { recursive: true });
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const dest = path.join(archiveDir, `tasks-${MILESTONE}-${stamp}.json`);
+    fs.renameSync(TASKS_FILE, dest);
+    log(`  Archived ${TASKS_FILE} → ${dest}`);
+  } catch (e) {
+    log(`  ⚠️ Could not archive ${TASKS_FILE}: ${e.message}`);
+  }
+};
+
 // =============================
 // GitHub Service (OOP)
 // =============================
@@ -201,7 +258,7 @@ class GitHubService {
       MILESTONE,
     ];
 
-    (task.labels || ['enhancement']).forEach((l) => {
+    (task.labels || []).forEach((l) => {
       commandArgs.push('--label', l);
     });
 
@@ -346,6 +403,7 @@ const confirm = () => {
       log('🧪 DRY RUN MODE — No changes will be made to GitHub\n');
     }
 
+    log(`Repo: ${REPO}  |  Milestone: ${MILESTONE}`);
     log(`--- Loading ${TASKS_FILE} ---`);
     const tasks = loadTasks();
     validateTasks(tasks);
@@ -458,9 +516,12 @@ ${DRY_RUN ? '  🧪 DRY RUN MODE — No changes will be made to GitHub\n' : ''} 
 ════════════════════════════════════════════════
 `);
 
-    if (errors === 0 && !DRY_RUN && fs.existsSync(STATE_FILE)) {
-      fs.unlinkSync(STATE_FILE);
-      log('  State file cleaned up.');
+    if (errors === 0 && !DRY_RUN) {
+      if (fs.existsSync(STATE_FILE)) {
+        fs.unlinkSync(STATE_FILE);
+        log('  State file cleaned up.');
+      }
+      archiveTasksFile();
     } else if (errors > 0) {
       log(
         `\n⚠️ Finished with ${errors} error(s). State file preserved so you can safely retry with --resume argument.`,
