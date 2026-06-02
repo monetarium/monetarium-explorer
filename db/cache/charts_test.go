@@ -462,3 +462,81 @@ func TestAggregateSKASupply_DailyBins(t *testing.T) {
 		t.Fatalf("expected 3 heights, got %d", len(dayHeights))
 	}
 }
+
+func TestNormalizeGenesisBlockTime(t *testing.T) {
+	const block1 = 1_700_000_000 // an arbitrary block-1 unix time
+
+	tests := []struct {
+		name        string
+		in          ChartUints
+		wantChanged bool
+		want        ChartUints
+	}{
+		{
+			// Monetarium testnet: block 1 mined ~205 days after genesis.
+			name:        "long pre-launch gap is collapsed",
+			in:          ChartUints{block1 - 205*86400, block1, block1 + 300},
+			wantChanged: true,
+			want:        ChartUints{block1 - 1, block1, block1 + 300},
+		},
+		{
+			name:        "normal inter-block gap is untouched",
+			in:          ChartUints{block1, block1 + 300, block1 + 600},
+			wantChanged: false,
+			want:        ChartUints{block1, block1 + 300, block1 + 600},
+		},
+		{
+			name:        "gap exactly at threshold is untouched",
+			in:          ChartUints{block1, block1 + genesisGapThreshold},
+			wantChanged: false,
+			want:        ChartUints{block1, block1 + genesisGapThreshold},
+		},
+		{
+			name:        "gap one second past threshold is collapsed",
+			in:          ChartUints{block1, block1 + genesisGapThreshold + 1},
+			wantChanged: true,
+			want:        ChartUints{block1 + genesisGapThreshold, block1 + genesisGapThreshold + 1},
+		},
+		{
+			name:        "single genesis block does not index Time[1]",
+			in:          ChartUints{block1},
+			wantChanged: false,
+			want:        ChartUints{block1},
+		},
+		{
+			name:        "empty series is a no-op",
+			in:          ChartUints{},
+			wantChanged: false,
+			want:        ChartUints{},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := NormalizeGenesisBlockTime(tc.in)
+			if got != tc.wantChanged {
+				t.Errorf("NormalizeGenesisBlockTime returned %v, want %v", got, tc.wantChanged)
+			}
+			if !reflect.DeepEqual(tc.in, tc.want) {
+				t.Errorf("after normalize: got %v, want %v", tc.in, tc.want)
+			}
+		})
+	}
+}
+
+func TestNormalizeGenesisBlockTime_Idempotent(t *testing.T) {
+	const block1 = 1_700_000_000
+	times := ChartUints{block1 - 205*86400, block1, block1 + 300}
+
+	if !NormalizeGenesisBlockTime(times) {
+		t.Fatal("first call should report a change")
+	}
+	first := append(ChartUints(nil), times...)
+
+	if NormalizeGenesisBlockTime(times) {
+		t.Error("second call should be a no-op (gap already collapsed)")
+	}
+	if !reflect.DeepEqual(times, first) {
+		t.Errorf("second call mutated data: got %v, want %v", times, first)
+	}
+}

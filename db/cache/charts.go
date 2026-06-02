@@ -145,7 +145,7 @@ const (
 // cacheVersion helps detect when the cache data stored has changed its
 // structure or content. A change on the cache version results to recomputing
 // all the charts data a fresh thereby making the cache to hold the latest changes.
-var cacheVersion = semver.NewSemver(6, 2, 0)
+var cacheVersion = semver.NewSemver(6, 3, 0)
 
 // versionedCacheData defines the cache data contents to be written into a .gob file.
 type versionedCacheData struct {
@@ -1153,6 +1153,39 @@ func accumulate(data ChartUints) ChartUints {
 		d = append(d, accumulator)
 	}
 	return d
+}
+
+// genesisGapThreshold is the inter-block interval (seconds) above which the
+// genesis→block-1 gap is treated as a pre-launch dead period rather than a
+// real mining interval. On a healthy network block 0→1 is on the order of the
+// target block time (minutes), so the threshold is never crossed; only a long
+// pre-launch gap (e.g. Monetarium testnet's ~205 days) exceeds one hour.
+const genesisGapThreshold = 3600
+
+// NormalizeGenesisBlockTime collapses an abnormally large genesis→block-1 gap
+// in a block-time series so that time-axis charts begin at real network start
+// rather than the genesis date, and the duration-between-blocks chart does not
+// show the entire pre-launch gap as its first interval.
+//
+// It mutates times[0] in place, moving it to just before block 1, and returns
+// whether a correction was applied. It is genesis-only and self-no-op: after a
+// correction the gap is ~1s (< genesisGapThreshold), so re-running on
+// incremental syncs and after gob restarts changes nothing. A chain with only
+// the genesis block (len < 2) is left untouched so times[1] is never indexed.
+//
+// This is a derived-cache correction only; it must never feed back into the
+// canonical block timestamp in Postgres or the block-details/API responses.
+func NormalizeGenesisBlockTime(times ChartUints) bool {
+	if len(times) < 2 {
+		return false
+	}
+	if times[1]-times[0] <= genesisGapThreshold {
+		return false
+	}
+	// Keep timestamps strictly increasing (gap of 1s) so the height alignment
+	// and day-bin start both fold onto block 1's day.
+	times[0] = times[1] - 1
+	return true
 }
 
 // Translate the times slice to a slice of differences. The original dataset
