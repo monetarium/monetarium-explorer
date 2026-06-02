@@ -3457,6 +3457,9 @@ func appendChartBlocks(charts *cache.ChartData, rows *sql.Rows) error {
 	if badRows > 0 {
 		log.Errorf("%d rows have invalid chainwork values.", badRows)
 	}
+	if len(blocks.Time) >= 2 && blocks.Time[1] > blocks.Time[0]+3600 {
+		blocks.Time[0] = blocks.Time[1] - 1
+	}
 	chainLen := len(blocks.Chainwork)
 	if rowCount > 0 && uint64(chainLen-1) != height {
 		return fmt.Errorf("appendChartBlocks: height misalignment. last height = %d. data length = %d", height, chainLen)
