@@ -204,16 +204,16 @@ Repo and milestone resolve, per setting, with this precedence:
 CLI flag (--repo / --milestone)  >  env var (REPO / MILESTONE)  >  config.json  >  built-in default
 ```
 
-The committed [`config.json`](config.json) holds the team's standing values:
+The committed [`config.json`](config.json) holds the team's standing values (the milestone is the current release — bump it per release):
 
 ```json
 {
   "repo": "monetarium/monetarium-explorer",
-  "milestone": "v1"
+  "milestone": "v2"
 }
 ```
 
-Change the milestone there once per release; everyone picks it up via git.
+Everyone picks up the change via git.
 
 ---
 
@@ -328,3 +328,4 @@ A `tasks.json` is a **transient input**, not a record (the source of truth is th
 - All transient files live in one gitignored dir, **`.github/scripts/generate-issues/.local/`** (`tasks.json`, the resume state, the log, and `archive/`) — a single `.gitignore` entry, nothing committed.
 - On a **successful live run**, the script removes the state file and **moves `tasks.json` into `.local/archive/`** (named `tasks-<milestone>-<timestamp>.json`). The default slot is then empty.
 - So **a `tasks.json` sitting in the slot means a draft is pending or was abandoned** — never a base to extend. Start each new batch from a fresh file; overwrite a leftover rather than appending to it.
+- Even `--dry-run` creates `.local/` and writes a log there: it makes **no GitHub API calls**, but is not entirely side-effect-free locally.
