@@ -1,19 +1,35 @@
 # Agendas — Mutation Impact / Blast Radius
 
-Primary scenario: **re-enabling** `/agendas` and `/agenda/{id}`. Secondary: changing agenda data
-structures.
+The pages are **live** (enabled in PR #395). Primary scenario now: **maintaining** `/agendas` /
+`/agenda/{id}` and changing agenda data structures without regressing them. The historical
+"re-enable" risks are kept below because they are the failure modes you can still hit when editing
+these pages.
 
-## Risk: Orphaned page (route re-enabled, nav not)
-- **Trigger:** restore the handlers at [main.go:780-785](../../../cmd/dcrdata/main.go#L780-L785)
-  but leave the navbar unchanged.
-- **Affected:** [extras.tmpl:79-87](../../../cmd/dcrdata/views/extras.tmpl#L79-L87) (no Agendas
-  `menu-item`).
-- **Failure mode:** silent. Page returns 200 but is reachable only by direct URL or via the
-  vote-tx link in [tx.tmpl:593](../../../cmd/dcrdata/views/tx.tmpl#L593).
-- **Fix:** add an "Agendas" menu item → `/agendas`.
+## Risk: Orphaned page / dead link (route ↔ nav drift)
+- **Status:** currently in sync — routes at
+  [main.go:780-781](../../../cmd/dcrdata/main.go#L780-L781) and the "Agendas" navbar item at
+  [extras.tmpl:84](../../../cmd/dcrdata/views/extras.tmpl#L84) (both added in PR #395).
+- **Trigger:** remove one without the other — drop the navbar item and the page is reachable only
+  by direct URL or the vote-tx link in [tx.tmpl:593](../../../cmd/dcrdata/views/tx.tmpl#L593); drop
+  the route and the navbar item becomes a dead 404/410 link.
+- **Failure mode:** silent (orphaned) or loud-on-click (dead link).
+- **Fix:** keep the route table and the navbar in sync.
+
+## Risk: Not-yet-started agenda nil summary (panic)
+- **Trigger:** visit `/agenda/{id}` for a deployment whose `StartTime` is still in the future, or
+  remove the nil-summary guard at
+  [explorerroutes.go:1998-2003](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L1998-L2003).
+- **Affected:** `ChainDB.AgendasVotesSummary` returns `(nil, nil)` for a future-`StartTime` agenda;
+  `AgendaPage` then dereferences `summary.Abstain/Yes/No` (choice override) and `summary.LockedIn`
+  (time-left).
+- **Failure mode:** hard — nil-pointer panic, surfaced as HTTP 500 via `middleware.Recoverer`.
+- **Fix / status:** PR #395 (`43a27ce2`) substitutes a zero-tally `&dbtypes.AgendaSummary{}` when
+  `summary == nil`; pinned by
+  [agendapage_test.go](../../../cmd/dcrdata/internal/explorer/agendapage_test.go) (`f6ea9703`).
+  **Do not remove the guard** — it is the only thing between a freshly-defined agenda and a 500.
 
 ## Risk: Empty historical vote charts
-- **Trigger:** re-enable `/agenda/{id}` on a DB that synced *after* an agenda's votes were cast,
+- **Trigger:** open `/agenda/{id}` on a DB that synced *after* an agenda's votes were cast,
   or for a vote version with no deployments (`SSGenVoteChoices` returns `[]`).
 - **Affected:** `agenda_votes` table; `AgendaVotes`
   ([pgblockchain.go:1588](../../../db/dcrpg/pgblockchain.go#L1588)); `/api/agenda/{id}`;
@@ -32,12 +48,12 @@ structures.
 - **Failure mode:** hard — explorer fails to start. **Pre-existing**, unchanged by re-enabling
   the page; if the explorer already runs on the target net, the tracker already initializes.
 - **Simnet:** `voteTracker == nil` → `AgendasPage` returns the "agendas disabled on simnet"
-  status page by design ([explorerroutes.go:2067-2071](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L2067-L2071)).
+  status page by design ([explorerroutes.go:2073-2077](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L2073-L2077)).
 
 ## Risk: Choice-ID / JSON-tag drift
 - **Trigger:** rename a vote choice ID or a `dbtypes.AgendaVoteChoices` JSON tag.
 - **Affected:** the lower-cased switch at
-  [explorerroutes.go:2003-2011](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L2003-L2011)
+  [explorerroutes.go:2009-2017](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L2009-L2017)
   (`"abstain"/"yes"/"no"`); `agenda_controller.js` keys (`d.yes/d.abstain/d.no/d.time/d.height`);
   meter `data-*` attrs in `agendas.tmpl`.
 - **Failure mode:** silent — counts mis-mapped or charts blank; no build/test error
@@ -53,11 +69,12 @@ structures.
 - **Failure mode:** silent for the UI (empty/zero); potentially behavioral for subsidy/blake3pow
   gating (separate concern, not touched by re-enabling).
 
-## Doc reconciliation
-- [wiki/specs/market-removal/spec.md](../../specs/market-removal/spec.md) and
-  [wiki/index.md:32](../../index.md) currently classify `/agendas` as "made unavailable (like
-  `/treasury`, `/proposals`)". Re-enabling contradicts that; update the note so the corpus does
-  not claim agendas is removed.
+## Doc reconciliation (done in this update)
+- [wiki/specs/market-removal/spec.md](../../specs/market-removal/spec.md),
+  [wiki/specs/parameters/spec.md](../../specs/parameters/spec.md), and
+  [core/pages.md](../../core/pages.md) previously classified `/agendas` as disabled / "made
+  unavailable". They were updated alongside PR #395 so the corpus no longer claims agendas is
+  removed; `/agendas` + `/agenda/{id}` now live in the **Active pages** table of `core/pages.md`.
 
 ## What is NOT at risk
 - **No multi-coin / precision blast radius.** Agendas carry no VAR/SKA amounts; re-enabling
@@ -70,4 +87,4 @@ See also:
 - /wiki/code-analysis/agendas/flow.full.md (depends-on: full trace)
 - /wiki/code-analysis/agendas/patterns.md (shares-pattern-with: dormant-feature stub)
 - /wiki/core/constraints.md (depends-on: C1/C3/C7 — explicitly N/A for agendas)
-- /wiki/specs/market-removal/spec.md (contradicts: agendas listed as removed)
+- /wiki/specs/market-removal/spec.md (reconciled: agendas no longer listed as disabled)

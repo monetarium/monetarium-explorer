@@ -29,7 +29,7 @@ _Requirements and guidelines for specific features and pages._
 - address-transactions: specs/address-transactions/spec.md — bottom section: Coin column, coin filter, sstxcommitment gate, multi-coin CSV schema, server↔XHR parity
 - parameters: specs/parameters/spec.md — `/parameters` page Monetarium adjustment: drop Treasury section + treasury-share row, keep Rule change as reference, show actual 50/50 PoW/PoS split, fix Decred address prefixes, add SKA coin parameters section
 - attack-cost: specs/attack-cost/spec.md — `/attack-cost` page Monetarium adjustment: VAR-only domain (no SKA), `DCR`→`VAR` labels, manual-only exchange rate (no auto price), keep formula but drop Decred citation, replace hardcoded Decred miner list with manual hashrate/power/cost inputs
-- market-removal: specs/market-removal/spec.md — `/market` page Monetarium removal: page made unavailable (like `/treasury`, `/agendas`, `/proposals`), drop "Market" menu item and Home "Exchange Rate" card, remove USD equivalents on Home / `/tx` / `/address` / `/block`, turn off background exchange polling and the related service endpoints
+- market-removal: specs/market-removal/spec.md — `/market` page Monetarium removal: page made unavailable (like `/treasury`, `/proposals`), drop "Market" menu item and Home "Exchange Rate" card, remove USD equivalents on Home / `/tx` / `/address` / `/block`, turn off background exchange polling and the related service endpoints
 
 ## 🤖 Code Traces
 
@@ -126,14 +126,14 @@ _The `/parameters` page: active-network consensus config. Mostly static `chaincf
 - patterns: code-analysis/parameters/patterns.md — near-static chaincfg.Params page: dual-source commonData/ExtendedParams split, hardcoded network-name prefix table, VAR-only subsidy rows, unchecked MaximumBlockSizes[0] fallback
 - impact: code-analysis/parameters/impact.md — commonData nil → .ChainParams deref crash, silent blank/misaligned address-prefix table on unknown network, stale/empty-slice MaximumBlockSize, unlocked pageData.BlockchainInfo race
 
-### Agendas — DORMANT (re-enablable, not removed)
+### Agendas — LIVE (enabled in PR #395)
 
-_The `/agendas` + `/agenda/{id}` consensus-deployment voting pages. HTML routes are currently stubbed to **HTTP 410** ([cmd/dcrdata/main.go:780-785](../cmd/dcrdata/main.go#L780-L785), commit `52ea3cf1`), but — unlike `/treasury` and `/market` — the handlers, the JSON API (`/api/agendas`, `/api/agenda/{id}`, still live), and the full DB pipeline (`agenda_votes` populated by `insertVotes` during `StoreBlock`) are intact and functional. Dual-source data: live metadata/progress from node RPC (`gov/agendas.AgendaDB` BoltDB + `VoteTracker`), historical tallies from Postgres. **Coin-agnostic** — vote counts/percentages/heights only, no VAR/SKA amounts, so C1/C3/C7 do not apply and **no multi-coin adaptation is needed**. Node support confirmed in `monetarium-node@v1.3.10` (mainnet 48 / testnet 52 agenda IDs). Re-enable = revert 2 route lines + re-add the navbar link._
+_The `/agendas` + `/agenda/{id}` consensus-deployment voting pages — **live** (enabled in PR #395, commit `6622b4ae`; routes at [cmd/dcrdata/main.go:780-781](../cmd/dcrdata/main.go#L780-L781), navbar link at [views/extras.tmpl:84](../cmd/dcrdata/views/extras.tmpl#L84)). They had been route-stubbed to HTTP 410 during migration (`52ea3cf1`) but never removed — handlers, JSON API (`/api/agendas`, `/api/agenda/{id}`), and the DB pipeline (`agenda_votes` populated by `insertVotes` during `StoreBlock`) were intact, so re-enabling was a two-line route revert. Dual-source data: live metadata/progress from node RPC (`gov/agendas.AgendaDB` BoltDB + `VoteTracker`), historical tallies from Postgres. **Coin-agnostic** — vote counts/percentages/heights only, no VAR/SKA amounts, so C1/C3/C7 do not apply and **no multi-coin adaptation is needed**. One re-enable bug fixed in PR #395: a nil DB vote-summary panic on not-yet-started agendas (`43a27ce2`, guarded + regression-tested)._
 
-- flow (compact): code-analysis/agendas/flow.compact.md — dormant-stub status, dual-source flow, why no multi-coin work is needed, re-enable mutation checklist
-- flow (full): code-analysis/agendas/flow.full.md — end-to-end trace: node RPC → gov/agendas (BoltDB + VoteTracker) + db/dcrpg agenda_votes → handlers → templates → JS; node-support evidence; silent/hard failures
-- patterns: code-analysis/agendas/patterns.md — dormant-feature route stub (handler+pipeline retained), dual-source governance data (RPC-live + Postgres-historical), coin-agnostic feature (precision rules N/A)
-- impact: code-analysis/agendas/impact.md — re-enable blast radius: orphaned-page nav gap, empty forward-only vote charts, VoteTracker startup dep, choice-ID/JSON-tag drift, milestone unavailability, market-removal-spec reconciliation
+- flow (compact): code-analysis/agendas/flow.compact.md — live status (PR #395), dual-source flow, why no multi-coin work is needed, not-yet-started nil-summary guard, maintenance checklist
+- flow (full): code-analysis/agendas/flow.full.md — end-to-end trace: node RPC → gov/agendas (BoltDB + VoteTracker) + db/dcrpg agenda_votes → handlers → templates → JS; PR #395 re-enable + nil-summary guard; node-support evidence; silent/hard failures
+- patterns: code-analysis/agendas/patterns.md — dual-source governance data (RPC-live + Postgres-historical), coin-agnostic feature (precision rules N/A), dormant-feature route stub (agendas was the re-enable case study; treasury/proposals/market remain stubbed)
+- impact: code-analysis/agendas/impact.md — live-page blast radius: route↔nav drift, not-yet-started nil-summary panic (guarded), empty forward-only vote charts, VoteTracker startup dep, choice-ID/JSON-tag drift, milestone unavailability
 
 ### Sidechain
 

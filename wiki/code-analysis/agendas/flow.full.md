@@ -1,9 +1,10 @@
 # Agendas — Full Flow (`/agendas`, `/agenda/{id}`)
 
-> Scope: re-enabling the consensus-deployment **Agendas** pages and assessing whether they
-> need adaptation to the Monetarium multi-coin model. Status as of this trace: the HTML pages
-> are **dormant** (route-stubbed to HTTP 410), but the handlers, the JSON API, and the full
-> backend data pipeline are intact and functional.
+> Scope: the consensus-deployment **Agendas** pages and whether they need adaptation to the
+> Monetarium multi-coin model. Status: the HTML pages are **live** — enabled in **PR #395**
+> (commit `6622b4ae`) by restoring the two routes and re-adding the navbar link. The handlers,
+> the JSON API, and the full backend data pipeline were intact throughout (the pages were only
+> ever route-stubbed to HTTP 410, never removed).
 
 ## Section 1 — Overview
 
@@ -22,20 +23,22 @@ There is no VAR/SKA value anywhere in the agendas flow, so the precision bifurca
 coin-label rules (C7) **do not apply** — this is the central finding for the "adapt to the
 Monetarium model" question (see Section 5).
 
-**Current disabled state.** [cmd/dcrdata/main.go:780-785](../../../cmd/dcrdata/main.go#L780-L785)
-replaces the two HTML routes with closures returning `http.StatusGone` ("agendas not
-available"). The original wiring was:
+**Current state — live (PR #395).** [cmd/dcrdata/main.go:780-781](../../../cmd/dcrdata/main.go#L780-L781)
+now wires the two HTML routes to the real handlers:
 
 ```go
 withCache.Get("/agendas", explore.AgendasPage)
 withCache.With(explorer.AgendaPathCtx).Get("/agenda/{agendaid}", explore.AgendaPage)
 ```
 
-It was stubbed in commit `52ea3cf1` *("feat: multi-coin data in explorer routes and template
-structs")* in the same bulk edit that stubbed `/treasury`, `/proposals`, and (later) `/market`.
-Unlike treasury (genuinely absent from Monetarium) and proposals (Politeia), agendas was a
-**defensive stub during migration**, not a removal: the node, the handlers, and the DB pipeline
-all still support it.
+**History.** The pages had been route-stubbed to `http.StatusGone` ("agendas not available") in
+commit `52ea3cf1` *("feat: multi-coin data in explorer routes and template structs")*, in the same
+bulk edit that stubbed `/treasury`, `/proposals`, and (later) `/market`. Unlike treasury (genuinely
+absent from Monetarium) and proposals (Politeia), agendas was a **defensive stub during
+migration**, not a removal — the node, the handlers, and the DB pipeline always supported it.
+**PR #395** (`6622b4ae`) re-enabled it by reverting those two route lines and re-adding the navbar
+link ([extras.tmpl:84](../../../cmd/dcrdata/views/extras.tmpl#L84)); a follow-up commit
+(`43a27ce2`) added a nil-summary guard for not-yet-started agendas (see Sections 5–6).
 
 ## Section 2 — End-to-End Data Flow
 
@@ -131,13 +134,17 @@ the Template+WebSocket parity concern (C3) does not arise here.
     All three first short-circuit if `agendaInfo.StartTime` is in the future.
 
 ### Layer D — Handlers (HTML + JSON API)
-- **HTML — `AgendasPage`** ([explorerroutes.go:2066-2098](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L2066-L2098)):
+- **HTML — `AgendasPage`** ([explorerroutes.go:2072-2104](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L2072-L2104)):
   `nil` voteTracker → status page *"agendas disabled on simnet"*; else `agendasSource.AllAgendas()`
   plus `voteTracker.Summary()` → template `agendas`.
-- **HTML — `AgendaPage`** ([explorerroutes.go:1977-2063](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L1977-L2063)):
-  `agendasSource.AgendaInfo(id)` (BoltDB) + `dataSource.AgendasVotesSummary(ctx, id)` (Postgres);
-  overrides each `Choices[i].Count` with the DB tally (`abstain/yes/no`), computes
-  `qVotes = RuleChangeActivationQuorum * QuorumProgress`, time-left, → template `agenda`.
+- **HTML — `AgendaPage`** ([explorerroutes.go:1977-2069](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L1977-L2069)):
+  `agendasSource.AgendaInfo(id)` (BoltDB) + `dataSource.AgendasVotesSummary(ctx, id)` (Postgres).
+  **`AgendasVotesSummary` returns `(nil, nil)` for an agenda whose voting has not started yet
+  (future `StartTime`); the handler substitutes a zero-tally `&dbtypes.AgendaSummary{}`**
+  ([explorerroutes.go:1998-2003](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L1998-L2003))
+  before it dereferences `summary.Abstain/Yes/No` (choice override) and `summary.LockedIn`
+  (time-left). It then overrides each `Choices[i].Count` with the DB tally (`abstain/yes/no`),
+  computes `qVotes = RuleChangeActivationQuorum * QuorumProgress`, time-left, → template `agenda`.
 - **JSON — `getAgendasData`** ([apiroutes.go:2046-2076](../../../cmd/dcrdata/internal/api/apiroutes.go#L2046-L2076)):
   `AgendaDB.AllAgendas()` + `DataSource.AllAgendas()` (milestones) → `[]apitypes.AgendasInfo`.
   **This route is still live** ([apirouter.go:211-213](../../../cmd/dcrdata/internal/api/apirouter.go#L211-L213)).
@@ -166,7 +173,7 @@ the Template+WebSocket parity concern (C3) does not arise here.
 - **Dual data origin coupling.** `AgendaPage` joins BoltDB metadata (`AgendaInfo`) with Postgres
   tallies (`AgendasVotesSummary`) by **string agenda ID** and by **choice ID string** (`"yes"`,
   `"no"`, `"abstain"`, matched lower-cased at
-  [explorerroutes.go:2003-2011](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L2003-L2011)).
+  [explorerroutes.go:2009-2017](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L2009-L2017)).
   A renamed choice ID would silently drop the override.
 - **Go→JS meter contract (untyped).** `agendas.tmpl` emits `data-progress`, `data-threshold`,
   `data-approval` (raw `float32` 0–1); `agendas_controller.js` reads them positionally. No
@@ -183,9 +190,10 @@ the Template+WebSocket parity concern (C3) does not arise here.
   ([pgblockchain.go:5064-5152](../../../db/dcrpg/pgblockchain.go#L5064-L5152)) — subsidy-split and
   blake3pow activation. Re-enabling the pages does **not** touch this, but it shows agenda data
   is load-bearing beyond the UI.
-- **Nav coupling.** The navbar ([extras.tmpl:79-87](../../../cmd/dcrdata/views/extras.tmpl#L79-L87))
-  has **no Agendas link** — it was removed when the page was stubbed. Re-enabling the route
-  without re-adding the link leaves the page reachable only by direct URL.
+- **Nav coupling.** The navbar ([extras.tmpl:84](../../../cmd/dcrdata/views/extras.tmpl#L84)) has
+  an **"Agendas" → `/agendas`** menu item (re-added in PR #395). The route table and the navbar
+  must stay in sync: drop the link and the page is reachable only by direct URL; drop the route and
+  the link is dead.
 
 ## Section 5 — Critical Constraints
 
@@ -204,6 +212,15 @@ the Template+WebSocket parity concern (C3) does not arise here.
   `GetVoteInfoResult`, `Agenda`, `Choice`, `GetStakeVersionsResult`,
   `GetStakeVersionInfoResult` all exist. So the data pipeline produces real data; agendas were
   **not** removed for lack of node support.
+- **Not-yet-started agendas yield a nil DB summary.** `ChainDB.AgendasVotesSummary` short-circuits
+  to `(nil, nil)` when `agendaInfo.StartTime` is in the future (voting not begun). `AgendaPage`
+  must replace that with a zero-tally `&dbtypes.AgendaSummary{}`
+  ([explorerroutes.go:1998-2003](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L1998-L2003))
+  — otherwise the subsequent `summary.Abstain/Yes/No` and `summary.LockedIn` derefs panic (HTTP 500
+  via `middleware.Recoverer`). Added in PR #395 (`43a27ce2`); pinned by
+  [agendapage_test.go](../../../cmd/dcrdata/internal/explorer/agendapage_test.go) (`f6ea9703`).
+  This is the one place a freshly-defined-but-not-yet-voting deployment differs from an
+  actively-voting one.
 - **VoteTracker is mandatory on non-simnet.** `NewVoteTracker` returns an error if
   `len(stakeVersions) == 0` ([tracker.go:136-138](../../../gov/agendas/tracker.go#L136-L138)), and
   `_main` treats that as fatal ([main.go:434-439](../../../cmd/dcrdata/main.go#L434-L439)). Since
@@ -212,22 +229,28 @@ the Template+WebSocket parity concern (C3) does not arise here.
 
 ## Section 6 — Mutation Impact
 
-**To re-enable the pages (the requested change):**
+**What re-enabling did (PR #395 — done):**
 
-1. **Restore the two routes** at [main.go:780-785](../../../cmd/dcrdata/main.go#L780-L785):
+1. **Restored the two routes** at [main.go:780-781](../../../cmd/dcrdata/main.go#L780-L781):
    `withCache.Get("/agendas", explore.AgendasPage)` and
    `withCache.With(explorer.AgendaPathCtx).Get("/agenda/{agendaid}", explore.AgendaPage)`. Both
    handlers and `AgendaPathCtx`/`getAgendaIDCtx`
    ([explorermiddleware.go:228,276](../../../cmd/dcrdata/internal/explorer/explorermiddleware.go#L228))
-   already exist and compile.
-2. **Re-add the navbar link** in
-   [extras.tmpl:79-87](../../../cmd/dcrdata/views/extras.tmpl#L79-L87) (e.g. an "Agendas"
-   `menu-item` → `/agendas`). Without this the page is orphaned.
-3. **No backend, API, template, or JS changes are needed** — they are intact.
-4. **Reconcile docs:** the market-removal spec
-   ([wiki/specs/market-removal/spec.md](../../specs/market-removal/spec.md), indexed at
-   [wiki/index.md:32](../../index.md)) lists `/agendas` among "made unavailable (like
-   `/treasury`, `/proposals`)". Update that note — agendas is being re-enabled, not removed.
+   already existed and compiled.
+2. **Re-added the navbar link** at
+   [extras.tmpl:84](../../../cmd/dcrdata/views/extras.tmpl#L84) ("Agendas" `menu-item` →
+   `/agendas`), so the page is reachable from the menu, not just by direct URL.
+3. **Added a nil-summary guard**
+   ([explorerroutes.go:1998-2003](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L1998-L2003),
+   `43a27ce2`) for not-yet-started agendas (`AgendasVotesSummary` → `(nil, nil)`), with a
+   regression test
+   ([agendapage_test.go](../../../cmd/dcrdata/internal/explorer/agendapage_test.go), `f6ea9703`).
+4. **No backend, API, template, or JS changes were needed** — they were intact.
+5. **Docs reconciled** (this wiki update): the market-removal spec
+   ([wiki/specs/market-removal/spec.md](../../specs/market-removal/spec.md)), the parameters spec
+   ([wiki/specs/parameters/spec.md](../../specs/parameters/spec.md)), and the page registry
+   ([wiki/core/pages.md](../../core/pages.md)) no longer list `/agendas` as disabled/removed;
+   `/agendas` + `/agenda/{id}` are in the **Active pages** table.
 
 **Direct deps to check when changing agenda data structures:** `AgendaTagged`,
 `VoteSummary`/`AgendaSummary`, `dbtypes.MileStone`, `dbtypes.AgendaVoteChoices`,
@@ -263,14 +286,23 @@ the Template+WebSocket parity concern (C3) does not arise here.
   but fully wired. Don't delete the handlers or DB tables.
 - **Forgetting the BoltDB↔Postgres join** — `AgendaPage` needs *both* `agendasSource`
   (metadata) and `dataSource` (tallies); a nil `agendasSource` or missing milestone breaks it.
+- **Removing the not-yet-started nil-summary guard** — `AgendaPage` panics (HTTP 500) on any
+  agenda whose `StartTime` is in the future; `AgendasVotesSummary` returns `(nil, nil)` there and
+  the handler dereferences `summary`. The regression test in `agendapage_test.go` exists precisely
+  to stop this from reappearing.
 
 ## Section 8 — Evidence
 
-- Route stubs / original wiring: [main.go:780-785](../../../cmd/dcrdata/main.go#L780-L785);
-  commit `52ea3cf1` diff replaced `explore.AgendasPage`/`explore.AgendaPage` with 410 closures.
+- Live routes / re-enable: [main.go:780-781](../../../cmd/dcrdata/main.go#L780-L781)
+  (`explore.AgendasPage`; `explorer.AgendaPathCtx`+`explore.AgendaPage`), enabled in PR #395
+  `6622b4ae`; previously 410-stubbed in `52ea3cf1`.
 - Handlers: `AgendasPage`
-  [explorerroutes.go:2066](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L2066),
-  `AgendaPage` [explorerroutes.go:1975-2063](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L1975-L2063).
+  [explorerroutes.go:2072-2104](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L2072-L2104),
+  `AgendaPage` [explorerroutes.go:1977-2069](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L1977-L2069);
+  nil-summary guard
+  [explorerroutes.go:1998-2003](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L1998-L2003)
+  (`43a27ce2`); regression test
+  [agendapage_test.go](../../../cmd/dcrdata/internal/explorer/agendapage_test.go) (`f6ea9703`).
 - Backend interface: `agendaBackend`
   [explorer.go:134-137](../../../cmd/dcrdata/internal/explorer/explorer.go#L134-L137); wiring
   [main.go:415-452](../../../cmd/dcrdata/main.go#L415-L452).
@@ -290,7 +322,7 @@ the Template+WebSocket parity concern (C3) does not arise here.
   `Deployments` maps; vote IDs at `mainnetparams.go:405-461`; RPC types
   `rpc/jsonrpc/types@v1.3.10/chainsvrresults.go:497-527` (`Choice`, `Agenda`,
   `GetVoteInfoResult`).
-- Navbar (no agendas link): [extras.tmpl:79-87](../../../cmd/dcrdata/views/extras.tmpl#L79-L87).
+- Navbar ("Agendas" link, re-added in PR #395): [extras.tmpl:84](../../../cmd/dcrdata/views/extras.tmpl#L84).
 
 See also:
 - /wiki/code-analysis/agendas/flow.compact.md (derived-from: this file)
@@ -298,4 +330,4 @@ See also:
 - /wiki/code-analysis/agendas/impact.md (depends-on: re-enable blast radius)
 - /wiki/core/constraints.md (depends-on: C1 numeric precision — explicitly N/A for agendas; C3 parity — N/A, no WS path; C7 coin labels — N/A)
 - /wiki/code-analysis/parameters/flow.full.md (shares-pattern-with: near-static chaincfg.Params + node-RPC page)
-- /wiki/specs/market-removal/spec.md (contradicts: lists /agendas as removed; reconcile on re-enable)
+- /wiki/specs/market-removal/spec.md (reconciled: no longer lists /agendas as a disabled page)
