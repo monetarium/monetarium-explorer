@@ -75,9 +75,11 @@ func TestMain(m *testing.M) {
 // testClient needed to mock the actual client GetVoteInfo implementation
 type testClient int
 
-// GetVoteInfo implementation showing a sample data format expected.
+// GetVoteInfo implementation showing a sample data format expected. It reports a
+// single Monetarium-era vote version (>= MinVoteVersion) so the stored agenda
+// survives the AllAgendas filter.
 func (*testClient) GetVoteInfo(_ context.Context, version uint32) (*chainjson.GetVoteInfoResult, error) {
-	if version != 5 {
+	if version != 11 {
 		msg := fmt.Sprintf("stake version %d does not exist", version)
 		return nil, dcrjson.NewRPCError(dcrjson.ErrRPCInvalidParameter, msg)
 	}
@@ -86,7 +88,7 @@ func (*testClient) GetVoteInfo(_ context.Context, version uint32) (*chainjson.Ge
 		StartHeight:   318592,
 		EndHeight:     326655,
 		Hash:          "000000000000000021a2128e44824adc7ad0560d38ca0692aeb8281f75b6d9a0",
-		VoteVersion:   5,
+		VoteVersion:   11,
 		Quorum:        4032,
 		TotalVotes:    0,
 		Agendas: []chainjson.Agenda{
@@ -208,7 +210,7 @@ var expectedAgenda = &AgendaTagged{
 			Progress:    100,
 		},
 	},
-	VoteVersion: 5,
+	VoteVersion: 11,
 }
 
 // TestUpdateAndRetrievals tests the agendas db updating and retrieval of one
@@ -216,7 +218,7 @@ var expectedAgenda = &AgendaTagged{
 func TestUpdateAndRetrievals(t *testing.T) {
 	var client *testClient
 
-	voteVersions := []uint32{5}
+	voteVersions := []uint32{11}
 	dbInstance := &AgendaDB{
 		sdb:           db,
 		deploySource:  client,
@@ -228,39 +230,37 @@ func TestUpdateAndRetrievals(t *testing.T) {
 		t.Fatalf("agenda update error: %v", err)
 	}
 
-	// Test retrieval of all agendas.
+	// Test retrieval of all agendas. firstAgendaInfo (VoteVersion 4) is a
+	// pre-Monetarium artifact and must be hidden, leaving only expectedAgenda
+	// (VoteVersion 11).
 	t.Run("Test_AllAgendas", func(t *testing.T) {
 		agendas, err := dbInstance.AllAgendas()
 		if err != nil {
 			t.Fatalf("expected no error but found '%v'", err)
 		}
 
-		if len(agendas) != 2 {
-			t.Fatalf("expected to find two agendas but found: %d ", len(agendas))
+		if len(agendas) != 1 {
+			t.Fatalf("expected to find one agenda (>= MinVoteVersion) but found: %d ", len(agendas))
 		}
 
-		for _, data := range agendas {
-			if data == nil {
-				t.Fatal("expected to find non nil data")
-			}
+		data := agendas[0]
+		if data == nil {
+			t.Fatal("expected to find non nil data")
+		}
 
-			switch data.ID {
-			case firstAgendaInfo.ID:
-				if !reflect.DeepEqual(data, firstAgendaInfo) {
-					t.Fatal("expected the returned data to be equal to firstAgendainfo but it wasn't")
-				}
+		if data.ID == firstAgendaInfo.ID {
+			t.Fatalf("pre-Monetarium agenda %q (VoteVersion %d) should be filtered out",
+				firstAgendaInfo.ID, firstAgendaInfo.VoteVersion)
+		}
 
-			case expectedAgenda.ID:
-				if !reflect.DeepEqual(data, expectedAgenda) {
-					t.Fatal("expected the returned data to be equal to second agenda data but it wasn't")
-				}
-			default:
-				t.Fatalf("inaccurate agendas data found")
-			}
+		if !reflect.DeepEqual(data, expectedAgenda) {
+			t.Fatal("expected the returned data to be equal to expectedAgenda but it wasn't")
 		}
 	})
 
-	// Testing retrieval of single agenda by ID.
+	// Testing retrieval of single agenda by ID. AgendaInfo is unfiltered, so a
+	// pre-Monetarium agenda (firstAgendaInfo, VoteVersion 4) stays reachable by
+	// direct ID lookup even though AllAgendas hides it from the list.
 	t.Run("Test_AgendaInfo", func(t *testing.T) {
 		agenda, err := dbInstance.AgendaInfo(firstAgendaInfo.ID)
 		if err != nil {
@@ -269,6 +269,79 @@ func TestUpdateAndRetrievals(t *testing.T) {
 
 		if !reflect.DeepEqual(agenda, firstAgendaInfo) {
 			t.Fatal("expected the agenda info returned to be equal to firstAgendaInfo but it wasn't")
+		}
+	})
+}
+
+// newFilterTestDB creates an AgendaDB backed by a fresh temporary storm DB seeded
+// with the provided agendas. stakeVersions is set non-nil so AllAgendas does not
+// short-circuit on the "no deployments" guard.
+func newFilterTestDB(t *testing.T, seeded ...*AgendaTagged) *AgendaDB {
+	t.Helper()
+
+	sdb, err := storm.Open(filepath.Join(t.TempDir(), "filter.db"))
+	if err != nil {
+		t.Fatalf("storm.Open: %v", err)
+	}
+	t.Cleanup(func() { sdb.Close() })
+
+	for _, a := range seeded {
+		if err := sdb.Save(a); err != nil {
+			t.Fatalf("save agenda %q: %v", a.ID, err)
+		}
+	}
+
+	return &AgendaDB{sdb: sdb, stakeVersions: []uint32{MinVoteVersion}}
+}
+
+// TestAllAgendasVoteVersionFilter verifies that AllAgendas hides pre-Monetarium
+// agendas (VoteVersion < MinVoteVersion, Decred-network artifacts) and renders an
+// empty result rather than an error when nothing qualifies.
+func TestAllAgendasVoteVersionFilter(t *testing.T) {
+	mkAgenda := func(id string, ver uint32) *AgendaTagged {
+		return &AgendaTagged{ID: id, Description: id, VoteVersion: ver}
+	}
+
+	t.Run("drops below threshold, keeps at or above", func(t *testing.T) {
+		adb := newFilterTestDB(t,
+			mkAgenda("decred-v10", MinVoteVersion-1),
+			mkAgenda("monetarium-v11", MinVoteVersion),
+			mkAgenda("monetarium-v12", MinVoteVersion+1),
+		)
+
+		got, err := adb.AllAgendas()
+		if err != nil {
+			t.Fatalf("AllAgendas: unexpected error %v", err)
+		}
+
+		ids := make([]string, 0, len(got))
+		for _, a := range got {
+			if a.VoteVersion < MinVoteVersion {
+				t.Errorf("agenda %q with VoteVersion %d below threshold %d leaked through",
+					a.ID, a.VoteVersion, MinVoteVersion)
+			}
+			ids = append(ids, a.ID)
+		}
+
+		// Ordered by VoteVersion descending (OrderBy(...).Reverse()).
+		want := []string{"monetarium-v12", "monetarium-v11"}
+		if !reflect.DeepEqual(ids, want) {
+			t.Fatalf("AllAgendas returned %v, want %v", ids, want)
+		}
+	})
+
+	t.Run("all below threshold yields empty slice and no error", func(t *testing.T) {
+		adb := newFilterTestDB(t,
+			mkAgenda("decred-v4", 4),
+			mkAgenda("decred-v10", MinVoteVersion-1),
+		)
+
+		got, err := adb.AllAgendas()
+		if err != nil {
+			t.Fatalf("AllAgendas: expected no error for the all-filtered case, got %v", err)
+		}
+		if len(got) != 0 {
+			t.Fatalf("AllAgendas: expected an empty result, got %d agendas", len(got))
 		}
 	})
 }
