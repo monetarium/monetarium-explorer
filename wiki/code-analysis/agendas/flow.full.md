@@ -98,6 +98,16 @@ the Template+WebSocket parity concern (C3) does not arise here.
     all stake versions; invoked once at startup
     ([main.go:981](../../../cmd/dcrdata/main.go#L981)) and **every 5 blocks**
     ([explorer.go:892-894](../../../cmd/dcrdata/internal/explorer/explorer.go#L892-L894)).
+  - `AllAgendas` ([deployments.go:294](../../../gov/agendas/deployments.go#L294)) reads the whole
+    `AgendaTagged` bucket and **filters out pre-Monetarium agendas** — it selects
+    `q.Gte("VoteVersion", MinVoteVersion)` (constant `MinVoteVersion = 11`,
+    [deployments.go:57](../../../gov/agendas/deployments.go#L57)) ordered by vote version
+    descending. `UpdateAgendas` still **stores** every stake version (1…N) the node reports;
+    `AllAgendas` is the read-side gate that hides versions 1–10. When nothing qualifies, storm's
+    `Find` returns `ErrNotFound`, which `AllAgendas` maps to `([]*AgendaTagged{}, nil)` so callers
+    render an empty list, not an error. This is the single shared source for **both** list
+    surfaces (`/agendas` table and `/api/agendas` JSON); `AgendaInfo` (single-ID lookup) is **not**
+    filtered (see Sections 5–6).
   - `VoteTracker.Summary()` builds `VoteSummary` from RPC + chaincfg params (quorum, thresholds,
     interval sizes). Constructed only when **not simnet**
     ([main.go:433-440](../../../cmd/dcrdata/main.go#L433-L440)); `nil` tracker is a sentinel.
@@ -134,9 +144,17 @@ the Template+WebSocket parity concern (C3) does not arise here.
     All three first short-circuit if `agendaInfo.StartTime` is in the future.
 
 ### Layer D — Handlers (HTML + JSON API)
-- **HTML — `AgendasPage`** ([explorerroutes.go:2072-2104](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L2072-L2104)):
+- **HTML — `AgendasPage`** ([explorerroutes.go:2072-2124](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L2072-L2124)):
   `nil` voteTracker → status page *"agendas disabled on simnet"*; else `agendasSource.AllAgendas()`
-  plus `voteTracker.Summary()` → template `agendas`.
+  (the version-filtered **table** list) plus `voteTracker.Summary()` (the live progress **cards**).
+  **The page renders agendas twice from two sources, so the handler cross-filters the cards to the
+  table:** it builds an allowed-ID set from `AllAgendas()` and passes the tracker summaries through
+  the pure helper `filterAgendaSummaries`
+  ([call at explorerroutes.go:2104](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L2104),
+  [func at 2126-2138](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L2126-L2138), PR #401),
+  dropping any `VoteSummary.Agendas` entry whose `ID` is not in the set — on a **defensive copy** of
+  the shared `tracker.summary` (it must not mutate tracker state), matching by **ID** because
+  `AgendaSummary` has no `VoteVersion`. → template `agendas`.
 - **HTML — `AgendaPage`** ([explorerroutes.go:1977-2069](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L1977-L2069)):
   `agendasSource.AgendaInfo(id)` (BoltDB) + `dataSource.AgendasVotesSummary(ctx, id)` (Postgres).
   **`AgendasVotesSummary` returns `(nil, nil)` for an agenda whose voting has not started yet
@@ -147,6 +165,9 @@ the Template+WebSocket parity concern (C3) does not arise here.
   computes `qVotes = RuleChangeActivationQuorum * QuorumProgress`, time-left, → template `agenda`.
 - **JSON — `getAgendasData`** ([apiroutes.go:2046-2076](../../../cmd/dcrdata/internal/api/apiroutes.go#L2046-L2076)):
   `AgendaDB.AllAgendas()` + `DataSource.AllAgendas()` (milestones) → `[]apitypes.AgendasInfo`.
+  The output loop is driven by the version-filtered `AgendaDB.AllAgendas()` slice, so
+  `/api/agendas` inherits the `VoteVersion >= MinVoteVersion` gate for free; the
+  `DataSource.AllAgendas()` milestone map is unfiltered but only read per emitted agenda ID.
   **This route is still live** ([apirouter.go:211-213](../../../cmd/dcrdata/internal/api/apirouter.go#L211-L213)).
 - **JSON — `getAgendaData`** ([apiroutes.go:2005-2041](../../../cmd/dcrdata/internal/api/apiroutes.go#L2005-L2041)):
   `AgendaVotes(id, 0)` (by time) + `AgendaVotes(id, 1)` (by height) →
@@ -205,6 +226,18 @@ the Template+WebSocket parity concern (C3) does not arise here.
 - **C3 (template + WebSocket parity) — N/A.** No WebSocket push path for agendas; both pages are
   request-scoped HTTP. (Contrast block/tx, which must mirror fields across template + WS.)
 - **C7 (coin-type labels) — N/A.** No coin labels are rendered.
+- **Pre-Monetarium vote versions are hidden from the list (`MinVoteVersion = 11`).** Monetarium's
+  own votes start at vote version 11; versions 1–10 are Decred-network artifacts the node still
+  reports. `AllAgendas` drops them via `q.Gte("VoteVersion", MinVoteVersion)`
+  ([deployments.go:57,294-308](../../../gov/agendas/deployments.go#L294-L308)). The threshold is a
+  single named constant — do **not** reintroduce a bare `q.True()` select or scatter the literal
+  `11`. The gate is coin-agnostic (`VoteVersion` is a `uint32`); it adds no precision/multi-coin
+  surface (C1/C7 stay N/A). It governs the **list** surfaces only — `AgendaInfo(id)` is unfiltered,
+  so a filtered version's `/agenda/{id}` detail page stays reachable by direct URL (issue #400).
+  **The source filter does not reach the `/agendas` page's live progress cards.** Those render from
+  `voteTracker.Summary().Agendas` (a separate, tracker-sourced surface), so `AgendasPage`
+  cross-filters them against the `AllAgendas` ID set (PR #401) to keep the cards and the table in
+  agreement (see Section 6).
 - **Real Monetarium-specific dependency: node must expose consensus deployments + stake-version
   voting.** Verified present in `monetarium-node` chaincfg **v1.3.10**: mainnet defines **48**
   agenda IDs, testnet **52**, across vote versions; vote IDs include `VoteIDMaxBlockSize`,
@@ -258,6 +291,25 @@ the Template+WebSocket parity concern (C3) does not arise here.
 `/api/agendas` + `/api/agenda/{id}` consumers.
 
 **Silent failures:**
+- **Decred artifacts resurface.** Reverting `AllAgendas` to a `q.True()` select, lowering
+  `MinVoteVersion`, or scattering the literal `11` instead of the constant silently lets vote
+  versions 1–10 reappear in the `/agendas` table and `/api/agendas` JSON. No error — just wrong
+  rows. The regression tests in
+  [deployments_test.go](../../../gov/agendas/deployments_test.go) pin the `>= 11` gate
+  (`TestAllAgendasVoteVersionFilter` and the adapted `Test_AllAgendas`).
+- **Decred agendas linger in the summary cards.** The version filter at `AllAgendas()` aligns the
+  table + API but **not** the `/agendas` voting cards (`VoteSummary.Agendas`, tracker-sourced).
+  `AgendasPage`'s cross-filter
+  ([call explorerroutes.go:2104](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L2104),
+  PR #401) closes this; remove it and the cards again show vote versions ≤ 10 while the table hides
+  them — most visible when the node's highest vote version is still ≤ 10 (table empty, cards
+  populated). The filter logic is the pure helper `filterAgendaSummaries`
+  ([explorerroutes.go:2126-2138](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L2126-L2138)),
+  unit-tested by `TestFilterAgendaSummaries`
+  ([agendapage_test.go:78](../../../cmd/dcrdata/internal/explorer/agendapage_test.go#L78), 4 cases:
+  keep/drop, empty input, empty allow-set, full pass-through). The handler *wiring* stays uncovered
+  — `voteTracker` is a concrete `*agendas.VoteTracker`, not a stubbable interface — but the filter
+  itself is now pinned (PR #401).
 - Re-enable route but forget the nav link → page works only via direct URL (no error).
 - `agenda_votes` charts render but are **empty** (`[[0,0,0,0]]`) for any agenda whose votes
   were not seen during the explorer's DB sync, or if `SSGenVoteChoices` returns no choices
@@ -269,7 +321,12 @@ the Template+WebSocket parity concern (C3) does not arise here.
 
 **Hard failures:**
 - Unknown `agendaid` → `AgendaInfo` error → `ExpStatusNotFound` page.
-- `AllAgendas()` DB error → `ExpStatusError` page.
+- `AllAgendas()` DB error → `ExpStatusError` page. **Note:** the *all-filtered* case (no agenda
+  reaches `MinVoteVersion`) is **not** an error — `AllAgendas` maps storm's `ErrNotFound` to an
+  empty slice + nil error so `/agendas` renders the *"No agendas found for {NetName}"* empty state
+  ([agendas.tmpl:227-232](../../../cmd/dcrdata/views/agendas.tmpl#L227-L232)) at HTTP 200. Letting
+  `ErrNotFound` propagate instead would wrongly turn an empty list into an `ExpStatusError` page
+  (and a 503 from `/api/agendas`).
 - On non-simnet, a node with **zero** stake versions would fail `NewVoteTracker` → explorer
   won't start (pre-existing risk, unchanged by re-enabling).
 - On simnet, `voteTracker == nil` → `/agendas` shows the *"agendas disabled on simnet"* status
@@ -290,6 +347,20 @@ the Template+WebSocket parity concern (C3) does not arise here.
   agenda whose `StartTime` is in the future; `AgendasVotesSummary` returns `(nil, nil)` there and
   the handler dereferences `summary`. The regression test in `agendapage_test.go` exists precisely
   to stop this from reappearing.
+- **Loosening the `MinVoteVersion` gate** — replacing `q.Gte("VoteVersion", MinVoteVersion)` with
+  `q.True()`, lowering the constant, or hard-coding `11` somewhere else silently brings back the
+  Decred-era agendas (vote versions 1–10) that issue #400 hid. Keep the threshold in the one named
+  constant in `gov/agendas`.
+- **Mapping the all-filtered case to an error** — with a real matcher, `Find` returns
+  `storm.ErrNotFound` when no agenda qualifies. That must become an empty slice + nil error, not a
+  propagated error; otherwise the empty list turns into an error page instead of the empty state.
+- **Filtering `AgendaInfo` too** — the version gate belongs to the *list* (`AllAgendas`) only.
+  `AgendaInfo(id)` must stay unfiltered so a filtered agenda's `/agenda/{id}` page remains
+  reachable by direct URL.
+- **Filtering the list but not the cards** — the `/agendas` page renders agendas twice: the table
+  (`AllAgendas`) and the live progress cards (`voteTracker.Summary().Agendas`, a different source).
+  A list-level filter must be mirrored onto the cards in `AgendasPage` (cross-filter by ID on a
+  *defensive copy* of the shared `tracker.summary`), or the two surfaces disagree.
 
 ## Section 8 — Evidence
 
@@ -306,6 +377,23 @@ the Template+WebSocket parity concern (C3) does not arise here.
 - Backend interface: `agendaBackend`
   [explorer.go:134-137](../../../cmd/dcrdata/internal/explorer/explorer.go#L134-L137); wiring
   [main.go:415-452](../../../cmd/dcrdata/main.go#L415-L452).
+- Vote-version filter (issue #400): constant `MinVoteVersion`
+  [deployments.go:53-57](../../../gov/agendas/deployments.go#L53-L57); `AllAgendas` select +
+  `ErrNotFound`→empty handling
+  [deployments.go:294-308](../../../gov/agendas/deployments.go#L294-L308); tests
+  [deployments_test.go](../../../gov/agendas/deployments_test.go)
+  (`TestAllAgendasVoteVersionFilter`, `Test_AllAgendas`); empty state
+  [agendas.tmpl:227-232](../../../cmd/dcrdata/views/agendas.tmpl#L227-L232).
+- Summary-card cross-filter (PR #401): allowed-ID set
+  [explorerroutes.go:2086-2089](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L2086-L2089),
+  then pure helper `filterAgendaSummaries` applied to a defensive copy
+  [explorerroutes.go:2099-2104](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L2099-L2104),
+  [func 2126-2138](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L2126-L2138); test
+  `TestFilterAgendaSummaries` [agendapage_test.go:78](../../../cmd/dcrdata/internal/explorer/agendapage_test.go#L78);
+  cards rendered at [agendas.tmpl:26-219](../../../cmd/dcrdata/views/agendas.tmpl#L26-L219);
+  `AgendaSummary` (note: no `VoteVersion` field)
+  [tracker.go:37-61](../../../gov/agendas/tracker.go#L37-L61); shared cached summary pointer
+  [tracker.go:479-483](../../../gov/agendas/tracker.go#L479-L483).
 - DB pipeline: `insertVotes` [queries.go:382](../../../db/dcrpg/queries.go#L382) +
   [queries.go:537-604](../../../db/dcrpg/queries.go#L537-L604); caller
   [pgblockchain.go:4340](../../../db/dcrpg/pgblockchain.go#L4340); milestones
@@ -326,7 +414,7 @@ the Template+WebSocket parity concern (C3) does not arise here.
 
 See also:
 - /wiki/code-analysis/agendas/flow.compact.md (derived-from: this file)
-- /wiki/code-analysis/agendas/patterns.md (shares-pattern-with: dormant-feature stub, dual-source governance data)
+- /wiki/code-analysis/agendas/patterns.md (shares-pattern-with: dormant-feature stub, dual-source governance data, single-source list filter)
 - /wiki/code-analysis/agendas/impact.md (depends-on: re-enable blast radius)
 - /wiki/core/constraints.md (depends-on: C1 numeric precision — explicitly N/A for agendas; C3 parity — N/A, no WS path; C7 coin labels — N/A)
 - /wiki/code-analysis/parameters/flow.full.md (shares-pattern-with: near-static chaincfg.Params + node-RPC page)

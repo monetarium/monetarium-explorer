@@ -69,6 +69,55 @@ these pages.
 - **Failure mode:** silent for the UI (empty/zero); potentially behavioral for subsidy/blake3pow
   gating (separate concern, not touched by re-enabling).
 
+## Risk: Pre-Monetarium agendas resurface / empty-state regression (vote-version filter)
+- **Status:** `AllAgendas` filters to vote version `>= MinVoteVersion` (constant `= 11`)
+  ([deployments.go:57,294-308](../../../gov/agendas/deployments.go#L294-L308)), hiding Decred-era
+  agendas (versions 1–10) from the `/agendas` table and `/api/agendas` JSON. Added for issue #400;
+  pinned by [deployments_test.go](../../../gov/agendas/deployments_test.go)
+  (`TestAllAgendasVoteVersionFilter`, `Test_AllAgendas`).
+- **Trigger (silent):** revert the select to `q.True()`, lower `MinVoteVersion`, or hard-code the
+  literal `11` elsewhere → versions 1–10 reappear in both list surfaces. No error, just wrong rows.
+- **Trigger (loud):** let `AllAgendas` propagate storm's `ErrNotFound` (returned when *no* agenda
+  reaches the threshold) instead of mapping it to an empty slice + nil error. Both `AgendasPage`
+  ([explorerroutes.go:2080-2084](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L2080-L2084))
+  and `getAgendasData`
+  ([apiroutes.go:2048-2052](../../../cmd/dcrdata/internal/api/apiroutes.go#L2048-L2052)) treat any
+  returned error as a hard failure → `ExpStatusError` page / HTTP 503 instead of the
+  *"No agendas found"* empty state ([agendas.tmpl:227-232](../../../cmd/dcrdata/views/agendas.tmpl#L227-L232), HTTP 200).
+- **Out of scope:** the gate is list-only. `AgendaInfo(id)` stays unfiltered, so `/agenda/{id}` for
+  a hidden version is still reachable by direct URL — do not "fix" that by filtering the single-ID
+  lookup.
+- **Failure mode:** silent (wrong rows) for the first trigger; hard (error page) for the second.
+- **Fix:** keep the single named constant, the `q.Gte` matcher, and the `ErrNotFound`→empty mapping
+  together; assert all three in `deployments_test.go`.
+
+## Risk: Summary cards drift from the filtered list (`/agendas` two-render gap)
+- **Status:** `AgendasPage` cross-filters `VoteSummary.Agendas` against the `AllAgendas` ID set
+  via the pure helper `filterAgendaSummaries`
+  ([call explorerroutes.go:2104](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L2104),
+  [func 2126-2138](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L2126-L2138), PR #401) so
+  the live progress cards match the version-filtered table.
+- **Why it exists:** the `/agendas` page renders agendas from **two** sources — the table from
+  `AllAgendas()` (version-filtered) and the live cards from `voteTracker.Summary().Agendas` (the
+  highest vote version's agendas, **not** filtered at the source). Filtering only `AllAgendas()`
+  (issue #400) left the cards still showing Decred-era agendas; this is the gap PR #400 shipped with
+  and PR #401 closed.
+- **Trigger:** drop the cross-filter, or change `AllAgendas()` filtering without mirroring it onto
+  the cards → cards and table disagree. Most visible when the node's highest vote version is still
+  ≤ 10: the table renders *"No agendas found"* while the cards still show v≤10 agendas.
+- **Two correctness points in the cross-filter:** (1) match by **ID** — `AgendaSummary` has no
+  `VoteVersion` field ([tracker.go:37-61](../../../gov/agendas/tracker.go#L37-L61)); (2) filter a
+  **defensive copy** — `Summary()` returns the shared, mutex-guarded `tracker.summary`
+  ([tracker.go:479-483](../../../gov/agendas/tracker.go#L479-L483)), so reassigning `.Agendas` in
+  place would corrupt tracker state across requests / race the template read.
+- **Coverage:** the filter is extracted into the pure helper `filterAgendaSummaries`
+  ([explorerroutes.go:2126-2138](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L2126-L2138))
+  and unit-tested by `TestFilterAgendaSummaries`
+  ([agendapage_test.go:78](../../../cmd/dcrdata/internal/explorer/agendapage_test.go#L78), 4 cases).
+  The handler wiring stays uncovered (`voteTracker` is a concrete `*agendas.VoteTracker`, not
+  stubbable), but the filter behavior is pinned.
+- **Failure mode:** silent — inconsistent UI, no error.
+
 ## Doc reconciliation (done in this update)
 - [wiki/specs/market-removal/spec.md](../../specs/market-removal/spec.md),
   [wiki/specs/parameters/spec.md](../../specs/parameters/spec.md), and

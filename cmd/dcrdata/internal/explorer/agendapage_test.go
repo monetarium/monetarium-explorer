@@ -74,3 +74,61 @@ func TestAgendaPage_NilSummaryNotYetStarted(t *testing.T) {
 
 	exp.AgendaPage(w, req)
 }
+
+func TestFilterAgendaSummaries(t *testing.T) {
+	tests := []struct {
+		name  string
+		input []agendas.AgendaSummary
+		allow map[string]bool
+		want  []string // IDs that should survive
+	}{
+		{
+			name: "keeps allowed, drops rest",
+			input: []agendas.AgendaSummary{
+				{ID: "keep-me"},
+				{ID: "drop-me"},
+				{ID: "also-keep"},
+			},
+			allow: map[string]bool{"keep-me": true, "also-keep": true},
+			want:  []string{"keep-me", "also-keep"},
+		},
+		{
+			name:  "empty input yields empty output",
+			input: nil,
+			allow: map[string]bool{"nothing": true},
+			want:  nil,
+		},
+		{
+			name: "nothing allowed yields empty",
+			input: []agendas.AgendaSummary{
+				{ID: "a"},
+				{ID: "b"},
+			},
+			allow: map[string]bool{},
+			want:  nil,
+		},
+		{
+			name: "all allowed passes through",
+			input: []agendas.AgendaSummary{
+				{ID: "x"},
+				{ID: "y"},
+			},
+			allow: map[string]bool{"x": true, "y": true},
+			want:  []string{"x", "y"},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := filterAgendaSummaries(tc.input, tc.allow)
+			if len(got) != len(tc.want) {
+				t.Fatalf("len=%d, want len=%d; got %v", len(got), len(tc.want), got)
+			}
+			for i, id := range tc.want {
+				if got[i].ID != id {
+					t.Errorf("got[%d].ID=%q, want %q", i, got[i].ID, id)
+				}
+			}
+		})
+	}
+}

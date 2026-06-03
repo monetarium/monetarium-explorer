@@ -55,6 +55,49 @@ percentage, a block height, a status, or a timestamp.
   are intentionally not in scope here. The relevant invariant instead is **node capability**:
   the data only exists if the node exposes consensus deployments + stake-version voting.
 
+## Single-Source List Filter (one gate, multiple read surfaces)
+When an HTML page and a JSON API render the *same list* from one backend accessor, apply
+visibility/eligibility filtering **at that shared accessor** so every surface fed by it stays
+consistent. **The guarantee only covers surfaces that read from that accessor** — a sibling
+rendering on the same page sourced from somewhere else will silently drift and has to be aligned
+separately (see the summary-cards caveat below). This page is the cautionary example: filtering
+`AllAgendas()` fixed the table + API, but the `/agendas` voting cards come from a *different*
+source and needed their own filter.
+
+- **Where:** `gov/agendas.AgendaDB.AllAgendas()`
+  ([deployments.go:294-308](../../../gov/agendas/deployments.go#L294-L308)) drops pre-Monetarium
+  agendas with `q.Gte("VoteVersion", MinVoteVersion)` (constant `MinVoteVersion = 11`,
+  [deployments.go:57](../../../gov/agendas/deployments.go#L57)). The one accessor feeds the
+  `/agendas` table (`AgendasPage`,
+  [explorerroutes.go:2079](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L2079)) **and**
+  the `/api/agendas` JSON (`getAgendasData`,
+  [apiroutes.go:2047](../../../cmd/dcrdata/internal/api/apiroutes.go#L2047)). Introduced for
+  issue #400.
+- **Single-row lookups stay unfiltered.** The companion accessor `AgendaInfo(id)`
+  ([deployments.go:270](../../../gov/agendas/deployments.go#L270)) is *not* filtered: the list gate
+  must not leak into direct-ID access, so a hidden item's detail page (`/agenda/{id}`) is still
+  reachable by URL.
+- **Sibling surface from a different source needs its own filter (the drift caveat).** The
+  `/agendas` page also renders live progress *cards* from `voteTracker.Summary().Agendas`
+  ([agendas.tmpl:26-219](../../../cmd/dcrdata/views/agendas.tmpl#L26-L219)) — these do **not** come
+  from `AllAgendas()`. Filtering only the accessor left those cards still showing Decred-era
+  agendas, so `AgendasPage` cross-filters them against the `AllAgendas()` ID set via the pure helper
+  `filterAgendaSummaries`
+  ([explorerroutes.go:2126-2138](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L2126-L2138),
+  tested by `TestFilterAgendaSummaries`; PR #401). Match by **ID** — `AgendaSummary` has no
+  `VoteVersion` — on a **defensive copy** of the shared, mutex-guarded `tracker.summary` (must not
+  mutate tracker state). Extracting the filter as a pure function is what makes it unit-testable; the
+  handler itself isn't (its `voteTracker` is a concrete type).
+- **Constraints:**
+  - The threshold is **one named constant** in the owning package — no bare literals, no re-deriving
+    the threshold in handlers. (Re-*projecting* the already-filtered ID set onto a sibling surface
+    that has a different source — as the summary cards do — is a separate, legitimate need, not a
+    duplicate of the source-level filter.)
+  - A real matcher makes empty results a first-class case: storm's `Find` returns
+    `storm.ErrNotFound` when nothing matches; map it to an **empty slice + nil error** so callers
+    render their empty state, not an error page. (Both agenda handlers treat any returned error as
+    a hard failure.)
+
 See also:
 - /wiki/code-analysis/agendas/flow.full.md (derived-from)
 - /wiki/code-analysis/agendas/impact.md (shares-pattern-with: dormant-feature stub)
