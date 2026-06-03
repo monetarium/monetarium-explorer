@@ -66,8 +66,8 @@ and the transaction table; charts are per-coin. Mempool/unconfirmed activity is
 
 ### 3.1 Coin filter (source of truth) — *unchanged*
 
-- **`db/dbtypes/types.go:49`** — `const CoinTypeAll = uint8(255)`.
-- **`cmd/dcrdata/internal/middleware/apimiddleware.go:821–842`** — `CoinCtx`
+- **`db/dbtypes/types.go:50`** — `const CoinTypeAll = uint8(255)`.
+- **`cmd/dcrdata/internal/middleware/apimiddleware.go:819–840`** — `CoinCtx`
   parses `?coin=` to `uint8`; absent/invalid/`255` ⇒ `CoinTypeAll`; `1–254` ⇒
   SKA coin; stored under `ctxCoin`. `GetCoinCtx(r)` returns it (default
   `CoinTypeAll`).
@@ -77,7 +77,7 @@ and the transaction table; charts are per-coin. Mempool/unconfirmed activity is
 ### 3.2 DB layer — the major behavioral change (`db/dcrpg/pgblockchain.go`)
 
 **`AddressHistory` signature** now `(... txnView dbtypes.AddrTxnViewType, coinType uint8)`
-(`:2419-2420`). New filter-before-paginate branch (`:~2427-2480`):
+(`:2405-2406`). New filter-before-paginate branch (`:~2417-2487`):
 
 - When `coinType != CoinTypeAll`: get the **full per-coin row set** from
   `pgb.AddressCache.Rows(address, coinType)` (uncompacted) or, on cache miss,
@@ -93,7 +93,7 @@ and the transaction table; charts are per-coin. Mempool/unconfirmed activity is
 Codified by **`db/dbtypes/coinfilter_test.go::TestCoinFilterBeforePagination`**
 (new, DB-free): filter-after-paginate leaves coin rows unreachable on page 0.
 
-**`AddressData` mempool overlay rewritten** (`:~2740-2910`): unconfirmed
+**`AddressData` mempool overlay rewritten** (`:~2704-2878`): unconfirmed
 funding/spending rows are appended to `addrData.Transactions` **only when
 `coinTypeFilter == CoinTypeAll || == coinType`**, and the entire
 `received/sent/numReceived/numSent/skaReceivedByType/skaSpentByType`
@@ -105,7 +105,7 @@ design — commit `6e92df4c`).
 `AddressHistoryAll`, `addressInfo`, retry recursion, and `AddressTransactionsAll`
 now pass `dbtypes.CoinTypeAll` explicitly.
 
-**`retrieveAddressMergedTxns` rewritten** (`db/dcrpg/queries.go:~1890`): now
+**`retrieveAddressMergedTxns` rewritten** (`db/dcrpg/queries.go:~1897`): now
 `db.QueryContext(ctx, internal.SelectAddressMergedView, address, N, offset)` +
 `scanAddressMergedRows`. Previously routed through `retrieveAddressTxnsStmt(... 0)`,
 which bound `coinType=0` as `$2` = **LIMIT 0** on the merged statement (which has
@@ -116,25 +116,25 @@ no `coin_type` predicate and uses `$2` for LIMIT) → silently zero rows
 ### 3.3 Interface change — 6 sites
 
 `AddressHistory`'s new `coinType` param propagates to:
-`explorer.explorerDataSource` (`explorer.go:105`), `api.DataSource`
+`explorer.explorerDataSource` (`explorer.go:78`), `api.DataSource`
 (`apiroutes.go:58`), and mocks `noop_ds_test.go`, `explorer_test.go`,
 `pgblockchain_test.go`.
 
 ### 3.4 Data structures (source of truth — `db/dbtypes/types.go`)
 
-- `AddressInfo` (`:2323-2373`): `NumUnconfirmed int64` (`:2343`),
-  **`NumUnconfirmedByCoin map[uint8]int64`** (`:2345`), `Balance *AddressBalance`
-  (`:2361`), **`ActiveCoins []uint8`** (`:2366`).
-- `CoinBalance` (`:2379-2389`): `CoinType`, `NumSpent/NumUnspent`,
+- `AddressInfo` (`:2335-2384`): `NumUnconfirmed int64` (`:2355`),
+  **`NumUnconfirmedByCoin map[uint8]int64`** (`:2357`), `Balance *AddressBalance`
+  (`:2373`), **`ActiveCoins []uint8`** (`:2378`).
+- `CoinBalance` (`:2391-2403`): `CoinType`, `NumSpent/NumUnspent`,
   `TotalSpent/TotalUnspent int64` (VAR atoms),
   `TotalSpentSKA/TotalUnspentSKA string` (SKA atoms),
   **`TotalReceived int64` / `TotalReceivedSKA string`** (precomputed).
-- `AddressBalance` (`:2393-2406`): `Coins map[uint8]*CoinBalance`,
+- `AddressBalance` (`:2407-2412`): `Coins map[uint8]*CoinBalance`,
   `TotalOutputs/TotalInputs`, `FromStake/ToStake`, plus legacy flat
   `TotalUnspent/TotalSpent/NumSpent/NumUnspent` (synced from `Coins[0]`,
   back-compat only).
-- `ActiveCoins` populated at `pgblockchain.go:2626` (no confirmed txns) and
-  `:2691` (confirmed txns); `NumUnconfirmedByCoin` at `:2762`.
+- `ActiveCoins` populated at `pgblockchain.go:2592` (no confirmed txns) and
+  `:2648` (confirmed txns); `NumUnconfirmedByCoin` at `:2719`.
 
 ### 3.5 Transformation 1 — templates
 
@@ -161,7 +161,7 @@ skaDecimalParts .SKAValue true{{end}}`; `Credit VAR`/`Debit VAR` headers
 renamed to `Credit`/`Debit`; `sstxcommitment` gate now also requires
 `eq .CoinType 0`.
 
-**`templates.go:768-780`** — new `jsonMarshal` func: coerces `[]uint8`→`[]int`
+**`templates.go:796-808`** — new `jsonMarshal` func: coerces `[]uint8`→`[]int`
 before `json.Marshal` (else `[]byte` alias renders base64), so `ActiveCoins`
 serializes as a JSON array for `data-active-coins`.
 
@@ -171,7 +171,7 @@ preserve the filter.
 
 ### 3.6 Transformation 2 — controller (`address_controller.js`)
 
-- `coin` **added to the TurboQuery null-template** (`:271-275`) and to targets
+- `coin` **added to the TurboQuery null-template** (`:282-291`) and to targets
   (`coinFilter`, `coin`).
 - New `coinUrlSegment()` (`&coin=` or empty), `normalizeCoinSetting()`
   (validates against `activeCoins`, syncs both selectors, canonicalizes string
@@ -180,8 +180,8 @@ preserve the filter.
   `activeCoins`, else 0), `changeCoin(e)` (sets `settings.coin`, resets
   pagination, forces chart refetch via `state.coin='__force_refetch__'`).
 - `activeCoins` parsed from `data-active-coins` (try/catch → `[]` on bad JSON).
-- Chart cache keys now `${chart}-${bin}-${coin}` (`fetchGraphData :625`,
-  `processData`, `popChartCache :679`); `drawGraph` short-circuit also compares
+- Chart cache keys now `${chart}-${bin}-${coin}` (`fetchGraphData :623`,
+  `processData`, `popChartCache :674`); `drawGraph` short-circuit also compares
   `settings.coin === state.coin`. Chart URL: `?coin=${coin}` appended.
 - `amountFlowProcessor(d, binSize, coinType, atomsByTime)`: VAR reads the
   **server-precomputed `d.balance[i]`** (old JS `balance += v` accumulator
@@ -196,8 +196,8 @@ preserve the filter.
 - Confirmed-tx handler decrements **only the `numUnconfirmed` target whose
   `data-coin-type` matches** the row's `data-coin-type`.
 
-### 3.7 Chart serialization (`db/dbtypes/types.go:2041-2057`,
-`db/dcrpg/internal/addrstmts.go:351-359`, `db/dcrpg/queries.go:4301-4343`)
+### 3.7 Chart serialization (`db/dbtypes/types.go:2079-2095`,
+`db/dcrpg/internal/addrstmts.go:365-373`, `db/dcrpg/queries.go:4285-4327`)
 
 `ChartsData` json tags: `received/sent/net/balance` (VAR float64) and
 `received_atoms/sent_atoms/net_atoms/balance_atoms` (SKA string), all
@@ -252,7 +252,7 @@ balanceSKA` → `items.BalanceAtoms`.
 6. **Centralized coin labels (core constraint C7).** Use `coinSymbol`
    (template) / `renderCoinType` (JS); no hard-coded `DCR`/`VAR` literals.
 7. **CSV download is a deliberate full, non-merged, all-coin export.** The
-   `address.tmpl:327` link is static — it carries no `?coin=` / `?txntype=`,
+   `address.tmpl:346` link is static — it carries no `?coin=` / `?txntype=`,
    and the controller never rewrites it. `addressIoCsv` reads `GetCoinCtx(r)`
    (so a future link *could* scope by coin) but never reads `txntype` and
    always calls `AddressRowsCompact`. The on-page Type/Coin filters scoping the
@@ -282,7 +282,7 @@ When modifying *the address coin-filter / multi-coin path*, check:
 
 **Indirect / derived**
 - `ActiveCoins` / `NumUnconfirmedByCoin` populated only at
-  `pgblockchain.go:2626/2691` and `:2762` — patch *both* branches.
+  `pgblockchain.go:2592/2648` and `:2719` — patch *both* branches.
 - `Balance.Coins[0]` legacy-flat sync (drop only when nothing reads it).
 
 **Serialization boundaries**

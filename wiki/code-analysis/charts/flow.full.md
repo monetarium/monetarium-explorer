@@ -20,32 +20,32 @@ PostgreSQL `vins.value_in` deltas → `pgb.coinSupply` fetcher (registered as a 
 
 ### 3. Per-Layer Breakdown
 
-- **Location:** `db/dcrpg/internal/vinoutstmts.go:130-269`
+- **Location:** `db/dcrpg/internal/vinoutstmts.go:130-301`
   - **Data Structures:** PostgreSQL `vouts(value INT8, ska_value TEXT, coin_type)`, `transactions(block_height, block_time, is_mainchain, is_valid)`.
   - **Transformations:**
     - `SelectCoinSupply` (line 132) — sums `vins.value_in` per block (legacy VAR delta query).
-    - `SelectSKACoinSupplyPerBlock` (line 253) — `sum(vouts.ska_value::numeric)::text` per `(block_height, block_time)` for `coin_type = $2`, filtered to mainchain & valid, ordered by height. Per-block values; cumulation happens in Go.
-    - `SelectVARCoinSupplyPerBlock` (line 263) — `sum(vouts.value::numeric * 10000000000)::text` (multiplies by 10^10 so VAR values share SKA's 18-decimal scale). **Returns 2 columns** (`block_time, total`) — note the schema mismatch with `LoadSKASupplyForCoin`'s 3-column scan; reachable only if a future caller invokes the loader with `coinType == 0`, which the current handler short-circuits.
+    - `SelectSKACoinSupplyPerBlock` (line 262) — `sum(vouts.ska_value::numeric)::text` per `(block_height, block_time)` for `coin_type = $2`, filtered to mainchain & valid, ordered by height. Per-block values; cumulation happens in Go.
+    - `SelectVARCoinSupplyPerBlock` (line 295) — `sum(vouts.value::numeric * 10000000000)::text` (multiplies by 10^10 so VAR values share SKA's 18-decimal scale). **Returns 2 columns** (`block_time, total`) — note the schema mismatch with `LoadSKASupplyForCoin`'s 3-column scan; reachable only if a future caller invokes the loader with `coinType == 0`, which the current handler short-circuits.
 
-- **Location:** `db/dcrpg/pgblockchain.go:1078-1138` (`LoadSKASupplyForCoin`), `:3253-…` (`coinSupply` fetcher for the legacy VAR path).
+- **Location:** `db/dcrpg/pgblockchain.go:1087-1147` (`LoadSKASupplyForCoin`), `:3418-…` (`coinSupply` fetcher for the legacy VAR path).
   - **Data Structures:** `*sql.Rows` → `[]int64 blockHeights, []int64 timestamps, []string blockValues` → `*big.Int runningTotal` → `cache.SKASupplyChartData{Heights, Timestamps, Values: cumulativeValues}`.
-  - **Transformations:** Streaming scan; on each row `runningTotal.Add(blockValue)`; the cumulative `runningTotal.String()` is appended to `cumulativeValues`. The completed three slices are written to `charts.SKASupply[coinType]` under no explicit cache lock — the map is mutated directly while `skaSupplyChart` reads it under `charts.mtx.RLock()`. Concurrent first-load on the same `coinType` is racy; subsequent reads are protected.
+  - **Transformations:** Streaming scan; on each row `runningTotal.Add(blockValue)`; the cumulative `runningTotal.String()` is appended to `cumulativeValues`. The completed three slices are written to `charts.SKASupply[coinType]` under `charts.SKASupplyMtx.Lock()` ([db/dcrpg/pgblockchain.go:1136-1142](../../../db/dcrpg/pgblockchain.go)). **Lock caveat:** the gate readers `SKASupplyExists`/`SKASupplyHeight` also use `SKASupplyMtx`, but the actual chart reader `skaSupplyChart` reads the map under the *different* `charts.mtx.RLock()` ([db/cache/charts.go:1801-1807](../../../db/cache/charts.go)) — so a write does **not** exclude a `skaSupplyChart` read. Combined with the stale-height reload path (§3 API layer), a reload can run concurrently with a render of the same coin → a latent `concurrent map read and map write` hazard. See impact.md → "SKA supply map read/write under mismatched locks".
 
 - **Location:** `db/cache/charts.go`
   - **Data Structures:**
     - VAR path: `ChartData.Blocks zoomSet` (`Height, Time, NewAtoms ChartUints`) + `Days zoomSet`. `ChartUints = []uint64`.
     - SKA path: `ChartData.SKASupply SKASupplyData = map[uint8]SKASupplyChartData{Heights []int64; Timestamps []int64; Values []string}`. Cumulative values are stored, not deltas.
   - **Transformations:**
-    - `(*ChartData).Chart` (line 1050) — looks up `chartMakers[chartID]`; if absent and `IsSKASupplyChart(chartID)`, dispatches to `skaSupplyChart(...)` **without consulting or writing the JSON cache** (`cacheChart` is only called for `chartMakers` hits). VAR continues to be cached.
-    - `coinSupplyChart` (line 1262) — VAR-only; uses `accumulate(charts.Blocks.NewAtoms)` (line 1269) for `BlockBin` and `accumulate(charts.Days.NewAtoms)` (line 1284) for `DayBin`; emits `{h, supply}` or `{h, t, supply}` via `encode`.
-    - `skaSupplyChart` (line 1692) — coinType-0 short-circuits to `coinSupplyChart`. Otherwise reads `charts.SKASupply[coinType]` under `RLock`. For `BlockBin` it returns the per-block series verbatim; for `DayBin` it calls `aggregateSKASupply(timestamps, heights, values)` (line 1814), which buckets by `t / 86400`, keeps the **last** sample per day, and re-emits `(timestamp, height, value)` triples sorted ascending by day. The block-bin response always carries `h`; the day-bin time-axis response also carries `h` per fix `a9db4b3b`.
-    - `accumulate` (line 1105) is **VAR-only**: `uint64` accumulator overflows for SKA atoms.
+    - `(*ChartData).Chart` (line 1093) — looks up `chartMakers[chartID]`; if absent and `IsSKASupplyChart(chartID)`, dispatches to `skaSupplyChart(...)` **without consulting or writing the JSON cache** (`cacheChart` is only called for `chartMakers` hits). VAR continues to be cached.
+    - `coinSupplyChart` (line 1349) — VAR-only; uses `accumulate(charts.Blocks.NewAtoms)` (line 1356) for `BlockBin` and `accumulate(charts.Days.NewAtoms)` (line 1371) for `DayBin`; emits `{h, supply}` or `{h, t, supply}` via `encode`.
+    - `skaSupplyChart` (line 1789) — coinType-0 short-circuits to `coinSupplyChart`. Otherwise reads `charts.SKASupply[coinType]` under `RLock`. For `BlockBin` it returns the per-block series verbatim; for `DayBin` it calls `aggregateSKASupply(timestamps, heights, values)` (line 1846), which buckets by `t / 86400`, keeps the **last** sample per day, and re-emits `(timestamp, height, value)` triples sorted ascending by day. The block-bin response always carries `h`; the day-bin time-axis response also carries `h` per fix `a9db4b3b`.
+    - `accumulate` (line 1148) is **VAR-only**: `uint64` accumulator overflows for SKA atoms.
 
 - **Location:** `cmd/dcrdata/internal/api/apiroutes.go:1942-1975` (`ChartTypeData`), router at `cmd/dcrdata/internal/api/apirouter.go:240-243` and middleware at `cmd/dcrdata/internal/middleware/apimiddleware.go:796-815`.
   - **Data Structures:** `c.charts *cache.ChartData`, `c.DataSource.LoadSKASupplyForCoin(...)`.
   - **Transformations:**
     - `r.With(m.CoinSupplyChartTypeCtx).Get("/coin-supply/{charttype}", app.ChartTypeData)` — for `coin-supply/N`, the middleware re-prefixes the URL param, putting `"coin-supply/" + charttype` into `ctxChartType`. The fallthrough `r.With(m.ChartTypeCtx).Get("/{charttype}", app.ChartTypeData)` covers everything else.
-    - `ChartTypeData` first checks `IsSKASupplyChart(chartType) && coinType > 0 && !c.charts.SKASupplyExists(coinType)` and triggers `LoadSKASupplyForCoin`. If load fails it logs `Warnf` and continues; downstream `Chart(...)` then returns `"no SKA supply data found"`, which the handler maps to HTTP 503. Pure VAR requests skip the load entirely.
+    - `ChartTypeData` triggers `LoadSKASupplyForCoin` for `IsSKASupplyChart(chartType) && coinType > 0` when **either** the coin is not yet loaded (`!SKASupplyExists(coinType)`) **or** the cached series is stale: `currHeight - cachedHeight > skaSupplyStaleHeightThreshold` (=10 blocks), comparing `SKASupplyHeight(coinType)` against `DataSource.GetHeight` ([cmd/dcrdata/internal/api/apiroutes.go:1888, 1901-1912](../../../cmd/dcrdata/internal/api/apiroutes.go)). So reloads now also fire for already-loaded coins, not just on first request — this is what makes the mismatched-lock hazard (§3 DB layer) reachable. If load fails it logs `Warnf` and continues; downstream `Chart(...)` then returns `"no SKA supply data found"`, which the handler maps to HTTP 503. Pure VAR requests skip the load entirely.
 
 - **Location:** `cmd/dcrdata/internal/explorer/explorerroutes.go:1911-1943` (`Charts` handler).
   - **Data Structures:** `pageData.HomeInfo.SKACoinSupply []SKACoinSupplyEntry`, page payload `{*CommonPageData, Premine, TargetPoolSize, ActiveSKATypes []uint8}`.
@@ -77,7 +77,7 @@ PostgreSQL `vins.value_in` deltas → `pgb.coinSupply` fetcher (registered as a 
 - **VAR uses `[]uint64`**, accumulated via `accumulate()`; this overflows for SKA atoms (18 decimals). Never reuse `accumulate` or `ChartUints` for SKA.
 - **SKA atoms travel as strings end-to-end**: SQL `::text`, Go `[]string` + `*big.Int`, JSON `"supply": []string`, JS `Number(...) * 1e-18` ONLY for the chart line, **never** for the legend. The legend MUST use `splitSkaAtomsNoTrailing` (or equivalent BigInt-safe helper) on the original raw string.
 - **The `h` field is contractual** for time-axis SKA responses (regression-fixed in `a9db4b3b`); `19a114c1` made `h` and cumulation invariants. Any new SKA chart endpoint must keep them.
-- **`skaSupplyChart` uses `RLock` only** — the loader writes to `charts.SKASupply` without taking a write lock, so concurrent first-loads on the same coin type can race. Acceptable because `LoadSKASupplyForCoin` is idempotent over the same data, but a refactor must preserve this invariant or add a write-lock.
+- **`SKASupply` is guarded by two *different* mutexes** — the loader writes under `charts.SKASupplyMtx.Lock()` and the gate readers (`SKASupplyExists`/`SKASupplyHeight`) use `SKASupplyMtx.RLock()`, but the chart reader `skaSupplyChart` reads under `charts.mtx.RLock()`. The writer therefore does **not** exclude the chart reader; with the stale-height reload path a reload can run concurrently with a render → latent `concurrent map read and map write`. This is a real defect (see impact.md); a refactor should unify all `SKASupply` access on `SKASupplyMtx` rather than rely on load idempotence.
 - **Cache absent for SKA**: the JSON byte cache (`cacheChart`) is bypassed for `skaSupplyChart`. A future optimization that flips this on must invalidate per coin type when a new block arrives.
 - **VAR-circulation endpoint duality**: `/api/chart/coin-supply` and `/api/chart/coin-supply/0` resolve to the same data via two different code paths. If the legacy `coin-supply` route is ever removed, the `circulationFunc` projection / inflation logic must follow it through.
 
@@ -105,7 +105,7 @@ When modifying chart data structures or pipelines, check ALL of:
   - Forgetting `h` on a SKA time-axis response leaves the frontend with no per-point block alignment, breaking `xFunc(i) = heights[i]` for the day bin.
   - Stale `?zoom=` after switching between VAR and SKA charts — the `charts` controller calls `Zoom.project(...)` across data-range changes (line 901), unlike the address controller; behavior is OK but worth understanding before changing.
 - **Hard failures:**
-  - `LoadSKASupplyForCoin` with `coinType == 0` issues the 2-column `SelectVARCoinSupplyPerBlock` but `Scan(&h, &t, &v)` expects 3 targets. This does **not** panic: the per-row scan error is logged and `continue`d ([db/dcrpg/pgblockchain.go:1103-1106](../../../db/dcrpg/pgblockchain.go#L1103-L1106)), so **every** row is skipped and the result is empty → downstream "no data" → HTTP 503 (loud but degraded, not a crash). Currently unreachable because the API handler short-circuits coinType=0; reachable if a refactor removes that guard.
+  - `LoadSKASupplyForCoin` with `coinType == 0` issues the 2-column `SelectVARCoinSupplyPerBlock` but `Scan(&h, &t, &v)` expects 3 targets. This does **not** panic: the per-row scan error is logged and `continue`d ([db/dcrpg/pgblockchain.go:1111-1113](../../../db/dcrpg/pgblockchain.go#L1111-L1113)), so **every** row is skipped and the result is empty → downstream "no data" → HTTP 503 (loud but degraded, not a crash). Currently unreachable because the API handler short-circuits coinType=0; reachable if a refactor removes that guard.
   - `uint64` overflow if a future change pushes SKA values into `ChartUints`.
   - 503 response for `coin-supply/{N}` when no rows exist — handler returns `"chart data not available"`; chart UI shows the loading spinner indefinitely if not handled in JS.
 
@@ -114,7 +114,7 @@ When modifying chart data structures or pipelines, check ALL of:
 - Reusing the VAR pipeline (`Blocks.NewAtoms`, `accumulate`, `*atomsToVAR`) for SKA coins — it overflows, loses precision, and bypasses the per-coin map.
 - Adding a new chart format that omits `h` for time-axis SKA responses (regression risk; `a9db4b3b` was a fix for exactly this).
 - Computing cumulative supply on the frontend — already done in Go, doing it again in JS produces a double-summed series.
-- Mutating `SKASupply[coinType]` from outside `LoadSKASupplyForCoin` without coordinating with `charts.mtx` — the existing loader writes without `Lock`, relying on idempotence.
+- Mutating `SKASupply[coinType]` from outside `LoadSKASupplyForCoin` without holding `charts.SKASupplyMtx` — and note the existing reader `skaSupplyChart` reads under the *wrong* mutex (`charts.mtx`), so even correctly locking `SKASupplyMtx` does not make a concurrent render safe today (real defect — see impact.md).
 - Adding a new VAR-supply variant on the legacy `coin-supply` chart ID instead of `coin-supply/0` — the legacy ID is on the deprecation path; add to the prefixed namespace.
 - Building a Y-axis label with a hardcoded "DCR" or "VAR" — use `coinLabel = isSKA ? renderCoinType(coinType) : 'VAR'`.
 - Wrapping `Number(s) * 1e-18` and using it for the legend — the legend MUST go through `formatSkaAtomsExact` / `splitSkaAtomsNoTrailing`.

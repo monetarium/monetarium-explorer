@@ -21,8 +21,8 @@ mempool overlay, REST/CSV, server templates, Stimulus controller.
 **Failure mode:** loud (compile failure) — *if* every site is found. The hazard is the mock sites: missing one fails the build of that test package only, easy to overlook across 10 modules.
 
 **Affected sites:**
-- Production: `db/dcrpg/pgblockchain.go`; the two Go interfaces — `cmd/dcrdata/internal/explorer/explorer.go` (~:105) and `cmd/dcrdata/internal/api/apiroutes.go` (~:58); `explorerUI.AddressListData` ([explorerroutes.go:1879-1884](cmd/dcrdata/internal/explorer/explorerroutes.go#L1879-L1884)).
-- Four mock files (must stay in lockstep): [explorer_test.go:50](cmd/dcrdata/internal/explorer/explorer_test.go#L50), [api/noop_ds_test.go:29](cmd/dcrdata/internal/api/noop_ds_test.go#L29), [api/address_api_test.go:15](cmd/dcrdata/internal/api/address_api_test.go#L15), [api/apiroutes_test.go:337](cmd/dcrdata/internal/api/apiroutes_test.go#L337).
+- Production: `db/dcrpg/pgblockchain.go`; the two Go interfaces — `cmd/dcrdata/internal/explorer/explorer.go` (~:78) and `cmd/dcrdata/internal/api/apiroutes.go` (~:58); `explorerUI.AddressListData` ([explorerroutes.go:1642-1656](cmd/dcrdata/internal/explorer/explorerroutes.go#L1642-L1656)).
+- Four mock files (must stay in lockstep): [explorer_test.go:52](cmd/dcrdata/internal/explorer/explorer_test.go#L52), [api/noop_ds_test.go:29](cmd/dcrdata/internal/api/noop_ds_test.go#L29), [api/address_api_test.go:15](cmd/dcrdata/internal/api/address_api_test.go#L15), [api/apiroutes_test.go:339](cmd/dcrdata/internal/api/apiroutes_test.go#L339).
 
 **Constraint:** when adding a per-coin field on `AddressInfo`/`CoinBalance`, populate it in **all three** aggregators (see patterns.md "Coin-aware aggregation in three pipelines") plus the `ActiveCoins`/`NumUnconfirmedByCoin` branches; a field set in only one is silently wrong for the other code paths / page positions.
 
@@ -34,9 +34,9 @@ mempool overlay, REST/CSV, server templates, Stimulus controller.
 
 **Failure mode:** silent — wrong rows or an empty result with no error.
 
-**Description:** `dbtypes.CoinTypeAll = uint8(255)` ([types.go:47-49](db/dbtypes/types.go#L47-L49)) has **two** meanings:
+**Description:** `dbtypes.CoinTypeAll = uint8(255)` ([types.go:48-50](db/dbtypes/types.go#L48-L50)) has **two** meanings:
 - **Table / CSV / counts pipelines:** 255 = "no filter — show all coins". In-memory row filters (`AddressRowsCompact`, `AddressCache.Rows`) **must short-circuit** on `CoinTypeAll` and return all rows. Missing the short-circuit makes `if r.CoinType == coinType` match nothing → the no-`?coin=` CSV comes back empty (regression: `db/cache/addresscache_test.go::TestAddressCacheRows_CoinTypeAll`).
-- **Chart pipeline:** 255 is meaningless (charts are inherently per-coin) and collapses to `0` (VAR) at [pgblockchain.go:3327-3330](db/dcrpg/pgblockchain.go#L3327-L3330). The JS `effectiveCoin()` mirrors this collapse — change one, change both.
+- **Chart pipeline:** 255 is meaningless (charts are inherently per-coin) and collapses to `0` (VAR) at [pgblockchain.go:3285-3287](db/dcrpg/pgblockchain.go#L3285-L3287). The JS `effectiveCoin()` mirrors this collapse — change one, change both.
 
 **Constraint:** `CoinTypeAll` must stay `255`, distinct from every real coin (`TestCoinTypeAllSentinel`). Renaming the exported constant touches every caller.
 
@@ -48,7 +48,7 @@ mempool overlay, REST/CSV, server templates, Stimulus controller.
 
 **Failure mode:** silent — zeros, truncation, or scientific notation; invisible until an SKA-holding address is viewed.
 
-**Description (the PR #263 bug class):** the `addresses.value INT8` column stores the VAR-atom representation regardless of coin type; for SKA rows it's the truncated INT8 of `vout.Value` (commonly `0`). `selectAddressAmountFlowByAddress` formerly summed `value` for both coin families, so `parseRowsSentReceived`'s `*big.Int` accumulator faithfully accumulated zeros and `/api/address/{addr}/amountflow/{bin}?coin=N` shipped zeroed series for every SKA coin — invisible because no frontend exercised the SKA path. **Fixed in PR #263:** the SQL now emits parallel `received_ska`/`sent_ska` from `COALESCE(SUM(NULLIF(ska_value,'')::numeric),0)::text` and the scanner builds `*big.Int` from those text columns ([addrstmts.go:351-359](db/dcrpg/internal/addrstmts.go#L351-L359), [queries.go:4289-4331](db/dcrpg/queries.go#L4289-L4331)). The same dual-column pattern is in `SelectAddressSpentUnspentCountAndValue` ([addrstmts.go:234-247](db/dcrpg/internal/addrstmts.go#L234-L247)).
+**Description (the PR #263 bug class):** the `addresses.value INT8` column stores the VAR-atom representation regardless of coin type; for SKA rows it's the truncated INT8 of `vout.Value` (commonly `0`). `selectAddressAmountFlowByAddress` formerly summed `value` for both coin families, so `parseRowsSentReceived`'s `*big.Int` accumulator faithfully accumulated zeros and `/api/address/{addr}/amountflow/{bin}?coin=N` shipped zeroed series for every SKA coin — invisible because no frontend exercised the SKA path. **Fixed in PR #263:** the SQL now emits parallel `received_ska`/`sent_ska` from `COALESCE(SUM(NULLIF(ska_value,'')::numeric),0)::text` and the scanner builds `*big.Int` from those text columns ([addrstmts.go:365-373](db/dcrpg/internal/addrstmts.go#L365-L373), [queries.go:4285-4327](db/dcrpg/queries.go#L4285-L4327)). The same dual-column pattern is in `SelectAddressSpentUnspentCountAndValue` ([addrstmts.go:234-261](db/dcrpg/internal/addrstmts.go#L234-L261)).
 
 **Constraint (C1):** any new monetary-aggregate SQL must emit both VAR and SKA columns; SKA stays a `*big.Int`-backed decimal string to the render boundary. See patterns.md "Dual VAR/SKA SUM" and "SKA decimal-string atom pipeline".
 
@@ -60,7 +60,7 @@ mempool overlay, REST/CSV, server templates, Stimulus controller.
 
 **Failure mode:** silent — the chart replays another coin's cached series.
 
-**Description:** the chart cache `ctrl.retrievedData` is keyed by `` `${chart}-${bin}-${coin}` `` ([address_controller.js:644](cmd/dcrdata/public/js/controllers/address_controller.js#L644)); `changeCoin` invalidates via a `__force_refetch__` sentinel (~:461-472). Server cache `AddressCacheItem.history` is keyed `(address, HistoryChart, grouping, coinType)`. **Cache invalidation (`FreshenAddressCaches`) is per-address, not per-(address, coin)** — a reorg invalidates all coins together (intentional; don't "optimize" to per-coin without re-checking reorg correctness).
+**Description:** the chart cache `ctrl.retrievedData` is keyed by `` `${chart}-${bin}-${coin}` `` ([address_controller.js:623](cmd/dcrdata/public/js/controllers/address_controller.js#L623)); `changeCoin` invalidates via a `__force_refetch__` sentinel (~:456-467). Server cache `AddressCacheItem.history` is keyed `(address, HistoryChart, grouping, coinType)`. **Cache invalidation (`FreshenAddressCaches`) is per-address, not per-(address, coin)** — a reorg invalidates all coins together (intentional; don't "optimize" to per-coin without re-checking reorg correctness).
 
 ---
 
@@ -97,7 +97,7 @@ mempool overlay, REST/CSV, server templates, Stimulus controller.
 ## Resolved (no longer a risk) — recorded so it isn't re-flagged
 
 - **sstxcommitment SKA false-positive — FIXED.** `extras.tmpl` now guards the heuristic with `if and (eq .CoinType 0) (eq .SentTotal 0.0)` (VAR-only), so SKA debit rows are no longer misclassified as "sstxcommitment". Residual minor fragility: it is still a float-compare-to-magic-value for VAR; replacing it with an explicit `AddressTx` flag remains a nice-to-have, not a bug.
-- **Per-row coin fields unread by template — FIXED.** `AddressTx.{CoinType,SKAValue,ReceivedTotalSKA,SentTotalSKA}` ([types.go:2294-2302](db/dbtypes/types.go#L2294-L2302)) are read by `extras.tmpl` (Coin column at ~:218/:250; per-coin amount branches).
+- **Per-row coin fields unread by template — FIXED.** `AddressTx.{CoinType,SKAValue,ReceivedTotalSKA,SentTotalSKA}` ([types.go:2302-2310](db/dbtypes/types.go#L2302-L2310)) are read by `extras.tmpl` (Coin column at ~:214/:246; per-coin amount branches).
 - **`FiatBalance` dead code — REMOVED.** The field, the handler `nil` assignment, and the `if $.FiatBalance` template branch were all deleted; `xcBot.Conversion` is no longer called from the address handler. Reviving fiat needs a multi-coin price model that does not exist (open question below).
 - **`coin` not in TurboQuery / VAR-only legend / no Coin column / float SKA chart accumulator — all SHIPPED.** See [flow.compact.md](flow.compact.md) Stale-Claim Delta.
 

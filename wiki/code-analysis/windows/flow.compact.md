@@ -50,5 +50,5 @@
       changed everywhere together).
 - [ ] Handler pagination ↔ `retrieveWindowBlocks` range math ↔
       `CalculateWindowIndex` all use the same `windowSize`.
-- [ ] `dataSource` interface (`explorer.go:100`) + mock (`explorer_test.go:100`)
+- [ ] `dataSource` interface (`explorer.go:95`) + mock (`explorer_test.go:103`)
       moved with any `PosIntervals` signature change.
