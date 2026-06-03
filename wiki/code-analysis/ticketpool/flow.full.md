@@ -181,7 +181,7 @@ A static shell with `data-controller="ticketpool"`. Three Dygraph mount points (
 - `onBarsChange(e)` — sets `this.bars`, GETs `/api/ticketpool/bydate/{bars}`, calls `purchasesGraphData(response.time_chart)` (no mempool merge in this branch) and updates the purchases graph only.
 - `disconnect()` — destroys both Dygraphs and deregisters WS handlers.
 
-Labels: `'A.v.g. Tickets Value (DCR)'` (purchases y2-axis) and `'Ticket Price (VAR)'` (price x-axis). The `DCR` string is a legacy label leak — see [/wiki/specs/parameters/spec.md](../../specs/parameters/spec.md) and [/wiki/specs/attack-cost/spec.md](../../specs/attack-cost/spec.md) for the `DCR`→`VAR` rename pattern. (C7 prefers the `coinSymbol` / `renderCoinType` helpers, but neither is the right tool for a column header — the constraint here is the spec, not C7 directly.)
+Labels are VAR-only and consistent: `'A.v.g. Tickets Value (VAR)'` (purchases y2-axis, [ticketpool_controller.js:257](../../../cmd/dcrdata/public/js/controllers/ticketpool_controller.js#L257)) and `'Ticket Price (VAR)'` (price x-axis, [:286](../../../cmd/dcrdata/public/js/controllers/ticketpool_controller.js#L286)). The former purchases-axis `(DCR)` leak has been fixed; both are hardcoded `(VAR)` literals — acceptable because tickets are a VAR-only PoS instrument, so C7's `coinSymbol`/`renderCoinType` helpers are not required for these static axis labels.
 
 ## Section 4 — Cross-Layer Dependencies
 
@@ -200,7 +200,7 @@ Labels: `'A.v.g. Tickets Value (DCR)'` (purchases y2-axis) and `'Ticket Price (V
 - **C2 (dual pipeline mutation):** Two collection paths feed the page — DB (Postgres `tickets` JOIN) and live mempool (`DataCache` via `GetMempoolPriceCountTime`). Any change to the ticket-row population (e.g. adding a new column to the SELECT for filtering) must update three `Scan` sites *and* the cache invariant that all three sub-charts share one `(height, interval)` key. The mempool overlay now has a single producer shared by REST and WS (§3.5); historically it was two divergent formulas (resolved in [#290](https://github.com/monetarium/monetarium-explorer/issues/290)).
 - **C3 (template+WS parity):** The HTML template carries **no** chart data — there is no SSR variant to keep in parity. The two non-static data paths (REST and WS) carry the **same struct** *and* (after [#290](https://github.com/monetarium/monetarium-explorer/issues/290)) the same producer for every field, so they cannot drift on the mempool overlay. Adding new top-level fields to `TicketPoolChartsData` still requires updating both producer sites — see Section 6.
 - **C6 (template cloning):** `populateOutputs` builds the donut table via `innerHTML` concatenation, not `<template>` cloning. Tolerated because all interpolated values are pre-coerced with `parseInt()` to integers. **Do not extend the function with any user-derived string** without converting to a `<template>` clone.
-- **C7 (coin-symbol helper):** Legacy `DCR` label survives in the purchases y2-axis (`'A.v.g. Tickets Value (DCR)'`, [ticketpool_controller.js:242](../../../cmd/dcrdata/public/js/controllers/ticketpool_controller.js#L242)). The x-axis on the price chart already says `(VAR)`. The two labels disagree on a single page.
+- **C7 (coin-symbol helper):** Resolved — both chart axes now read `(VAR)` ([ticketpool_controller.js:257](../../../cmd/dcrdata/public/js/controllers/ticketpool_controller.js#L257) and [:286](../../../cmd/dcrdata/public/js/controllers/ticketpool_controller.js#L286)); the former purchases-axis `(DCR)` leak is gone. These are static VAR-only labels, so the centralized `renderCoinType`/`coinSymbol` helpers do not apply.
 
 ## Section 6 — Mutation Impact
 
@@ -242,7 +242,7 @@ When modifying `/ticketpool`, check:
 - Types: [api/types/apitypes.go:931-960](../../../api/types/apitypes.go#L931-L960), [db/dbtypes/types.go:2118-2128](../../../db/dbtypes/types.go#L2118-L2128), [db/dbtypes/types.go:827-857](../../../db/dbtypes/types.go#L827-L857)
 
 See also:
-- /wiki/core/constraints.md (depends-on: C1 numeric precision — VAR-only float64 pipeline; C2 dual collection paths; C3 REST/WS payload parity; C6 template-cloning exception in `populateOutputs`; C7 legacy `DCR` label leak)
+- /wiki/core/constraints.md (depends-on: C1 numeric precision — VAR-only float64 pipeline; C2 dual collection paths; C3 REST/WS payload parity; C6 template-cloning exception in `populateOutputs`)
 - /wiki/core/staking-rewards.md (depends-on: tickets are VAR-only by chain design)
 - /wiki/code-analysis/decodetx/patterns.md (shares-pattern-with: P1 form-shell over WS-RPC; the `getticketpooldata` switch is the same shape as `decodetx`/`sendtx`)
 - /wiki/code-analysis/parameters/flow.full.md (shares-pattern-with: no-compute Go handler that renders only `commonData`)

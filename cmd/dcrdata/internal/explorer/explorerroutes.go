@@ -1995,6 +1995,12 @@ func (exp *explorerUI) AgendaPage(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Errorf("fetching Cumulative votes choices count failed: %v", err)
 	}
+	if summary == nil {
+		// AgendasVotesSummary returns (nil, nil) for an agenda whose voting
+		// has not started yet (future StartTime). Use a zero-tally summary so
+		// the page renders instead of dereferencing a nil pointer below.
+		summary = &dbtypes.AgendaSummary{}
+	}
 
 	// Overrides the default count value with the actual vote choices count
 	// matching data displayed on "Cumulative Vote Choices" and "Vote Choices By

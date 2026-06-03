@@ -35,19 +35,19 @@ monetarium-node RPC ──► blockdata collector ──► explorer.Store() ─
 
 ### Layer A — Chain → in-memory snapshot
 
-- **Location:** `blockdata/blockdata.go:207` (`GetCoinSupply`); `cmd/dcrdata/internal/explorer/explorer.go:574-649` (`(*explorerUI).Store`).
+- **Location:** `blockdata/blockdata.go:207` (`GetCoinSupply`); `cmd/dcrdata/internal/explorer/explorer.go:504-904` (`(*explorerUI).Store`).
 - **Data structures:** `blockData.ExtraInfo.CoinSupply`, `blockData.CurrentStakeDiff`,
-  `blockData.PoolInfo` → copied into `explorer/types/explorertypes.go:811` `HomeInfo`
-  (`CoinSupply int64`, `StakeDiff float64`, `HashRate float64`) and `:1375` `TicketPoolInfo`
+  `blockData.PoolInfo` → copied into `explorer/types/explorertypes.go:877` `HomeInfo`
+  (`CoinSupply int64`, `StakeDiff float64`, `HashRate float64`) and `:1444` `TicketPoolInfo`
   (`Size uint32`, `Value float64`).
-- **Transformations:** `explorer.go:562-564` computes `stakePerc` using VAR `CoinSupply` via
+- **Transformations:** `explorer.go:529-531` computes `stakePerc` using VAR `CoinSupply` via
   `dcrutil.Amount(...).ToCoin()` (8-decimal float). `HomeInfo` is written under `p.Lock()`;
   attack-cost reads under `RLock` — a snapshot, not request- or block-scoped.
 
 ### Layer B — HTTP handler
 
 - **Location:** `cmd/dcrdata/internal/explorer/explorerroutes.go` `(*explorerUI).AttackCost`;
-  route registered `cmd/dcrdata/main.go:817`.
+  route registered `cmd/dcrdata/main.go:786`.
 - **Data structures:** anonymous struct embedding `*CommonPageData` with
   `HashRate float64`, `Height int64`, `TicketPrice float64`, `TicketPoolSize int64`,
   `TicketPoolValue float64`, `CoinSupply int64`. No `DCRPrice`/USD field — the rate is
@@ -62,7 +62,7 @@ monetarium-node RPC ──► blockdata collector ──► explorer.Store() ─
 
 - **Location:** `cmd/dcrdata/views/attackcost.tmpl` (the `data-attackcost-*` attribute
   block at the top of the controller container); template registered in the set at
-  `explorer.go:424`.
+  `explorer.go:394`.
 - **Data structures:** `data-attackcost-height`, `-hashrate`, `-ticket-price`,
   `-ticket-pool-value`, `-ticket-pool-size`, `-coin-supply`. `CoinSupply int64` is emitted
   as a raw VAR-atom integer string. No `-dcrprice` attribute — the rate is user-entered.
@@ -98,7 +98,7 @@ monetarium-node RPC ──► blockdata collector ──► explorer.Store() ─
 
 - **Handler ↔ shared `HomeInfo`:** the handler does not own its data; it reads whatever
   `Store()` last wrote. `HomeInfo`/`TicketPoolInfo` are **shared structs** (JSON-tagged,
-  `explorertypes.go:812`) also serialized by the HTTP API and consumed by the home page —
+  `explorertypes.go:878`) also serialized by the HTTP API and consumed by the home page —
   a field type/units change ripples far beyond this page.
 - **Template ↔ controller (brittle):** the `data-attackcost-*` attribute keys
   (`this.data.get(...)`) and the `static targets` array form an exact, untyped string
@@ -134,7 +134,7 @@ When modifying this page, check:
   `attackcost.tmpl`; the `parseInt`/`parseFloat` reads in `attackcost_controller.js`
   `connect()`.
 - **Indirect dependencies:** `HomeInfo`/`TicketPoolInfo` shared with HTTP API + home
-  page; `explorer.go:574-649` `Store()` population.
+  page; `explorer.go:504-904` `Store()` population.
 - **Serialization boundary:** Go numeric → `data-*` string → JS `parseInt/parseFloat`
   (and the JSON-tagged shared struct used elsewhere).
 - **Rendering layers:** Dygraphs (`doZoomY_` patch), ~90 `data-attackcost-target` hooks.
@@ -171,11 +171,11 @@ When modifying this page, check:
 
 ## Section 8 — Evidence
 
-- `cmd/dcrdata/main.go:817` — route registration.
+- `cmd/dcrdata/main.go:786` — route registration.
 - `cmd/dcrdata/internal/explorer/explorerroutes.go` `AttackCost` — handler; reads under
   `RLock`, renders, no math.
-- `cmd/dcrdata/internal/explorer/explorer.go:562-564, 574-649` — `Store()` → `HomeInfo`.
-- `explorer/types/explorertypes.go:811-837` (`HomeInfo`), `:1375-1382` (`TicketPoolInfo`).
+- `cmd/dcrdata/internal/explorer/explorer.go:529-531, 504-904` — `Store()` → `HomeInfo`.
+- `explorer/types/explorertypes.go:877-903` (`HomeInfo`), `:1444-1451` (`TicketPoolInfo`).
 - `blockdata/blockdata.go:207` — `GetCoinSupply`.
 - `cmd/dcrdata/views/attackcost.tmpl` — `data-*` contract at the top of the controller
   container; manual `Exchange Rate`, `Device Hashrate`, `Device Power`, `Device Price`

@@ -6,15 +6,15 @@
 **Description:**
 "Coin supply" is served by two code paths that share the `coin-supply` / `coin-supply/{N}` chart-ID namespace but no code:
 
-- **VAR (legacy):** PG `vins.value_in` deltas pre-loaded into `ChartData.Blocks.NewAtoms` / `Days.NewAtoms` (`ChartUints = []uint64`). `coinSupplyChart` ([db/cache/charts.go:1262](../../../db/cache/charts.go)) calls `accumulate(charts.Blocks.NewAtoms)` ([:1269](../../../db/cache/charts.go)) / `accumulate(charts.Days.NewAtoms)` ([:1284](../../../db/cache/charts.go)) at chart time, emits `{h, [t,] supply: []uint64}` via `encode`, and the result goes through `cacheChart`.
-- **SKA (per-coin, lazy):** `(*ChartData).Chart` ([:1050](../../../db/cache/charts.go)) finds no `chartMakers[chartID]` entry, and when `IsSKASupplyChart(chartID)` ([:93](../../../db/cache/charts.go)) is true dispatches to `skaSupplyChart` ([:1692](../../../db/cache/charts.go)) — outside the cache. Cumulation is precomputed by `LoadSKASupplyForCoin` ([db/dcrpg/pgblockchain.go:1080](../../../db/dcrpg/pgblockchain.go)) via `*big.Int` running total ([:1117-1126](../../../db/dcrpg/pgblockchain.go)) into `charts.SKASupply[coinType]{Heights, Timestamps, Values []string}`.
+- **VAR (legacy):** PG `vins.value_in` deltas pre-loaded into `ChartData.Blocks.NewAtoms` / `Days.NewAtoms` (`ChartUints = []uint64`). `coinSupplyChart` ([db/cache/charts.go:1349](../../../db/cache/charts.go)) calls `accumulate(charts.Blocks.NewAtoms)` ([:1356](../../../db/cache/charts.go)) / `accumulate(charts.Days.NewAtoms)` ([:1371](../../../db/cache/charts.go)) at chart time, emits `{h, [t,] supply: []uint64}` via `encode`, and the result goes through `cacheChart`.
+- **SKA (per-coin, lazy):** `(*ChartData).Chart` ([:1093](../../../db/cache/charts.go)) finds no `chartMakers[chartID]` entry, and when `IsSKASupplyChart(chartID)` ([:93](../../../db/cache/charts.go)) is true dispatches to `skaSupplyChart` ([:1789](../../../db/cache/charts.go)) — outside the cache. Cumulation is precomputed by `LoadSKASupplyForCoin` ([db/dcrpg/pgblockchain.go:1087](../../../db/dcrpg/pgblockchain.go)) via `*big.Int` running total ([:1127-1134](../../../db/dcrpg/pgblockchain.go)) into `charts.SKASupply[coinType]{Heights, Timestamps, Values []string}`.
 
-`coin-supply/0` is the path-uniform alias for the legacy VAR data: `skaSupplyChart` short-circuits `coinType == 0` back to `coinSupplyChart` ([:1698-1700](../../../db/cache/charts.go)). The bare `coin-supply` ID is on the deprecation path; the dropdown only emits `coin-supply/0` and `coin-supply/{N}` ([cmd/dcrdata/views/charts.tmpl:40-41](../../../cmd/dcrdata/views/charts.tmpl)).
+`coin-supply/0` is the path-uniform alias for the legacy VAR data: `skaSupplyChart` short-circuits `coinType == 0` back to `coinSupplyChart` ([:1796-1798](../../../db/cache/charts.go)). The bare `coin-supply` ID is on the deprecation path; the dropdown only emits `coin-supply/0` and `coin-supply/{N}` ([cmd/dcrdata/views/charts.tmpl:33-34](../../../cmd/dcrdata/views/charts.tmpl)).
 
 **Constraints:**
-- Register a new *cached* chart in `chartMakers` ([:1033](../../../db/cache/charts.go)); a new SKA per-coin chart extends the `IsSKASupplyChart` family and is intentionally *not* cached.
+- Register a new *cached* chart in `chartMakers` ([:1072](../../../db/cache/charts.go)); a new SKA per-coin chart extends the `IsSKASupplyChart` family and is intentionally *not* cached.
 - Never add a new VAR-supply variant under the bare `coin-supply` ID — use the `coin-supply/` prefixed namespace.
-- `accumulate` ([:1105](../../../db/cache/charts.go)) is a `uint64` accumulator; it is only ever applied to `ChartUints` (`*.NewAtoms`, `*.BlockSize`). It MUST NOT be applied to `SKASupply.Values` (already cumulative; would double-sum and overflow).
+- `accumulate` ([:1148](../../../db/cache/charts.go)) is a `uint64` accumulator; it is only ever applied to `ChartUints` (`*.NewAtoms`, `*.BlockSize`). It MUST NOT be applied to `SKASupply.Values` (already cumulative; would double-sum and overflow).
 
 **depends-on:** [impact.md → "Risk: `accumulate` / `ChartUints` applied to SKA supply"](impact.md), [impact.md → "Risk: VAR-circulation endpoint duality broken"](impact.md).
 
@@ -95,19 +95,19 @@ The lazy DB load is a separate concern: `ChartTypeData` ([cmd/dcrdata/internal/a
 
 ---
 
-## Lazy first-load writes `SKASupply` without a write lock
+## Lazy SKA-supply load guarded by a mismatched mutex (latent race)
 
 **Appears in:**
 - [/wiki/code-analysis/charts/flow.full.md](flow.full.md)
 
 **Description:**
-`LoadSKASupplyForCoin` ([db/dcrpg/pgblockchain.go:1080](../../../db/dcrpg/pgblockchain.go)) assigns `charts.SKASupply[coinType] = cache.SKASupplyChartData{...}` ([:1128-1132](../../../db/dcrpg/pgblockchain.go)) directly, taking **no** `charts.mtx` write lock. Readers (`skaSupplyChart` [db/cache/charts.go:1703-1710](../../../db/cache/charts.go), `SKASupplyExists` [:868-878](../../../db/cache/charts.go)) take only `RLock`. Concurrent first requests for the same coin type (the gate is the non-atomic `!SKASupplyExists(coinType)` check in `ChartTypeData`) can both run the loader and race the map write. It is tolerated because the loader is idempotent over the same DB result set and the data is append-only-by-height.
+`LoadSKASupplyForCoin` ([db/dcrpg/pgblockchain.go:1087](../../../db/dcrpg/pgblockchain.go)) assigns `charts.SKASupply[coinType] = cache.SKASupplyChartData{...}` under `charts.SKASupplyMtx.Lock()` ([:1136-1142](../../../db/dcrpg/pgblockchain.go)). The gate readers `SKASupplyExists` ([db/cache/charts.go:897-908](../../../db/cache/charts.go)) and `SKASupplyHeight` ([:911-919](../../../db/cache/charts.go)) read under `SKASupplyMtx.RLock()` — consistent with the writer. **But the chart reader `skaSupplyChart` reads `charts.SKASupply[coinType]` under `charts.mtx.RLock()` ([:1801-1807](../../../db/cache/charts.go)) — a *different* mutex**, so the writer's lock does not exclude it. Because the load gate now also reloads on staleness (`currHeight - cachedHeight > skaSupplyStaleHeightThreshold`), a reload (writer) can run concurrently with a render (reader) of the same coin → a latent Go `concurrent map read and map write`. The pattern to learn from: a dedicated mutex only helps if **every** accessor uses it.
 
 **Constraints:**
-- Mutating `SKASupply[coinType]` from anywhere other than `LoadSKASupplyForCoin` requires coordinating with `charts.mtx` (the loader's omission is deliberate, not a license to add more lockless writers).
-- A refactor that makes the loader non-idempotent (e.g. incremental append by height delta) MUST add a write lock or a per-coin singleflight gate first.
+- All `SKASupply` access must go through one mutex. Today the reader/writer split is `charts.mtx` vs `SKASupplyMtx` — a real defect; unify on `SKASupplyMtx`.
+- The gate is a non-atomic check-then-act, so two concurrent requests can both run the loader. Harmless for corruption (each write serialized, identical data, last-writer-wins) but redundant; a per-coin singleflight removes the duplicate work.
 
-**depends-on:** [impact.md → "Risk: concurrent SKA first-load map race"](impact.md).
+**depends-on:** [impact.md → "SKA supply map read/write under mismatched locks"](impact.md).
 
 ---
 

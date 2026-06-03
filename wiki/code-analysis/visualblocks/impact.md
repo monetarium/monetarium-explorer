@@ -56,7 +56,7 @@ You MUST verify all of the following layers, because the page has **two transpor
 ### Vitest pin (new in `38636d52`)
 
 - File: [cmd/dcrdata/public/js/controllers/visualBlocks_controller.test.js](../../../cmd/dcrdata/public/js/controllers/visualBlocks_controller.test.js).
-- 13 tests across `makeMempoolBlock`, `newBlockHtmlElement`, `normaliseWsBlock`.
+- 15 tests across `makeMempoolBlock` (6), `newBlockHtmlElement` (5), `normaliseWsBlock` (2), and `visualBlocks reconnect resync` (2, added after `38636d52`).
 - Asserts: no DCR; no legacy rewards/transactions/fund classes; vote-state classes by `(Voted, VoteValid)`; indicator-fill structure (1 TOTAL + N fill-bar); FillBar `txCount` from `RegularCoinCounts` (block) or `CoinStats.regular_count` (mempool); ticket title carries `coin:"VAR"`; `block-rows > *` order = votes/tickets/indicator-fill; WS-shape regression for BlockBasic lowercase JSON tags.
 - Risk: a tile-shape change that breaks any of these assertions surfaces in `npm test` (vitest), not at `go build`.
 

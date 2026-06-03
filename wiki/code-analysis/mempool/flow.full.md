@@ -66,20 +66,22 @@ views/home_mempool.tmpl  ──► homepage_controller.js (rAF-buffered indicato
 - **`cmd/dcrdata/internal/explorer/explorer.go::(*explorerUI).StoreMPData`** (`explorer.go:483-512`):
   1. Reads `pageData.HomeInfo.SKACoinSupply` to compute `issuedSKA` (the full set of ever-issued SKA coin types).
   2. Reads `pageData.BlockchainInfo.MaxBlockSize` (fallback `393216.0`).
-  3. Calls `computeCoinFills(inv.CoinStats, maxBlockSize, issuedSKA)` → writes the results to **both** `inv.CoinFills` (legacy) **and** `inv.MempoolShort.CoinFills` plus `TotalFillRatio` and `ActiveSKACount`.
+  3. Calls `types.ComputeCoinFills(inv.CoinStats, maxBlockSize, issuedSKA)` (`explorer.go:487`) → writes the results to **both** `inv.CoinFills` (legacy) **and** `inv.MempoolShort.CoinFills` plus `TotalFillRatio` and `ActiveSKACount`.
   4. Replaces `exp.invs` under `exp.invsMtx.Lock`.
   5. Resets the page ETag/Last-Modified.
 - **`pubsub/pubsubhub.go::(*PubSubHub).StoreMPData`** (`pubsubhub.go:620-626`) — only assigns `psh.invs = inv`. Does **not** recompute CoinFills (it consumes the values the explorer just wrote).
 
 Additional CoinFills recomputation lives in **`(*explorerUI).Store`** (new-block saver path) at `explorer.go:599-615`: after `HomeInfo.SKACoinSupply` is refreshed from the DB, fills are recomputed using the **new** issued set, so a freshly issued SKA coin gets a zero-fill indicator broadcast before its first mempool tx arrives.
 
-#### 3.4 `computeCoinFills` — `cmd/dcrdata/internal/explorer/explorer.go:1108-1217`
+#### 3.4 `types.ComputeCoinFills` — `explorer/types/explorertypes.go:1760`
+
+> Refactor note: the fill computation now lives in the **types** package as the exported `types.ComputeCoinFills` ([explorer/types/explorertypes.go:1760](../../../explorer/types/explorertypes.go)), called from `(*explorerUI).StoreMPData` ([explorer.go:487](../../../cmd/dcrdata/internal/explorer/explorer.go)), `(*explorerUI).Store` ([explorer.go:598](../../../cmd/dcrdata/internal/explorer/explorer.go)), and the dev fixtures ([dev_indicators.go:58](../../../cmd/dcrdata/internal/explorer/dev_indicators.go)). The original unexported `computeCoinFills` at [explorer.go:1000](../../../cmd/dcrdata/internal/explorer/explorer.go) still exists but is **dead code** (no callers). The logic below is identical in both.
 
 - `varQuota = maxBlockSize * 0.10`; `skaPool = maxBlockSize * 0.90`; per-SKA quota = `skaPool / numSKA`.
 - Seeds the SKA key set from **both** the live `stats` map **and** the `issuedSKA` parameter so coins with no current mempool activity still appear (with zero fill).
 - VAR always first in the returned slice; SKA keys are sorted ascending.
 - Status logic per coin: `"ok"` (size ≤ quota), `"borrowing"` (over quota but `totalUsed ≤ maxBlockSize`), `"full"` (over total capacity).
-- **`PctOfTC` is intentionally NOT clamped** — overflow must surface as text. `IsOverflow = raw > 1.0`; visual width is clipped via SCSS at 100% (`explorer.go:1169-1180`). The SCSS clip is required because `coin_fills` JSON carries the raw value.
+- **`PctOfTC` is intentionally NOT clamped** — overflow must surface as text. `IsOverflow = raw > 1.0` (`explorer/types/explorertypes.go:1811-1812`); visual width is clipped via SCSS at 100%. The SCSS clip is required because `coin_fills` JSON carries the raw value.
 
 #### 3.5 Type definitions — `explorer/types/explorertypes.go`
 
@@ -234,9 +236,9 @@ When adding a **new saver**:
 - `mempool/monitor.go:545-637` — `addTxToCoinStats`, `normalizeCoinStatsAmounts`, `addAtomStrings`.
 - `mempool/mempoolcache.go:46-69` — `DataCache.StoreMPData` with `stakeData == nil` guard.
 - `mempool/monitor_test.go:13-103` — incremental equivalence tests including precision boundary (`"123456789012345678901"` atoms).
-- `cmd/dcrdata/internal/explorer/explorer.go:483-512` — `explorerUI.StoreMPData`; `computeCoinFills` call + dual write to `inv.CoinFills` and `inv.MempoolShort.CoinFills`.
+- `cmd/dcrdata/internal/explorer/explorer.go:472-502` — `(*explorerUI).StoreMPData`; `types.ComputeCoinFills` call (`:487`) + dual write to `inv.CoinFills` and `inv.MempoolShort.CoinFills`.
 - `cmd/dcrdata/internal/explorer/explorer.go:596-615` — new-block CoinFills recomputation after `SKACoinSupply` refresh.
-- `cmd/dcrdata/internal/explorer/explorer.go:1108-1217` — `computeCoinFills`; quota / borrowing / overflow logic.
+- `explorer/types/explorertypes.go:1760` — `types.ComputeCoinFills`; quota / borrowing / overflow logic. (Dead duplicate at `cmd/dcrdata/internal/explorer/explorer.go:1000` `computeCoinFills`, no callers.)
 - `cmd/dcrdata/internal/explorer/websockethandlers.go:122-167` — `getmempooltxs`, `getmempooltrimmed`.
 - `cmd/dcrdata/internal/explorer/websockethandlers.go:284-324` — `sigMempoolUpdate`, `sigNewTxs` (root WS).
 - `pubsub/pubsubhub.go:474-529` — `sigMempoolUpdate`, `sigNewTxs` (pubsub WS).
@@ -250,7 +252,7 @@ When adding a **new saver**:
 - `cmd/dcrdata/views/home_mempool.tmpl:117-135` — LatestTransactions table with `SKATotals` branching.
 - `cmd/dcrdata/views/mempool.tmpl` — full-page mempool listings; multi-coin aware (per-coin Total Sent, per-coin Transactions sections, SKA-aware Regular table).
 - `cmd/dcrdata/public/js/controllers/homepage_controller.js:25-269` — handler registration, `updateIndicators` rAF batching, `_flushIndicators` apply/inject/zero loop.
-- `cmd/dcrdata/public/js/helpers/indicator_fill.js:20-168` — JS mirror of `computeCoinFills`.
+- `cmd/dcrdata/public/js/helpers/indicator_fill.js:20-168` — JS mirror of `types.ComputeCoinFills`.
 - `txhelpers/txhelpers.go:1305-1329` — `SKATotalsFromMsgTx`; nil-return for VAR-only txs.
 
 See also:

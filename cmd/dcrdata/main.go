@@ -777,12 +777,8 @@ func _main(ctx context.Context) error {
 			http.Error(w, "treasury not available", http.StatusGone)
 		})
 		withCache.Get("/parameters", explore.ParametersPage)
-		withCache.Get("/agendas", func(w http.ResponseWriter, r *http.Request) {
-			http.Error(w, "agendas not available", http.StatusGone)
-		})
-		withCache.With(explorer.AgendaPathCtx).Get("/agenda/{agendaid}", func(w http.ResponseWriter, r *http.Request) {
-			http.Error(w, "agendas not available", http.StatusGone)
-		})
+		withCache.Get("/agendas", explore.AgendasPage)
+		withCache.With(explorer.AgendaPathCtx).Get("/agenda/{agendaid}", explore.AgendaPage)
 		withCache.Get("/attack-cost", explore.AttackCost)
 	})
 
@@ -1104,7 +1100,7 @@ func _main(ctx context.Context) error {
 
 func connectNodeRPC(cfg *config, ntfnHandlers *rpcclient.NotificationHandlers) (*rpcclient.Client, semver.Semver, error) {
 	return rpcutils.ConnectNodeRPC(cfg.DcrdServ, cfg.DcrdUser, cfg.DcrdPass,
-		cfg.DcrdCert, cfg.DisableDaemonTLS, true, ntfnHandlers)
+		cfg.DcrdCert, cfg.DisableDaemonTLS, false, ntfnHandlers)
 }
 
 func listenAndServeProto(ctx context.Context, wg *sync.WaitGroup, listen, proto string, mux http.Handler) {

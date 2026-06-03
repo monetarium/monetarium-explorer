@@ -111,7 +111,7 @@ WebSocket mempool path:
   - **Transformations:** Sub-test `BlockContractWireFormat` adds `total_fill_ratio` assertion (`wantRatio := float64(15000) / maxBlockSize`). Sub-test `BlockWSWireFormatEquivalence` adds `total_fill_ratio` to `contractFields` and patches `RegularCoinCounts` + `TotalFillRatio` onto the test's `blockCopy` to mirror the production handler. **The contract now asserts five fields are wire-identical between HTTP and WS**, not four.
 
 - **Location:** `cmd/dcrdata/public/js/controllers/visualBlocks_controller.test.js` (new in `38636d52`)
-  - **Coverage:** 13 tests across `makeMempoolBlock`, `newBlockHtmlElement`, and `normaliseWsBlock`. Asserts:
+  - **Coverage:** 15 tests across `makeMempoolBlock` (6), `newBlockHtmlElement` (5), `normaliseWsBlock` (2), and `visualBlocks reconnect resync` (2, added after `38636d52`). Asserts:
     - Header size + percent, no DCR text.
     - No `.block-rewards`/`.block-transactions`/`.block-tx`/`.fund`/`.pow`/`.pos`/`.fees`.
     - Three vote-state classes by `(Voted, VoteValid)`; empty slots to 5.
@@ -120,6 +120,7 @@ WebSocket mempool path:
     - Ticket title carries `"coin": "VAR"`.
     - `block-rows > *` order: votes → tickets → indicator-fill.
     - Regression: `normaliseWsBlock` reads BlockBasic's lowercase JSON tags (`height`/`time`/`size`/`formatted_bytes`) instead of PascalCase — locks in the fix for the `/block/undefined` bug observed during in-browser verification.
+    - Reconnect resync (`visualBlocks reconnect resync`): re-requests the trimmed mempool on the synthetic `reconnect` event, and removes its own `reconnect` handler on `disconnect`.
 
 ### Section 4 — Cross-Layer Dependencies
 - **Two transport shapes for "one block."** HTTP renders `TrimmedBlockInfo` (already filtered, `Transactions` field name — still present on the wire but the new template does NOT iterate it). WebSocket pushes the full `BlockInfo` (`Tx` field name, includes coinbase — also no longer iterated by the controller). The five contract fields (`regular_coin_counts`, `coin_fills`, `active_ska_count`, `max_block_size`, `total_fill_ratio`) are patched onto the WS shallow-copy so the contract test can assert byte-identical JSON for them across transports. The remaining asymmetry (Tx/Transactions, coinbase filter, Subsidy struct) no longer reaches the page — every consumer the rewrite added reads only the five contract fields plus the BlockBasic embeds (`Size`/`FormattedBytes`) plus Votes/Tickets/Revs.
@@ -262,7 +263,7 @@ When modifying `/visualblocks` data:
 - `cmd/dcrdata/internal/explorer/visualblocks_contract_test.go` — `BlockContractWireFormat` asserts `total_fill_ratio`; `BlockWSWireFormatEquivalence` asserts five-field parity; `MempoolContractWireFormat` unchanged.
 - `cmd/dcrdata/public/index.js:46-64` — `ws.registerEvtHandler('newblock', ...)` → `globalEventBus.publish('BLOCK_RECEIVED', newBlock)`.
 - `cmd/dcrdata/public/js/controllers/visualBlocks_controller.js:1-420` — full rewrite: helpers, normalisers, exported builders, Stimulus controller.
-- `cmd/dcrdata/public/js/controllers/visualBlocks_controller.test.js:1-280` — 13 tests (vote states, indicator-fill structure, FillBar tooltip JSON, ticket coin label, block-rows order, WS-shape regression).
+- `cmd/dcrdata/public/js/controllers/visualBlocks_controller.test.js:1-356` — 15 tests (vote states, indicator-fill structure, FillBar tooltip JSON, ticket coin label, block-rows order, WS-shape regression, reconnect resync).
 - `cmd/dcrdata/views/visualblocks.tmpl` — full rewrite: 3-row tile (votes / tickets / indicator-fill), three vote states, formatBytes header, indicator-fill markup mirroring `home_mempool.tmpl`.
 - `cmd/dcrdata/public/scss/visualblocks.scss` — vote-state classes, compact indicator-fill overrides, dark-theme update.
 - `cmd/dcrdata/public/scss/_indicator-fill.scss` — base partial (shared with homepage), imported globally via `application.scss:56`.

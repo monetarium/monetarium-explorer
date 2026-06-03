@@ -17,7 +17,7 @@
 - `Bars` button strings (`"all"/"day"/"wk"/"mo"`) must match `dbtypes.TimeGroupingFromStr`; mismatch silently falls into `UnknownGrouping` → 422.
 - WS event names `getticketpooldata` / `getticketpooldataResp` are hardcoded in both JS and the Go switch; `EventId + "Resp"` is appended server-side.
 - `populateOutputs` uses `innerHTML` (C6 exception); tolerated because all interpolated values pass through `parseInt()`. Do not add string interpolation.
-- JS purchases-chart y2 label says `(DCR)`; price-chart x-label says `(VAR)`. Legacy `DCR` leak.
+- JS chart axis labels are VAR-only and consistent: purchases y2 `'A.v.g. Tickets Value (VAR)'` ([ticketpool_controller.js:257](../../../cmd/dcrdata/public/js/controllers/ticketpool_controller.js#L257)), price x `'Ticket Price (VAR)'` ([:286](../../../cmd/dcrdata/public/js/controllers/ticketpool_controller.js#L286)). The former purchases-axis `(DCR)` leak is fixed.
 
 ## Mutation Checklist
 
@@ -27,4 +27,4 @@ See also:
 - [/wiki/code-analysis/ticketpool/flow.full.md](flow.full.md)
 - [/wiki/code-analysis/ticketpool/patterns.md](patterns.md)
 - [/wiki/code-analysis/ticketpool/impact.md](impact.md)
-- [/wiki/core/constraints.md](../../core/constraints.md) (C1, C2, C3, C6, C7, C8)
+- [/wiki/core/constraints.md](../../core/constraints.md) (C1, C2, C3, C6, C8)

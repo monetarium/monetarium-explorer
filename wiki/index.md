@@ -43,6 +43,7 @@ _Data flow for block rendering, including headers, metrics, and block content pa
 - flow (full): code-analysis/block/flow.full.md — detailed, step-by-step function trace for deep debugging of block logic
 - patterns: code-analysis/block/patterns.md — recurring architectural concepts and invariants to follow when modifying blocks
 - impact: code-analysis/block/impact.md — downstream components and templates that break if block data structures change
+- defect (ska-stake-fee): code-analysis/block/ska-stake-fee.md — fixed-incident postmortem: SKA SSFee rows showed `0` in the block "Stake Fees" table; net-reward `FeeRaw` math, coin-type-from-first-SKA-output, "Fee"→"Rewards" header (#301)
 
 ### Transaction
 
@@ -125,6 +126,15 @@ _The `/parameters` page: active-network consensus config. Mostly static `chaincf
 - patterns: code-analysis/parameters/patterns.md — near-static chaincfg.Params page: dual-source commonData/ExtendedParams split, hardcoded network-name prefix table, VAR-only subsidy rows, unchecked MaximumBlockSizes[0] fallback
 - impact: code-analysis/parameters/impact.md — commonData nil → .ChainParams deref crash, silent blank/misaligned address-prefix table on unknown network, stale/empty-slice MaximumBlockSize, unlocked pageData.BlockchainInfo race
 
+### Agendas — DORMANT (re-enablable, not removed)
+
+_The `/agendas` + `/agenda/{id}` consensus-deployment voting pages. HTML routes are currently stubbed to **HTTP 410** ([cmd/dcrdata/main.go:780-785](../cmd/dcrdata/main.go#L780-L785), commit `52ea3cf1`), but — unlike `/treasury` and `/market` — the handlers, the JSON API (`/api/agendas`, `/api/agenda/{id}`, still live), and the full DB pipeline (`agenda_votes` populated by `insertVotes` during `StoreBlock`) are intact and functional. Dual-source data: live metadata/progress from node RPC (`gov/agendas.AgendaDB` BoltDB + `VoteTracker`), historical tallies from Postgres. **Coin-agnostic** — vote counts/percentages/heights only, no VAR/SKA amounts, so C1/C3/C7 do not apply and **no multi-coin adaptation is needed**. Node support confirmed in `monetarium-node@v1.3.10` (mainnet 48 / testnet 52 agenda IDs). Re-enable = revert 2 route lines + re-add the navbar link._
+
+- flow (compact): code-analysis/agendas/flow.compact.md — dormant-stub status, dual-source flow, why no multi-coin work is needed, re-enable mutation checklist
+- flow (full): code-analysis/agendas/flow.full.md — end-to-end trace: node RPC → gov/agendas (BoltDB + VoteTracker) + db/dcrpg agenda_votes → handlers → templates → JS; node-support evidence; silent/hard failures
+- patterns: code-analysis/agendas/patterns.md — dormant-feature route stub (handler+pipeline retained), dual-source governance data (RPC-live + Postgres-historical), coin-agnostic feature (precision rules N/A)
+- impact: code-analysis/agendas/impact.md — re-enable blast radius: orphaned-page nav gap, empty forward-only vote charts, VoteTracker startup dep, choice-ID/JSON-tag drift, milestone unavailability, market-removal-spec reconciliation
+
 ### Sidechain
 
 _The `/side` page: read-only HTML table of every block with `is_mainchain=false`. Single SQL query (`blocks JOIN block_chain`), no WebSocket, no Stimulus, no amounts — the simplest page-rendering shape in the codebase. Writers are two independent paths: startup `ImportSideChains` (off by default, inserts rows) and live reorg `TipToSideChain` (flips existing rows). `BlockStatus` is shared with 3 sibling endpoints (`/disapproved`, `/block/{hash}` status, height-keyed status) each Scanning a different column subset — positional Scan invariant._
@@ -168,14 +178,9 @@ _The `/ticketpool` page: form-shell HTML + three live data channels (HTTP `/api/
 - patterns: code-analysis/ticketpool/patterns.md — P1 form-shell over WS-RPC, P2 tri-modal struct with positional Scan, P3 process-global stale-while-revalidate cache, P4 dual-transport overlay with divergent semantics, P5 VAR-only float64 staking pipeline
 - impact: code-analysis/ticketpool/impact.md — column-Scan desync, REST/WS payload drift, `Mempool.Price` semantic drift, WS event-name drift, TimeGrouping enum drift, SKA-through-VAR pipeline corruption, cache-loop removal, process-global cache cross-talk, C6 violation surface, legacy `DCR` label leak, `/bydate` response asymmetry
 
-### Market
+### Market — REMOVED
 
-_The `/market` page: server-rendered shell + Stimulus chart controller fed by a single nullable `*exchanges.ExchangeBot` (Coinbase + Binance + Mexc + dex.decred.org polling, or optional DCRRates gRPC master). The bot snapshot is read three ways: HTML render via `MarketPage`/`getExchangeState`, WS pushes via `watchExchanges → "exchange" event → globalEventBus 'EXCHANGE_UPDATE'`, and lazily-encoded versioned chart bytes via `/api/chart/market/{token}/{candlestick|depth}`. The same bot also drives `xcBot.Conversion(float64)` fiat sidebars on home/tx/address (and the 410-gated treasury handler). Per [/wiki/core/pages.md](core/pages.md) this page is flagged "should be disabled" — no Monetarium asset trades anywhere; the entire surface is `float64` (VAR-safe, SKA-incompatible) and DCR-symbol-hard-coded across 5 layers. Network-name gate `Name != "mainnet"` is a no-op on Monetarium mainnet._
-
-- flow (compact): code-analysis/market/flow.compact.md — three-channel data path, dual collection mode (DCRRates gRPC vs HTTP poll), snapshot/stateCopy invariant, mutation checklist
-- flow (full): code-analysis/market/flow.full.md — detailed bot construction → updateState → MarketPage handler / watchExchanges / QuickSticks·QuickDepth → market.tmpl + market_controller.js trace, including cross-page `Conversion(...)` callsites
-- patterns: code-analysis/market/patterns.md — P1 globally-shared optional collector, P2 dual collection source (gRPC vs poll), P3 lock-free stateCopy read, P4 versioned lazy-encoded chart cache, P5 untyped WS bridge via globalEventBus
-- impact: code-analysis/market/impact.md — `float64`-only SKA precision trap, 5-layer DCR-symbol hard-coding, network-name gate no-op on Monetarium mainnet, cross-page conversion fan-out (~7 sites), WS event-id silent drift, C8 WS vs REST schema asymmetry, `IsFailed()` only honored by `/market` (cross-page conversions show stale fiat)
+_The `/market` page and the entire `exchanges/` pipeline were **removed** from the codebase; the code-analysis trace was deleted as obsolete. The route now returns **HTTP 410 Gone** ("market not available", [cmd/dcrdata/main.go](../cmd/dcrdata/main.go) `r.Get("/market", …)`). Removal landed in `d4d8c94e` (`cmd/dcrdata: remove /market and all exchange-bot wiring`) and `ea9ded5b` (`chore: remove orphaned exchanges/ and exchanges/rateserver/ modules`). For intent see [specs/market-removal/spec.md](specs/market-removal/spec.md); for the disabled-route registry see [core/pages.md](core/pages.md) (§ Disabled / 410 Gone)._
 
 ### Page-Rendering (cross-domain consolidation)
 
