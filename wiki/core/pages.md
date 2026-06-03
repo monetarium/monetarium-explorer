@@ -12,52 +12,50 @@ Non-page endpoints (WebSockets, JSON APIs under `/api` and `/insight/api`, `/dow
 
 ## Active pages
 
-| URL | Handler | Description |
-|---|---|---|
-| `/` | `Home` | Landing dashboard: header metrics (height, supply, hashrate, ticket info), latest blocks, mempool snapshot, multi-coin supply card. |
-| `/visualblocks` | `VisualBlocks` | Visual grid of recent blocks rendered as colored tiles by tx type/size — alternative to the table view. |
-| `/blocks` | `Blocks` | Paginated table of recent blocks (height, time, size, tx counts, voters, fees). |
-| `/block/{blockhash}` | `Block` (with `BlockHashPathOrIndexCtx`) | Block details: header, votes/tickets/regular tx tables, navigation to neighbor blocks. Accepts either a block hash or a height in `{blockhash}`. |
-| `/side` | `SideChains` | List of side-chain (orphaned) blocks the node has seen. |
-| `/disapproved` | `DisapprovedBlocks` | List of blocks disapproved by the next block's stake voters (their regular tx were invalidated). |
-| `/days` | `DayBlocksListing` | Blocks aggregated by day (count, total fees, per-period summary). |
-| `/weeks` | `WeekBlocksListing` | Blocks aggregated by week. |
-| `/months` | `MonthBlocksListing` | Blocks aggregated by month. |
-| `/years` | `YearBlocksListing` | Blocks aggregated by year. |
-| `/mempool` | `Mempool` | Unconfirmed transactions split by coin (VAR + SKA{n}) and by tx type, with totals and per-coin tables. |
-| `/tx/{txid}` | `TxPage` | Transaction details: inputs, outputs, fees, confirmations, block link. Single-coin per tx (VAR or one SKA{n}); fee paid in same coin. |
-| `/tx/{txid}/{inout}/{inoutid}` | `TxPage` (scrolled to a specific input/output) | Same view as `/tx/{txid}` but anchored to a specific `in` or `out` index. |
-| `/address/{address}` | `AddressPage` | Address overview: balance, sent/received totals, paginated tx table, chart selectors (kind, zoom, group-by). URL state is the source of truth for chart settings. |
-| `/addresstable/{address}` | `AddressTable` (AJAX fragment) | Server-rendered HTML fragment for the address tx table — used by the address page for pagination/filtering without a full reload. |
-| `/decodetx` | `DecodeTxPage` | Form that decodes a raw transaction hex string into structured input/output details without broadcasting. |
-| `/search` | `Search` | Dispatcher that inspects the query and redirects to the matching page (block hash, height, tx hash, or address). Renders an error page on no match. |
-| `/charts` | `Charts` | Historical charts (supply, hashrate, fees, block size, ticket metrics, etc.) including the per-coin SKA `coin-supply/{N}` pipeline. |
-| `/parameters` | `ParametersPage` | Static-ish chain parameters: subsidy schedule, ticket parameters, network constants, consensus rules. |
-| `/ticketpool` | `Ticketpool` | Live ticket pool view: distribution by price, age, and other dimensions. |
-| `/ticketpricewindows` | `StakeDiffWindows` | Stake-difficulty (ticket-price) windows — past windows plus the in-progress one with projected next price. |
-| `/attack-cost` | `AttackCost` | 51%-style attack-cost calculator using current hashrate, ticket price, and supply numbers. |
-| `/verify-message` | `VerifyMessagePage` (GET) / `VerifyMessageHandler` (POST) | Form that verifies an address+message+signature triple is valid. POST is rate-limited via tollbooth. |
-| `/insight` | `InsightRootPage` (static assets also mirrored under `/insight/*`) | Landing page for the Insight-compatible JSON API; documents `/insight/api/...` endpoints. |
+| URL                            | Handler                                                            | Description                                                                                                                                                       |
+| ------------------------------ | ------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/`                            | `Home`                                                             | Landing dashboard: header metrics (height, supply, hashrate, ticket info), latest blocks, mempool snapshot, multi-coin supply card.                               |
+| `/visualblocks`                | `VisualBlocks`                                                     | Visual grid of recent blocks rendered as colored tiles by tx type/size — alternative to the table view.                                                           |
+| `/blocks`                      | `Blocks`                                                           | Paginated table of recent blocks (height, time, size, tx counts, voters, fees).                                                                                   |
+| `/block/{blockhash}`           | `Block` (with `BlockHashPathOrIndexCtx`)                           | Block details: header, votes/tickets/regular tx tables, navigation to neighbor blocks. Accepts either a block hash or a height in `{blockhash}`.                  |
+| `/side`                        | `SideChains`                                                       | List of side-chain (orphaned) blocks the node has seen.                                                                                                           |
+| `/disapproved`                 | `DisapprovedBlocks`                                                | List of blocks disapproved by the next block's stake voters (their regular tx were invalidated).                                                                  |
+| `/days`                        | `DayBlocksListing`                                                 | Blocks aggregated by day (count, total fees, per-period summary).                                                                                                 |
+| `/weeks`                       | `WeekBlocksListing`                                                | Blocks aggregated by week.                                                                                                                                        |
+| `/months`                      | `MonthBlocksListing`                                               | Blocks aggregated by month.                                                                                                                                       |
+| `/years`                       | `YearBlocksListing`                                                | Blocks aggregated by year.                                                                                                                                        |
+| `/mempool`                     | `Mempool`                                                          | Unconfirmed transactions split by coin (VAR + SKA{n}) and by tx type, with totals and per-coin tables.                                                            |
+| `/tx/{txid}`                   | `TxPage`                                                           | Transaction details: inputs, outputs, fees, confirmations, block link. Single-coin per tx (VAR or one SKA{n}); fee paid in same coin.                             |
+| `/tx/{txid}/{inout}/{inoutid}` | `TxPage` (scrolled to a specific input/output)                     | Same view as `/tx/{txid}` but anchored to a specific `in` or `out` index.                                                                                         |
+| `/address/{address}`           | `AddressPage`                                                      | Address overview: balance, sent/received totals, paginated tx table, chart selectors (kind, zoom, group-by). URL state is the source of truth for chart settings. |
+| `/addresstable/{address}`      | `AddressTable` (AJAX fragment)                                     | Server-rendered HTML fragment for the address tx table — used by the address page for pagination/filtering without a full reload.                                 |
+| `/decodetx`                    | `DecodeTxPage`                                                     | Form that decodes a raw transaction hex string into structured input/output details without broadcasting.                                                         |
+| `/search`                      | `Search`                                                           | Dispatcher that inspects the query and redirects to the matching page (block hash, height, tx hash, or address). Renders an error page on no match.               |
+| `/charts`                      | `Charts`                                                           | Historical charts (supply, hashrate, fees, block size, ticket metrics, etc.) including the per-coin SKA `coin-supply/{N}` pipeline.                               |
+| `/parameters`                  | `ParametersPage`                                                   | Static-ish chain parameters: subsidy schedule, ticket parameters, network constants, consensus rules.                                                             |
+| `/ticketpool`                  | `Ticketpool`                                                       | Live ticket pool view: distribution by price, age, and other dimensions.                                                                                          |
+| `/ticketpricewindows`          | `StakeDiffWindows`                                                 | Stake-difficulty (ticket-price) windows — past windows plus the in-progress one with projected next price.                                                        |
+| `/attack-cost`                 | `AttackCost`                                                       | 51%-style attack-cost calculator using current hashrate, ticket price, and supply numbers.                                                                        |
+| `/verify-message`              | `VerifyMessagePage` (GET) / `VerifyMessageHandler` (POST)          | Form that verifies an address+message+signature triple is valid. POST is rate-limited via tollbooth.                                                              |
+| `/insight`                     | `InsightRootPage` (static assets also mirrored under `/insight/*`) | Landing page for the Insight-compatible JSON API; documents `/insight/api/...` endpoints.                                                                         |
 
 ---
 
 ---
-
-
 
 ## Disabled (return HTTP 410 Gone)
 
 Wired but intentionally off in this fork. No Monetarium adjustment required unless we decide to re-enable them. Source: [main.go](../../cmd/dcrdata/main.go) lines 770–809.
 
-| URL | Status | Description |
-|---|---|---|
-| `/treasury` | 410 — "treasury not available" | Decred treasury account balance and history page; Monetarium has no treasury. |
-| `/treasurytable` | 410 — same | AJAX fragment for the treasury tx table. |
-| `/agendas` | 410 — "agendas not available" | Consensus deployment vote agendas list; Monetarium does not run on-chain consensus voting. |
-| `/agenda/{agendaid}` | 410 — same | Single-agenda details (timeline, threshold, vote counts). |
-| `/proposals` | 410 — "proposals not available" | Politeia governance proposals list; not used in Monetarium. |
-| `/proposal/{proposaltoken}` | 410 — same | Single Politeia proposal details. |
-| `/market` | 410 — "market not available" | Exchange / market data; no Monetarium asset is traded on any exchange. |
+| URL                         | Status                          | Description                                                                                |
+| --------------------------- | ------------------------------- | ------------------------------------------------------------------------------------------ |
+| `/treasury`                 | 410 — "treasury not available"  | Decred treasury account balance and history page; Monetarium has no treasury.              |
+| `/treasurytable`            | 410 — same                      | AJAX fragment for the treasury tx table.                                                   |
+| `/agendas`                  | 410 — "agendas not available"   | Consensus deployment vote agendas list. **Dormant, not removed** — `monetarium-node` defines consensus deployments and the handlers + DB pipeline are intact; can be re-enabled. See [code-analysis/agendas/](code-analysis/agendas/flow.compact.md). |
+| `/agenda/{agendaid}`        | 410 — same                      | Single-agenda details (timeline, threshold, vote counts). Dormant — can be re-enabled; see `/agendas` above.                            |
+| `/proposals`                | 410 — "proposals not available" | Politeia governance proposals list; not used in Monetarium.                                |
+| `/proposal/{proposaltoken}` | 410 — same                      | Single Politeia proposal details.                                                          |
+| `/market`                   | 410 — "market not available"    | Exchange / market data; no Monetarium asset is traded on any exchange.                     |
 
 ---
 
@@ -65,15 +63,15 @@ Wired but intentionally off in this fork. No Monetarium adjustment required unle
 
 Permanent redirects — no template content of their own, but they target pages on the active list above.
 
-| URL | Target |
-|---|---|
-| `/rejects` | `/disapproved` |
-| `/stats` | `/` |
-| `/explorer/` (legacy mount) | `/blocks` |
-| `/explorer/block/{x}` | `/block/{x}` |
-| `/explorer/tx/{x}` | `/tx/{x}` |
-| `/explorer/address/{x}` | `/address/{x}` |
-| `/explorer/decodetx` | `/decodetx` |
+| URL                         | Target         |
+| --------------------------- | -------------- |
+| `/rejects`                  | `/disapproved` |
+| `/stats`                    | `/`            |
+| `/explorer/` (legacy mount) | `/blocks`      |
+| `/explorer/block/{x}`       | `/block/{x}`   |
+| `/explorer/tx/{x}`          | `/tx/{x}`      |
+| `/explorer/address/{x}`     | `/address/{x}` |
+| `/explorer/decodetx`        | `/decodetx`    |
 
 ---
 
