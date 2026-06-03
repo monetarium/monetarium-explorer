@@ -34,7 +34,10 @@ by reverting those two route lines + re-adding the link.)
   appear in the `/agendas` table or `/api/agendas` JSON (one shared source feeds both). The
   all-filtered case maps storm's `ErrNotFound` → empty slice + nil error (renders the empty state,
   not an error). `AgendaInfo(id)` is **unfiltered** — `/agenda/{id}` stays reachable by URL.
-  Threshold is one named constant; no coin-type handling. (issue #400)
+  Threshold is one named constant; no coin-type handling. (issue #400) The page's live progress
+  **cards** (`VoteSummary.Agendas`, tracker-sourced) are a **separate** surface the source filter
+  doesn't reach; `AgendasPage` cross-filters them to the same `AllAgendas` ID set so cards and table
+  agree (PR #401).
 - **Not-yet-started agenda → nil DB summary (guarded).** `ChainDB.AgendasVotesSummary` returns
   `(nil, nil)` for an agenda whose deployment `StartTime` is in the future. `AgendaPage`
   substitutes a zero-tally `&dbtypes.AgendaSummary{}`
@@ -61,6 +64,10 @@ by reverting those two route lines + re-adding the link.)
 - [ ] Historical vote charts populate **forward** from sync; pre-sync completed votes need a
       genesis resync to backfill.
 - [ ] No multi-coin / precision handling — do not introduce VAR/SKA maps or float coin conversion.
+- [ ] When filtering the agenda *list*, also align the `/agendas` summary cards
+      (`VoteSummary.Agendas`) — they come from `voteTracker.Summary()`, not `AllAgendas`. Cross-filter
+      by ID via the pure `filterAgendaSummaries` helper on a defensive copy of the shared summary
+      (PR #401).
 - [ ] Verify on non-simnet (tracker non-nil); simnet shows the disabled status page by design.
 
 See also:

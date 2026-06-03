@@ -144,9 +144,17 @@ the Template+WebSocket parity concern (C3) does not arise here.
     All three first short-circuit if `agendaInfo.StartTime` is in the future.
 
 ### Layer D — Handlers (HTML + JSON API)
-- **HTML — `AgendasPage`** ([explorerroutes.go:2072-2104](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L2072-L2104)):
+- **HTML — `AgendasPage`** ([explorerroutes.go:2072-2124](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L2072-L2124)):
   `nil` voteTracker → status page *"agendas disabled on simnet"*; else `agendasSource.AllAgendas()`
-  plus `voteTracker.Summary()` → template `agendas`.
+  (the version-filtered **table** list) plus `voteTracker.Summary()` (the live progress **cards**).
+  **The page renders agendas twice from two sources, so the handler cross-filters the cards to the
+  table:** it builds an allowed-ID set from `AllAgendas()` and passes the tracker summaries through
+  the pure helper `filterAgendaSummaries`
+  ([call at explorerroutes.go:2104](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L2104),
+  [func at 2126-2138](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L2126-L2138), PR #401),
+  dropping any `VoteSummary.Agendas` entry whose `ID` is not in the set — on a **defensive copy** of
+  the shared `tracker.summary` (it must not mutate tracker state), matching by **ID** because
+  `AgendaSummary` has no `VoteVersion`. → template `agendas`.
 - **HTML — `AgendaPage`** ([explorerroutes.go:1977-2069](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L1977-L2069)):
   `agendasSource.AgendaInfo(id)` (BoltDB) + `dataSource.AgendasVotesSummary(ctx, id)` (Postgres).
   **`AgendasVotesSummary` returns `(nil, nil)` for an agenda whose voting has not started yet
@@ -226,6 +234,10 @@ the Template+WebSocket parity concern (C3) does not arise here.
   `11`. The gate is coin-agnostic (`VoteVersion` is a `uint32`); it adds no precision/multi-coin
   surface (C1/C7 stay N/A). It governs the **list** surfaces only — `AgendaInfo(id)` is unfiltered,
   so a filtered version's `/agenda/{id}` detail page stays reachable by direct URL (issue #400).
+  **The source filter does not reach the `/agendas` page's live progress cards.** Those render from
+  `voteTracker.Summary().Agendas` (a separate, tracker-sourced surface), so `AgendasPage`
+  cross-filters them against the `AllAgendas` ID set (PR #401) to keep the cards and the table in
+  agreement (see Section 6).
 - **Real Monetarium-specific dependency: node must expose consensus deployments + stake-version
   voting.** Verified present in `monetarium-node` chaincfg **v1.3.10**: mainnet defines **48**
   agenda IDs, testnet **52**, across vote versions; vote IDs include `VoteIDMaxBlockSize`,
@@ -285,6 +297,19 @@ the Template+WebSocket parity concern (C3) does not arise here.
   rows. The regression tests in
   [deployments_test.go](../../../gov/agendas/deployments_test.go) pin the `>= 11` gate
   (`TestAllAgendasVoteVersionFilter` and the adapted `Test_AllAgendas`).
+- **Decred agendas linger in the summary cards.** The version filter at `AllAgendas()` aligns the
+  table + API but **not** the `/agendas` voting cards (`VoteSummary.Agendas`, tracker-sourced).
+  `AgendasPage`'s cross-filter
+  ([call explorerroutes.go:2104](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L2104),
+  PR #401) closes this; remove it and the cards again show vote versions ≤ 10 while the table hides
+  them — most visible when the node's highest vote version is still ≤ 10 (table empty, cards
+  populated). The filter logic is the pure helper `filterAgendaSummaries`
+  ([explorerroutes.go:2126-2138](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L2126-L2138)),
+  unit-tested by `TestFilterAgendaSummaries`
+  ([agendapage_test.go:78](../../../cmd/dcrdata/internal/explorer/agendapage_test.go#L78), 4 cases:
+  keep/drop, empty input, empty allow-set, full pass-through). The handler *wiring* stays uncovered
+  — `voteTracker` is a concrete `*agendas.VoteTracker`, not a stubbable interface — but the filter
+  itself is now pinned (PR #401).
 - Re-enable route but forget the nav link → page works only via direct URL (no error).
 - `agenda_votes` charts render but are **empty** (`[[0,0,0,0]]`) for any agenda whose votes
   were not seen during the explorer's DB sync, or if `SSGenVoteChoices` returns no choices
@@ -332,6 +357,10 @@ the Template+WebSocket parity concern (C3) does not arise here.
 - **Filtering `AgendaInfo` too** — the version gate belongs to the *list* (`AllAgendas`) only.
   `AgendaInfo(id)` must stay unfiltered so a filtered agenda's `/agenda/{id}` page remains
   reachable by direct URL.
+- **Filtering the list but not the cards** — the `/agendas` page renders agendas twice: the table
+  (`AllAgendas`) and the live progress cards (`voteTracker.Summary().Agendas`, a different source).
+  A list-level filter must be mirrored onto the cards in `AgendasPage` (cross-filter by ID on a
+  *defensive copy* of the shared `tracker.summary`), or the two surfaces disagree.
 
 ## Section 8 — Evidence
 
@@ -355,6 +384,16 @@ the Template+WebSocket parity concern (C3) does not arise here.
   [deployments_test.go](../../../gov/agendas/deployments_test.go)
   (`TestAllAgendasVoteVersionFilter`, `Test_AllAgendas`); empty state
   [agendas.tmpl:227-232](../../../cmd/dcrdata/views/agendas.tmpl#L227-L232).
+- Summary-card cross-filter (PR #401): allowed-ID set
+  [explorerroutes.go:2086-2089](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L2086-L2089),
+  then pure helper `filterAgendaSummaries` applied to a defensive copy
+  [explorerroutes.go:2099-2104](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L2099-L2104),
+  [func 2126-2138](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L2126-L2138); test
+  `TestFilterAgendaSummaries` [agendapage_test.go:78](../../../cmd/dcrdata/internal/explorer/agendapage_test.go#L78);
+  cards rendered at [agendas.tmpl:26-219](../../../cmd/dcrdata/views/agendas.tmpl#L26-L219);
+  `AgendaSummary` (note: no `VoteVersion` field)
+  [tracker.go:37-61](../../../gov/agendas/tracker.go#L37-L61); shared cached summary pointer
+  [tracker.go:479-483](../../../gov/agendas/tracker.go#L479-L483).
 - DB pipeline: `insertVotes` [queries.go:382](../../../db/dcrpg/queries.go#L382) +
   [queries.go:537-604](../../../db/dcrpg/queries.go#L537-L604); caller
   [pgblockchain.go:4340](../../../db/dcrpg/pgblockchain.go#L4340); milestones
