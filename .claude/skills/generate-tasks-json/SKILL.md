@@ -32,29 +32,31 @@ The repo ships a curated `wiki/` (`wiki/index.md`). Use it to fill issue bodies 
 
 ## Preserving the original client request
 
-Issues are the project's **single source of truth** — [`GITHUB_ISSUES_AND_PROJECT_BOARD.md` §1](../../../.github/scripts/generate-issues/GITHUB_ISSUES_AND_PROJECT_BOARD.md) requires that discussion live in the issue, "not in external messengers." A client request that arrives over a messenger — typically in **Russian** — and gets silently rewritten into an English issue body loses that record, and any translation drift becomes invisible. So when an issue's content originates from a **client-provided request** (a message or spec the user pastes in, in *any* language), preserve the client's exact wording inside the issue.
+Issues are the project's **single source of truth** — [`GITHUB_ISSUES_AND_PROJECT_BOARD.md` §1](../../../.github/scripts/generate-issues/GITHUB_ISSUES_AND_PROJECT_BOARD.md) requires that discussion live in the issue, "not in external messengers." A client request that arrives over a messenger — often in a language other than the one the issue is written in — and gets silently rewritten into the issue body loses that record, and any translation drift becomes invisible. So when an issue's content originates from a **client-provided request** (a message or spec the user pastes in, in *any* language), preserve the client's exact wording inside the issue.
 
 - **How to recognize it (the trigger).** A client citation is the user *forwarding someone else's words*, not describing the work in their own. In priority order:
-  1. **Explicit demarcation** — the user marked it: a quoted/fenced block, a `Client:` / `From the client:` / `Клиент:` lead-in, or an obviously pasted or forwarded chat chunk. That marked span *is* the citation; take it as-is.
-  2. **Register shift** — failing an explicit mark, look for a different language than the user's own instructions (Russian amid English is the usual tell here), end-user/reporter phrasing ("не отображается…", "сделайте, пожалуйста…"), or a casual non-technical tone unlike their directives to you.
+  1. **Explicit demarcation** — the user marked it: a quoted/fenced block, a `Client:` / `From the client:` lead-in (or its equivalent in another language), or an obviously pasted or forwarded chat chunk. That marked span *is* the citation; take it as-is.
+  2. **Register shift** — failing an explicit mark, look for a different language than the user's own instructions (a sudden switch to another language is the usual tell), end-user/reporter phrasing ("it doesn't show up…", "please fix…"), or a casual non-technical tone unlike their directives to you.
 
-  The user's own instructions to you ("create issues for this", "split into two") are **not** the citation — exclude them. And if the user is the originator describing the work in their own words — even in Russian — nothing was forwarded, so there is nothing to cite: skip the block.
-- **Capture only the client's words, verbatim.** Lift the contiguous span the cues above pick out, trimmed of your-instruction framing — exact wording, no paraphrase, no in-place translation. The English issue body *is* the working interpretation; the snippet is the untouched original a reviewer (and the client) can check it against.
+  The user's own instructions to you ("create issues for this", "split into two") are **not** the citation — exclude them. And if the user is the originator describing the work in their own words — even in another language — nothing was forwarded, so there is nothing to cite: skip the block.
+- **Capture only the client's words, verbatim.** Lift the contiguous span the cues above pick out, trimmed of your-instruction framing — exact wording, no paraphrase, no in-place translation. The issue body *is* the working interpretation; the snippet is the untouched original a reviewer (and the client) can check it against.
 - **Slice per issue.** When one client message spawns several issues, give each issue only the excerpt that motivated it — the sentence(s) or paragraph for that change, not the whole message. A short, atomic request goes in whole.
-- **Never fabricate — confirm or omit.** The block earns its place only by being the client's *actual* words, checkable against the English body. So if you can't pin down a clean verbatim span — the request was paraphrased, the boundary is fuzzy, or you're unsure whether text is the client's or the user's — **do not reconstruct or back-translate one.** Ask the user to paste or point at the exact client text, or leave the block out. A made-up "original" is worse than none.
+- **Never fabricate — confirm or omit.** The block earns its place only by being the client's *actual* words, checkable against the issue body. So if you can't pin down a clean verbatim span — the request was paraphrased, the boundary is fuzzy, or you're unsure whether text is the client's or the user's — **do not reconstruct or back-translate one.** Ask the user to paste or point at the exact client text, or leave the block out. A made-up "original" is worse than none.
 - **Placement.** Append it at the **end** of `description`, under a `---` divider, as a blockquote with a language-tagged heading:
 
   ```
-  ...English body: scope, steps, acceptance...
+  ...body: scope, steps, acceptance...
 
   ---
 
-  **Original client request (RU):**
+  **Original client request (<lang>):**
 
-  > <client's exact words, verbatim>
+  > <client's exact words, verbatim — first paragraph>
+  >
+  > <... and any further paragraphs, each line still quoted>
   ```
 
-  Tag the language in the heading (`(RU)`, `(EN)`, …). In the JSON this is one `description` string: newlines are `\n`, each quoted line starts with `> `, and any `"` inside the snippet must be escaped as `\"`. Cyrillic needs no escaping — the file is UTF-8.
+  Tag the source language in the heading with its code (`(RU)`, `(EN)`, `(ES)`, …). In the JSON this is one `description` string: newlines are `\n`, and **every** quoted line starts with `> ` — including the blank lines between paragraphs, which must be a bare `>` (a fully blank line ends the blockquote and drops the rest out of the quote). Any `"` inside the snippet must be escaped as `\"`; non-ASCII text (Cyrillic, accents, CJK, …) needs no escaping — the file is UTF-8.
 
 ## Workflow
 
@@ -115,7 +117,7 @@ The default shape is a **single full-stack issue**:
       "type": "issue",
       "issue_type": "Task",
       "title": "[<DOMAIN>] <concise full-stack change>",
-      "description": "<scope + checkbox steps; spec acceptance checklist lifted verbatim; code-analysis 'must preserve' invariants>\n\n---\n\n**Original client request (RU):**\n\n> <client's verbatim words; omit this block for non-client work>",
+      "description": "<scope + checkbox steps; spec acceptance checklist lifted verbatim; code-analysis 'must preserve' invariants>\n\n---\n\n**Original client request (<lang>):**\n\n> <client's verbatim words; omit this block for non-client work>",
       "labels": ["bug"]
     }
   ]
@@ -146,5 +148,5 @@ Planning mistakes (over-decomposition, splitting by layer, wrong prefix, adding 
 - **Adding a `milestone` field to a task.** The milestone is applied globally from `config.json` (or `--milestone` / `MILESTONE`) — a per-task field is noise.
 - **Appending to / reusing a stale `tasks.json`.** Start a fresh file every time (Workflow step 1); a successful run archives the consumed one to `.local/archive/`, so a file in the slot is a pending/abandoned draft, never a base to extend.
 - **Reusing or renaming an `id` across runs after partial success.** With `--resume` the script keys `.create_issues_state.json` by `id`; changing ids mid-flight breaks resume linkage.
-- **Mangling or inventing the client snippet.** When the issue comes from a client request, keep the original wording **verbatim** (no translating it in place) and give each issue only **its** excerpt — don't paste the whole message into every issue. And never *manufacture* a snippet: if the client's exact words weren't actually provided, confirm or omit — don't back-translate the English body into a fake "original" (see "Preserving the original client request").
+- **Mangling or inventing the client snippet.** When the issue comes from a client request, keep the original wording **verbatim** (no translating it in place) and give each issue only **its** excerpt — don't paste the whole message into every issue. And never *manufacture* a snippet: if the client's exact words weren't actually provided, confirm or omit — don't back-translate the issue body into a fake "original" (see "Preserving the original client request").
 - **Running the live command to "just check".** Dry-run is the only thing you run; the live run is the user's.
