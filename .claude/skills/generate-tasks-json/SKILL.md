@@ -30,13 +30,39 @@ The repo ships a curated `wiki/` (`wiki/index.md`). Use it to fill issue bodies 
 - The change may cascade across several Go modules (7-module workspace) and both transports (HTTP template + WebSocket). That is still **one** issue — the full-stack developer owns it end to end.
 - A `[DOCS]` issue is warranted when refreshing those code-analysis files (`flow.compact.md`, `patterns.md`, `impact.md`) is itself a distinct piece of work after a change lands.
 
+## Preserving the original client request
+
+Issues are the project's **single source of truth** — [`GITHUB_ISSUES_AND_PROJECT_BOARD.md` §1](../../../.github/scripts/generate-issues/GITHUB_ISSUES_AND_PROJECT_BOARD.md) requires that discussion live in the issue, "not in external messengers." A client request that arrives over a messenger — typically in **Russian** — and gets silently rewritten into an English issue body loses that record, and any translation drift becomes invisible. So when an issue's content originates from a **client-provided request** (a message or spec the user pastes in, in *any* language), preserve the client's exact wording inside the issue.
+
+- **How to recognize it (the trigger).** A client citation is the user *forwarding someone else's words*, not describing the work in their own. In priority order:
+  1. **Explicit demarcation** — the user marked it: a quoted/fenced block, a `Client:` / `From the client:` / `Клиент:` lead-in, or an obviously pasted or forwarded chat chunk. That marked span *is* the citation; take it as-is.
+  2. **Register shift** — failing an explicit mark, look for a different language than the user's own instructions (Russian amid English is the usual tell here), end-user/reporter phrasing ("не отображается…", "сделайте, пожалуйста…"), or a casual non-technical tone unlike their directives to you.
+
+  The user's own instructions to you ("create issues for this", "split into two") are **not** the citation — exclude them. And if the user is the originator describing the work in their own words — even in Russian — nothing was forwarded, so there is nothing to cite: skip the block.
+- **Capture only the client's words, verbatim.** Lift the contiguous span the cues above pick out, trimmed of your-instruction framing — exact wording, no paraphrase, no in-place translation. The English issue body *is* the working interpretation; the snippet is the untouched original a reviewer (and the client) can check it against.
+- **Slice per issue.** When one client message spawns several issues, give each issue only the excerpt that motivated it — the sentence(s) or paragraph for that change, not the whole message. A short, atomic request goes in whole.
+- **Never fabricate — confirm or omit.** The block earns its place only by being the client's *actual* words, checkable against the English body. So if you can't pin down a clean verbatim span — the request was paraphrased, the boundary is fuzzy, or you're unsure whether text is the client's or the user's — **do not reconstruct or back-translate one.** Ask the user to paste or point at the exact client text, or leave the block out. A made-up "original" is worse than none.
+- **Placement.** Append it at the **end** of `description`, under a `---` divider, as a blockquote with a language-tagged heading:
+
+  ```
+  ...English body: scope, steps, acceptance...
+
+  ---
+
+  **Original client request (RU):**
+
+  > <client's exact words, verbatim>
+  ```
+
+  Tag the language in the heading (`(RU)`, `(EN)`, …). In the JSON this is one `description` string: newlines are `\n`, each quoted line starts with `> `, and any `"` inside the snippet must be escaped as `\"`. Cyrillic needs no escaping — the file is UTF-8.
+
 ## Workflow
 
 1. **Check the slot for a leftover `tasks.json`** (see "File location and shape"). A successful live run auto-archives the file, so any `tasks.json` present is a **previous batch left pending or abandoned** — **never append to or merge with it.** Treat it as stale: confirm with the user, then **overwrite** it for the new batch.
 2. **Read the authoritative doc** (above), then understand the work: the user-visible change, the layers it touches, and any constraints.
 3. **Decide the shape per §3** — default to a **single `type: issue`** (full-stack, one PR). Use `parent` + vertical-slice sub-issues **only** for the large-feature exception of §3.3.
 4. **Pick the one domain prefix** from the §3.4 canonical set; **omit `assignee`** (§4).
-5. **Draft the JSON** following the schema below, sourcing content from the wiki.
+5. **Draft the JSON** following the schema below, sourcing content from the wiki. For client-sourced work, end each issue body with the verbatim original snippet (see "Preserving the original client request").
 6. **Validate locally** in dry-run mode (see "Validate"). Never invoke a live run yourself.
 
 ## File location and shape
@@ -62,7 +88,7 @@ This is the `create-issues.js` schema (a script contract, not team policy). The 
 - `type` — one of `parent`, `sub-issue`, `issue`. Anything else fails validation. **Default to `issue`.**
 - `parent` — required when `type` is `sub-issue`; must reference an existing `id` whose task is `type: parent`.
 - `issue_type` — `Feature` for parents, `Task` otherwise. Defaults apply if omitted; set it explicitly.
-- `description` — markdown body. The script auto-appends `\n\nPart of #<parent-number>` to sub-issues — do not write that yourself.
+- `description` — markdown body. The script auto-appends `\n\nPart of #<parent-number>` to sub-issues — do not write that yourself. When the work comes from a client request, end the body with the verbatim original-request block (see "Preserving the original client request").
 - `assignee` — **omit by default** (unassigned pool, §4). Only set it for a `parent`'s Feature Owner.
 - `labels` — array from the doc's allowed set only (§7). **Optional**: set the one label matching the kind of change (`bug` / `enhancement` / `refactoring`) when it adds value; omitting `labels` leaves the issue **unlabeled** (the script no longer force-defaults to `enhancement`). There is **no** per-task `milestone` field — the script applies the milestone globally from `config.json` (§8.2).
 
@@ -89,7 +115,7 @@ The default shape is a **single full-stack issue**:
       "type": "issue",
       "issue_type": "Task",
       "title": "[<DOMAIN>] <concise full-stack change>",
-      "description": "<scope + checkbox steps; spec acceptance checklist lifted verbatim; code-analysis 'must preserve' invariants>",
+      "description": "<scope + checkbox steps; spec acceptance checklist lifted verbatim; code-analysis 'must preserve' invariants>\n\n---\n\n**Original client request (RU):**\n\n> <client's verbatim words; omit this block for non-client work>",
       "labels": ["bug"]
     }
   ]
@@ -120,4 +146,5 @@ Planning mistakes (over-decomposition, splitting by layer, wrong prefix, adding 
 - **Adding a `milestone` field to a task.** The milestone is applied globally from `config.json` (or `--milestone` / `MILESTONE`) — a per-task field is noise.
 - **Appending to / reusing a stale `tasks.json`.** Start a fresh file every time (Workflow step 1); a successful run archives the consumed one to `.local/archive/`, so a file in the slot is a pending/abandoned draft, never a base to extend.
 - **Reusing or renaming an `id` across runs after partial success.** With `--resume` the script keys `.create_issues_state.json` by `id`; changing ids mid-flight breaks resume linkage.
+- **Mangling or inventing the client snippet.** When the issue comes from a client request, keep the original wording **verbatim** (no translating it in place) and give each issue only **its** excerpt — don't paste the whole message into every issue. And never *manufacture* a snippet: if the client's exact words weren't actually provided, confirm or omit — don't back-translate the English body into a fake "original" (see "Preserving the original client request").
 - **Running the live command to "just check".** Dry-run is the only thing you run; the live run is the user's.
