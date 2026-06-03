@@ -101,7 +101,7 @@ Per-type fields default to `"0"` (not `""`) so the JSON contract is stable regar
 Both call sites also write to **two struct fields**: `inv.CoinFills` (legacy, for in-memory readers) and `inv.MempoolShort.CoinFills` (JSON-serialised).
 
 **Constraints:**
-- Changes to `computeCoinFills` inputs or outputs need both call sites updated.
+- Changes to `types.ComputeCoinFills` (`explorer/types/explorertypes.go:1760`) inputs or outputs need both call sites updated (`explorer.go:487` and `:598`). Don't edit the dead `explorer.go:1000 computeCoinFills` duplicate.
 - Changes to the field set need both `inv.CoinFills` and `inv.MempoolShort.CoinFills` written; otherwise HTTP-rendered pages drift from JSON snapshots.
 - The JS mirror in [public/js/helpers/indicator_fill.js](../../../cmd/dcrdata/public/js/helpers/indicator_fill.js) must track the Go output shape; divergence is silent.
 

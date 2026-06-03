@@ -10,7 +10,7 @@ Three load-bearing differences from `/side` shape the mutation surface:
 
 1. **Filter column.** `/side` filters on `is_mainchain = FALSE`; `/disapproved` filters on `is_valid = FALSE`. Each query's SELECT skips its own filter column (the WHERE makes it redundant), so the two queries leave **different** `BlockStatus` fields unwritten by Scan — `/side` leaves `IsMainchain` zero, `/disapproved` leaves `IsValid` zero.
 2. **Writer semantics.** `/side` rows are populated by reorg (`TipToSideChain`) or by opt-in startup import (`ImportSideChains`). `/disapproved` rows are populated by the normal **block-connect** path — `updateLastBlock` flips `is_valid=false` on the *previous* block when the current block's vote bits disapprove it. Disapprovals are produced by every running instance, no flag, on every block where stakeholders rejected the parent's regular tx tree.
-3. **HTTP cache.** `/disapproved` is mounted under `withCache` (`ETagAndLastModifiedIntercept`) at [cmd/dcrdata/main.go:801](../../../cmd/dcrdata/main.go#L801); `/side` is **not** ([cmd/dcrdata/main.go:768](../../../cmd/dcrdata/main.go#L768)). Disapprovals only change on new-block notifications, which is the same trigger that resets the cache's ETag, so caching is coherent. `/side` could in principle also be cached but currently is not.
+3. **HTTP cache.** `/disapproved` is mounted under `withCache` (`ETagAndLastModifiedIntercept`) at [cmd/dcrdata/main.go:770](../../../cmd/dcrdata/main.go#L770); `/side` is **not** ([cmd/dcrdata/main.go:735](../../../cmd/dcrdata/main.go#L735)). Disapprovals only change on new-block notifications, which is the same trigger that resets the cache's ETag, so caching is coherent. `/side` could in principle also be cached but currently is not.
 
 The page returns `[]*dbtypes.BlockStatus`. That struct is reused by **4 SQL functions** with different column subsets — this is the central mutation hazard, already documented in [sidechain/flow.full.md §3](../sidechain/flow.full.md). Treat this trace as the writer-specific complement to that one.
 
@@ -69,32 +69,32 @@ views/disapproved.tmpl  →  HTML response
 
 The same data is also reachable indirectly:
 
-- `/rejects` → `http.Redirect(..., "/disapproved", 308)` ([cmd/dcrdata/main.go:769-771](../../../cmd/dcrdata/main.go#L769-L771)). Legacy alias; permanent redirect.
+- `/rejects` → `http.Redirect(..., "/disapproved", 308)` ([cmd/dcrdata/main.go:736-738](../../../cmd/dcrdata/main.go#L736-L738)). Legacy alias; permanent redirect.
 - `/blocks` template links to `/disapproved` for users looking for PoS-invalidated blocks ([cmd/dcrdata/views/blocks.tmpl:179](../../../cmd/dcrdata/views/blocks.tmpl#L179)).
 
 ## Section 3 — Per-Layer Breakdown
 
 ### Router
 
-- **Location:** [cmd/dcrdata/main.go:799-801](../../../cmd/dcrdata/main.go#L799-L801)
+- **Location:** [cmd/dcrdata/main.go:768-770](../../../cmd/dcrdata/main.go#L768-L770)
 - **Code:**
   ```go
   withCache := r.With(explore.ETagAndLastModifiedIntercept)
   withCache.Get("/", explore.Home)
   withCache.Get("/disapproved", explore.DisapprovedBlocks)
   ```
-- **Middleware:** `ETagAndLastModifiedIntercept` ([explorermiddleware.go:192](../../../cmd/dcrdata/internal/explorer/explorermiddleware.go#L192)) — block-scoped ETag/Last-Modified cache shared with `/`, `/mempool`, `/charts`, and other home-page-adjacent endpoints. See [page-rendering/patterns.md](../page-rendering/patterns.md) for the cache invariant.
-- **Legacy redirect:** [cmd/dcrdata/main.go:769-771](../../../cmd/dcrdata/main.go#L769-L771) — `/rejects` → `/disapproved` (308 Permanent).
+- **Middleware:** `ETagAndLastModifiedIntercept` ([explorermiddleware.go:193](../../../cmd/dcrdata/internal/explorer/explorermiddleware.go#L193)) — block-scoped ETag/Last-Modified cache shared with `/`, `/mempool`, `/charts`, and other home-page-adjacent endpoints. See [page-rendering/patterns.md](../page-rendering/patterns.md) for the cache invariant.
+- **Legacy redirect:** [cmd/dcrdata/main.go:736-738](../../../cmd/dcrdata/main.go#L736-L738) — `/rejects` → `/disapproved` (308 Permanent).
 
 ### Handler
 
-- **Location:** [cmd/dcrdata/internal/explorer/explorerroutes.go:288-318](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L288-L318)
+- **Location:** [cmd/dcrdata/internal/explorer/explorerroutes.go:264-293](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L264-L293)
 - **Logic:** call `dataSource.DisapprovedBlocks(ctx)`; on context-deadline error, render the timeout error page via `exp.timeoutErrorPage`; on any other error, render `StatusPage(defaultErrorCode, "failed to retrieve stakeholder disapproved blocks", ...)`; otherwise execute the `"disapproved"` template with `{ *CommonPageData, Data []*dbtypes.BlockStatus }`.
-- **No mutation, no derived fields, no per-coin handling.** Thin pass-through. Identical shape to `SideChains` handler ([explorerroutes.go:238-268](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L238-L268)).
+- **No mutation, no derived fields, no per-coin handling.** Thin pass-through. Identical shape to `SideChains` handler ([explorerroutes.go:214-243](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L214-L243)).
 
 ### DataSource interface
 
-- **Location:** [cmd/dcrdata/internal/explorer/explorer.go:91](../../../cmd/dcrdata/internal/explorer/explorer.go#L91) — `DisapprovedBlocks(context.Context) ([]*dbtypes.BlockStatus, error)`
+- **Location:** [cmd/dcrdata/internal/explorer/explorer.go:85](../../../cmd/dcrdata/internal/explorer/explorer.go#L85) — `DisapprovedBlocks(context.Context) ([]*dbtypes.BlockStatus, error)`
 - **Test mock:** [cmd/dcrdata/internal/explorer/explorer_test.go:73](../../../cmd/dcrdata/internal/explorer/explorer_test.go#L73) — fan-out point if the signature changes.
 
 ### ChainDB read method
@@ -238,9 +238,9 @@ When modifying anything in this flow, check:
 
 ## Section 8 — Evidence
 
-- Route registration — [cmd/dcrdata/main.go:799-801](../../../cmd/dcrdata/main.go#L799-L801); `/rejects` redirect — [cmd/dcrdata/main.go:769-771](../../../cmd/dcrdata/main.go#L769-L771)
-- Handler — [cmd/dcrdata/internal/explorer/explorerroutes.go:288-318](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L288-L318)
-- Interface — [cmd/dcrdata/internal/explorer/explorer.go:91](../../../cmd/dcrdata/internal/explorer/explorer.go#L91)
+- Route registration — [cmd/dcrdata/main.go:768-770](../../../cmd/dcrdata/main.go#L768-L770); `/rejects` redirect — [cmd/dcrdata/main.go:736-738](../../../cmd/dcrdata/main.go#L736-L738)
+- Handler — [cmd/dcrdata/internal/explorer/explorerroutes.go:264-293](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L264-L293)
+- Interface — [cmd/dcrdata/internal/explorer/explorer.go:85](../../../cmd/dcrdata/internal/explorer/explorer.go#L85)
 - Test mock — [cmd/dcrdata/internal/explorer/explorer_test.go:73](../../../cmd/dcrdata/internal/explorer/explorer_test.go#L73)
 - Template name registration — [cmd/dcrdata/internal/explorer/explorer.go:401](../../../cmd/dcrdata/internal/explorer/explorer.go#L401)
 - POSExplanation link — [cmd/dcrdata/internal/explorer/explorer.go:169](../../../cmd/dcrdata/internal/explorer/explorer.go#L169)
@@ -252,7 +252,7 @@ When modifying anything in this flow, check:
 - Entry link from `/blocks` — [cmd/dcrdata/views/blocks.tmpl:179](../../../cmd/dcrdata/views/blocks.tmpl#L179)
 - Writer cascade `updateLastBlock` — [db/dcrpg/pgblockchain.go:4042-4155](../../../db/dcrpg/pgblockchain.go#L4042-L4155)
 - Writer SQL `UpdateLastBlockValid` — [db/dcrpg/internal/blockstmts.go:203](../../../db/dcrpg/internal/blockstmts.go#L203)
-- ETag middleware — [cmd/dcrdata/internal/explorer/explorermiddleware.go:192-193](../../../cmd/dcrdata/internal/explorer/explorermiddleware.go#L192-L193)
+- ETag middleware — [cmd/dcrdata/internal/explorer/explorermiddleware.go:193](../../../cmd/dcrdata/internal/explorer/explorermiddleware.go#L193)
 - Sibling `BlockStatus` SELECTs — [db/dcrpg/internal/blockstmts.go:170-193](../../../db/dcrpg/internal/blockstmts.go#L170-L193); sibling Scans — [db/dcrpg/queries.go:3969-4074](../../../db/dcrpg/queries.go#L3969-L4074)
 
 See also:

@@ -19,10 +19,10 @@ ETag cache) are **not** re-described here — they are consolidated in
 `/parameters` is ~95% an immutable read of `chaincfg.Params`. The handler reads
 nothing live except a single dynamic value: `MaximumBlockSize`. `params :=
 exp.ChainParams` is the process-lifetime snapshot captured once at startup
-([explorer.go:369-371](../../../cmd/dcrdata/internal/explorer/explorer.go#L369-L371)),
+([explorer.go:339-341](../../../cmd/dcrdata/internal/explorer/explorer.go#L339-L341)),
 and ~40 template rows bind straight off `.ChainParams.*`. The only
 request-time variation comes from `exp.pageData.BlockchainInfo.MaxBlockSize`
-([explorerroutes.go:2149-2156](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L2149-L2156)),
+([explorerroutes.go:1913-1920](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L1913-L1920)),
 itself a per-block out-of-band snapshot, not a live RPC call.
 
 **Constraints:**
@@ -45,16 +45,16 @@ itself a per-block out-of-band snapshot, not a live RPC call.
 
 **Description:**
 The template payload is `struct{ *CommonPageData; ExtendedParams }`
-([explorerroutes.go:2164-2174](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L2164-L2174)).
+([explorerroutes.go:1953-1964](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L1953-L1964)).
 This is the generic `*CommonPageData` embedding pattern, but parameters is the
 trace that grounds the **split decision**: ~40 rows resolve via
 `.ChainParams.*` (owned by `commonData`, shared by every page) and exactly
 three resolve via `.ExtendedParams.*` — `MaximumBlockSize`,
 `ActualTicketPoolSize`, `AddressPrefix` — a *page-local anonymous struct type*
 declared inside the handler
-([explorerroutes.go:2158-2162](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L2158-L2162)).
+([explorerroutes.go:1946-1951](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L1946-L1951)).
 `ActualTicketPoolSize = int64(params.TicketPoolSize * params.TicketsPerBlock)`
-([explorerroutes.go:2147](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L2147))
+([explorerroutes.go:1911](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L1911))
 is a derived value that is *not* a `chaincfg.Params` field — it must live in
 `ExtendedParams` precisely because there is no common-struct field for it.
 
@@ -91,7 +91,7 @@ regnet (`Rk Rs Re RS Rc Pr rprv rpub`) — selected by `params.Name` via
 falls back to a `0x` + hex.EncodeToString of the magic-byte field on
 `chaincfg.Params`, so the rendered table is never silently empty. The only
 caller is `ParametersPage` —
-[explorerroutes.go:2146](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L2146)
+[explorerroutes.go:1910](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L1910)
 — blast radius is one page.
 
 **Constraints:**
@@ -191,11 +191,11 @@ strings — no `*big.Int` crosses the template boundary.
 
 **Description:**
 When `exp.pageData.BlockchainInfo == nil` (non-tip state by design at
-[blockdata/blockdata.go:339-341](../../../blockdata/blockdata.go#L339-L341),
+[blockdata/blockdata.go:338-340](../../../blockdata/blockdata.go#L338-L340),
 or the RPC warn-and-continue at
 [blockdata/blockdata.go:334-337](../../../blockdata/blockdata.go#L334-L337)),
 the handler falls back to `int64(params.MaximumBlockSizes[0])`
-([explorerroutes.go:2154](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L2154)).
+([explorerroutes.go:1918](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L1918)).
 There is **no length check** on the `MaximumBlockSizes` slice and no
 non-nil-guard short-circuit beyond the `BlockchainInfo != nil` branch. This
 fallback is load-bearing: it is the *intended* behavior for every render

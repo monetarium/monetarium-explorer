@@ -76,14 +76,6 @@
 **Failure mode:** XSS if untrusted strings are interpolated; otherwise none.
 **Description:** Current code is safe because every interpolated value is forced through `parseInt()`. The function is the only `innerHTML`-based template on this page; widening it would re-introduce the C6 risk that the rest of the project's per-template `<template>` cloning specifically prevents.
 
-## Risk: Legacy `DCR` label leak
-
-**Trigger:** none — this is an existing inconsistency, not a mutation risk. Documenting for sweep work.
-**Affected flows:**
-- /wiki/code-analysis/ticketpool/flow.full.md §3.9
-**Failure mode:** cosmetic
-**Description:** [ticketpool_controller.js:242](../../../cmd/dcrdata/public/js/controllers/ticketpool_controller.js#L242) says `'A.v.g. Tickets Value (DCR)'`; the price chart at line 271 already says `'Ticket Price (VAR)'`. The same `DCR`→`VAR` rename pattern is being applied across [/wiki/specs/parameters/spec.md](../../specs/parameters/spec.md) and [/wiki/specs/attack-cost/spec.md](../../specs/attack-cost/spec.md); fold into that sweep.
-
 ## Risk: `/bydate` response asymmetry
 
 **Trigger:** unifying `getTicketPoolByDate` to return a `TicketPoolChartsData` (instead of the anonymous `{Height, TimeChart}` struct) without updating the JS to expect `mempool`/`price_chart`/`outputs_chart` keys on this branch.
@@ -95,7 +87,7 @@
 See also:
 - /wiki/code-analysis/ticketpool/flow.full.md
 - /wiki/code-analysis/ticketpool/patterns.md
-- /wiki/core/constraints.md (depends-on: C1, C2, C3, C6, C7, C8)
+- /wiki/core/constraints.md (depends-on: C1, C2, C3, C6, C8)
 - /wiki/code-analysis/decodetx/impact.md (shares-pattern-with: R1 WS event-name drift)
 - /wiki/code-analysis/time-based-blocks/impact.md (shares-pattern-with: positional Scan desync)
 - /wiki/code-analysis/windows/impact.md (shares-pattern-with: positional Scan desync)

@@ -1,6 +1,6 @@
 # Decode/Broadcast Tx (`/decodetx`) — Compact
 
-**Flow:** `GET /decodetx` → `DecodeTxPage` → `rawtx.tmpl` (form only, no data); interactive `<textarea>` + Decode/Broadcast buttons → `messagesocket_service.send({event,message})` → `/ws` → `RootWebsocket` `switch msg.EventId` → `dataSource.DecodeRawTransaction`/`SendRawTransaction` (`ChainDB` → node RPC `decoderawtransaction`/`sendrawtransaction`) → JSON pretty-print → `{EventId: <id>+"Resp", Message}` → `rawtx_controller` `<pre>.textContent = evt`. A parallel handler exists at `/ps` ([pubsub/pubsubhub.go:291-317](../../../pubsub/pubsubhub.go#L291-L317)); `sendtx` is also exposed as `POST /insight/api/tx/send`.
+**Flow:** `GET /decodetx` → `DecodeTxPage` → `rawtx.tmpl` (form only, no data); interactive `<textarea>` + Decode/Broadcast buttons → `messagesocket_service.send({event,message})` → `/ws` → `RootWebsocket` `switch msg.EventId` → `dataSource.DecodeRawTransaction`/`SendRawTransaction` (`ChainDB` → node RPC `decoderawtransaction`/`sendrawtransaction`) → JSON pretty-print → `{EventId: <id>+"Resp", Message}` → `rawtx_controller` `<pre>.textContent = evt`. A parallel handler exists at `/ps` ([pubsub/pubsubhub.go:290-316](../../../pubsub/pubsubhub.go#L290-L316)); `sendtx` is also exposed as `POST /insight/api/tx/send`.
 
 **Key architectural patterns:**
 
@@ -19,8 +19,8 @@
 **Mutation checklist (touching `/decodetx`):**
 
 1. Rename `decodetx`/`sendtx` strings? Update 5 sites: `rawtx.tmpl` `data-event-id` (×3), `websockethandlers.go` case, `pubsubhub.go` case, `pstypes.eventIDs` (`SigDecodeTx`/`SigSendTx`), `rawtx_controller.js` `registerEvtHandler` (`decodetxResp`/`sendtxResp`).
-2. Change `DecodeRawTransaction`/`SendRawTransaction` interface? Update **two** interface decls (explorer.go:111, pubsubhub.go:51), `ChainDB` impl in `db/dcrpg/`, `mockDataSource` in `explorer_test.go`, and `iapi.BlockData.SendRawTransaction` caller in `insight/apiroutes.go`.
+2. Change `DecodeRawTransaction`/`SendRawTransaction` interface? Update **two** interface decls (explorer.go:107, pubsubhub.go:53), `ChainDB` impl in `db/dcrpg/`, `mockDataSource` in `explorer_test.go`, and `iapi.BlockData.SendRawTransaction` caller in `insight/apiroutes.go`.
 3. Touch `*chainjson.TxRawResult.Vout`? Confirm `Value omitempty` + `SKAValue` + `CoinType` invariant still holds end-to-end; do NOT introduce float conversion on the SKA path.
 4. Adjust size limits? Three independent values (`1<<20` in explorer, `psh.wsHub.requestLimit` in pubsub, `iapi.params.MaxTxSize` in Insight). No shared constant.
 5. Add structured data to the response? You'll be the first to depend on the response *shape* (currently it's just text). Either keep `<pre>.textContent` (no XSS surface) or adopt C6 cloning + parsed payload — don't mix.
-6. Delete or rename the route? Also update the legacy `/explorer/decodetx → /decodetx` redirect in `explorer.go:980`.
+6. Delete or rename the route? Also update the legacy `/explorer/decodetx → /decodetx` redirect in `explorer.go:958`.

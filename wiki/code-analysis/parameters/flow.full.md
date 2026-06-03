@@ -53,44 +53,44 @@ monetarium-node
 
 ### Node / static config
 
-- **Location:** `db/dcrpg/pgblockchain.go:6408-6410`
+- **Location:** `db/dcrpg/pgblockchain.go:6317-6319`
 - **Data structures:** `*chaincfg.Params` (from `monetarium-node`)
 - **Transformations:** none — `GetChainParams()` returns `pgb.chainParams` verbatim.
 
 ### Capture at startup
 
-- **Location:** `cmd/dcrdata/internal/explorer/explorer.go:369-371`
+- **Location:** `cmd/dcrdata/internal/explorer/explorer.go:339-341`
 - **Data structures:** `exp.ChainParams *chaincfg.Params`, `exp.NetName`
 - **Transformations:** `exp.ChainParams = exp.dataSource.GetChainParams()` once;
   `exp.NetName = netName(exp.ChainParams)`. **Process-lifetime constant.**
 
 ### Dynamic field source (RPC)
 
-- **Location:** `blockdata/blockdata.go:332-357`
+- **Location:** `blockdata/blockdata.go:333-353`
 - **Data structures:** `chainjson.GetBlockChainInfoResult` (field
   `BlockData.BlockchainInfo`, defined `blockdata/blockdata.go:38`)
 - **Transformations:** `chainInfo, err := t.dcrdChainSvr.GetBlockChainInfo(ctx)`.
-  Critically, `blockdata.go:339-341` **nulls** `chainInfo` unless
+  Critically, `blockdata.go:338-340` **nulls** `chainInfo` unless
   `chainInfo.BestBlockHash == hash.String()` — `GetBlockChainInfo` is only
   valid at the chain tip.
 
 ### Store into pageData
 
-- **Location:** `cmd/dcrdata/internal/explorer/explorer.go:536-572`
-- **Data structures:** `pageData` (struct `explorer.go:230-233`,
+- **Location:** `cmd/dcrdata/internal/explorer/explorer.go:536-540`
+- **Data structures:** `pageData` (struct `explorer.go:206-213`,
   `RWMutex`-guarded), field `BlockchainInfo *chainjson.GetBlockChainInfoResult`
 - **Transformations:** under `p.Lock()`: `p.BlockchainInfo = blockData.BlockchainInfo`.
 
 ### Handler
 
-- **Location:** `cmd/dcrdata/internal/explorer/explorerroutes.go:2144-2186`
+- **Location:** `cmd/dcrdata/internal/explorer/explorerroutes.go:1907-1974`
 - **Data structures:** anonymous `struct{ *CommonPageData; ExtendedParams }`;
   `ExtendedParams{ MaximumBlockSize int64; ActualTicketPoolSize int64; AddressPrefix []types.AddrPrefix; SKACoins []types.SKACoinParam }`
 - **Transformations:**
   - `addrPrefix := types.AddressPrefixes(params)`
   - `actualTicketPoolSize := int64(params.TicketPoolSize * params.TicketsPerBlock)`
   - `maxBlockSize`: under `pageData.RLock()`, `BlockchainInfo.MaxBlockSize` if
-    non-nil, else `int64(params.MaximumBlockSizes[0])` (`:2150-2156`)
+    non-nil, else `int64(params.MaximumBlockSizes[0])` (`:1914-1920`)
   - `emissionHeights map[uint8]int64` is built per request: call
     `exp.dataSource.SKACoinSupply(ctx)` for the list of CoinTypes ever
     observed on chain, gather those not in `params.InitialSKATypes` into a
@@ -112,11 +112,11 @@ monetarium-node
 
 ### commonData (shared header)
 
-- **Location:** `explorerroutes.go:2534-2572`
+- **Location:** `explorerroutes.go:2304-2342`
 - **Data structures:** `*CommonPageData{ Tip, Version, ChainParams, BlockTimeUnix, NetName, … }`
 - **Transformations:** `GetTip(ctx)` → `exptypes.WebBasicBlock` (Postgres,
-  `db/dcrpg/pgblockchain.go:7319-7348`). On error logs and **returns `nil`**
-  (`:2540`). Re-injects `exp.ChainParams` and
+  `db/dcrpg/pgblockchain.go:7306-7325`). On error logs and **returns `nil`**
+  (`:2310`). Re-injects `exp.ChainParams` and
   `BlockTimeUnix = int64(exp.ChainParams.TargetTimePerBlock.Seconds())`.
 
 ### AddressPrefixes transform
@@ -221,7 +221,7 @@ Notes:
 
 ### Route
 
-- **Location:** `cmd/dcrdata/main.go:810`
+- **Location:** `cmd/dcrdata/main.go:779`
 - `withCache.Get("/parameters", explore.ParametersPage)` where
   `withCache = r.With(explore.ETagAndLastModifiedIntercept)`
   (`explorermiddleware.go:193`).
@@ -233,7 +233,7 @@ Notes:
 - **Dual param injection (brittle):** the template binds `.ChainParams` from
   `CommonPageData` (via `commonData`) **and** `.ExtendedParams` from the
   handler's anonymous struct, merged by Go struct embedding at the
-  `templates.exec` call (`explorerroutes.go:2164-2174`). Adding a template row
+  `templates.exec` call (`explorerroutes.go:1953-1964`). Adding a template row
   requires knowing which of the two sources owns the field.
 - **`commonData` is shared by every page**, not just `/parameters`. Changing it
   to satisfy this page risks all pages. Page-specific data belongs in
@@ -241,7 +241,7 @@ Notes:
 - **`GetChainParams` is broad**: it seeds `exp.ChainParams` once at startup and
   feeds `commonData` for every page render.
 - **`BlockchainInfo` is shared state**: also read by `StoreMPData`
-  (`explorer.go:506`) and other pages — not isolated to `/parameters`.
+  (`explorer.go:474`) and other pages — not isolated to `/parameters`.
 - **Tip↔nil coupling:** `commonData` returning `nil` (DB tip fetch failure)
   makes the embedded `*CommonPageData` nil; the template then dereferences
   `.ChainParams` off nil → template execute error.
@@ -251,10 +251,10 @@ Notes:
 ## Section 5 — Critical Constraints
 
 - **Lock discipline:** `pageData.BlockchainInfo` must be read under
-  `pageData.RLock()` (`explorerroutes.go:2149-2156`); writer `Store` holds
-  `p.Lock()` (`explorer.go:568`). Reading outside the RLock is a data race.
+  `pageData.RLock()` (`explorerroutes.go:1913-1920`); writer `Store` holds
+  `p.Lock()` (`explorer.go:536`). Reading outside the RLock is a data race.
 - **Tip-only RPC validity:** `BlockchainInfo` is intentionally `nil` for
-  non-tip blocks (`blockdata.go:339-341`); the handler fallback to
+  non-tip blocks (`blockdata.go:338-340`); the handler fallback to
   `params.MaximumBlockSizes[0]` exists precisely for this.
 - **Subsidy/Stake rows stay VAR-only scalar:** `BaseSubsidy`,
   `WorkRewardProportionV2`, `StakeRewardProportionV2`, `MinimumStakeDiff`,

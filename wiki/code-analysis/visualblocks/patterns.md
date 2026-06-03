@@ -180,11 +180,12 @@ Implication: this is the contract-enforcement floor. The test does NOT cover DOM
 
 ## 11. Vitest DOM-Shape Pin (new in `38636d52`)
 
-`cmd/dcrdata/public/js/controllers/visualBlocks_controller.test.js` is the first frontend test in this domain. 13 tests across three describe blocks:
+`cmd/dcrdata/public/js/controllers/visualBlocks_controller.test.js` is the first frontend test in this domain. 15 tests across four describe blocks:
 
 - `makeMempoolBlock` (6 tests): header size + pct + no DCR; no legacy rewards / transactions / fund classes; three vote states + coin:VAR title; indicator-fill with one TOTAL + one fill-bar per CoinFills entry; tooltip JSON carries coin + txCount from `CoinStats.regular_count`; ticket title carries `coin:"VAR"`.
 - `newBlockHtmlElement` (5 tests): same surface for block tiles; FillBar `txCount` derived from `RegularCoinCounts`; block-rows order is votes → tickets → indicator-fill.
 - `normaliseWsBlock` (2 tests): reads `height`/`time`/`size`/`formatted_bytes` from BlockBasic's lowercase JSON tags; normalises nested votes from `voted`/`vote_valid` to `Voted`/`VoteValid` PascalCase.
+- `visualBlocks reconnect resync` (2 tests, added after `38636d52`): re-requests the trimmed mempool on the synthetic `'reconnect'` event; removes its own `'reconnect'` handler on `disconnect`.
 
 Implication: every future tile-DOM change must run this file and either confirm assertions pass or update them. The WS-shape regression test specifically guards the `/block/undefined` bug class.
 

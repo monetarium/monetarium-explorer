@@ -4,14 +4,14 @@ Blast-radius reference for changes that touch the `/side` page, its DB writers, 
 
 ## 1. `BlockStatus` struct edits (4-endpoint blast)
 
-**Trigger:** any change to [db/dbtypes/types.go:2267-2275](../../../db/dbtypes/types.go#L2267-L2275) — field add, remove, reorder, or type change.
+**Trigger:** any change to [db/dbtypes/types.go:2275-2282](../../../db/dbtypes/types.go#L2275-L2282) — field add, remove, reorder, or type change.
 
 **Affected positional `rows.Scan` sites in [db/dcrpg/queries.go](../../../db/dcrpg/queries.go):**
 
 | Function | SQL (in [internal/blockstmts.go](../../../db/dcrpg/internal/blockstmts.go)) | Cols scanned | Skipped |
 |---|---|---|---|
-| `retrieveSideChainBlocks` ([queries.go:3969-3991](../../../db/dcrpg/queries.go#L3969-L3991)) | `SelectSideChainBlocks` | `is_valid, height, previous_hash, hash, next_hash` | `is_mainchain` (filtered by WHERE) |
-| `retrieveDisapprovedBlocks` ([queries.go:4020-…](../../../db/dcrpg/queries.go#L4020)) | `SelectDisapprovedBlocks` | `is_mainchain, height, previous_hash, hash, next_hash` | `is_valid` (filtered by WHERE) |
+| `retrieveSideChainBlocks` ([queries.go:3974-3994](../../../db/dcrpg/queries.go#L3974-L3994)) | `SelectSideChainBlocks` | `is_valid, height, previous_hash, hash, next_hash` | `is_mainchain` (filtered by WHERE) |
+| `retrieveDisapprovedBlocks` ([queries.go:4025-…](../../../db/dcrpg/queries.go#L4025)) | `SelectDisapprovedBlocks` | `is_mainchain, height, previous_hash, hash, next_hash` | `is_valid` (filtered by WHERE) |
 | Block-status (single hash) | `SelectBlockStatus` | all 6 columns | — |
 | Block-statuses (by height) | `SelectBlockStatuses` | `is_valid, is_mainchain, hash` | `height, previous_hash, next_hash` |
 
@@ -24,7 +24,7 @@ Blast-radius reference for changes that touch the `/side` page, its DB writers, 
 
 ## 2. SQL ↔ Scan desync (positional invariant)
 
-**Trigger:** edit either `SelectSideChainBlocks` ([blockstmts.go:170-174](../../../db/dcrpg/internal/blockstmts.go#L170-L174)) or the matching `rows.Scan` ([queries.go:3981](../../../db/dcrpg/queries.go#L3981)) without updating the other.
+**Trigger:** edit either `SelectSideChainBlocks` ([blockstmts.go:177-181](../../../db/dcrpg/internal/blockstmts.go#L177-L181)) or the matching `rows.Scan` ([queries.go:3984](../../../db/dcrpg/queries.go#L3984)) without updating the other.
 
 **Failure modes:**
 
@@ -47,7 +47,7 @@ Blast-radius reference for changes that touch the `/side` page, its DB writers, 
 
 **Trigger:** operator complains that `/side` is empty despite the node reporting side chains in `getchaintips`.
 
-**Why:** `cfg.ImportSideChains` defaults to `false` ([cmd/dcrdata/config.go:151](../../../cmd/dcrdata/config.go#L151), marked *experimental*). The startup batch import at [cmd/dcrdata/main.go:885-960](../../../cmd/dcrdata/main.go#L885-L960) only runs when the flag is on. Without the flag, side-chain rows enter the DB only via live reorgs that happen *after* this instance started.
+**Why:** `cfg.ImportSideChains` defaults to `false` ([cmd/dcrdata/config.go:147](../../../cmd/dcrdata/config.go#L147), marked *experimental*). The startup batch import at [cmd/dcrdata/main.go:854-929](../../../cmd/dcrdata/main.go#L854-L929) only runs when the flag is on. Without the flag, side-chain rows enter the DB only via live reorgs that happen *after* this instance started.
 
 **Failure mode:** silent product behavior — not a bug. Document this in any spec that promises "side chains since genesis".
 
@@ -57,7 +57,7 @@ Blast-radius reference for changes that touch the `/side` page, its DB writers, 
 
 **Trigger:** `TipToSideChain` runs while a `/side` request is mid-flight.
 
-**Why:** the read query (`retrieveSideChainBlocks`) and the writer (`setMainchainByBlockHash` per row, plus per-row updates to transactions / votes / tickets / addresses in [pgblockchain.go:3704-…](../../../db/dcrpg/pgblockchain.go#L3704)) share no application-level lock. Postgres MVCC isolates the SELECT, but the writer commits row-by-row, so the next request can see a different set.
+**Why:** the read query (`retrieveSideChainBlocks`) and the writer (`setMainchainByBlockHash` per row, plus per-row updates to transactions / votes / tickets / addresses in [pgblockchain.go:3647-…](../../../db/dcrpg/pgblockchain.go#L3647)) share no application-level lock. Postgres MVCC isolates the SELECT, but the writer commits row-by-row, so the next request can see a different set.
 
 **Failure mode:** silent and benign — page shows the snapshot at that request's read timestamp. Resolves on refresh.
 

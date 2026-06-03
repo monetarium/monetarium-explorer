@@ -10,7 +10,7 @@
   shared snapshot (height, hashrate, ticket price, ticket pool size/value, coin supply);
   no DB/RPC/XHR. Math lives entirely in JS.
 - **VAR-only legacy snapshot:** consumes flat `HomeInfo.CoinSupply int64` /
-  `TicketPoolInfo` (`explorertypes.go:811,1375`); never `VARCoinSupply`/`SKACoinSupply`.
+  `TicketPoolInfo` (`explorertypes.go:877,1444`); never `VARCoinSupply`/`SKACoinSupply`.
   All labels on the page are `VAR`.
 - **Manual-only exchange rate:** USD/VAR comes from the user-edited `Exchange Rate`
   input only — no server-provided seed, no exchange-bot dependency. Default `1`.

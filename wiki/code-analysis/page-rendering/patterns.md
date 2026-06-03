@@ -65,7 +65,7 @@ single hierarchy:
 
 Writers: `Store` is the only path that *nests* two locks —
 `pageData.Lock()` then `invsMtx.Lock()`
-([explorer.go:547,608-614](../../../cmd/dcrdata/internal/explorer/explorer.go#L547-L614)).
+([explorer.go:536,597-603](../../../cmd/dcrdata/internal/explorer/explorer.go#L536-L603)).
 `StoreMPData` takes `pageData.RLock`, releases it, *then* takes `invsMtx.Lock`
 — not nested. Readers (page handlers) acquire `invsMtx.RLock` →
 `MempoolInfo.RLock` → `pageData.RLock` **sequentially**, never nested.
