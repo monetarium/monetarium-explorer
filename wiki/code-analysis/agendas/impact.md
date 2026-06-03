@@ -69,6 +69,28 @@ these pages.
 - **Failure mode:** silent for the UI (empty/zero); potentially behavioral for subsidy/blake3pow
   gating (separate concern, not touched by re-enabling).
 
+## Risk: Pre-Monetarium agendas resurface / empty-state regression (vote-version filter)
+- **Status:** `AllAgendas` filters to vote version `>= MinVoteVersion` (constant `= 11`)
+  ([deployments.go:57,294-308](../../../gov/agendas/deployments.go#L294-L308)), hiding Decred-era
+  agendas (versions 1–10) from the `/agendas` table and `/api/agendas` JSON. Added for issue #400;
+  pinned by [deployments_test.go](../../../gov/agendas/deployments_test.go)
+  (`TestAllAgendasVoteVersionFilter`, `Test_AllAgendas`).
+- **Trigger (silent):** revert the select to `q.True()`, lower `MinVoteVersion`, or hard-code the
+  literal `11` elsewhere → versions 1–10 reappear in both list surfaces. No error, just wrong rows.
+- **Trigger (loud):** let `AllAgendas` propagate storm's `ErrNotFound` (returned when *no* agenda
+  reaches the threshold) instead of mapping it to an empty slice + nil error. Both `AgendasPage`
+  ([explorerroutes.go:2080-2084](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L2080-L2084))
+  and `getAgendasData`
+  ([apiroutes.go:2048-2052](../../../cmd/dcrdata/internal/api/apiroutes.go#L2048-L2052)) treat any
+  returned error as a hard failure → `ExpStatusError` page / HTTP 503 instead of the
+  *"No agendas found"* empty state ([agendas.tmpl:227-232](../../../cmd/dcrdata/views/agendas.tmpl#L227-L232), HTTP 200).
+- **Out of scope:** the gate is list-only. `AgendaInfo(id)` stays unfiltered, so `/agenda/{id}` for
+  a hidden version is still reachable by direct URL — do not "fix" that by filtering the single-ID
+  lookup.
+- **Failure mode:** silent (wrong rows) for the first trigger; hard (error page) for the second.
+- **Fix:** keep the single named constant, the `q.Gte` matcher, and the `ErrNotFound`→empty mapping
+  together; assert all three in `deployments_test.go`.
+
 ## Doc reconciliation (done in this update)
 - [wiki/specs/market-removal/spec.md](../../specs/market-removal/spec.md),
   [wiki/specs/parameters/spec.md](../../specs/parameters/spec.md), and
