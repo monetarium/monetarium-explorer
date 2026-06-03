@@ -126,6 +126,15 @@ _The `/parameters` page: active-network consensus config. Mostly static `chaincf
 - patterns: code-analysis/parameters/patterns.md — near-static chaincfg.Params page: dual-source commonData/ExtendedParams split, hardcoded network-name prefix table, VAR-only subsidy rows, unchecked MaximumBlockSizes[0] fallback
 - impact: code-analysis/parameters/impact.md — commonData nil → .ChainParams deref crash, silent blank/misaligned address-prefix table on unknown network, stale/empty-slice MaximumBlockSize, unlocked pageData.BlockchainInfo race
 
+### Agendas — DORMANT (re-enablable, not removed)
+
+_The `/agendas` + `/agenda/{id}` consensus-deployment voting pages. HTML routes are currently stubbed to **HTTP 410** ([cmd/dcrdata/main.go:780-785](../cmd/dcrdata/main.go#L780-L785), commit `52ea3cf1`), but — unlike `/treasury` and `/market` — the handlers, the JSON API (`/api/agendas`, `/api/agenda/{id}`, still live), and the full DB pipeline (`agenda_votes` populated by `insertVotes` during `StoreBlock`) are intact and functional. Dual-source data: live metadata/progress from node RPC (`gov/agendas.AgendaDB` BoltDB + `VoteTracker`), historical tallies from Postgres. **Coin-agnostic** — vote counts/percentages/heights only, no VAR/SKA amounts, so C1/C3/C7 do not apply and **no multi-coin adaptation is needed**. Node support confirmed in `monetarium-node@v1.3.10` (mainnet 48 / testnet 52 agenda IDs). Re-enable = revert 2 route lines + re-add the navbar link._
+
+- flow (compact): code-analysis/agendas/flow.compact.md — dormant-stub status, dual-source flow, why no multi-coin work is needed, re-enable mutation checklist
+- flow (full): code-analysis/agendas/flow.full.md — end-to-end trace: node RPC → gov/agendas (BoltDB + VoteTracker) + db/dcrpg agenda_votes → handlers → templates → JS; node-support evidence; silent/hard failures
+- patterns: code-analysis/agendas/patterns.md — dormant-feature route stub (handler+pipeline retained), dual-source governance data (RPC-live + Postgres-historical), coin-agnostic feature (precision rules N/A)
+- impact: code-analysis/agendas/impact.md — re-enable blast radius: orphaned-page nav gap, empty forward-only vote charts, VoteTracker startup dep, choice-ID/JSON-tag drift, milestone unavailability, market-removal-spec reconciliation
+
 ### Sidechain
 
 _The `/side` page: read-only HTML table of every block with `is_mainchain=false`. Single SQL query (`blocks JOIN block_chain`), no WebSocket, no Stimulus, no amounts — the simplest page-rendering shape in the codebase. Writers are two independent paths: startup `ImportSideChains` (off by default, inserts rows) and live reorg `TipToSideChain` (flips existing rows). `BlockStatus` is shared with 3 sibling endpoints (`/disapproved`, `/block/{hash}` status, height-keyed status) each Scanning a different column subset — positional Scan invariant._
