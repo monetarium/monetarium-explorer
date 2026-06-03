@@ -2083,6 +2083,24 @@ func (exp *explorerUI) AgendasPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	allowedIDs := make(map[string]bool, len(agenda))
+	for _, a := range agenda {
+		allowedIDs[a.ID] = true
+	}
+
+	rawSummary := exp.voteTracker.Summary()
+	if rawSummary == nil {
+		rawSummary = &agendas.VoteSummary{}
+	}
+	summaryCopy := *rawSummary
+	var filteredSummaries []agendas.AgendaSummary
+	for _, s := range summaryCopy.Agendas {
+		if allowedIDs[s.ID] {
+			filteredSummaries = append(filteredSummaries, s)
+		}
+	}
+	summaryCopy.Agendas = filteredSummaries
+
 	str, err := exp.templates.exec("agendas", struct {
 		*CommonPageData
 		Agendas       []*agendas.AgendaTagged
@@ -2090,7 +2108,7 @@ func (exp *explorerUI) AgendasPage(w http.ResponseWriter, r *http.Request) {
 	}{
 		CommonPageData: exp.commonData(r),
 		Agendas:        agenda,
-		VotingSummary:  exp.voteTracker.Summary(),
+		VotingSummary:  &summaryCopy,
 	})
 
 	if err != nil {
