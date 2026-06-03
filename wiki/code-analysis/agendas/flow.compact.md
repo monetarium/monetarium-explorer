@@ -28,6 +28,13 @@ by reverting those two route lines + re-adding the link.)
 - **No multi-coin / precision work needed.** Agendas carry **zero** VAR/SKA amounts — counts are
   `uint32`, rates `float32`, heights/quorum integers. C1 (precision), C3 (WS parity — no WS path),
   C7 (coin labels) all **N/A**. This is the answer to "adapt to the Monetarium model": don't.
+- **List hides pre-Monetarium vote versions (`MinVoteVersion = 11`).** `AllAgendas`
+  ([deployments.go:294](../../../gov/agendas/deployments.go#L294)) selects
+  `q.Gte("VoteVersion", MinVoteVersion)`; versions 1–10 are Decred-network artifacts and never
+  appear in the `/agendas` table or `/api/agendas` JSON (one shared source feeds both). The
+  all-filtered case maps storm's `ErrNotFound` → empty slice + nil error (renders the empty state,
+  not an error). `AgendaInfo(id)` is **unfiltered** — `/agenda/{id}` stays reachable by URL.
+  Threshold is one named constant; no coin-type handling. (issue #400)
 - **Not-yet-started agenda → nil DB summary (guarded).** `ChainDB.AgendasVotesSummary` returns
   `(nil, nil)` for an agenda whose deployment `StartTime` is in the future. `AgendaPage`
   substitutes a zero-tally `&dbtypes.AgendaSummary{}`
