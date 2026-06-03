@@ -2088,18 +2088,20 @@ func (exp *explorerUI) AgendasPage(w http.ResponseWriter, r *http.Request) {
 		allowedIDs[a.ID] = true
 	}
 
+	// VoteTracker.Summary() returns all agendas from the node's GetVoteInfo RPC
+	// regardless of vote version. This cross-filter removes pre-Monetarium
+	// (VoteVersion < 11) summaries that AllAgendas() already hides from the
+	// table below, keeping cards and meters consistent with the list.
+	// Once the node has been on a version >= 11 long enough to be the only
+	// version the tracker has seen, this becomes a no-op — but before that it
+	// prevents a misleading page where the table shows "No agendas" while cards
+	// still show Decred-era entries.
 	rawSummary := exp.voteTracker.Summary()
 	if rawSummary == nil {
 		rawSummary = &agendas.VoteSummary{}
 	}
 	summaryCopy := *rawSummary
-	var filteredSummaries []agendas.AgendaSummary
-	for _, s := range summaryCopy.Agendas {
-		if allowedIDs[s.ID] {
-			filteredSummaries = append(filteredSummaries, s)
-		}
-	}
-	summaryCopy.Agendas = filteredSummaries
+	summaryCopy.Agendas = filterAgendaSummaries(summaryCopy.Agendas, allowedIDs)
 
 	str, err := exp.templates.exec("agendas", struct {
 		*CommonPageData
@@ -2119,6 +2121,20 @@ func (exp *explorerUI) AgendasPage(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html")
 	w.WriteHeader(http.StatusOK)
 	io.WriteString(w, str)
+}
+
+// filterAgendaSummaries removes AgendaSummary entries whose ID is not in the
+// allowed set. Used to cross-filter VoteTracker summaries against the already-
+// version-filtered AllAgendas() list so status cards stay consistent with the
+// table below them.
+func filterAgendaSummaries(summaries []agendas.AgendaSummary, allowedIDs map[string]bool) []agendas.AgendaSummary {
+	filtered := make([]agendas.AgendaSummary, 0, len(summaries))
+	for _, s := range summaries {
+		if allowedIDs[s.ID] {
+			filtered = append(filtered, s)
+		}
+	}
+	return filtered
 }
 
 // ProposalPage is the page handler for the "/proposal" path.
