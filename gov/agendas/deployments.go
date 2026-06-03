@@ -50,6 +50,12 @@ var (
 // dbInfo defines the property that holds the db version.
 const dbInfo = "_agendas.db_"
 
+// MinVoteVersion is the lowest vote version that belongs to Monetarium. Agendas
+// with a lower vote version are pre-Monetarium Decred-network artifacts and must
+// not surface in the agendas list; AllAgendas — the single source feeding both
+// the /agendas table and the /api/agendas JSON — filters them out.
+const MinVoteVersion uint32 = 11
+
 // DeploymentSource provides a cleaner way to track the rpcclient methods used
 // in this package. It also allows usage of alternative implementations to
 // satisfy the interface.
@@ -280,14 +286,23 @@ func (db *AgendaDB) AgendaInfo(agendaID string) (*AgendaTagged, error) {
 	return agenda, nil
 }
 
-// AllAgendas returns all agendas and their info in the db.
+// AllAgendas returns all Monetarium agendas (VoteVersion >= MinVoteVersion) and
+// their info in the db, ordered by vote version descending. Pre-Monetarium
+// agendas (Decred-network artifacts with a lower vote version) are filtered out.
+// When no agendas qualify it returns an empty slice and a nil error so callers
+// render their empty state instead of an error page.
 func (db *AgendaDB) AllAgendas() (agendas []*AgendaTagged, err error) {
 	if db.stakeVersions == nil {
 		return []*AgendaTagged{}, nil
 	}
 
-	err = db.sdb.Select(q.True()).OrderBy("VoteVersion", "ID").Reverse().Find(&agendas)
+	err = db.sdb.Select(q.Gte("VoteVersion", MinVoteVersion)).OrderBy("VoteVersion", "ID").Reverse().Find(&agendas)
 	if err != nil {
+		// A real matcher means Find reports ErrNotFound when nothing qualifies;
+		// that is an empty list, not a failure.
+		if err == storm.ErrNotFound {
+			return []*AgendaTagged{}, nil
+		}
 		log.Errorf("Failed to fetch data from Agendas DB: %v", err)
 	}
 	return
