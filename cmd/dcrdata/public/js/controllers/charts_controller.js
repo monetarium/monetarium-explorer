@@ -479,7 +479,11 @@ export default class extends Controller {
     const isSKA = isSKASupplyChart(chartName)
     const coinType = skaCoinTypeFromChart(chartName)
     const coinLabel = isSKA ? renderCoinType(coinType) : 'VAR'
-    const switchKey = isCoinSupplyChart(chartName) ? 'coin-supply' : isSKAFeeChart(chartName) ? 'fees' : chartName
+    const switchKey = isCoinSupplyChart(chartName)
+      ? 'coin-supply'
+      : isSKAFeeChart(chartName)
+        ? 'fees'
+        : chartName
 
     switch (switchKey) {
       case 'ticket-price': // price graph
@@ -658,13 +662,22 @@ export default class extends Controller {
           d = zip2D(data, ys)
           assign(
             gOptions,
-            mapDygraphOptions(d, [xlabel, 'Total Fee'], false, `Total Fee (${coinLabel})`, true, false)
+            mapDygraphOptions(
+              d,
+              [xlabel, 'Total Fee'],
+              false,
+              `Total Fee (${coinLabel})`,
+              true,
+              false
+            )
           )
           yFormatter = (div, data, i) => {
             const raw = this._skaFeeRaw && this._skaFeeRaw[i]
             const exact = raw != null ? formatSkaAtomsExact(raw) : data.series[0].y.toString()
             div.appendChild(
-              legendEntry(`${data.series[0].dashHTML} ${data.series[0].labelHTML}: ${exact} ${coinLabel}`)
+              legendEntry(
+                `${data.series[0].dashHTML} ${data.series[0].labelHTML}: ${exact} ${coinLabel}`
+              )
             )
           }
           break
