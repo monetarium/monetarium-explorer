@@ -128,7 +128,6 @@ function makeController() {
 
 describe('ChartsController URL persistence', () => {
   beforeEach(() => {
-    mockReplace.mockClear()
     vi.clearAllMocks()
   })
 

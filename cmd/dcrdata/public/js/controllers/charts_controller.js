@@ -918,7 +918,7 @@ export default class extends Controller {
     this.validateZoom()
   }
 
-  setBin(e) {
+  async setBin(e) {
     const target = e.srcElement || e.target
     const option = target ? target.dataset.option : e
     if (!option) return
@@ -927,7 +927,7 @@ export default class extends Controller {
     this.updateVSelector()
     if (!target) return // Exit if running for the first time.
     selectedChart = null // Force fetch
-    this.selectChart()
+    await this.selectChart()
   }
 
   setScale(e) {
@@ -956,14 +956,14 @@ export default class extends Controller {
     this.query.replace(this.settings)
   }
 
-  setAxis(e) {
+  async setAxis(e) {
     const target = e.srcElement || e.target
     const option = target ? target.dataset.option : e
     if (!option) return
     this.setActiveOptionBtn(option, this.axisOptionTargets)
     if (!target) return // Exit if running for the first time.
     this.settings.axis = null
-    this.selectChart()
+    await this.selectChart()
   }
 
   updateVSelector(chart) {
