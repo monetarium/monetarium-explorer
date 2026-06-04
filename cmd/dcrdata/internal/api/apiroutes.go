@@ -110,6 +110,7 @@ type DataSource interface {
 	GetAddressTransactionsRawWithSkip(ctx context.Context, addr string, count, skip int) []*apitypes.AddressTxRaw
 	GetMempoolPriceCountTime() *apitypes.PriceCountTime
 	LoadSKASupplyForCoin(ctx context.Context, charts *cache.ChartData, coinType uint8) error
+	LoadSKAFeesForCoin(ctx context.Context, charts *cache.ChartData, coinType uint8) error
 }
 
 // dcrdata application context used by all route handlers
@@ -1911,6 +1912,27 @@ func (c *appContext) ChartTypeData(w http.ResponseWriter, r *http.Request) {
 			if reload {
 				if err := c.DataSource.LoadSKASupplyForCoin(r.Context(), c.charts, coinType); err != nil {
 					log.Warnf("ChartTypeData: failed to load SKA supply for coin type %d: %v", coinType, err)
+				}
+			}
+		}
+	}
+
+	// Check if this is an SKA fee chart and if data needs to be loaded
+	if c.charts != nil && cache.IsSKAFeeChart(chartType) {
+		coinType := cache.FeeCoinType(chartType)
+		if coinType > 0 {
+			reload := !c.charts.SKAFeesExists(coinType)
+			if currHeight, err := c.DataSource.GetHeight(r.Context()); err == nil {
+				if cachedHeight, ok := c.charts.SKAFeesHeight(coinType); !ok || currHeight-cachedHeight > skaSupplyStaleHeightThreshold {
+					reload = true
+				}
+			} else {
+				log.Warnf("ChartTypeData: failed to get current height: %v", err)
+			}
+
+			if reload {
+				if err := c.DataSource.LoadSKAFeesForCoin(r.Context(), c.charts, coinType); err != nil {
+					log.Warnf("ChartTypeData: failed to load SKA fees for coin type %d: %v", coinType, err)
 				}
 			}
 		}

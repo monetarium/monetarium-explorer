@@ -232,6 +232,8 @@ func NewAPIRouter(app *appContext, JSONIndent string, useRealIP, compressLarge b
 	mux.Route("/chart", func(r chi.Router) {
 		// Handle coin-supply/N pattern (SKA coin types)
 		r.With(m.CoinSupplyChartTypeCtx).Get("/coin-supply/{charttype}", app.ChartTypeData)
+		// Handle fees/N pattern (per-coin fee charts)
+		r.With(m.SKAFeeChartTypeCtx).Get("/fees/{charttype}", app.ChartTypeData)
 		// Handle standard single-segment chart types
 		r.With(m.ChartTypeCtx).Get("/{charttype}", app.ChartTypeData)
 	})

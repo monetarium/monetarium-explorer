@@ -62,6 +62,9 @@ const (
 
 	// SKA coin supply chart prefix (coin-supply/N where N is coin type)
 	SKASupplyPrefix = "coin-supply/"
+
+	// SKA fee chart prefix (fees/N where N is coin type)
+	SKAFeePrefix = "fees/"
 )
 
 // binLevel specifies the granularity of data.
@@ -102,6 +105,25 @@ func SkaCoinType(chartID string) uint8 {
 	}
 	var coinType uint8
 	_, err := fmt.Sscanf(chartID[len(SKASupplyPrefix):], "%d", &coinType)
+	if err != nil {
+		return 0
+	}
+	return coinType
+}
+
+// IsSKAFeeChart checks if the chart ID is an SKA fee chart (fees/N).
+func IsSKAFeeChart(chartID string) bool {
+	return len(chartID) > len(SKAFeePrefix) && chartID[:len(SKAFeePrefix)] == SKAFeePrefix
+}
+
+// FeeCoinType extracts the coin type number from an SKA fee chart ID.
+// Returns 0 if the chart ID is invalid.
+func FeeCoinType(chartID string) uint8 {
+	if !IsSKAFeeChart(chartID) {
+		return 0
+	}
+	var coinType uint8
+	_, err := fmt.Sscanf(chartID[len(SKAFeePrefix):], "%d", &coinType)
 	if err != nil {
 		return 0
 	}
@@ -341,6 +363,17 @@ type SKASupplyChartData struct {
 // SKASupplyData stores per-coin-type cumulative supply data (strings for precision).
 type SKASupplyData map[uint8]SKASupplyChartData
 
+// SKAFeeChartData holds per-block fee data for a single SKA coin type.
+// Fees are stored as exact-precision strings to preserve 18 decimal places.
+type SKAFeeChartData struct {
+	Heights    []int64
+	Timestamps []int64
+	Fees       []string
+}
+
+// SKAFeesData stores per-coin-type SKA fee data.
+type SKAFeesData map[uint8]SKAFeeChartData
+
 // Snip truncates the zoomSet to a provided length.
 func (set *zoomSet) Snip(length int) {
 	if length < 0 {
@@ -495,6 +528,9 @@ type ChartData struct {
 	SKASupply    SKASupplyData
 	// Lock() must be held when mutating SKASupply.
 	SKASupplyMtx sync.RWMutex
+	SKAFees      SKAFeesData
+	// SKAFeesMtx must be held when reading or mutating SKAFees.
+	SKAFeesMtx sync.RWMutex
 }
 
 // ValidateLengths checks that the length of all arguments is equal.
@@ -928,6 +964,34 @@ func (charts *ChartData) SKASupplyHeight(coinType uint8) (int64, bool) {
 	return data.Heights[len(data.Heights)-1], true
 }
 
+// SKAFeesExists checks if SKA fee data exists for the given coin type.
+func (charts *ChartData) SKAFeesExists(coinType uint8) bool {
+	if charts == nil {
+		return false
+	}
+	charts.SKAFeesMtx.RLock()
+	defer charts.SKAFeesMtx.RUnlock()
+	if charts.SKAFees == nil {
+		return false
+	}
+	data, ok := charts.SKAFees[coinType]
+	return ok && len(data.Fees) > 0
+}
+
+// SKAFeesHeight returns the height of the last recorded block for the given coin type.
+func (charts *ChartData) SKAFeesHeight(coinType uint8) (int64, bool) {
+	charts.SKAFeesMtx.RLock()
+	defer charts.SKAFeesMtx.RUnlock()
+	if charts.SKAFees == nil {
+		return 0, false
+	}
+	data, ok := charts.SKAFees[coinType]
+	if !ok || len(data.Heights) == 0 {
+		return 0, false
+	}
+	return data.Heights[len(data.Heights)-1], true
+}
+
 // PoolSizeTip is the height of the PoolSize data.
 func (charts *ChartData) PoolSizeTip() int32 {
 	charts.mtx.RLock()
@@ -1024,6 +1088,7 @@ func NewChartData(ctx context.Context, height uint32, chainParams *chaincfg.Para
 		cache:        make(map[string]*cachedChart),
 		updaters:     make([]ChartUpdater, 0),
 		SKASupply:    make(SKASupplyData),
+		SKAFees:      make(SKAFeesData),
 	}
 }
 
@@ -1112,6 +1177,10 @@ func (charts *ChartData) Chart(chartID, binString, axisString string) ([]byte, e
 		// Check if it's an SKA supply chart
 		if IsSKASupplyChart(chartID) {
 			return charts.skaSupplyChart(chartID, bin, axis)
+		}
+		// Check if it's an SKA fee chart
+		if IsSKAFeeChart(chartID) {
+			return charts.skaFeeChart(chartID, bin, axis)
 		}
 		return nil, UnknownChartErr
 	}
@@ -1886,6 +1955,96 @@ func (charts *ChartData) skaSupplyChart(chartID string, bin binLevel, axis axisT
 	return nil, InvalidBinErr
 }
 
+// skaFeeChart generates chart data for an SKA coin type's transaction fees.
+// Data is pre-loaded in the SKAFees map. Values are returned as exact-precision
+// strings to preserve 18 decimal places. coinType 0 is not handled here (it
+// uses the existing VAR fees path via the chartMakers registry).
+func (charts *ChartData) skaFeeChart(chartID string, bin binLevel, axis axisType) ([]byte, error) {
+	coinType := FeeCoinType(chartID)
+	if !IsSKAFeeChart(chartID) || coinType == 0 {
+		return nil, fmt.Errorf("invalid SKA fee chart: %s", chartID)
+	}
+
+	charts.SKAFeesMtx.RLock()
+	if charts.SKAFees == nil {
+		charts.SKAFeesMtx.RUnlock()
+		return nil, fmt.Errorf("SKA fee data not initialized for coin type %d", coinType)
+	}
+	data, ok := charts.SKAFees[coinType]
+	charts.SKAFeesMtx.RUnlock()
+	if !ok || len(data.Fees) == 0 {
+		return nil, fmt.Errorf("no SKA fee data found for coin type %d", coinType)
+	}
+
+	switch bin {
+	case BlockBin:
+		switch axis {
+		case HeightAxis:
+			resp := struct {
+				Bin  string   `json:"bin"`
+				Axis string   `json:"axis"`
+				H    []int64  `json:"h"`
+				Fees []string `json:"fees"`
+			}{
+				Bin:  string(bin),
+				Axis: string(axis),
+				H:    data.Heights,
+				Fees: data.Fees,
+			}
+			return json.Marshal(resp)
+		default:
+			resp := struct {
+				Bin  string   `json:"bin"`
+				Axis string   `json:"axis"`
+				H    []int64  `json:"h"`
+				T    []int64  `json:"t"`
+				Fees []string `json:"fees"`
+			}{
+				Bin:  string(bin),
+				Axis: string(axis),
+				H:    data.Heights,
+				T:    data.Timestamps,
+				Fees: data.Fees,
+			}
+			return json.Marshal(resp)
+		}
+	case DayBin:
+		timestamps, heights, values := aggregateSKAFees(data.Timestamps, data.Heights, data.Fees)
+		switch axis {
+		case HeightAxis:
+			resp := struct {
+				Bin  string   `json:"bin"`
+				Axis string   `json:"axis"`
+				H    []int64  `json:"h"`
+				Fees []string `json:"fees"`
+			}{
+				Bin:  string(bin),
+				Axis: string(axis),
+				H:    heights,
+				Fees: values,
+			}
+			return json.Marshal(resp)
+		default:
+			resp := struct {
+				Bin  string   `json:"bin"`
+				Axis string   `json:"axis"`
+				H    []int64  `json:"h"`
+				T    []int64  `json:"t"`
+				Fees []string `json:"fees"`
+			}{
+				Bin:  string(bin),
+				Axis: string(axis),
+				H:    heights,
+				T:    timestamps,
+				Fees: values,
+			}
+			return json.Marshal(resp)
+		}
+	}
+
+	return nil, InvalidBinErr
+}
+
 // skaSupplyChartData holds raw SKA supply data from the database.
 type skaSupplyChartData struct {
 	Heights []int64
@@ -1955,6 +2114,62 @@ func aggregateSKASupply(timestamps []int64, heights []int64, values []string) ([
 		dayTimestamps = append(dayTimestamps, day*86400)
 		dayHeights = append(dayHeights, d.height)
 		dayValues = append(dayValues, d.value.String())
+	}
+
+	return dayTimestamps, dayHeights, dayValues
+}
+
+// aggregateSKAFees aggregates per-block SKA fee data into daily bins by summing
+// fees within each day. Sums are accumulated in big.Int because SKA atoms use
+// 18 decimals and overflow float64/int64. The bin's timestamp is the start of
+// the UTC day; the bin's height is the height of the first block seen for that
+// day (input is assumed ordered by ascending height/time, matching the query).
+func aggregateSKAFees(timestamps []int64, heights []int64, values []string) ([]int64, []int64, []string) {
+	if len(timestamps) == 0 {
+		return nil, nil, nil
+	}
+
+	type dailyData struct {
+		timestamp int64
+		height    int64
+		total     *big.Int
+	}
+	dailyMap := make(map[int64]*dailyData)
+
+	for i, t := range timestamps {
+		dayKey := t / 86400
+		if i >= len(values) || i >= len(heights) {
+			continue
+		}
+		v, ok := new(big.Int).SetString(values[i], 10)
+		if !ok {
+			continue
+		}
+		if d, exists := dailyMap[dayKey]; exists {
+			d.total.Add(d.total, v)
+		} else {
+			dailyMap[dayKey] = &dailyData{
+				timestamp: t - (t % 86400),
+				height:    heights[i],
+				total:     new(big.Int).Set(v),
+			}
+		}
+	}
+
+	dayKeys := make([]int64, 0, len(dailyMap))
+	for day := range dailyMap {
+		dayKeys = append(dayKeys, day)
+	}
+	sort.Slice(dayKeys, func(i, j int) bool { return dayKeys[i] < dayKeys[j] })
+
+	dayTimestamps := make([]int64, 0, len(dailyMap))
+	dayHeights := make([]int64, 0, len(dailyMap))
+	dayValues := make([]string, 0, len(dailyMap))
+	for _, day := range dayKeys {
+		d := dailyMap[day]
+		dayTimestamps = append(dayTimestamps, d.timestamp)
+		dayHeights = append(dayHeights, d.height)
+		dayValues = append(dayValues, d.total.String())
 	}
 
 	return dayTimestamps, dayHeights, dayValues

@@ -213,6 +213,21 @@ const (
 			AND mixed AND value>0
 			AND fund_tx.is_mainchain
 		ORDER BY fund_tx.block_height;`
+
+	// SelectSKAFeesPerBlockAboveHeight fetches per-block SKA fee totals for a
+	// specific coin type ($2) from blocks.ssfee_totals (pow + pos per coin
+	// type). Unlike the VAR fee chart, SKA has no block subsidy, so the SSFee
+	// distribution recorded on the block IS the fee. Selecting straight from
+	// the blocks table means every block in range appears — blocks with no
+	// SSFee for the coin type yield 0 rather than being omitted, keeping the
+	// series continuous for sparse coins.
+	SelectSKAFeesPerBlockAboveHeight = `
+		SELECT b.height, b.time,
+			COALESCE(CAST(ssfee_totals->$2->>'pow' AS NUMERIC), 0) +
+			COALESCE(CAST(ssfee_totals->$2->>'pos' AS NUMERIC), 0) AS fees
+		FROM blocks b
+		WHERE b.is_mainchain AND b.height > $1
+		ORDER BY b.height;`
 )
 
 // SelectFeesPerBlockAboveHeight returns the per-block fee total for the Fees

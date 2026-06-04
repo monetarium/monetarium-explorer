@@ -3669,6 +3669,56 @@ func appendBlockFees(charts *cache.ChartData, rows *sql.Rows) error {
 	return rows.Err()
 }
 
+// retrieveSKAFees retrieves per-block SKA fee data for the given coin type from
+// blocks.ssfee_totals (pow + pos). SKA has no block subsidy, so the SSFee
+// distribution is the fee, and there is no coinbase-cancellation problem like
+// the VAR path (#405). This is the Fetcher half of a cache.ChartUpdater pair.
+func retrieveSKAFees(ctx context.Context, db *sql.DB, coinType uint8) (*sql.Rows, error) {
+	rows, err := db.QueryContext(ctx, internal.SelectSKAFeesPerBlockAboveHeight, 0 /* startHeight */, strconv.FormatUint(uint64(coinType), 10))
+	if err != nil {
+		return nil, err
+	}
+	return rows, nil
+}
+
+// appendSKAFees appends the results from retrieveSKAFees to the provided
+// ChartData. Fee per block = ssfee_totals[coinType].pow + .pos, carried as an
+// exact-precision string because SKA uses 18 decimals (exceeds float64's
+// significand). This is the Appender half of a cache.ChartUpdater pair.
+func appendSKAFees(charts *cache.ChartData, rows *sql.Rows, coinType uint8) error {
+	defer rows.Close()
+	var heights []int64
+	var timestamps []int64
+	var fees []string
+	for rows.Next() {
+		var blockHeight uint64
+		var blockTime time.Time
+		var fee string
+		if err := rows.Scan(&blockHeight, &blockTime, &fee); err != nil {
+			log.Errorf("Unable to scan for SKA fee fields: %v", err)
+			return err
+		}
+		heights = append(heights, int64(blockHeight))
+		timestamps = append(timestamps, blockTime.Unix())
+		fees = append(fees, fee)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	charts.SKAFeesMtx.Lock()
+	if charts.SKAFees == nil {
+		charts.SKAFees = make(map[uint8]cache.SKAFeeChartData)
+	}
+	charts.SKAFees[coinType] = cache.SKAFeeChartData{
+		Heights:    heights,
+		Timestamps: timestamps,
+		Fees:       fees,
+	}
+	charts.SKAFeesMtx.Unlock()
+	return nil
+}
+
 // retrievePrivacyParticipation retrieves the sum of all mixed vouts that is
 // newer than the data in the provided ChartData. This data is used to plot fees
 // on the /charts page. This is the Fetcher half of a pair that make up a
