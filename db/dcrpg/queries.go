@@ -3637,9 +3637,17 @@ func appendBlockFees(charts *cache.ChartData, rows *sql.Rows) error {
 
 		// fees is the per-block total in atoms over the fee-bearing set
 		// (regular-tree non-coinbase txs + ticket purchases); see
-		// SelectFeesPerBlockAboveHeight. It is always >= 0, so a value below
-		// zero would signal a real data anomaly and should surface, not be
-		// silently abs()'d as before (issue #405).
+		// SelectFeesPerBlockAboveHeight. It is always >= 0, so a negative value
+		// signals a real data anomaly. Surface it as an error rather than let
+		// uint64(fees) silently wrap it into a huge spike on the chart (the old
+		// code abs()'d it, which hid the same anomaly) (issue #405). We return
+		// rather than skip the row: blocks.Fees is index-aligned with the other
+		// per-block series, so dropping an entry would desync them and make
+		// Lengthen truncate every block chart to the shortest series.
+		if fees < 0 {
+			return fmt.Errorf("appendBlockFees: negative per-block fee total %d at height %d", fees, blockHeight)
+		}
+
 		blocks.Fees = append(blocks.Fees, uint64(fees))
 	}
 	return rows.Err()

@@ -207,7 +207,7 @@ const (
 		SELECT block_height,
 			COALESCE(SUM(fees) FILTER (
 				WHERE (tree = 0 AND block_index > 0)
-					OR tx_type = 105
+					OR (tx_type = 105 AND tree = 1)
 			), 0) AS fees
 		FROM transactions
 		WHERE is_mainchain
