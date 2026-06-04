@@ -1958,13 +1958,13 @@ func (charts *ChartData) skaFeeChart(chartID string, bin binLevel, axis axisType
 		return nil, fmt.Errorf("invalid SKA fee chart: %s", chartID)
 	}
 
-	charts.mtx.RLock()
+	charts.SKAFeesMtx.RLock()
 	if charts.SKAFees == nil {
-		charts.mtx.RUnlock()
+		charts.SKAFeesMtx.RUnlock()
 		return nil, fmt.Errorf("SKA fee data not initialized for coin type %d", coinType)
 	}
 	data, ok := charts.SKAFees[coinType]
-	charts.mtx.RUnlock()
+	charts.SKAFeesMtx.RUnlock()
 	if !ok || len(data.Fees) == 0 {
 		return nil, fmt.Errorf("no SKA fee data found for coin type %d", coinType)
 	}

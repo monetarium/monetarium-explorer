@@ -1156,8 +1156,6 @@ func (pgb *ChainDB) LoadSKAFeesForCoin(ctx context.Context, charts *cache.ChartD
 	if err != nil {
 		return fmt.Errorf("LoadSKAFeesForCoin: query failed for coin type %d: %w", coinType, err)
 	}
-	defer rows.Close()
-
 	return appendSKAFees(charts, rows, coinType)
 }
 
