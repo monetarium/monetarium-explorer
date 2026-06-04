@@ -267,7 +267,7 @@ testnet=1
 ; monetarium-node RPC credentials (must match Step 1)
 dcrduser=monuser
 dcrdpass=monpass
-dcrdserv=127.0.0.1                 ; no port -> auto-selects 19509 (testnet) / 9509 (mainnet)
+dcrdserv=127.0.0.1:19509           ; node RPC port — testnet 19509, mainnet 9509
 dcrdcert=~/.monetarium/rpc.cert
 
 ; PostgreSQL — {netname} expands to testnet3 / mainnet
@@ -281,16 +281,14 @@ apiproto=http
 debuglevel=debug
 ```
 
-**Mainnet** — `monetarium-explorer-mainnet.conf`: identical, but **without** the `testnet=1` line.
+**Mainnet** — `monetarium-explorer-mainnet.conf`: the same, but **without** the `testnet=1` line and with `dcrdserv=127.0.0.1:9509` (the mainnet RPC port).
 
-A few choices keep per-network divergence to a minimum:
+A few notes on these settings:
 
 - **`pgdbname=monetarium_explorer_{netname}`** — `{netname}` is replaced with the active network name, so the same line yields `…_testnet3` or `…_mainnet`.
 - **Omit `apilisten`** — each network then binds its own default web port (17778 / 7777), which is collision-proof when both run at once. Set it explicitly only to change the port or bind beyond loopback (e.g. `apilisten=0.0.0.0:7777`).
-- **`dcrdserv=127.0.0.1`** (host only) — the node RPC port is filled in per network automatically.
+- **`dcrdserv` needs the RPC port explicitly**, and it differs per network (`127.0.0.1:19509` testnet, `127.0.0.1:9509` mainnet). Omitting the port falls back to the node's P2P port (19508 / 9508), not its RPC port, so the explorer fails to connect.
 - Setting any PostgreSQL option enables PG mode; there is no separate `pg=1` flag.
-
-> **Tip — one shared config.** Because `{netname}` and the omitted ports already resolve per network, you can keep a **single** `monetarium-explorer.conf` with no `testnet=1` line and select the network at launch instead: `./monetarium-explorer --testnet` for testnet, `./monetarium-explorer` for mainnet. The two-file layout above is shown for clarity; the shared-config form is equivalent.
 
 ---
 
