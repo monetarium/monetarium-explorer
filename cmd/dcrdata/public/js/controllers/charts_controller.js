@@ -833,6 +833,7 @@ export default class extends Controller {
       console.log('got api data', chartResponse, this, selection)
       selectedChart = selection
       this.plotGraph(selection, chartResponse)
+      this.query.replace(this.settings)
     } else {
       this.chartWrapperTarget.classList.remove('loading')
     }
