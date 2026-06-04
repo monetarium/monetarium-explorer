@@ -980,7 +980,7 @@ func (pgb *ChainDB) RegisterCharts(charts *cache.ChartData) {
 	charts.AddUpdater(cache.ChartUpdater{
 		Tag:      "fees",
 		Fetcher:  pgb.blockFees,
-		Appender: appendBlockFees,
+		Appender: pgb.appendBlockFees,
 	})
 
 	charts.AddUpdater(cache.ChartUpdater{

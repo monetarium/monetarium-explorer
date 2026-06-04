@@ -3624,25 +3624,37 @@ func retrieveBlockFees(ctx context.Context, db *sql.DB, charts *cache.ChartData)
 
 // Append the result from retrieveBlockFees to the provided ChartData. This
 // is the Appender half of a pair that make up a cache.ChartUpdater.
-func appendBlockFees(charts *cache.ChartData, rows *sql.Rows) error {
+// Fee per block = SUM(-t.fees) - total_subsidy(PoW + PoS + developer).
+func (pgb *ChainDB) appendBlockFees(charts *cache.ChartData, rows *sql.Rows) error {
 	defer rows.Close()
 	blocks := charts.Blocks
 	for rows.Next() {
 		var blockHeight uint64
+		var voters uint16
 		var fees int64
-		if err := rows.Scan(&blockHeight, &fees); err != nil {
+		if err := rows.Scan(&blockHeight, &voters, &fees); err != nil {
 			log.Errorf("Unable to scan for FeeInfoPerBlock fields: %v", err)
 			return err
 		}
 
-		// Converting to atoms.
-		blocks.Fees = append(blocks.Fees, uint64(fees))
+		// Subtract the block subsidy to isolate actual fee revenue.
+		// SUM(-t.fees) across all transactions includes the subsidy
+		// contributed by both the coinbase and SSFee transactions.
+		subsidy := pgb.BlockSubsidy(context.TODO(), int64(blockHeight), voters)
+		totalSubsidy := subsidy.PoW + subsidy.PoS + subsidy.Developer
+		fee := fees - totalSubsidy
+		if fee < 0 {
+			fee = 0
+		}
+
+		blocks.Fees = append(blocks.Fees, uint64(fee))
 	}
 	return rows.Err()
 }
 
-// retrieveBlockFees retrieves per-block SKA fee data above the tip for a given
-// coin type. This is the Fetcher half of a pair that make up a cache.ChartUpdater.
+// retrieveSKAFees retrieves per-block SKA fee data above the tip for a given
+// coin type from blocks.ssfee_totals (pow + pos). This is the Fetcher half of
+// a pair that make up a cache.ChartUpdater.
 func retrieveSKAFees(ctx context.Context, db *sql.DB, charts *cache.ChartData, coinType uint8) (*sql.Rows, error) {
 	rows, err := db.QueryContext(ctx, internal.SelectSKAFeesPerBlockAboveHeight, 0 /* startHeight */, strconv.FormatUint(uint64(coinType), 10))
 	if err != nil {
@@ -3653,6 +3665,7 @@ func retrieveSKAFees(ctx context.Context, db *sql.DB, charts *cache.ChartData, c
 
 // appendSKAFees appends the results from retrieveSKAFees to the provided
 // ChartData. This is the Appender half of a pair that make up a cache.ChartUpdater.
+// Fee per block = ssfee_totals[coinType].pow + ssfee_totals[coinType].pos.
 func appendSKAFees(charts *cache.ChartData, rows *sql.Rows, coinType uint8) error {
 	defer rows.Close()
 	var heights []int64

@@ -189,36 +189,31 @@ const (
 	// RetrieveVoutDbIDs = `SELECT unnest(vout_db_ids) FROM transactions WHERE id = $1;`
 	// RetrieveVoutDbID  = `SELECT vout_db_ids[$2] FROM transactions WHERE id = $1;`
 
+	// SelectFeesPerBlockAboveHeight fetches per-block VAR fee totals by
+	// summing -fees across all transactions and subtracting the block subsidy.
+	// LEFT JOINs from blocks so every block appears in the result.
+	// The fee per block is: SUM(-t.fees) - (PoW + PoS + developer subsidy).
+	// b.voters is returned so the caller can compute the subsidy via RewardsAtBlock.
 	SelectFeesPerBlockAboveHeight = `
-		SELECT block_height, SUM(fees) AS fees
-		FROM transactions
-		WHERE is_mainchain
-			AND block_height > $1
-			AND tx_type NOT IN (103, 104)
-		GROUP BY block_height
-		ORDER BY block_height;`
+		SELECT b.height, b.voters,
+			COALESCE(SUM(-t.fees), 0) AS fees
+		FROM blocks b
+		LEFT JOIN transactions t ON t.block_height = b.height AND t.is_mainchain
+		WHERE b.is_mainchain AND b.height > $1
+		GROUP BY b.height, b.voters
+		ORDER BY b.height;`
 
 	// SelectSKAFeesPerBlockAboveHeight fetches per-block SKA fee totals for a
-	// specific coin type (e.g. ska_fees->>'1' for SKA1). SSFee reward distributions
-	// (tx_type 103/104) are excluded. LEFT JOINs from blocks so every block appears
-	// in the result — blocks with no matching transactions get 0 fees.
+	// specific coin type from blocks.ssfee_totals (pow + pos per coin type).
+	// LEFT JOINs from blocks so every block appears — blocks without SSFee
+	// get 0 fees.
 	SelectSKAFeesPerBlockAboveHeight = `
-		SELECT t.block_height, t.block_time,
-			COALESCE(fee_sum.fees::text, '0') AS fees
-		FROM (
-			SELECT height AS block_height, time AS block_time
-			FROM blocks
-			WHERE is_mainchain AND height > $1
-		) t
-		LEFT JOIN (
-			SELECT block_height, SUM(CAST(ska_fees->>$2 AS NUMERIC)) AS fees
-			FROM transactions
-			WHERE is_mainchain
-				AND tx_type NOT IN (103, 104)
-				AND ska_fees ? $2
-			GROUP BY block_height
-		) fee_sum ON t.block_height = fee_sum.block_height
-		ORDER BY t.block_height;`
+		SELECT b.height, b.time,
+			COALESCE(CAST(ssfee_totals->$2->>'pow' AS NUMERIC), 0) +
+			COALESCE(CAST(ssfee_totals->$2->>'pos' AS NUMERIC), 0) AS fees
+		FROM blocks b
+		WHERE b.is_mainchain AND b.height > $1
+		ORDER BY b.height;`
 
 	SelectMixedTotalPerBlock = `
 		SELECT block_height AS block_height, 
