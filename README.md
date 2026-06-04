@@ -12,7 +12,7 @@ Monetarium Explorer is a block explorer for the [Monetarium](https://monetarium.
 - [Building](#building)
 - [Development Workflow](#development-workflow)
 - [Contributing](#contributing)
-- [Local Testing on Testnet](#local-testing-on-testnet)
+- [Local Testing (Testnet and Mainnet)](#local-testing-testnet-and-mainnet)
 - [Getting Started (Production)](#getting-started-production)
 - [APIs](#apis)
 - [License](#license)
@@ -89,12 +89,14 @@ The `public` and `views` folders must remain in the same directory as the `monet
 Alternatively, you can run the explorer using Docker.
 
 **Build the image:**
+
 ```sh
 docker build -t monetarium-explorer .
 ```
 
 **Run the container:**
 Mount your `monetarium-node` configuration directory (containing `rpc.cert`) to the container to allow the explorer to authenticate with the node:
+
 ```sh
 docker run -p 7777:7777 -v ~/.monetarium:/home/explorer/.monetarium monetarium-explorer
 ```
@@ -178,7 +180,23 @@ npm test               # Vitest unit tests
 
 ---
 
-## Local Testing on Testnet
+## Local Testing (Testnet and Mainnet)
+
+You can run the explorer against **testnet**, **mainnet**, or **both at once** on the same machine. Both `monetarium-node` and `monetarium-explorer` namespace their data and logs by network (`…/data/testnet3` vs `…/data/mainnet`) and choose per-network default ports, so running two networks side by side only requires **three things to differ**: the **config file** (which carries the network selection), the **PostgreSQL database**, and the **web/API port**.
+
+Everything below is parameterized by network — read the column for the network you want:
+
+| Parameter                          | testnet                   | mainnet                       |
+| ---------------------------------- | ------------------------- | ----------------------------- |
+| network selector                   | `testnet=1` / `--testnet` | _(none — mainnet is default)_ |
+| node RPC port (default)            | 19509                     | 9509                          |
+| node P2P port (default)            | 19508                     | 9508                          |
+| explorer web/API port (default)    | 17778                     | 7777                          |
+| `{netname}` (data dir / DB suffix) | `testnet3`                | `mainnet`                     |
+
+The same `monetarium-explorer` binary serves every network — build it once. There is no `--mainnet` flag: mainnet is selected by the **absence** of `testnet=1`, and a `testnet=1` set in a config file **cannot** be overridden from the command line. So each instance takes its network from the config file it loads (or the `--testnet` flag).
+
+> **macOS paths.** The config dirs are `~/Library/Application Support/Monetarium/` and `~/Library/Application Support/Monetarium-explorer/` (shown below in their POSIX `~/.monetarium…` form). The space in the macOS path means you must quote it or use `$HOME` when passing it to `--configfile`, e.g. `--configfile="$HOME/Library/Application Support/Monetarium-explorer/monetarium-explorer-mainnet.conf"`.
 
 ### Prerequisites
 
@@ -188,45 +206,60 @@ npm test               # Vitest unit tests
 
 ---
 
-### Step 1: Start monetarium-node on testnet3
+### Step 1: Start monetarium-node
 
-Create `~/.monetarium/monetarium.conf`: (macOS: ~/Library/Application Support/Monetarium/)
+Config dir: `~/.monetarium/`. The RPC/P2P ports, data directory, and logs are all chosen automatically per network, so the config only needs credentials and `txindex`.
+
+**Testnet** — `monetarium.conf`:
 
 ```ini
 testnet=1
 rpcuser=monuser
 rpcpass=monpass
-rpclisten=127.0.0.1:19509
 txindex=1
 ```
-
-Start and wait for full sync:
 
 ```sh
 ./monetarium-node --testnet
 ```
 
-Wait until the log shows `New best block` at the current testnet height before proceeding.
+**Mainnet** — a separate `monetarium-mainnet.conf` (so the `testnet=1` default file is not reused):
+
+```ini
+rpcuser=monuser
+rpcpass=monpass
+txindex=1
+```
+
+```sh
+./monetarium-node --configfile=~/.monetarium/monetarium-mainnet.conf
+```
+
+Both networks share the same `rpc.cert`. Wait until the node is syncing (`New valid peer …`, then `New best block`) before starting the explorer. A fresh network with no DNS seeders sits at height 0 with 0 peers — add `addpeer=<ip>:9508` (mainnet) / `addpeer=<ip>:19508` (testnet) lines to bootstrap it.
 
 ---
 
 ### Step 2: Create the PostgreSQL database
 
+One database per network. Naming them with the `{netname}` suffix lets a single explorer config line cover both:
+
 ```sh
-createuser -P monetarium_testnet    # enter a password, e.g. "testpass"
-createdb -O monetarium_testnet monetarium_testnet
+createuser -P monetarium_explorer    # set a password once; reused for both DBs
+createdb -O monetarium_explorer monetarium_explorer_testnet3
+createdb -O monetarium_explorer monetarium_explorer_mainnet
 ```
 
 ---
 
 ### Step 3: Configure monetarium-explorer
 
+Config dir: `~/.monetarium-explorer/`. One config file per network, differing only by the `testnet=1` line:
+
 ```sh
-mkdir -p ~/.monetarium-explorer # # macOS: ~/Library/Application\ Support/Monetarium-explorer
 cp cmd/dcrdata/sample-dcrdata.conf ~/.monetarium-explorer/monetarium-explorer.conf
 ```
 
-Edit `~/.monetarium-explorer/monetarium-explorer.conf`:
+**Testnet** — `monetarium-explorer.conf`:
 
 ```ini
 testnet=1
@@ -234,68 +267,81 @@ testnet=1
 ; monetarium-node RPC credentials (must match Step 1)
 dcrduser=monuser
 dcrdpass=monpass
-dcrdserv=127.0.0.1:19509
+dcrdserv=127.0.0.1                 ; no port -> auto-selects 19509 (testnet) / 9509 (mainnet)
 dcrdcert=~/.monetarium/rpc.cert
 
-; PostgreSQL
-pg=1
-pgdbname=monetarium_testnet
-pguser=monetarium_testnet
-pgpass=testpass
+; PostgreSQL — {netname} expands to testnet3 / mainnet
+pgdbname=monetarium_explorer_{netname}
+pguser=monetarium_explorer
+pgpass=yourpass
 pghost=127.0.0.1:5432
 
-; Web interface
-apilisten=127.0.0.1:7777
+; Web interface — omit apilisten to use the per-network default (17778 / 7777)
 apiproto=http
-
 debuglevel=debug
 ```
+
+**Mainnet** — `monetarium-explorer-mainnet.conf`: identical, but **without** the `testnet=1` line.
+
+A few choices keep per-network divergence to a minimum:
+
+- **`pgdbname=monetarium_explorer_{netname}`** — `{netname}` is replaced with the active network name, so the same line yields `…_testnet3` or `…_mainnet`.
+- **Omit `apilisten`** — each network then binds its own default web port (17778 / 7777), which is collision-proof when both run at once. Set it explicitly only to change the port or bind beyond loopback (e.g. `apilisten=0.0.0.0:7777`).
+- **`dcrdserv=127.0.0.1`** (host only) — the node RPC port is filled in per network automatically.
+- Setting any PostgreSQL option enables PG mode; there is no separate `pg=1` flag.
+
+> **Tip — one shared config.** Because `{netname}` and the omitted ports already resolve per network, you can keep a **single** `monetarium-explorer.conf` with no `testnet=1` line and select the network at launch instead: `./monetarium-explorer --testnet` for testnet, `./monetarium-explorer` for mainnet. The two-file layout above is shown for clarity; the shared-config form is equivalent.
 
 ---
 
 ### Step 4: Run monetarium-explorer
 
+Build once, then run one instance per network (each in its own terminal):
+
 ```sh
 cd cmd/dcrdata
+go build -o monetarium-explorer .
+
+# Testnet (reads the default monetarium-explorer.conf, which sets testnet=1)
 ./monetarium-explorer
+
+# Mainnet (select the mainnet config file)
+./monetarium-explorer --configfile=~/.monetarium-explorer/monetarium-explorer-mainnet.conf
 ```
 
-On first run the explorer will create the DB schema and begin syncing all blocks. **Do not interrupt the initial sync.**
+On first run against a new database the explorer creates the schema and begins syncing all blocks. **Do not interrupt the initial sync.**
 
 ---
 
 ### Step 5: Verify
 
-Once sync reaches the tip, open:
-
-http://127.0.0.1:7777
-
-Check the API:
-
-```sh
-curl http://127.0.0.1:7777/api/block/best
-```
+| Network | Web UI                 | API                                          |
+| ------- | ---------------------- | -------------------------------------------- |
+| testnet | http://127.0.0.1:17778 | `curl http://127.0.0.1:17778/api/block/best` |
+| mainnet | http://127.0.0.1:7777  | `curl http://127.0.0.1:7777/api/block/best`  |
 
 ---
 
 ### Ports reference
 
-| Service                        | Port                |
-| ------------------------------ | ------------------- |
-| monetarium-node P2P (testnet3) | 19508               |
-| monetarium-node RPC (testnet3) | 19509               |
-| monetarium-explorer web/API    | 7777 (configurable) |
+| Service                     | testnet3 | mainnet |
+| --------------------------- | -------- | ------- |
+| monetarium-node P2P         | 19508    | 9508    |
+| monetarium-node RPC         | 19509    | 9509    |
+| monetarium-explorer web/API | 17778    | 7777    |
 
 ---
 
 ### Troubleshooting
 
-| Error                                                | Fix                                                                           |
-| ---------------------------------------------------- | ----------------------------------------------------------------------------- |
-| `expected network testnet3, got Unknown CurrencyNet` | Rebuild monetarium-node from source; stale binary has old wire constants      |
-| `Connection to dcrd failed`                          | Verify `dcrdserv`, `dcrduser`, `dcrdpass`, and that the node is fully started |
-| `pq: relation does not exist`                        | Ensure `pg=1` is set and the DB user has CREATE privileges                    |
-| `bad project fund address`                           | Safe to ignore; Monetarium has no treasury                                    |
+| Error                                                                                 | Fix                                                                                                                                                                                                                    |
+| ------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `expected network testnet3, got Unknown CurrencyNet`                                  | Rebuild monetarium-node from source; stale binary has old wire constants                                                                                                                                               |
+| `Connection to dcrd failed`                                                           | Verify `dcrdserv`, `dcrduser`, `dcrdpass`, and that the node for that network is fully started                                                                                                                         |
+| `pq: relation does not exist`                                                         | Ensure the PostgreSQL options are set and the DB user has CREATE privileges                                                                                                                                            |
+| `Unable to initialize vote tracker: Unexpected number of blocks ... GetStakeVersions` | The node is below ~2016 blocks (e.g. a brand-new mainnet); the vote tracker needs a taller chain and recovers once it grows. To start the explorer earlier, build from the `hotfix/disable-vote-tracker-checks` branch |
+| `listen tcp ...:7777: bind: address already in use`                                   | Another instance already holds that web port — omit `apilisten` so each network uses its own default, or pick a distinct port                                                                                          |
+| `bad project fund address`                                                            | Safe to ignore; Monetarium has no treasury                                                                                                                                                                             |
 
 ---
 
