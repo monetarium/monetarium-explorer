@@ -200,17 +200,24 @@ const (
 
 	// SelectSKAFeesPerBlockAboveHeight fetches per-block SKA fee totals for a
 	// specific coin type (e.g. ska_fees->>'1' for SKA1). SSFee reward distributions
-	// (tx_type 103/104) are excluded. Joins blocks for timestamps.
+	// (tx_type 103/104) are excluded. LEFT JOINs from blocks so every block appears
+	// in the result — blocks with no matching transactions get 0 fees.
 	SelectSKAFeesPerBlockAboveHeight = `
-		SELECT t.block_height, b.time,
-			COALESCE(SUM(CAST(t.ska_fees->>$2 AS NUMERIC)), 0) AS fees
-		FROM transactions t
-		JOIN blocks b ON t.block_height = b.height AND b.is_mainchain
-		WHERE t.is_mainchain
-			AND t.block_height > $1
-			AND t.tx_type NOT IN (103, 104)
-			AND t.ska_fees ? $2
-		GROUP BY t.block_height, b.time
+		SELECT t.block_height, t.block_time,
+			COALESCE(fee_sum.fees::text, '0') AS fees
+		FROM (
+			SELECT height AS block_height, time AS block_time
+			FROM blocks
+			WHERE is_mainchain AND height > $1
+		) t
+		LEFT JOIN (
+			SELECT block_height, SUM(CAST(ska_fees->>$2 AS NUMERIC)) AS fees
+			FROM transactions
+			WHERE is_mainchain
+				AND tx_type NOT IN (103, 104)
+				AND ska_fees ? $2
+			GROUP BY block_height
+		) fee_sum ON t.block_height = fee_sum.block_height
 		ORDER BY t.block_height;`
 
 	SelectMixedTotalPerBlock = `
