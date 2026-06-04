@@ -3622,6 +3622,21 @@ func retrieveBlockFees(ctx context.Context, db *sql.DB, charts *cache.ChartData)
 	return rows, nil
 }
 
+// clampNonNegativeFee guards the appendBlockFees invariant that a per-block fee
+// total from SelectFeesPerBlockAboveHeight is non-negative: the only txs with a
+// negative stored fee (the subsidy-minting coinbase and votes/stakebase) are
+// excluded by that query's FILTER, so the fee-bearing set (regular-tree
+// non-coinbase txs + ticket purchases) sums to >= 0. A negative value is a data
+// anomaly. It is clamped to 0 rather than wrapped via uint64() into a huge chart
+// spike, and ok=false lets the caller log the anomaly without aborting. See
+// issue #405.
+func clampNonNegativeFee(fees int64) (value uint64, ok bool) {
+	if fees < 0 {
+		return 0, false
+	}
+	return uint64(fees), true
+}
+
 // Append the result from retrieveBlockFees to the provided ChartData. This
 // is the Appender half of a pair that make up a cache.ChartUpdater.
 func appendBlockFees(charts *cache.ChartData, rows *sql.Rows) error {
@@ -3635,20 +3650,21 @@ func appendBlockFees(charts *cache.ChartData, rows *sql.Rows) error {
 			return err
 		}
 
-		// fees is the per-block total in atoms over the fee-bearing set
-		// (regular-tree non-coinbase txs + ticket purchases); see
-		// SelectFeesPerBlockAboveHeight. It is always >= 0, so a negative value
-		// signals a real data anomaly. Surface it as an error rather than let
-		// uint64(fees) silently wrap it into a huge spike on the chart (the old
-		// code abs()'d it, which hid the same anomaly) (issue #405). We return
-		// rather than skip the row: blocks.Fees is index-aligned with the other
-		// per-block series, so dropping an entry would desync them and make
-		// Lengthen truncate every block chart to the shortest series.
-		if fees < 0 {
-			return fmt.Errorf("appendBlockFees: negative per-block fee total %d at height %d", fees, blockHeight)
+		// A negative per-block total should be impossible (see
+		// clampNonNegativeFee / SelectFeesPerBlockAboveHeight), so warn loudly,
+		// but do NOT return an error here: appendBlockFees runs mid-pipeline as
+		// the "fees" updater, and (*ChartData).Update aborts on the first
+		// appender error before Lengthen() runs. Returning would strand the
+		// already-appended sibling series (Time, Height, …) ahead of a frozen
+		// Fees series with no reconciliation, permanently wedging chart updates
+		// on the offending block. Clamping to 0 keeps blocks.Fees index-aligned
+		// with the other per-block series and lets the update proceed. (#405)
+		fee, ok := clampNonNegativeFee(fees)
+		if !ok {
+			log.Warnf("appendBlockFees: negative per-block fee total %d at height %d; clamping to 0", fees, blockHeight)
 		}
 
-		blocks.Fees = append(blocks.Fees, uint64(fees))
+		blocks.Fees = append(blocks.Fees, fee)
 	}
 	return rows.Err()
 }

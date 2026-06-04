@@ -6768,6 +6768,11 @@ func (pgb *ChainDB) GetExplorerBlock(ctx context.Context, hash string) *exptypes
 	}
 	block.TotalSent = (getTotalSent(block.Tx) + getTotalSent(block.Treasury) + getTotalSent(block.Revs) +
 		getTotalSent(block.Tickets) + getTotalSent(block.Votes) + getTotalSent(block.StakeFees)).ToCoin()
+	// This per-block fee total (regular-tree non-coinbase txs + ticket purchases)
+	// is the definition the Fees chart must mirror. Its SQL twin is
+	// internal.SelectFeesPerBlockAboveHeight; if you change which txs count here,
+	// update that query too or the chart and this header will silently diverge
+	// (issue #405).
 	block.MiningFee = (getTotalFee(block.Tx) + getTotalFee(block.Tickets)).ToCoin()
 
 	// Aggregate fees per coin type (VAR from MiningFee, SKA from SSFeeTotalsByCoin)

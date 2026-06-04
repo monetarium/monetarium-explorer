@@ -6,6 +6,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/monetarium/monetarium-explorer/db/dbtypes"
 	"github.com/monetarium/monetarium-explorer/db/dcrpg/internal"
 )
 
@@ -43,32 +44,35 @@ func TestSelectFeesPerBlockExcludesCoinbase(t *testing.T) {
 		}
 	}
 
-	// Shadow the real transactions table with the columns the query touches.
+	// Shadow the real transactions table with the columns the query touches,
+	// matching their production types (see CreateTransactionTable).
 	mustExec(`CREATE TEMP TABLE transactions (
 		block_height INT8,
 		tree         INT2,
-		tx_type      INT2,
+		tx_type      INT4,
 		block_index  INT4,
 		fees         INT8,
 		is_mainchain BOOLEAN
 	) ON COMMIT DROP;`)
 
 	// One mainchain block (height 100) mirroring real mainnet rows:
-	//   - coinbase    (tree 0, index 0): fee = -(all collected fees)  <- the bug
-	//   - regular tx  (tree 0, index 1): fee  13460
-	//   - ticket buy  (tree 1, type 105): fee  3020
-	//   - ticket buy  (tree 1, type 105): fee  3020
-	// Block# header value = 13460 + 3020 + 3020 = 19500 atoms.
+	//   - coinbase    (tree 0, index 0):            fee = -(all collected fees)  <- the bug
+	//   - regular tx  (tree 0, index 1):            fee  13460
+	//   - ticket buy  (tree 1, TxTypeTicketPurchase): fee  3020
+	//   - ticket buy  (tree 1, TxTypeTicketPurchase): fee  3020
+	// Block# header value = 13460 + 3020 + 3020 = 19500 atoms. The ticket
+	// tx_type is bound from dbtypes.TxTypeTicketPurchase — the same constant the
+	// query interpolates — so the two stay tied to one source of truth.
 	const regularFee = 13460
 	const ticketFee = 3020
 	const realBlockFee = regularFee + 2*ticketFee // 19500
 	mustExec(`INSERT INTO transactions
 		(block_height, tree, tx_type, block_index, fees, is_mainchain) VALUES
-		(100, 0,   0, 0, $1, TRUE),
-		(100, 0,   0, 1, $2, TRUE),
-		(100, 1, 105, 0, $3, TRUE),
-		(100, 1, 105, 1, $3, TRUE);`,
-		-realBlockFee, regularFee, ticketFee)
+		(100, 0,  0, 0, $1, TRUE),
+		(100, 0,  0, 1, $2, TRUE),
+		(100, 1, $4, 0, $3, TRUE),
+		(100, 1, $4, 1, $3, TRUE);`,
+		-realBlockFee, regularFee, ticketFee, int(dbtypes.TxTypeTicketPurchase))
 
 	// Guard the premise: the naive SUM(fees) cancels to exactly zero, which is
 	// the symptom the chart exhibited. If this ever stops holding, the fix's
