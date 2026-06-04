@@ -232,7 +232,7 @@ txindex=1
 ```
 
 ```sh
-./monetarium-node --configfile=~/.monetarium/monetarium-mainnet.conf
+./monetarium-node --configfile="$HOME/.monetarium/monetarium-mainnet.conf"
 ```
 
 Both networks share the same `rpc.cert`. Wait until the node is syncing (`New valid peer …`, then `New best block`) before starting the explorer. A fresh network with no DNS seeders sits at height 0 with 0 peers — add `addpeer=<ip>:9508` (mainnet) / `addpeer=<ip>:19508` (testnet) lines to bootstrap it.
@@ -306,7 +306,7 @@ go build -o monetarium-explorer .
 ./monetarium-explorer
 
 # Mainnet (select the mainnet config file)
-./monetarium-explorer --configfile=~/.monetarium-explorer/monetarium-explorer-mainnet.conf
+./monetarium-explorer --configfile="$HOME/.monetarium-explorer/monetarium-explorer-mainnet.conf"
 ```
 
 On first run against a new database the explorer creates the schema and begins syncing all blocks. **Do not interrupt the initial sync.**
