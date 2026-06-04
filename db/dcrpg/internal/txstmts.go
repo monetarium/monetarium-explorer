@@ -4,6 +4,12 @@
 
 package internal
 
+import (
+	"fmt"
+
+	"github.com/monetarium/monetarium-explorer/db/dbtypes"
+)
+
 // These queries relate primarily to the "transactions" table.
 const (
 	CreateTransactionTable = `CREATE TABLE IF NOT EXISTS transactions (
@@ -189,14 +195,6 @@ const (
 	// RetrieveVoutDbIDs = `SELECT unnest(vout_db_ids) FROM transactions WHERE id = $1;`
 	// RetrieveVoutDbID  = `SELECT vout_db_ids[$2] FROM transactions WHERE id = $1;`
 
-	SelectFeesPerBlockAboveHeight = `
-		SELECT block_height, SUM(fees) AS fees
-		FROM transactions
-		WHERE is_mainchain
-			AND block_height > $1
-		GROUP BY block_height
-		ORDER BY block_height;`
-
 	SelectMixedTotalPerBlock = `
 		SELECT block_height AS block_height, 
 			SUM(mix_count * mix_denom) AS total_mixed
@@ -215,7 +213,55 @@ const (
 			AND mixed AND value>0
 			AND fund_tx.is_mainchain
 		ORDER BY fund_tx.block_height;`
+
+	// SelectSKAFeesPerBlockAboveHeight fetches per-block SKA fee totals for a
+	// specific coin type ($2) from blocks.ssfee_totals (pow + pos per coin
+	// type). Unlike the VAR fee chart, SKA has no block subsidy, so the SSFee
+	// distribution recorded on the block IS the fee. Selecting straight from
+	// the blocks table means every block in range appears — blocks with no
+	// SSFee for the coin type yield 0 rather than being omitted, keeping the
+	// series continuous for sparse coins.
+	SelectSKAFeesPerBlockAboveHeight = `
+		SELECT b.height, b.time,
+			COALESCE(CAST(ssfee_totals->$2->>'pow' AS NUMERIC), 0) +
+			COALESCE(CAST(ssfee_totals->$2->>'pos' AS NUMERIC), 0) AS fees
+		FROM blocks b
+		WHERE b.is_mainchain AND b.height > $1
+		ORDER BY b.height;`
 )
+
+// SelectFeesPerBlockAboveHeight returns the per-block fee total for the Fees
+// chart. It must equal the Block# page header value, which is
+// getTotalFee(block.Tx) + getTotalFee(block.Tickets) (pgblockchain.go):
+// regular-tree non-coinbase transactions plus ticket purchases.
+//
+// transactions.fees is stored as spent - sent, so the coinbase carries a
+// negative fee (it mints the subsidy and emits collected fees as outputs)
+// equal to -(all real fees in the block). A plain SUM(fees) therefore cancels
+// to exactly zero for every block. The FILTER restricts the sum to the
+// fee-bearing set the header counts: the coinbase (tree 0, index 0) and the
+// stake tree's votes/revocations/stake-fees are excluded; only ticket purchases
+// (tx_type = dbtypes.TxTypeTicketPurchase, interpolated below so this can never
+// drift from the value extraction.go stores) contribute from the stake tree.
+// COALESCE keeps fee-only-coinbase blocks at 0 rather than NULL.
+//
+// The sum is restricted to is_mainchain only, deliberately NOT is_valid:
+// getTotalFee runs over the node's block txs without a validity filter, so a
+// stakeholder-disapproved block's regular-tree fees count toward both the chart
+// and the header. Adding an is_valid filter here would re-diverge them. See
+// issue #405.
+var SelectFeesPerBlockAboveHeight = fmt.Sprintf(`
+	SELECT block_height,
+		COALESCE(SUM(fees) FILTER (
+			WHERE (tree = 0 AND block_index > 0)
+				OR (tx_type = %d AND tree = 1)
+		), 0) AS fees
+	FROM transactions
+	WHERE is_mainchain
+		AND block_height > $1
+	GROUP BY block_height
+	ORDER BY block_height;`,
+	dbtypes.TxTypeTicketPurchase)
 
 /*
 var (

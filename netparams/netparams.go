@@ -20,7 +20,7 @@ type Params struct {
 // monetarium-node on the main network (wire.MainNet).
 var MainNetParams = Params{
 	Params:            chaincfg.MainNetParams(),
-	JSONRPCClientPort: "9508",
+	JSONRPCClientPort: "9509",
 	JSONRPCServerPort: "9509",
 	GRPCServerPort:    "9510",
 }
@@ -29,7 +29,7 @@ var MainNetParams = Params{
 // monetarium-node on the test network (version 3) (wire.TestNet3).
 var TestNet3Params = Params{
 	Params:            chaincfg.TestNet3Params(),
-	JSONRPCClientPort: "19508",
+	JSONRPCClientPort: "19509",
 	JSONRPCServerPort: "19509",
 	GRPCServerPort:    "19510",
 }
@@ -38,7 +38,7 @@ var TestNet3Params = Params{
 // (wire.SimNet).
 var SimNetParams = Params{
 	Params:            chaincfg.SimNetParams(),
-	JSONRPCClientPort: "19556",
+	JSONRPCClientPort: "19557",
 	JSONRPCServerPort: "19557",
 	GRPCServerPort:    "19558",
 }
