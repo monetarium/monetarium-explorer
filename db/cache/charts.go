@@ -2122,8 +2122,9 @@ func aggregateSKASupply(timestamps []int64, heights []int64, values []string) ([
 // aggregateSKAFees aggregates per-block SKA fee data into daily bins by summing
 // fees within each day. Sums are accumulated in big.Int because SKA atoms use
 // 18 decimals and overflow float64/int64. The bin's timestamp is the start of
-// the UTC day; the bin's height is the height of the first block seen for that
-// day (input is assumed ordered by ascending height/time, matching the query).
+// the UTC day; the bin's height is the height of the first block that
+// contributes to that day — i.e. the first with a parseable fee value (input is
+// assumed ordered by ascending height/time, matching the query).
 func aggregateSKAFees(timestamps []int64, heights []int64, values []string) ([]int64, []int64, []string) {
 	if len(timestamps) == 0 {
 		return nil, nil, nil
