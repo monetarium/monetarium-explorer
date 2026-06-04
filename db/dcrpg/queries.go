@@ -3655,7 +3655,7 @@ func (pgb *ChainDB) appendBlockFees(charts *cache.ChartData, rows *sql.Rows) err
 // retrieveSKAFees retrieves per-block SKA fee data above the tip for a given
 // coin type from blocks.ssfee_totals (pow + pos). This is the Fetcher half of
 // a pair that make up a cache.ChartUpdater.
-func retrieveSKAFees(ctx context.Context, db *sql.DB, charts *cache.ChartData, coinType uint8) (*sql.Rows, error) {
+func retrieveSKAFees(ctx context.Context, db *sql.DB, coinType uint8) (*sql.Rows, error) {
 	rows, err := db.QueryContext(ctx, internal.SelectSKAFeesPerBlockAboveHeight, 0 /* startHeight */, strconv.FormatUint(uint64(coinType), 10))
 	if err != nil {
 		return nil, err

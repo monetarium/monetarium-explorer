@@ -1152,7 +1152,7 @@ func (pgb *ChainDB) LoadSKAFeesForCoin(ctx context.Context, charts *cache.ChartD
 	ctx, cancel := context.WithTimeout(ctx, pgb.queryTimeout)
 	defer cancel()
 
-	rows, err := retrieveSKAFees(ctx, pgb.db, charts, coinType)
+	rows, err := retrieveSKAFees(ctx, pgb.db, coinType)
 	if err != nil {
 		return fmt.Errorf("LoadSKAFeesForCoin: query failed for coin type %d: %w", coinType, err)
 	}
