@@ -3634,11 +3634,12 @@ func appendBlockFees(charts *cache.ChartData, rows *sql.Rows) error {
 			log.Errorf("Unable to scan for FeeInfoPerBlock fields: %v", err)
 			return err
 		}
-		if fees < 0 {
-			fees *= -1
-		}
 
-		// Converting to atoms.
+		// fees is the per-block total in atoms over the fee-bearing set
+		// (regular-tree non-coinbase txs + ticket purchases); see
+		// SelectFeesPerBlockAboveHeight. It is always >= 0, so a value below
+		// zero would signal a real data anomaly and should surface, not be
+		// silently abs()'d as before (issue #405).
 		blocks.Fees = append(blocks.Fees, uint64(fees))
 	}
 	return rows.Err()

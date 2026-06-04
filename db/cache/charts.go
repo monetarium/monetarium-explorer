@@ -145,7 +145,14 @@ const (
 // cacheVersion helps detect when the cache data stored has changed its
 // structure or content. A change on the cache version results to recomputing
 // all the charts data a fresh thereby making the cache to hold the latest changes.
-var cacheVersion = semver.NewSemver(6, 3, 0)
+//
+// 6.4.0: issue #405 fixed SelectFeesPerBlockAboveHeight so per-block Fees no
+// longer cancel to zero against the coinbase. Already-synced deployments cached
+// the wrong (all-zero) Fees series; bumping the version forces a full recompute
+// of the charts cache on next start so the corrected query reruns over every
+// block. No database resync or backfill is needed — transactions.fees was
+// always stored correctly.
+var cacheVersion = semver.NewSemver(6, 4, 0)
 
 // versionedCacheData defines the cache data contents to be written into a .gob file.
 type versionedCacheData struct {

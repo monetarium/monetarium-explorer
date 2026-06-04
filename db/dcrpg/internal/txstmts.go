@@ -189,8 +189,26 @@ const (
 	// RetrieveVoutDbIDs = `SELECT unnest(vout_db_ids) FROM transactions WHERE id = $1;`
 	// RetrieveVoutDbID  = `SELECT vout_db_ids[$2] FROM transactions WHERE id = $1;`
 
+	// SelectFeesPerBlockAboveHeight returns the per-block fee total for the Fees
+	// chart. It must equal the Block# page header value, which is
+	// getTotalFee(block.Tx) + getTotalFee(block.Tickets) (pgblockchain.go):
+	// regular-tree non-coinbase transactions plus ticket purchases.
+	//
+	// transactions.fees is stored as spent - sent, so the coinbase carries a
+	// negative fee (it mints the subsidy and emits collected fees as outputs)
+	// equal to -(all real fees in the block). A plain SUM(fees) therefore
+	// cancels to exactly zero for every block. The FILTER restricts the sum to
+	// the fee-bearing set the header counts: the coinbase (tree 0, index 0) and
+	// the stake tree's votes/revocations/stake-fees are excluded; only ticket
+	// purchases (tx_type 105, dbtypes.TxTypeTicketPurchase) contribute from the
+	// stake tree. COALESCE keeps fee-only-coinbase blocks at 0 rather than NULL.
+	// See issue #405.
 	SelectFeesPerBlockAboveHeight = `
-		SELECT block_height, SUM(fees) AS fees
+		SELECT block_height,
+			COALESCE(SUM(fees) FILTER (
+				WHERE (tree = 0 AND block_index > 0)
+					OR tx_type = 105
+			), 0) AS fees
 		FROM transactions
 		WHERE is_mainchain
 			AND block_height > $1
