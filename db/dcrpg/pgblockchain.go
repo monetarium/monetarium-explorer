@@ -1146,6 +1146,21 @@ func (pgb *ChainDB) LoadSKASupplyForCoin(ctx context.Context, charts *cache.Char
 	return fmt.Errorf("no data found for coin type %d", coinType)
 }
 
+// LoadSKAFeesForCoin loads per-block SKA fee data for the specified coin type
+// into charts.SKAFees. Loads all available data (start height 0).
+func (pgb *ChainDB) LoadSKAFeesForCoin(ctx context.Context, charts *cache.ChartData, coinType uint8) error {
+	ctx, cancel := context.WithTimeout(ctx, pgb.queryTimeout)
+	defer cancel()
+
+	rows, err := retrieveSKAFees(ctx, pgb.db, charts, coinType)
+	if err != nil {
+		return fmt.Errorf("LoadSKAFeesForCoin: query failed for coin type %d: %w", coinType, err)
+	}
+	defer rows.Close()
+
+	return appendSKAFees(charts, rows, coinType)
+}
+
 // appears, along with the index of the transaction in each of the blocks. The
 // next and previous block hashes are NOT SET in each BlockStatus.
 func (pgb *ChainDB) TransactionBlocks(ctx context.Context, txHash string) ([]*dbtypes.BlockStatus, []uint32, error) {

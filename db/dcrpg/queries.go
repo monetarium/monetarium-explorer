@@ -3634,14 +3634,57 @@ func appendBlockFees(charts *cache.ChartData, rows *sql.Rows) error {
 			log.Errorf("Unable to scan for FeeInfoPerBlock fields: %v", err)
 			return err
 		}
-		if fees < 0 {
-			fees *= -1
-		}
 
 		// Converting to atoms.
 		blocks.Fees = append(blocks.Fees, uint64(fees))
 	}
 	return rows.Err()
+}
+
+// retrieveBlockFees retrieves per-block SKA fee data above the tip for a given
+// coin type. This is the Fetcher half of a pair that make up a cache.ChartUpdater.
+func retrieveSKAFees(ctx context.Context, db *sql.DB, charts *cache.ChartData, coinType uint8) (*sql.Rows, error) {
+	rows, err := db.QueryContext(ctx, internal.SelectSKAFeesPerBlockAboveHeight, 0 /* startHeight */, strconv.FormatUint(uint64(coinType), 10))
+	if err != nil {
+		return nil, err
+	}
+	return rows, nil
+}
+
+// appendSKAFees appends the results from retrieveSKAFees to the provided
+// ChartData. This is the Appender half of a pair that make up a cache.ChartUpdater.
+func appendSKAFees(charts *cache.ChartData, rows *sql.Rows, coinType uint8) error {
+	defer rows.Close()
+	var heights []int64
+	var timestamps []int64
+	var fees []string
+	for rows.Next() {
+		var blockHeight uint64
+		var blockTime time.Time
+		var fee string
+		if err := rows.Scan(&blockHeight, &blockTime, &fee); err != nil {
+			log.Errorf("Unable to scan for SKA fee fields: %v", err)
+			return err
+		}
+		heights = append(heights, int64(blockHeight))
+		timestamps = append(timestamps, blockTime.Unix())
+		fees = append(fees, fee)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	charts.SKAFeesMtx.Lock()
+	if charts.SKAFees == nil {
+		charts.SKAFees = make(map[uint8]cache.SKAFeeChartData)
+	}
+	charts.SKAFees[coinType] = cache.SKAFeeChartData{
+		Heights:    heights,
+		Timestamps: timestamps,
+		Fees:       fees,
+	}
+	charts.SKAFeesMtx.Unlock()
+	return nil
 }
 
 // retrievePrivacyParticipation retrieves the sum of all mixed vouts that is

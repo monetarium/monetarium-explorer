@@ -68,6 +68,10 @@ function isCoinSupplyChart(name) {
   return name === 'coin-supply' || (typeof name === 'string' && name.startsWith('coin-supply/'))
 }
 
+function isSKAFeeChart(name) {
+  return typeof name === 'string' && /^fees\/[1-9]\d*$/.test(name)
+}
+
 function formatSkaAtomsExact(atomStr) {
   const p = splitSkaAtomsNoTrailing(atomStr, true, 0)
   return p.rest ? `${p.intPart}.${p.rest}` : p.intPart
@@ -475,7 +479,7 @@ export default class extends Controller {
     const isSKA = isSKASupplyChart(chartName)
     const coinType = skaCoinTypeFromChart(chartName)
     const coinLabel = isSKA ? renderCoinType(coinType) : 'VAR'
-    const switchKey = isCoinSupplyChart(chartName) ? 'coin-supply' : chartName
+    const switchKey = isCoinSupplyChart(chartName) ? 'coin-supply' : isSKAFeeChart(chartName) ? 'fees' : chartName
 
     switch (switchKey) {
       case 'ticket-price': // price graph
@@ -646,6 +650,25 @@ export default class extends Controller {
         break
 
       case 'fees': // block fee graph
+        if (isSKAFeeChart(chartName)) {
+          const coinType = parseInt(chartName.split('/')[1], 10)
+          const coinLabel = renderCoinType(coinType)
+          this._skaFeeRaw = data.fees
+          const ys = data.fees.map((s) => Number(s) * 1e-18)
+          d = zip2D(data, ys)
+          assign(
+            gOptions,
+            mapDygraphOptions(d, [xlabel, 'Total Fee'], false, `Total Fee (${coinLabel})`, true, false)
+          )
+          yFormatter = (div, data, i) => {
+            const raw = this._skaFeeRaw && this._skaFeeRaw[i]
+            const exact = raw != null ? formatSkaAtomsExact(raw) : data.series[0].y.toString()
+            div.appendChild(
+              legendEntry(`${data.series[0].dashHTML} ${data.series[0].labelHTML}: ${exact} ${coinLabel}`)
+            )
+          }
+          break
+        }
         d = zip2D(data, data.fees, atomsToVAR)
         assign(
           gOptions,
