@@ -127,3 +127,6 @@ func (noopDS) GetMempoolPriceCountTime() *apitypes.PriceCountTime { return nil }
 func (noopDS) LoadSKASupplyForCoin(_ context.Context, _ *cache.ChartData, _ uint8) error {
 	return nil
 }
+func (noopDS) LoadSKAFeesForCoin(_ context.Context, _ *cache.ChartData, _ uint8) error {
+	return nil
+}

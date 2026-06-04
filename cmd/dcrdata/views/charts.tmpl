@@ -32,7 +32,9 @@
                             <option value="pow-difficulty">PoW Difficulty</option>
                             <option value="coin-supply/0">Circulation (VAR)</option>
                             {{range $t := .ActiveSKATypes}}<option value="coin-supply/{{$t}}">Circulation (SKA{{$t}})</option>
-                             {{end}}<option value="fees">Fees</option>
+                             {{end}}<option value="fees">Fees (VAR)</option>
+                             {{range $t := .ActiveSKATypes}}<option value="fees/{{$t}}">Fees (SKA{{$t}})</option>
+                              {{end}}
                              <option value="duration-btw-blocks">Duration Between Blocks</option>
                             <option value="chainwork">Total Work</option>
                             <option value="hashrate">Hashrate</option>

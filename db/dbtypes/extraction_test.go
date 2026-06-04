@@ -178,6 +178,93 @@ func Test_processTransactions_VAROnly(t *testing.T) {
 	}
 }
 
+// Test_processTransactions_FeeCancellationInvariant pins the storage invariant
+// behind the issue #405 Fees-chart fix. transactions.fees is stored as
+// spent - sent, so the coinbase — which mints the block subsidy and emits the
+// block's collected fees as outputs — carries a NEGATIVE fee equal to -(all
+// real fees in the block). Summing every tx in a block (as the old chart query
+// did) cancels the real fees against the coinbase to exactly zero.
+//
+// The Block# header instead reports getTotalFee(block.Tx) +
+// getTotalFee(block.Tickets) — regular-tree non-coinbase txs plus ticket
+// purchases. SelectFeesPerBlockAboveHeight must match that by excluding the
+// coinbase, which is identified as (tree 0, block_index 0); this test asserts
+// the coinbase indeed lands at block_index 0 so that predicate is sound.
+func Test_processTransactions_FeeCancellationInvariant(t *testing.T) {
+	const (
+		subsidy    = 1_000_000
+		regularFee = 100
+		ticketFee  = 50
+		blockFees  = regularFee + ticketFee // 150 — the per-block header/chart value
+	)
+
+	// Regular tree: coinbase (absorbs ALL block fees as outputs) + one VAR tx.
+	coinbase := wire.NewMsgTx()
+	coinbase.AddTxIn(wire.NewTxIn(&wire.OutPoint{Index: math.MaxUint32}, subsidy, nil))
+	coinbase.AddTxOut(wire.NewTxOut(subsidy+blockFees, nil))
+
+	regular := wire.NewMsgTx()
+	regular.AddTxIn(wire.NewTxIn(&wire.OutPoint{}, 1000, nil))
+	regular.AddTxOut(wire.NewTxOut(1000-regularFee, nil))
+
+	regBlk := &wire.MsgBlock{}
+	regBlk.Transactions = []*wire.MsgTx{coinbase, regular}
+	regTxs, _, _ := processTransactions(regBlk, wire.TxTreeRegular, chaincfg.SimNetParams(), true, true)
+	if len(regTxs) != 2 {
+		t.Fatalf("regular tree: expected 2 txs, got %d", len(regTxs))
+	}
+
+	// Stake tree: one ticket purchase with a real positive fee.
+	ticket := wire.NewMsgTx()
+	ticket.AddTxIn(wire.NewTxIn(&wire.OutPoint{}, 2000+ticketFee, nil))
+	ticket.AddTxOut(wire.NewTxOut(2000, opSSTXP2PKH()))
+
+	stakeBlk := &wire.MsgBlock{}
+	stakeBlk.STransactions = []*wire.MsgTx{ticket}
+	stakeTxs, _, _ := processTransactions(stakeBlk, wire.TxTreeStake, chaincfg.SimNetParams(), true, true)
+	if len(stakeTxs) != 1 {
+		t.Fatalf("stake tree: expected 1 tx, got %d", len(stakeTxs))
+	}
+
+	cb, reg, tkt := regTxs[0], regTxs[1], stakeTxs[0]
+
+	// The coinbase must sit at block_index 0 — the SQL predicate relies on it.
+	if cb.BlockIndex != 0 {
+		t.Errorf("coinbase BlockIndex: want 0, got %d", cb.BlockIndex)
+	}
+	if reg.BlockIndex != 1 {
+		t.Errorf("regular tx BlockIndex: want 1, got %d", reg.BlockIndex)
+	}
+
+	// Per-tx fees: coinbase negative, regular and ticket positive.
+	if cb.Fees != -blockFees {
+		t.Errorf("coinbase Fees: want %d, got %d", -blockFees, cb.Fees)
+	}
+	if reg.Fees != regularFee {
+		t.Errorf("regular Fees: want %d, got %d", regularFee, reg.Fees)
+	}
+	if tkt.TxType != TxTypeTicketPurchase {
+		t.Errorf("ticket TxType: want %d (TicketPurchase), got %d", TxTypeTicketPurchase, tkt.TxType)
+	}
+	if tkt.Fees != ticketFee {
+		t.Errorf("ticket Fees: want %d, got %d", ticketFee, tkt.Fees)
+	}
+
+	// The bug: summing every tx including the coinbase cancels to zero.
+	if got := cb.Fees + reg.Fees + tkt.Fees; got != 0 {
+		t.Errorf("sum over all txs incl. coinbase: want 0 (the bug's cancellation), got %d", got)
+	}
+	// The fix: summing the header set (regular non-coinbase + tickets) yields
+	// the real per-block fee.
+	if got := reg.Fees + tkt.Fees; got != blockFees {
+		t.Errorf("sum excluding coinbase: want %d, got %d", blockFees, got)
+	}
+	// The coinbase carries exactly the negative of the real fees.
+	if cb.Fees != -(reg.Fees + tkt.Fees) {
+		t.Errorf("coinbase fee should equal -(real fees): want %d, got %d", -(reg.Fees + tkt.Fees), cb.Fees)
+	}
+}
+
 func Test_processTransactions_SKAOnly(t *testing.T) {
 	// SKA1 amount exceeding int64 max: 2^63 + 1
 	bigAmt := new(big.Int).Add(new(big.Int).SetInt64(1<<62), big.NewInt(1<<62))

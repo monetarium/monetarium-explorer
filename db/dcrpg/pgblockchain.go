@@ -1146,6 +1146,19 @@ func (pgb *ChainDB) LoadSKASupplyForCoin(ctx context.Context, charts *cache.Char
 	return fmt.Errorf("no data found for coin type %d", coinType)
 }
 
+// LoadSKAFeesForCoin loads per-block SKA fee data for the specified coin type
+// into charts.SKAFees. Loads all available data (start height 0).
+func (pgb *ChainDB) LoadSKAFeesForCoin(ctx context.Context, charts *cache.ChartData, coinType uint8) error {
+	ctx, cancel := context.WithTimeout(ctx, pgb.queryTimeout)
+	defer cancel()
+
+	rows, err := retrieveSKAFees(ctx, pgb.db, coinType)
+	if err != nil {
+		return fmt.Errorf("LoadSKAFeesForCoin: query failed for coin type %d: %w", coinType, err)
+	}
+	return appendSKAFees(charts, rows, coinType)
+}
+
 // appears, along with the index of the transaction in each of the blocks. The
 // next and previous block hashes are NOT SET in each BlockStatus.
 func (pgb *ChainDB) TransactionBlocks(ctx context.Context, txHash string) ([]*dbtypes.BlockStatus, []uint32, error) {
@@ -6768,6 +6781,11 @@ func (pgb *ChainDB) GetExplorerBlock(ctx context.Context, hash string) *exptypes
 	}
 	block.TotalSent = (getTotalSent(block.Tx) + getTotalSent(block.Treasury) + getTotalSent(block.Revs) +
 		getTotalSent(block.Tickets) + getTotalSent(block.Votes) + getTotalSent(block.StakeFees)).ToCoin()
+	// This per-block fee total (regular-tree non-coinbase txs + ticket purchases)
+	// is the definition the Fees chart must mirror. Its SQL twin is
+	// internal.SelectFeesPerBlockAboveHeight; if you change which txs count here,
+	// update that query too or the chart and this header will silently diverge
+	// (issue #405).
 	block.MiningFee = (getTotalFee(block.Tx) + getTotalFee(block.Tickets)).ToCoin()
 
 	// Aggregate fees per coin type (VAR from MiningFee, SKA from SSFeeTotalsByCoin)

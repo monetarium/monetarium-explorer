@@ -3622,6 +3622,21 @@ func retrieveBlockFees(ctx context.Context, db *sql.DB, charts *cache.ChartData)
 	return rows, nil
 }
 
+// clampNonNegativeFee guards the appendBlockFees invariant that a per-block fee
+// total from SelectFeesPerBlockAboveHeight is non-negative: the only txs with a
+// negative stored fee (the subsidy-minting coinbase and votes/stakebase) are
+// excluded by that query's FILTER, so the fee-bearing set (regular-tree
+// non-coinbase txs + ticket purchases) sums to >= 0. A negative value is a data
+// anomaly. It is clamped to 0 rather than wrapped via uint64() into a huge chart
+// spike, and ok=false lets the caller log the anomaly without aborting. See
+// issue #405.
+func clampNonNegativeFee(fees int64) (value uint64, ok bool) {
+	if fees < 0 {
+		return 0, false
+	}
+	return uint64(fees), true
+}
+
 // Append the result from retrieveBlockFees to the provided ChartData. This
 // is the Appender half of a pair that make up a cache.ChartUpdater.
 func appendBlockFees(charts *cache.ChartData, rows *sql.Rows) error {
@@ -3634,14 +3649,74 @@ func appendBlockFees(charts *cache.ChartData, rows *sql.Rows) error {
 			log.Errorf("Unable to scan for FeeInfoPerBlock fields: %v", err)
 			return err
 		}
-		if fees < 0 {
-			fees *= -1
+
+		// A negative per-block total should be impossible (see
+		// clampNonNegativeFee / SelectFeesPerBlockAboveHeight), so warn loudly,
+		// but do NOT return an error here: appendBlockFees runs mid-pipeline as
+		// the "fees" updater, and (*ChartData).Update aborts on the first
+		// appender error before Lengthen() runs. Returning would strand the
+		// already-appended sibling series (Time, Height, …) ahead of a frozen
+		// Fees series with no reconciliation, permanently wedging chart updates
+		// on the offending block. Clamping to 0 keeps blocks.Fees index-aligned
+		// with the other per-block series and lets the update proceed. (#405)
+		fee, ok := clampNonNegativeFee(fees)
+		if !ok {
+			log.Warnf("appendBlockFees: negative per-block fee total %d at height %d; clamping to 0", fees, blockHeight)
 		}
 
-		// Converting to atoms.
-		blocks.Fees = append(blocks.Fees, uint64(fees))
+		blocks.Fees = append(blocks.Fees, fee)
 	}
 	return rows.Err()
+}
+
+// retrieveSKAFees retrieves per-block SKA fee data for the given coin type from
+// blocks.ssfee_totals (pow + pos). SKA has no block subsidy, so the SSFee
+// distribution is the fee, and there is no coinbase-cancellation problem like
+// the VAR path (#405). This is the Fetcher half of a cache.ChartUpdater pair.
+func retrieveSKAFees(ctx context.Context, db *sql.DB, coinType uint8) (*sql.Rows, error) {
+	rows, err := db.QueryContext(ctx, internal.SelectSKAFeesPerBlockAboveHeight, 0 /* startHeight */, strconv.FormatUint(uint64(coinType), 10))
+	if err != nil {
+		return nil, err
+	}
+	return rows, nil
+}
+
+// appendSKAFees appends the results from retrieveSKAFees to the provided
+// ChartData. Fee per block = ssfee_totals[coinType].pow + .pos, carried as an
+// exact-precision string because SKA uses 18 decimals (exceeds float64's
+// significand). This is the Appender half of a cache.ChartUpdater pair.
+func appendSKAFees(charts *cache.ChartData, rows *sql.Rows, coinType uint8) error {
+	defer rows.Close()
+	var heights []int64
+	var timestamps []int64
+	var fees []string
+	for rows.Next() {
+		var blockHeight uint64
+		var blockTime time.Time
+		var fee string
+		if err := rows.Scan(&blockHeight, &blockTime, &fee); err != nil {
+			log.Errorf("Unable to scan for SKA fee fields: %v", err)
+			return err
+		}
+		heights = append(heights, int64(blockHeight))
+		timestamps = append(timestamps, blockTime.Unix())
+		fees = append(fees, fee)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	charts.SKAFeesMtx.Lock()
+	if charts.SKAFees == nil {
+		charts.SKAFees = make(map[uint8]cache.SKAFeeChartData)
+	}
+	charts.SKAFees[coinType] = cache.SKAFeeChartData{
+		Heights:    heights,
+		Timestamps: timestamps,
+		Fees:       fees,
+	}
+	charts.SKAFeesMtx.Unlock()
+	return nil
 }
 
 // retrievePrivacyParticipation retrieves the sum of all mixed vouts that is

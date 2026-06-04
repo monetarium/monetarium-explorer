@@ -792,6 +792,17 @@ func ChartTypeCtx(next http.Handler) http.Handler {
 	})
 }
 
+// SKAFeeChartTypeCtx returns a http.HandlerFunc that embeds "fees/" + {charttype}
+// into the request context for handling fees/N requests.
+func SKAFeeChartTypeCtx(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		charttype := chi.URLParam(r, "charttype")
+		ctx := context.WithValue(r.Context(), ctxChartType,
+			"fees/"+charttype)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
 // CoinSupplyChartTypeCtx returns a http.HandlerFunc that embeds "coin-supply/" + {charttype}
 // into the request context for handling coin-supply/N requests.
 func CoinSupplyChartTypeCtx(next http.Handler) http.Handler {
