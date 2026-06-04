@@ -189,19 +189,20 @@ const (
 	// RetrieveVoutDbIDs = `SELECT unnest(vout_db_ids) FROM transactions WHERE id = $1;`
 	// RetrieveVoutDbID  = `SELECT vout_db_ids[$2] FROM transactions WHERE id = $1;`
 
-	// SelectFeesPerBlockAboveHeight fetches per-block VAR fee totals by
-	// summing -fees across all transactions and subtracting the block subsidy.
-	// LEFT JOINs from blocks so every block appears in the result.
-	// The fee per block is: SUM(-t.fees) - (PoW + PoS + developer subsidy).
-	// b.voters is returned so the caller can compute the subsidy via RewardsAtBlock.
+	// SelectFeesPerBlockAboveHeight fetches per-block VAR fee totals by summing
+	// the fees column of non-coinbase, non-vote, non-revocation, non-SSFee
+	// transactions. This matches the MiningFee computation used by the block
+	// explorer: SUM(fees) excluding coinbase (tree=0,block_index=0), votes
+	// (tx_type=2), revocations (tx_type=3), and SSFee distributions (103,104).
 	SelectFeesPerBlockAboveHeight = `
-		SELECT b.height, b.voters,
-			COALESCE(SUM(-t.fees), 0) AS fees
-		FROM blocks b
-		LEFT JOIN transactions t ON t.block_height = b.height AND t.is_mainchain
-		WHERE b.is_mainchain AND b.height > $1
-		GROUP BY b.height, b.voters
-		ORDER BY b.height;`
+		SELECT block_height, COALESCE(SUM(fees), 0) AS fees
+		FROM transactions
+		WHERE is_mainchain
+			AND block_height > $1
+			AND NOT (tree = 0 AND block_index = 0)
+			AND tx_type NOT IN (2, 3, 103, 104)
+		GROUP BY block_height
+		ORDER BY block_height;`
 
 	// SelectSKAFeesPerBlockAboveHeight fetches per-block SKA fee totals for a
 	// specific coin type from blocks.ssfee_totals (pow + pos per coin type).
