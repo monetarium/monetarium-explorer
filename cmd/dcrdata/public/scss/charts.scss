@@ -320,6 +320,8 @@ body.darkBG .chartview .dygraph-y2label {
 .chart-form-control {
   width: -moz-fit-content;
   width: fit-content;
+  min-width: 17em;
+  max-width: 100%;
   font-size: 0.9rem !important;
   height: calc(1.5em + 0.5rem + 2px) !important;
   line-height: 1;
