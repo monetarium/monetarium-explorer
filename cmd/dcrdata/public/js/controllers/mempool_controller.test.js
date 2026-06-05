@@ -73,3 +73,41 @@ describe('mempool reconnect resync', () => {
     expect(registered.reconnect[0].unsub).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('mempool zero vote count', () => {
+  it('renders "0" in voteCountTarget when no votes are tallied', () => {
+    const c = makeController()
+
+    // Mock targets
+    const voteCountTarget = {
+      firstChild: null,
+      removeChild: vi.fn(),
+      appendChild: vi.fn()
+    }
+    c.voteCountTarget = voteCountTarget
+    c.mempoolSizeTarget = { textContent: '' }
+
+    // Mock dependencies
+    c.lastCoinStats = null
+    c.applyCoinStats = vi.fn()
+    c.labelVotes = vi.fn()
+
+    // Mock Mempool instance
+    c.mempool = {
+      counts: vi.fn().mockReturnValue({ vote: {}, regular: 0, ticket: 0, rev: 0, total: 0 }),
+      voteSpans: vi.fn().mockReturnValue([]),
+      totals: vi
+        .fn()
+        .mockReturnValue({ size: 100, regular: 0, ticket: 0, vote: 0, rev: 0, total: 0 })
+    }
+
+    c.setMempoolFigures()
+
+    expect(voteCountTarget.appendChild).toHaveBeenCalledWith(
+      expect.objectContaining({
+        textContent: '0',
+        className: 'text-center position-relative d-inline-block'
+      })
+    )
+  })
+})
