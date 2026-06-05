@@ -143,9 +143,8 @@ select {
 }
 
 select.dropdown {
-  /* Fixed 8px arrow (the svg's natural width) rather than 8% of the box width,
-     so selects wider than the default 100px (e.g. the CHART control on
-     /charts) don't render an oversized arrow. */
+  /* Fixed 8px (the svg's natural width), not 8% of box width, so wider selects
+     (e.g. the CHART control) don't balloon the arrow. */
   background: url("/images/dropdown.svg") 95% / 8px no-repeat #fff;
   width: 100px;
 }
