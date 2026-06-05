@@ -143,7 +143,10 @@ select {
 }
 
 select.dropdown {
-  background: url("/images/dropdown.svg") 95% / 8% no-repeat #fff;
+  /* Fixed 8px arrow (the svg's natural width) rather than 8% of the box width,
+     so selects wider than the default 100px (e.g. the CHART control on
+     /charts) don't render an oversized arrow. */
+  background: url("/images/dropdown.svg") 95% / 8px no-repeat #fff;
   width: 100px;
 }
 
@@ -208,7 +211,7 @@ body.darkBG {
   }
 
   select.dropdown {
-    background: url("/images/dropdown-light.svg") 95% / 8% no-repeat #fff;
+    background: url("/images/dropdown-light.svg") 95% / 8px no-repeat #fff;
   }
 
   .search-bttn:hover {

@@ -315,6 +315,7 @@ body.darkBG .chartview .dygraph-y2label {
   padding: 2px;
   background: #fff;
   width: max-content;
+  max-width: 100%;
 }
 
 .chart-form-control {
@@ -323,6 +324,19 @@ body.darkBG .chartview .dygraph-y2label {
   font-size: 0.9rem !important;
   height: calc(1.5em + 0.5rem + 2px) !important;
   line-height: 1;
+}
+
+/* The CHART <select> has appearance:none (from .form-control), so it never
+   auto-sizes to its widest <option> and clips long labels ("Duration Between
+   Blocks", "Circulation (SKA{n})", etc.). min-width floors it wide enough to
+   show the longest label in full (with headroom for fallback fonts), while
+   .chart-control's max-width:100% keeps it within .container on narrow
+   viewports (no horizontal overflow). Scoped to .chart-control so the shared
+   .chart-form-control on /attackcost keeps its original width. The dropdown
+   arrow is pinned to a fixed size in navigation.scss (select.dropdown) so it
+   doesn't scale with this wider box. */
+.chart-control select {
+  min-width: 13rem;
 }
 
 .chart-control select,
