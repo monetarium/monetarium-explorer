@@ -315,6 +315,7 @@ body.darkBG .chartview .dygraph-y2label {
   padding: 2px;
   background: #fff;
   width: max-content;
+  max-width: 100%;
 }
 
 .chart-form-control {
@@ -323,6 +324,13 @@ body.darkBG .chartview .dygraph-y2label {
   font-size: 0.9rem !important;
   height: calc(1.5em + 0.5rem + 2px) !important;
   line-height: 1;
+}
+
+/* appearance:none (from .form-control) blocks native grow-to-widest-option
+   sizing, so min-width floors the box to its longest label. Scoped to
+   .chart-control so the shared .chart-form-control on /attackcost stays narrow. */
+.chart-control select {
+  min-width: 13rem;
 }
 
 .chart-control select,
