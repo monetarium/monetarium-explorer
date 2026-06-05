@@ -143,6 +143,13 @@ function cloneVoteRow(template, tx) {
   return tr
 }
 
+function makeVoteZeroSpan() {
+  const span = document.createElement('span')
+  span.className = 'text-center position-relative d-inline-block'
+  span.textContent = '0'
+  return span
+}
+
 function buildTable(target, txType, txns, rowFn) {
   while (target.firstChild) target.removeChild(target.firstChild)
   if (txns && txns.length > 0) {
@@ -334,9 +341,14 @@ export default class extends Controller {
     const counts = this.mempool.counts()
     const ct = this.voteCountTarget
     while (ct.firstChild) ct.removeChild(ct.firstChild)
-    this.mempool.voteSpans(counts.vote).forEach((span) => {
-      ct.appendChild(span)
-    })
+    const spans = this.mempool.voteSpans(counts.vote)
+    if (spans.length === 0) {
+      ct.appendChild(makeVoteZeroSpan())
+    } else {
+      spans.forEach((span) => {
+        ct.appendChild(span)
+      })
+    }
     const totals = this.mempool.totals()
     this.mempoolSizeTarget.textContent = humanize.bytes(totals.size)
     this.labelVotes()
