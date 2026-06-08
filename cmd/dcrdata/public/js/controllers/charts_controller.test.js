@@ -123,6 +123,10 @@ function makeController() {
   c.chartsViewTarget = {}
   c.ticketsPriceTarget = { checked: true }
   c.ticketsPurchaseTarget = { checked: true }
+  c.hashrateRateTarget = { checked: true }
+  c.hashrateMinersTarget = { checked: true }
+  c.intervalSelectorTarget = { classList: { add: vi.fn(), remove: vi.fn() } }
+  c.intervalOptionTargets = []
   return c
 }
 
@@ -214,5 +218,62 @@ describe('ChartsController URL persistence', () => {
         axis: 'height'
       })
     )
+  })
+})
+
+describe('hashrate y2 axisLabelFormatter', () => {
+  function makeHashrateController() {
+    const c = makeController()
+    // Minimal chartsView mock — no connect() needed
+    c.chartsView = {
+      plotter_: { clear: vi.fn() },
+      updateOptions: vi.fn(),
+      xAxisExtremes: vi.fn().mockReturnValue([0, 100]),
+      yAxisRanges: vi.fn().mockReturnValue([0, 100])
+    }
+    c.query = {
+      url: { protocol: 'https:', host: 'localhost' },
+      replace: vi.fn()
+    }
+    c.settings = {
+      axis: 'time',
+      bin: 'day',
+      interval: 'week',
+      scale: null,
+      zoom: null,
+      chart: 'hashrate',
+      visibility: null,
+      mode: null
+    }
+    return c
+  }
+
+  function getY2Formatter(c) {
+    const data = {
+      t: [1000, 2000],
+      rate: [100, 200],
+      active_miners: [3, 5],
+      offset: 0,
+      axis: 'time',
+      bin: 'day'
+    }
+    c.plotGraph('hashrate', data)
+    const opts = c.chartsView.updateOptions.mock.calls.find(([o]) => o.axes && o.axes.y2)[0]
+    return opts.axes.y2.axisLabelFormatter
+  }
+
+  it('returns the integer as a string for integer ticks', () => {
+    const fmt = getY2Formatter(makeHashrateController())
+    expect(fmt(3)).toBe('3')
+  })
+
+  it('returns the integer as a string for near-integer float ticks (fp rounding)', () => {
+    const fmt = getY2Formatter(makeHashrateController())
+    expect(fmt(3.0000000000000004)).toBe('3')
+  })
+
+  it('returns empty string for fractional ticks', () => {
+    const fmt = getY2Formatter(makeHashrateController())
+    expect(fmt(2.33)).toBe('')
   })
 })
