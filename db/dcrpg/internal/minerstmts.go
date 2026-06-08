@@ -17,6 +17,8 @@ const (
 
 	CountMiners = `SELECT COUNT(*) FROM miners;`
 
+	CountActiveMiners = `SELECT COUNT(*) FROM miners WHERE last_used >= $1;`
+
 	BackfillMiners = `
 		INSERT INTO miners (address, first_seen, last_used, blocks_mined)
 		SELECT addr, MIN(height)::INT4, MAX(height)::INT4, COUNT(*)::INT4

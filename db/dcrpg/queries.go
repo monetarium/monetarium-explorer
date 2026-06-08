@@ -5076,6 +5076,14 @@ func CountMiners(db *sql.DB) (int64, error) {
 	return count, err
 }
 
+// CountActiveMiners returns the number of unique miner addresses with last_used
+// at or above the given minimum block height.
+func CountActiveMiners(db *sql.DB, minHeight int64) (int64, error) {
+	var count int64
+	err := db.QueryRow(internal.CountActiveMiners, minHeight).Scan(&count)
+	return count, err
+}
+
 // bigAddSKA adds a decimal-string SKA atom value into a *big.Int accumulator.
 func bigAddSKA(acc *big.Int, s string) {
 	if s == "" || s == "0" {

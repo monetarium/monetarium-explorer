@@ -900,6 +900,7 @@ type HomeInfo struct {
 	PoWSKARewards         []PoWSKAReward       `json:"pow_ska_rewards,omitempty"`
 	VARCoinSupply         *VARCoinSupply       `json:"var_coin_supply,omitempty"`
 	SKACoinSupply         []SKACoinSupplyEntry `json:"ska_coin_supply,omitempty"`
+	ActiveMiners          int64                `json:"active_miners"`
 }
 
 // BlockSubsidy is an implementation of chainjson.GetBlockSubsidyResult

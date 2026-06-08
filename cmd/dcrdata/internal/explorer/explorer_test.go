@@ -189,6 +189,10 @@ func (m *mockDataSource) GetBlockSKAFees(ctx context.Context, height int64) (map
 	return nil, nil
 }
 
+func (m *mockDataSource) ActiveMiners(_ context.Context, _ int64) (int64, error) {
+	return 0, nil
+}
+
 // TestStore_PoWSKARewardsFromMFMarker verifies that "PoW SKA Fee Reward" is
 // derived from the authoritative "MF"-marked SSFee split
 // (ExtraInfo.SSFeeTotalsByCoin[ct].PoW) per issue #273, and that the legacy
