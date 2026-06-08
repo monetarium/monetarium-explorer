@@ -196,32 +196,12 @@
                 <div class="chart-control-wrapper me-2 mb-1 d-hide" data-charts-target="intervalSelector">
                     <div class="chart-control-label">INTERVAL</div>
                     <div class="chart-control">
-                        <ul class="nav nav-pills">
-                            <li class="nav-item nav-link"
-                                data-charts-target="intervalOption"
-                                data-action="click->charts#setInterval"
-                                data-option="all">
-                                All
-                            </li>
-                            <li class="nav-item nav-link"
-                                data-charts-target="intervalOption"
-                                data-action="click->charts#setInterval"
-                                data-option="year">
-                                Year
-                            </li>
-                            <li class="nav-item nav-link active"
-                                data-charts-target="intervalOption"
-                                data-action="click->charts#setInterval"
-                                data-option="week">
-                                Week
-                            </li>
-                            <li class="nav-item nav-link"
-                                data-charts-target="intervalOption"
-                                data-action="click->charts#setInterval"
-                                data-option="day">
-                                Day
-                            </li>
-                        </ul>
+                        <div class="btn-group" role="group">
+                            <button type="button" class="btn btn-outline-secondary" data-charts-target="intervalOption" data-action="click->charts#setInterval" data-option="all">All</button>
+                            <button type="button" class="btn btn-outline-secondary" data-charts-target="intervalOption" data-action="click->charts#setInterval" data-option="year">Year</button>
+                            <button type="button" class="btn btn-outline-secondary active" data-charts-target="intervalOption" data-action="click->charts#setInterval" data-option="week">Week</button>
+                            <button type="button" class="btn btn-outline-secondary" data-charts-target="intervalOption" data-action="click->charts#setInterval" data-option="day">Day</button>
+                        </div>
                     </div>
                 </div>
             </div>
