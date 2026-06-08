@@ -101,16 +101,12 @@
 				</div>
 			</div>
 			<div class="d-flex justify-content-around fs15 text-center text-secondary my-2">
-				<div class="d-flex">
-					<span class="me-2 text-nowrap">Regular:</span>
-					<div class="mono">
-						{{- range .RegularCoinCounts}}
-						<div class="d-flex">
-							<span class="me-2" style="min-width:3rem">{{.Symbol}}</span>
-							<span>{{intComma .Count}}</span>
-						</div>
-						{{- end}}
-					</div>
+				<div style="display:grid;grid-template-columns:max-content max-content max-content;column-gap:.5rem">
+					{{- range .RegularCoinCounts}}
+					<span>Regular</span>
+					<span class="text-end text-nowrap">{{.Symbol}}:</span>
+					<span class="text-end">{{intComma .Count}}</span>
+					{{- end}}
 				</div>
 					<span class="me-3">Votes: {{.Voters}}</span>
 					<span class="me-3">Tickets: {{.FreshStake}}</span>
