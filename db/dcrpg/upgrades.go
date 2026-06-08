@@ -267,7 +267,7 @@ func (u *Upgrader) compatVersion2Upgrades(current, target DatabaseVersion) (bool
 		// Schema v1 maintenance.
 		switch current.maint {
 		case 0:
-			log.Infof("Performing database maintenance upgrade 2.1.0 -> 2.1.1: "+
+			log.Infof("Performing database maintenance upgrade 2.1.0 -> 2.1.1: " +
 				"recomputing blocks.ssfee_totals as marker-based PoW/PoS split")
 			if err := u.recomputeSSFeeTotals(); err != nil {
 				return false, fmt.Errorf("failed maintenance 2.1.0 -> 2.1.1: %v", err)
