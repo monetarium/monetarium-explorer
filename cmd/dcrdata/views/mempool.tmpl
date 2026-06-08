@@ -111,20 +111,24 @@
                         </div>
                         <div class="col-12 col-md-6 col-lg-12 col-xl-6 pb-3">
                             <div class="text-center text-secondary fs13">Votes</div>
-                            <div class="text-center h4 mb-0" data-mempool-target="voteCount">
-                                {{$afterFirst := false -}}
-                                {{- range $hash, $tally := .VotingInfo.VoteTallys -}}
-                                    {{if $afterFirst}} + {{end}}
-                                    <span class="text-center position-relative d-inline-block"
-                                    data-mempool-target="voteTally"
-                                    data-hash="{{$hash}}"
-                                    data-affirmed="{{$tally.Affirmations}}"
-                                    data-count="{{$tally.VoteCount}}"
-                                    data-tooltip="for block {{$hash}}"
-                                    >{{$tally.VoteCount}}</span>
-                                    {{$afterFirst = true}}
-                                {{- end}}
-                            </div>
+                             <div class="text-center h4 mb-0" data-mempool-target="voteCount">
+                                 {{if .VotingInfo.VoteTallys -}}
+                                     {{$afterFirst := false -}}
+                                     {{- range $hash, $tally := .VotingInfo.VoteTallys -}}
+                                         {{if $afterFirst}} + {{end}}
+                                         <span class="text-center position-relative d-inline-block"
+                                         data-mempool-target="voteTally"
+                                         data-hash="{{$hash}}"
+                                         data-affirmed="{{$tally.Affirmations}}"
+                                         data-count="{{$tally.VoteCount}}"
+                                         data-tooltip="for block {{$hash}}"
+                                         >{{$tally.VoteCount}}</span>
+                                         {{$afterFirst = true}}
+                                     {{- end}}
+                                 {{- else -}}
+                                     <span class="text-center position-relative d-inline-block">0</span>
+                                 {{- end}}
+                             </div>
                             <div class="text-center fs13">
                                 <span data-mempool-target="voteTotal">{{formatCoinAtoms $varStats.VoteAmount 0}}</span> VAR
                             </div>
