@@ -3924,6 +3924,18 @@ func (pgb *ChainDB) StoreBlock(msgBlock *wire.MsgBlock, isValid, isMainchain,
 	}
 	pgb.lastBlock[blockHash] = blockDbID
 
+	// Extract miner address from the coinbase PoW reward output and upsert.
+	if len(msgBlock.Transactions) > 0 && len(msgBlock.Transactions[0].TxOut) > 0 {
+		coinbaseOut := msgBlock.Transactions[0].TxOut[0]
+		_, addrs := stdscript.ExtractAddrs(coinbaseOut.Version, coinbaseOut.PkScript, pgb.chainParams)
+		for _, addr := range addrs {
+			if uerr := upsertMiner(pgb.db, addr.String(), int64(dbBlock.Height)); uerr != nil {
+				log.Warnf("Failed to upsert miner %s at height %d: %v",
+					addr, dbBlock.Height, uerr)
+			}
+		}
+	}
+
 	// Insert the block in the block_chain table with the previous block hash
 	// and an empty string for the next block hash, which may be updated when a
 	// new block extends this chain.

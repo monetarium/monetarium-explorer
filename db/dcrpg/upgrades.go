@@ -28,7 +28,7 @@ const (
 	// This includes changes such as creating tables, adding/deleting columns,
 	// adding/deleting indexes or any other operations that create, delete, or
 	// modify the definition of any database relation.
-	schemaVersion = 0
+	schemaVersion = 1
 
 	// maintVersion indicates when certain maintenance operations should be
 	// performed for the same compatVersion and schemaVersion. Such operations
@@ -249,13 +249,28 @@ func (u *Upgrader) compatVersion2Upgrades(current, target DatabaseVersion) (bool
 	// initSchema := current.schema
 	switch current.schema {
 	case 0:
-		// Schema v0 maintenance.
+		// Schema v0 -> v1: create miners table and backfill from vouts.
+		log.Infof("Performing database upgrade 2.0.%d -> 2.1.%d: "+
+			"creating miners table", current.maint, current.maint)
+		if _, err := u.db.Exec(internal.CreateMinersTable); err != nil {
+			return false, fmt.Errorf("failed to create miners table: %w", err)
+		}
+		if _, err := u.db.Exec(internal.BackfillMiners); err != nil {
+			return false, fmt.Errorf("failed to backfill miners table: %w", err)
+		}
+		current.schema = 1
+		if err := updateSchemaVersion(u.db, current.schema); err != nil {
+			return false, fmt.Errorf("failed to update schema version: %w", err)
+		}
+		fallthrough
+	case 1:
+		// Schema v1 maintenance.
 		switch current.maint {
 		case 0:
-			log.Infof("Performing database maintenance upgrade 2.0.0 -> 2.0.1: " +
+			log.Infof("Performing database maintenance upgrade 2.1.0 -> 2.1.1: "+
 				"recomputing blocks.ssfee_totals as marker-based PoW/PoS split")
 			if err := u.recomputeSSFeeTotals(); err != nil {
-				return false, fmt.Errorf("failed maintenance 2.0.0 -> 2.0.1: %v", err)
+				return false, fmt.Errorf("failed maintenance 2.1.0 -> 2.1.1: %v", err)
 			}
 			if err := updateMaintenanceVersion(u.db, 1); err != nil {
 				return false, fmt.Errorf("failed to update maintenance version: %v", err)
@@ -266,178 +281,9 @@ func (u *Upgrader) compatVersion2Upgrades(current, target DatabaseVersion) (bool
 		default:
 			return false, fmt.Errorf("unsupported maint version %d", current.maint)
 		}
-
-	/* when there's an upgrade to define:
-	case 0:
-		// Remove table comments where the versions were stored.
-		log.Infof("Performing database upgrade 2.0.0 -> 2.1.0")
-
-		// removeTableComments(u.db) // do something here
-
-		// Continue to upgrades for the next schema version.
-		fallthrough
-	case 1:
-		// Upgrade to schema v2.
-		err = u.upgradeSchema1to2()
-		if err != nil {
-			return false, fmt.Errorf("failed to upgrade 1.1.0 to 1.2.0: %v", err)
-		}
-		current.schema++
-		if err = updateSchemaVersion(u.db, current.schema); err != nil {
-			return false, fmt.Errorf("failed to update schema version: %v", err)
-		}
-		fallthrough
-	case 2:
-		// Upgrade to schema v3.
-		err = u.upgradeSchema2to3()
-		if err != nil {
-			return false, fmt.Errorf("failed to upgrade 1.2.0 to 1.3.0: %v", err)
-		}
-		current.schema++
-		if err = updateSchemaVersion(u.db, current.schema); err != nil {
-			return false, fmt.Errorf("failed to update schema version: %v", err)
-		}
-		fallthrough
-
-	case 3:
-		// Upgrade to schema v4.
-		err = u.upgradeSchema3to4()
-		if err != nil {
-			return false, fmt.Errorf("failed to upgrade 1.3.0 to 1.4.0: %v", err)
-		}
-		current.schema++
-		if err = updateSchemaVersion(u.db, current.schema); err != nil {
-			return false, fmt.Errorf("failed to update schema version: %v", err)
-		}
-		fallthrough
-
-	case 4:
-		// Upgrade to schema v5.
-		err = u.upgradeSchema4to5()
-		if err != nil {
-			return false, fmt.Errorf("failed to upgrade 1.4.0 to 1.5.0: %v", err)
-		}
-		current.schema++
-		if err = updateSchemaVersion(u.db, current.schema); err != nil {
-			return false, fmt.Errorf("failed to update schema version: %v", err)
-		}
-		fallthrough
-
-	case 5:
-		// Perform schema v5 maintenance.
-		switch current.maint {
-		case 0:
-			// The maint 0 -> 1 upgrade is only needed if the user had upgraded
-			// to 1.5.0 before 1.5.1 was defined.
-			log.Infof("Performing database upgrade 1.5.0 -> 1.5.1")
-			if initSchema == 5 {
-				err = u.setTxMixData()
-				if err != nil {
-					return false, fmt.Errorf("failed to upgrade 1.5.0 to 1.5.1: %v", err)
-				}
-			}
-			current.maint++
-			if err = updateMaintenanceVersion(u.db, current.maint); err != nil {
-				return false, fmt.Errorf("failed to update maintenance version: %v", err)
-			}
-			fallthrough
-		case 1:
-			// all ready
-		default:
-			return false, fmt.Errorf("unsupported maint version %d", current.maint)
-		}
-
-		// Upgrade to schema v6.
-		err = u.upgradeSchema5to6()
-		if err != nil {
-			return false, fmt.Errorf("failed to upgrade 1.5.1 to 1.6.0: %v", err)
-		}
-		current.schema++
-		current.maint = 0
-		if err = storeVers(u.db, &current); err != nil {
-			return false, err
-		}
-
-		fallthrough
-
-	case 6:
-		err = u.upgradeSchema6to7()
-		if err != nil {
-			return false, fmt.Errorf("failed to upgrade 1.6.0 to 1.7.0: %v", err)
-		}
-		current.schema++
-		current.maint = 0
-		if err = storeVers(u.db, &current); err != nil {
-			return false, err
-		}
-
-		fallthrough
-
-	case 7:
-		err = u.upgradeSchema7to8()
-		if err != nil {
-			return false, fmt.Errorf("failed to upgrade 1.7.0 to 1.8.0: %v", err)
-		}
-		current.schema++
-		current.maint = 0
-		if err = storeVers(u.db, &current); err != nil {
-			return false, err
-		}
-
-		fallthrough
-
-	case 8:
-		err = u.upgradeSchema8to9()
-		if err != nil {
-			return false, fmt.Errorf("failed to upgrade 1.8.0 to 1.9.0: %v", err)
-		}
-		current.schema++
-		current.maint = 0
-		if err = storeVers(u.db, &current); err != nil {
-			return false, err
-		}
-
-		fallthrough
-
-	case 9:
-		err = u.upgradeSchema9to10()
-		if err != nil {
-			return false, fmt.Errorf("failed to upgrade 1.9.0 to 1.10.0: %v", err)
-		}
-		current.schema++
-		current.maint = 0
-		if err = storeVers(u.db, &current); err != nil {
-			return false, err
-		}
-
-		fallthrough
-
-	case 10:
-		err = u.upgradeSchema10to11()
-		if err != nil {
-			return false, fmt.Errorf("failed to upgrade 1.10.0 to 1.11.0: %v", err)
-		}
-		current.schema++
-		current.maint = 0
-		if err = storeVers(u.db, &current); err != nil {
-			return false, err
-		}
-
-		fallthrough
-
-	case 11:
-		// Perform schema v11 maintenance.
-
-		// No further upgrades.
-		return upgradeCheck()
-
-		// Or continue to upgrades for the next schema version.
-		// fallthrough
-	*/
-
-	default:
-		return false, fmt.Errorf("unsupported schema version %d", current.schema)
 	}
+
+	return upgradeCheck()
 }
 
 // recomputeSSFeeTotals re-derives blocks.ssfee_totals for every main-chain

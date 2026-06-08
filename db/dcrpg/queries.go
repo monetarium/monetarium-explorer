@@ -5063,6 +5063,19 @@ func retrieveDiff(ctx context.Context, db *sql.DB, timestamp int64) (float64, er
 	return diff, err
 }
 
+// upsertMiner inserts or updates a miner address record.
+func upsertMiner(db *sql.DB, address string, height int64) error {
+	_, err := db.Exec(internal.UpsertMinerRow, address, height, height)
+	return err
+}
+
+// CountMiners returns the total number of unique miner addresses tracked.
+func CountMiners(db *sql.DB) (int64, error) {
+	var count int64
+	err := db.QueryRow(internal.CountMiners).Scan(&count)
+	return count, err
+}
+
 // bigAddSKA adds a decimal-string SKA atom value into a *big.Int accumulator.
 func bigAddSKA(acc *big.Int, s string) {
 	if s == "" || s == "0" {
