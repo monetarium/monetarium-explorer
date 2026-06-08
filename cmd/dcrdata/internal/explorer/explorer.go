@@ -534,7 +534,10 @@ func (exp *explorerUI) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgB
 
 	// Compute the week-lookback threshold for active miner count.
 	weekNs := int64(7 * 24 * time.Hour)
-	weekBlocks := weekNs / exp.pageData.HomeInfo.Params.BlockTime
+	var weekBlocks int64
+	if exp.pageData.HomeInfo.Params.BlockTime > 0 {
+		weekBlocks = weekNs / exp.pageData.HomeInfo.Params.BlockTime
+	}
 	minHeight := newBlockData.Height - weekBlocks
 	if minHeight < 0 {
 		minHeight = 0

@@ -212,7 +212,11 @@ func TestStore_PoWSKARewardsFromMFMarker(t *testing.T) {
 			ChainParams: params,
 			wsHub:       NewWebsocketHub(),
 			pageData: &pageData{
-				HomeInfo: &explorerTypes.HomeInfo{},
+				HomeInfo: &explorerTypes.HomeInfo{
+					Params: explorerTypes.ChainParams{
+						BlockTime: 60,
+					},
+				},
 			},
 			invs: &explorerTypes.MempoolInfo{
 				MempoolShort: explorerTypes.MempoolShort{
