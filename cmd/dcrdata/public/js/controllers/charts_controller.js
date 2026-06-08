@@ -145,6 +145,15 @@ function legendFormatter(data) {
   return div.innerHTML
 }
 
+function hashrateYFormatter(div, data) {
+  const visibility = data.dygraph.getOption('visibility')
+  data.series.forEach((series, i) => {
+    if (visibility && visibility[i] === false) return
+    const fmt = i === 0 ? (y) => withBigUnits(y, hashrateUnits) : (y) => Math.round(y)
+    addLegendEntryFmt(div, series, fmt)
+  })
+}
+
 function nightModeOptions(nightModeOn) {
   if (nightModeOn) {
     return {
@@ -769,7 +778,7 @@ export default class extends Controller {
           gOptions.visibility = this.visibility
           gOptions.axes.y = { valueRange: [null, null] }
           gOptions.axes.y2 = { axisLabelFormatter: (y) => Math.round(y) }
-          yFormatter = customYFormatter((y) => withBigUnits(y, hashrateUnits))
+          yFormatter = hashrateYFormatter
         } else {
           d = zip2D(data, data.rate, 1, data.offset)
           {
@@ -779,7 +788,7 @@ export default class extends Controller {
             assign(gOptions, mapDygraphOptions(d, [xlabel, label], false, label, true, false))
           }
           gOptions.axes.y = { valueRange: [null, null] }
-          yFormatter = customYFormatter((y) => withBigUnits(y, hashrateUnits))
+          yFormatter = hashrateYFormatter
         }
         break
 
