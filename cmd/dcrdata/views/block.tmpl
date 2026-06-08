@@ -71,13 +71,13 @@
 			</div>
 			{{end}}
 			<div class="row py-2">
-				<div class="col-10 col-sm-8 text-start">
+				<div class="col-24 col-sm-8 text-start">
 					<span class="text-secondary fs13">Total Sent</span>
 					<div class="lh1rem pt-1 mono fs14">
 						<div class="d-inline-block">
 							{{- range .TotalSentByCoin}}
 							<div class="d-flex">
-								<span class="text-secondary me-2" style="min-width:3.5rem">{{.Symbol}}</span>
+								<span class="text-secondary me-2">{{.Symbol}}</span>
 								<span class="fs18 fs14-decimal fw-bold flex-grow-1 text-end">{{template "decimalParts" (coinDecimalParts .Amount .CoinType true 2)}}</span>
 							</div>
 							{{- end}}
@@ -85,14 +85,14 @@
 					</div>
 
 				</div>
-				<div class="col-7 col-sm-8 text-start">
+				<div class="col-12 col-sm-8 text-start">
 					<span class="text-secondary fs13">Size</span>
 					<br>
 					<span class="fs18 fw-bold lh1rem d-inline-block pt-1">{{.FormattedBytes}}</span>
 					<br>
 					<span class="fs14 text-secondary">{{.TxCount}} <span class="d-sm-none">txs</span><span class="d-none d-sm-inline">transactions</span></span>
 				</div>
-				<div class="col-7 col-sm-8 text-start">
+				<div class="col-12 col-sm-8 text-start">
 					<span class="text-secondary fs13">Block Time</span>
 					<br>
 					<span class="fs18 fw-bold lh1rem d-inline-block pt-1">{{.BlockTime.PrettyMDY}}</span>
@@ -115,6 +115,7 @@
 		</div>
 		<div class="col-24 secondary-card py-3 px-3 px-xl-4">
 			<div class="h6 d-inline-block my-2 ps-3">Block Details</div>
+			<div class="table-responsive">
 			<table class="w-100 fs14 mt-2 details">
 				<tbody>
 					<tr>
@@ -127,7 +128,7 @@
 							<div class="d-inline-block">
 								{{- range .FeesByCoin}}
 								<div class="d-flex">
-									<span class="me-2" style="min-width:3.5rem">{{.Symbol}}</span>
+									<span class="me-2">{{.Symbol}}</span>
 									<span class="flex-grow-1 text-end">{{template "decimalParts" (coinDecimalParts .Amount .CoinType false)}}</span>
 								</div>
 								{{- end}}
@@ -184,6 +185,7 @@
 					</tr>
 				</tbody>
 			</table>
+			</div>
 		</div>
 	</div>
 
@@ -191,6 +193,7 @@
 		<span class="d-inline-block pt-4 pb-1 h4">Block Reward</span>
 		{{range .Tx -}}
 		{{if eq .Coinbase true -}}
+		<div class="table-responsive">
 		<table class="table">
 			<thead>
 				<tr>
@@ -217,11 +220,13 @@
 				</tr>
 			</tbody>
 		</table>
+		</div>
 		{{- end -}}
 		{{- end}}
 
 		<span class="d-inline-block pt-4 pb-1 h4">Votes</span>
 		{{if not .Votes -}}
+		<div class="table-responsive">
 		<table class="table">
 			<tr>
 				<td>No votes in this block.
@@ -231,7 +236,9 @@
 				</td>
 			</tr>
 		</table>
+		</div>
 		{{- else}}
+		<div class="table-responsive">
 		<table class="table">
 			<thead>
 				<tr>
@@ -258,11 +265,13 @@
 			{{- end}}
 			</tbody>
 		</table>
+		</div>
 		{{- end}}
 
 		{{- if ge .Height .StakeValidationHeight -}}
 		{{if .Misses -}}
 		<span class="d-inline-block pt-4 pb-1 h4">Missed Votes</span>
+		<div class="table-responsive">
 		<table class="table">
 			<thead>
 				<tr>
@@ -279,17 +288,21 @@
 			{{- end}}
 			</tbody>
 		</table>
+		</div>
 		{{- end}}
 		{{- end}}
 
 		<span class="d-inline-block pt-4 pb-1 h4">Tickets</span>
 		{{- if not .Tickets}}
+		<div class="table-responsive">
 		<table class="table">
 			<tr>
 				<td>No tickets mined this block.</td>
 			</tr>
 		</table>
+		</div>
 		{{- else}}
+		<div class="table-responsive">
 		<table class="table">
 			<thead>
 				<tr>
@@ -314,10 +327,12 @@
 			{{- end}}
 			</tbody>
 		</table>
+		</div>
 		{{- end}}
 
 		{{if .Revocations -}}
 		<span class="d-inline-block pt-4 pb-1 h4">Revocations</span>
+		<div class="table-responsive">
 		<table class="table">
 			<thead>
 				<tr>
@@ -344,10 +359,12 @@
 			{{- end}}
 			</tbody>
 		</table>
+		</div>
 		{{- end -}}
 
 		{{if .StakeFees -}}
 		<span class="d-inline-block pt-4 pb-1 h4">Stake Fees</span>
+		<div class="table-responsive">
 		<table class="table">
 			<thead>
 				<tr>
@@ -376,16 +393,20 @@
 			{{- end}}
 			</tbody>
 		</table>
+		</div>
 		{{- end -}}
 
 		<span class="d-inline-block pt-4 pb-1 h4">Transactions</span>
 		{{if not .TxAvailable -}}
+		<div class="table-responsive">
 		<table class="table">
 			<tr>
 				<td>No standard transactions mined this block.</td>
 			</tr>
 		</table>
+		</div>
 		{{- else -}}
+		<div class="table-responsive">
 		<table class="table">
 			<thead>
 				<tr>
@@ -416,6 +437,7 @@
 			{{- end}}
 			</tbody>
 		</table>
+		</div>
 		{{- end}}
 	</div>
 {{- end}}{{/* with .Data */}}
