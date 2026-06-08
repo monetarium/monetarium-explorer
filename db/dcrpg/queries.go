@@ -3477,6 +3477,27 @@ func appendChartBlocks(charts *cache.ChartData, rows *sql.Rows) error {
 	return nil
 }
 
+// appendMinerRanges replaces the miner range data in ChartData.
+func appendMinerRanges(charts *cache.ChartData, rows *sql.Rows) error {
+	defer closeRows(rows)
+	var ranges []cache.MinerRange
+	var fs, lu int64
+	for rows.Next() {
+		if err := rows.Scan(&fs, &lu); err != nil {
+			return err
+		}
+		ranges = append(ranges, cache.MinerRange{
+			FirstSeen: uint64(fs),
+			LastUsed:  uint64(lu),
+		})
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("appendMinerRanges: iteration error: %w", err)
+	}
+	charts.SetMinerRanges(ranges)
+	return nil
+}
+
 // retrieveWindowStats fetches the ticket-price and pow-difficulty
 // charts data source from the blocks table. These data is fetched at an
 // interval of chaincfg.Params.StakeDiffWindowSize.
@@ -5082,6 +5103,11 @@ func CountActiveMiners(db *sql.DB, minHeight int64) (int64, error) {
 	var count int64
 	err := db.QueryRow(internal.CountActiveMiners, minHeight).Scan(&count)
 	return count, err
+}
+
+// retrieveMiners returns all miner range data for the active-miner chart.
+func retrieveMiners(ctx context.Context, db *sql.DB) (*sql.Rows, error) {
+	return db.QueryContext(ctx, internal.SelectMiners)
 }
 
 // bigAddSKA adds a decimal-string SKA atom value into a *big.Int accumulator.

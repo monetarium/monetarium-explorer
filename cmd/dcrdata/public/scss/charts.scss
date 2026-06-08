@@ -459,6 +459,22 @@ body.darkBG .customcheck input:checked ~ .tickets-bought {
   background-color: #2970ff;
 }
 
+.customcheck input:checked ~ .hashrate-rate {
+  background-color: #2970ff;
+}
+
+body.darkBG .customcheck input:checked ~ .hashrate-rate {
+  background-color: #2dd8a3;
+}
+
+.customcheck input:checked ~ .hashrate-miners {
+  background-color: #c60;
+}
+
+body.darkBG .customcheck input:checked ~ .hashrate-miners {
+  background-color: #2970ff;
+}
+
 .checkmark::after {
   content: "";
   position: absolute;

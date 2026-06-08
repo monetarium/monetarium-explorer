@@ -1001,6 +1001,12 @@ func (pgb *ChainDB) RegisterCharts(charts *cache.ChartData) {
 		Appender: appendPoolStats,
 	})
 
+	charts.AddUpdater(cache.ChartUpdater{
+		Tag:      "miner ranges",
+		Fetcher:  pgb.minerRanges,
+		Appender: appendMinerRanges,
+	})
+
 	// Load SKA coin supply data into charts.SKASupply
 	if err := pgb.skaSupplyUpdater(charts); err != nil {
 		log.Errorf("failed to load SKA supply data into charts: %v", err)
@@ -3421,6 +3427,17 @@ func (pgb *ChainDB) chartBlocks(ctx context.Context, charts *cache.ChartData) (*
 	rows, err := retrieveChartBlocks(ctx, pgb.db, charts)
 	if err != nil {
 		return nil, cancel, fmt.Errorf("chartBlocks: %w", pgb.replaceCancelError(err))
+	}
+	return rows, cancel, nil
+}
+
+// minerRanges fetches all miner range data for the active-miner chart.
+// This is the Fetcher half of a pair that make up a cache.ChartUpdater.
+func (pgb *ChainDB) minerRanges(ctx context.Context, _ *cache.ChartData) (*sql.Rows, func(), error) {
+	ctx, cancel := context.WithTimeout(ctx, pgb.queryTimeout)
+	rows, err := retrieveMiners(ctx, pgb.db)
+	if err != nil {
+		return nil, cancel, fmt.Errorf("minerRanges: %w", pgb.replaceCancelError(err))
 	}
 	return rows, cancel, nil
 }
