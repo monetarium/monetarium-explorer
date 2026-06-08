@@ -21,14 +21,21 @@ const (
 
 	BackfillMiners = `
 		INSERT INTO miners (address, first_seen, last_used, blocks_mined)
-		SELECT addr.address, MIN(addr.height)::INT4, MAX(addr.height)::INT4, COUNT(*)::INT4
+		SELECT sub.addr, MIN(sub.height)::INT4, MAX(sub.height)::INT4, COUNT(*)::INT4
 		FROM (
-			SELECT DISTINCT a.address, t.block_height AS height
-			FROM addresses a
-			JOIN transactions t ON a.tx_hash = t.tx_hash
-			WHERE a.tx_type = 102
+			SELECT DISTINCT v.script_addresses AS addr, t.block_height AS height
+			FROM vouts v
+			JOIN transactions t ON v.tx_hash = t.tx_hash
+			WHERE t.tree = 0
+			  AND t.block_index = 0
 			  AND t.is_mainchain = true
-		) addr
-		GROUP BY addr.address
+			  AND v.script_type IN ('pubkeyhash', 'scripthash', 'pubkey', 'pubkeyalt', 'pubkeyhashalt')
+			  AND v.value > 0
+			  AND v.script_addresses IS NOT NULL
+			  AND v.script_addresses NOT IN ('', 'unknown')
+			  AND v.script_addresses NOT LIKE '{%}'
+		) sub
+		WHERE sub.addr IS NOT NULL AND sub.addr != ''
+		GROUP BY sub.addr
 		ON CONFLICT (address) DO NOTHING;`
 )

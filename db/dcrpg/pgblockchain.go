@@ -3924,14 +3924,29 @@ func (pgb *ChainDB) StoreBlock(msgBlock *wire.MsgBlock, isValid, isMainchain,
 	}
 	pgb.lastBlock[blockHash] = blockDbID
 
-	// Extract miner address from the coinbase PoW reward output and upsert.
-	if len(msgBlock.Transactions) > 0 && len(msgBlock.Transactions[0].TxOut) > 0 {
-		coinbaseOut := msgBlock.Transactions[0].TxOut[0]
-		_, addrs := stdscript.ExtractAddrs(coinbaseOut.Version, coinbaseOut.PkScript, pgb.chainParams)
-		for _, addr := range addrs {
-			if uerr := upsertMiner(pgb.db, addr.String(), int64(dbBlock.Height)); uerr != nil {
-				log.Warnf("Failed to upsert miner %s at height %d: %v",
-					addr, dbBlock.Height, uerr)
+	// Extract miner address(es) from the coinbase transaction by iterating all
+	// outputs and picking those with regular (non-stake, non-treasury) scripts.
+	if len(msgBlock.Transactions) > 0 {
+		for _, txOut := range msgBlock.Transactions[0].TxOut {
+			_, addrs := stdscript.ExtractAddrs(txOut.Version, txOut.PkScript, pgb.chainParams)
+			if len(addrs) == 0 {
+				continue
+			}
+			sc := dbtypes.NewScriptClass(stdscript.DetermineScriptType(txOut.Version, txOut.PkScript))
+			// Only regular payment scripts (P2PKH, P2SH, P2PK) are PoW rewards.
+			// Skip stake, treasury, nonstandard, nulldata, multisig, and burn types.
+			switch sc {
+			case dbtypes.SCPubKeyHash, dbtypes.SCScriptHash, dbtypes.SCPubKey,
+				dbtypes.SCPubkeyHashAlt, dbtypes.SCPubkeyAlt:
+				// These are PoW-reward-type outputs.
+			default:
+				continue
+			}
+			for _, addr := range addrs {
+				if uerr := upsertMiner(pgb.db, addr.String(), int64(dbBlock.Height)); uerr != nil {
+					log.Warnf("Failed to upsert miner %s at height %d: %v",
+						addr, dbBlock.Height, uerr)
+				}
 			}
 		}
 	}
