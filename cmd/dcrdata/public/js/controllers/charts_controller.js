@@ -149,7 +149,8 @@ function hashrateYFormatter(div, data) {
   const visibility = data.dygraph.getOption('visibility')
   data.series.forEach((series, i) => {
     if (visibility && visibility[i] === false) return
-    const fmt = i === 0 ? (y) => withBigUnits(y, hashrateUnits) : (y) => Math.round(y)
+    const fmt =
+      i === 0 ? (y) => withBigUnits(y, hashrateUnits) : (y) => Math.round(y).toString().toString()
     addLegendEntryFmt(div, series, fmt)
   })
 }
@@ -777,7 +778,16 @@ export default class extends Controller {
           this.visibility = [this.hashrateRateTarget.checked, this.hashrateMinersTarget.checked]
           gOptions.visibility = this.visibility
           gOptions.axes.y = { valueRange: [null, null] }
-          gOptions.axes.y2 = { axisLabelFormatter: (y) => Math.round(y) }
+          gOptions.axes.y2 = {
+            axisLabelFormatter: (y) => Math.round(y),
+            ticker: (min, max, _pixels, _opts, _dygraph) => {
+              const ticks = []
+              for (let i = Math.ceil(min); i <= Math.floor(max); i++) {
+                ticks.push({ v: i, label: String(i) })
+              }
+              return ticks
+            }
+          }
           yFormatter = hashrateYFormatter
         } else {
           d = zip2D(data, data.rate, 1, data.offset)
