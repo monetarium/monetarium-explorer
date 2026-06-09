@@ -5098,17 +5098,17 @@ func upsertMiner(ctx context.Context, db *sql.DB, address string, height int64) 
 }
 
 // CountMiners returns the total number of unique miner addresses tracked.
-func CountMiners(db *sql.DB) (int64, error) {
+func CountMiners(ctx context.Context, db *sql.DB) (int64, error) {
 	var count int64
-	err := db.QueryRow(internal.CountMiners).Scan(&count)
+	err := db.QueryRowContext(ctx, internal.CountMiners).Scan(&count)
 	return count, err
 }
 
 // CountActiveMiners returns the number of unique miner addresses with last_used
 // at or above the given minimum block height.
-func CountActiveMiners(db *sql.DB, minHeight int64) (int64, error) {
+func CountActiveMiners(ctx context.Context, db *sql.DB, minHeight int64) (int64, error) {
 	var count int64
-	err := db.QueryRow(internal.CountActiveMiners, minHeight).Scan(&count)
+	err := db.QueryRowContext(ctx, internal.CountActiveMiners, minHeight).Scan(&count)
 	return count, err
 }
 

@@ -5372,8 +5372,8 @@ func (pgb *ChainDB) GetBlockByHash(ctx context.Context, hash string) (*wire.MsgB
 
 // ActiveMiners returns the number of unique miner addresses with last_used
 // at or above the given minimum block height.
-func (pgb *ChainDB) ActiveMiners(_ context.Context, minHeight int64) (int64, error) {
-	return CountActiveMiners(pgb.db, minHeight)
+func (pgb *ChainDB) ActiveMiners(ctx context.Context, minHeight int64) (int64, error) {
+	return CountActiveMiners(ctx, pgb.db, minHeight)
 }
 
 // GetBlockSKAFees calculates SKA PoW fees (transaction fees) for a block by fetching

@@ -1266,6 +1266,11 @@ func (charts *ChartData) Chart(chartID, binString, axisString, intervalString st
 	bin := ParseBin(binString)
 	axis := ParseAxis(axisString)
 	interval := ParseInterval(intervalString)
+	// Only the hashrate chart consumes the interval parameter; waste-free
+	// caching means other chart keys should not vary by interval.
+	if chartID != HashRate {
+		interval = DefaultInterval
+	}
 	cache, found, cacheID := charts.getCache(chartID, bin, axis, interval)
 	if found && cache.cacheID == cacheID {
 		return cache.data, nil

@@ -255,9 +255,11 @@ func (u *Upgrader) compatVersion2Upgrades(current, target DatabaseVersion) (bool
 		if _, err := u.db.Exec(internal.CreateMinersTable); err != nil {
 			return false, fmt.Errorf("failed to create miners table: %w", err)
 		}
+		log.Infof("Backfilling miners table from vouts (this may take a while on mainnet)…")
 		if _, err := u.db.Exec(internal.BackfillMiners); err != nil {
 			return false, fmt.Errorf("failed to backfill miners table: %w", err)
 		}
+		log.Infof("Miners table backfill complete.")
 		current.schema = 1
 		if err := updateSchemaVersion(u.db, current.schema); err != nil {
 			return false, fmt.Errorf("failed to update schema version: %w", err)

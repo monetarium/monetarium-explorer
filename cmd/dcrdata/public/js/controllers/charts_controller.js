@@ -150,7 +150,7 @@ function hashrateYFormatter(div, data) {
   data.series.forEach((series, i) => {
     if (visibility && visibility[i] === false) return
     const fmt =
-      i === 0 ? (y) => withBigUnits(y, hashrateUnits) : (y) => Math.round(y).toString().toString()
+      i === 0 ? (y) => withBigUnits(y, hashrateUnits) : (y) => Math.round(y).toString()
     addLegendEntryFmt(div, series, fmt)
   })
 }
