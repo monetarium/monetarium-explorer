@@ -921,6 +921,13 @@ func (charts *ChartData) SetMinerRanges(ranges []MinerRange) {
 // lookback interval using an event sweep over miner range data. The lookback
 // is determined empirically from actual block timestamps rather than a fixed
 // block count, ensuring correctness regardless of block production rate.
+//
+// This is a single-interval approximation: each address stores only
+// (first_seen, last_used), so a miner that mined at heights 100 and then 500
+// is counted as active for every block in between, including idle gaps. The
+// home card's CountActiveMiners query uses the same data and a strict >
+// boundary to roughly align with the chart, but a sub-block-boundary
+// discrepancy (height vs time axis) is inherent to this data model.
 func (charts *ChartData) activeMinersCounts(numBlocks int, interval intervalType) []uint64 {
 	if numBlocks == 0 || len(charts.MinerRanges) == 0 {
 		return make([]uint64, numBlocks)
@@ -950,8 +957,12 @@ func (charts *ChartData) activeMinersCounts(numBlocks int, interval intervalType
 			continue
 		}
 		events = append(events, ev{height: int(m.FirstSeen), delta: 1})
-		if interval != AllInterval && int(m.LastUsed) < numBlocks {
-			tLast := charts.Blocks.Time[m.LastUsed]
+		if interval != AllInterval {
+			used := int(m.LastUsed)
+			if used >= numBlocks {
+				used = numBlocks - 1
+			}
+			tLast := charts.Blocks.Time[used]
 			tExit := tLast + duration
 			exitHeight := sort.Search(len(charts.Blocks.Time), func(i int) bool {
 				return charts.Blocks.Time[i] > tExit
