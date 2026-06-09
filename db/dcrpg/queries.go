@@ -4033,7 +4033,6 @@ func retrieveHeightByTimestamp(ctx context.Context, db *sql.DB, timestamp time.T
 	return
 }
 
-
 // retrieveBlockHeight retrieves the height of the block with the given hash, if
 // it exists (be sure to check error against sql.ErrNoRows!).
 func retrieveBlockHeight(ctx context.Context, db *sql.DB, hash dbtypes.ChainHash) (height int64, err error) {

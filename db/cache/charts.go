@@ -80,8 +80,6 @@ const (
 	DefaultInterval = WeekInterval
 )
 
-
-
 // binLevel specifies the granularity of data.
 type binLevel string
 
