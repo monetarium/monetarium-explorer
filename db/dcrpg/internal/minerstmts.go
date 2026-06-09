@@ -46,6 +46,11 @@ const (
 	RevertOrphanMinerUpdate = `
 		UPDATE miners SET
 			blocks_mined = GREATEST(0, miners.blocks_mined - 1),
+			-- Approximation: when the orphaned height equals last_used, we
+			-- subtract 1 rather than re-querying the miner's actual previous
+			-- mainchain block. The error is bounded by the gap between the
+			-- miner's last two mainchain blocks and auto-corrects on the next
+			-- mining event.
 			last_used = CASE
 				WHEN miners.last_used = $1 AND miners.blocks_mined > 1 THEN $1 - 1
 				ELSE miners.last_used
