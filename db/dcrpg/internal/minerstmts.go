@@ -21,6 +21,8 @@ const (
 
 	SelectMiners = `SELECT first_seen, last_used FROM miners;`
 
+	IndexMinersTableOnLastUsed = `CREATE INDEX IF NOT EXISTS ` + IndexOfMinersTableOnLastUsed + ` ON miners (last_used);`
+
 	BackfillMiners = `
 		INSERT INTO miners (address, first_seen, last_used, blocks_mined)
 		SELECT sub.addr, MIN(sub.height)::INT4, MAX(sub.height)::INT4, COUNT(*)::INT4

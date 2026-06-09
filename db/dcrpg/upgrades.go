@@ -7,6 +7,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"time"
 
 	"github.com/monetarium/monetarium-explorer/db/dbtypes"
 	"github.com/monetarium/monetarium-explorer/db/dcrpg/internal"
@@ -255,8 +256,13 @@ func (u *Upgrader) compatVersion2Upgrades(current, target DatabaseVersion) (bool
 		if _, err := u.db.Exec(internal.CreateMinersTable); err != nil {
 			return false, fmt.Errorf("failed to create miners table: %w", err)
 		}
+		if _, err := u.db.Exec(internal.IndexMinersTableOnLastUsed); err != nil {
+			return false, fmt.Errorf("failed to create miners index: %w", err)
+		}
 		log.Infof("Backfilling miners table from vouts (this may take a while on mainnet)…")
-		if _, err := u.db.Exec(internal.BackfillMiners); err != nil {
+		backfillCtx, backfillCancel := context.WithTimeout(u.ctx, 30*time.Minute)
+		defer backfillCancel()
+		if _, err := u.db.ExecContext(backfillCtx, internal.BackfillMiners); err != nil {
 			return false, fmt.Errorf("failed to backfill miners table: %w", err)
 		}
 		log.Infof("Miners table backfill complete.")
