@@ -66,7 +66,6 @@ const (
 	// miners table
 
 	IndexOfMinersTableOnLastUsed = "ix_miners_last_used"
-
 )
 
 // AddressesIndexNames are the names of the indexes on the addresses table.
