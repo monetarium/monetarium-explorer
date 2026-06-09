@@ -890,7 +890,6 @@ export default class extends Controller {
       this.setActiveOptionBtn(this.settings.interval, this.intervalOptionTargets)
       this.setActiveOptionBtn(this.settings.axis, this.axisOptionTargets)
       const chartResponse = await requestJSON(url)
-      console.log('got api data', chartResponse, this, selection)
       selectedChart = selection
       this.plotGraph(selection, chartResponse)
       this.query.replace(this.settings)
