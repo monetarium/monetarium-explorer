@@ -17,7 +17,7 @@ const (
 
 	CountMiners = `SELECT COUNT(*) FROM miners;`
 
-	CountActiveMiners = `SELECT COUNT(*) FROM miners WHERE last_used >= $1;`
+	CountActiveMiners = `SELECT COUNT(*) FROM miners WHERE last_used > $1;`
 
 	SelectMiners = `SELECT first_seen, last_used FROM miners;`
 
