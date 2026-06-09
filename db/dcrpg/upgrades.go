@@ -260,7 +260,7 @@ func (u *Upgrader) compatVersion2Upgrades(current, target DatabaseVersion) (bool
 			return false, fmt.Errorf("failed to create miners index: %w", err)
 		}
 		log.Infof("Backfilling miners table from vouts (this may take a while on mainnet)…")
-		backfillCtx, backfillCancel := context.WithTimeout(u.ctx, 30*time.Minute)
+		backfillCtx, backfillCancel := context.WithTimeout(u.ctx, 1*time.Hour)
 		defer backfillCancel()
 		if _, err := u.db.ExecContext(backfillCtx, internal.BackfillMiners); err != nil {
 			return false, fmt.Errorf("failed to backfill miners table: %w", err)

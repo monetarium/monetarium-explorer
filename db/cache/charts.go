@@ -946,8 +946,11 @@ func (charts *ChartData) activeMinersCounts(numBlocks int, interval intervalType
 	}
 	events := make([]ev, 0, 2*len(charts.MinerRanges))
 	for _, m := range charts.MinerRanges {
+		if int(m.FirstSeen) >= numBlocks {
+			continue
+		}
 		events = append(events, ev{height: int(m.FirstSeen), delta: 1})
-		if interval != AllInterval && int(m.LastUsed) < len(charts.Blocks.Time) {
+		if interval != AllInterval && int(m.LastUsed) < numBlocks {
 			tLast := charts.Blocks.Time[m.LastUsed]
 			tExit := tLast + duration
 			exitHeight := sort.Search(len(charts.Blocks.Time), func(i int) bool {
@@ -1678,7 +1681,10 @@ func hashRateChart(charts *ChartData, bin binLevel, axis axisType, interval inte
 
 		numBlocks := len(charts.Blocks.Time)
 		activeFull := charts.activeMinersCounts(numBlocks, interval)
-		active := ChartUints(activeFull[HashrateAvgLength:])
+		active := ChartUints(activeFull)
+		if numBlocks > HashrateAvgLength {
+			active = activeFull[HashrateAvgLength:]
+		}
 
 		switch axis {
 		case HeightAxis:

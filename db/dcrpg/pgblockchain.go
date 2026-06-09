@@ -1350,6 +1350,9 @@ func (pgb *ChainDB) GetHeightByTimestamp(ctx context.Context, timestamp time.Tim
 	ctx, cancel := context.WithTimeout(ctx, pgb.queryTimeout)
 	defer cancel()
 	height, err := retrieveHeightByTimestamp(ctx, pgb.db, timestamp)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, nil
+	}
 	return height, pgb.replaceCancelError(err)
 }
 
@@ -3769,6 +3772,22 @@ func (pgb *ChainDB) TipToSideChain(mainRoot string) (tipHashStr string, blocksMo
 		ticketsUpdated += rowsUpdated
 		log.Debugf("UpdateTicketsMainchain: %v", time.Since(now))
 
+		// 8. Miners. Decrement blocks_mined for any miner addresses found in
+		// this block's coinbase output, adjusting last_used if necessary.
+		now = time.Now()
+		orphanHeight, err := retrieveBlockHeight(pgb.ctx, pgb.db, tipHash)
+		if err != nil {
+			log.Errorf("Failed to get height for orphan block %s: %v", tipHash, err)
+		} else {
+			if _, err := pgb.db.ExecContext(pgb.ctx, internal.RevertOrphanMinerUpdate, orphanHeight); err != nil {
+				log.Errorf("Failed to revert miners for orphan block at height %d: %v", orphanHeight, err)
+			}
+			if _, err := pgb.db.ExecContext(pgb.ctx, internal.CleanupMinerZeros); err != nil {
+				log.Errorf("Failed to clean up zero-count miner rows: %v", err)
+			}
+		}
+		log.Debugf("RevertMiners: %v", time.Since(now))
+
 		// move on to next block
 		tipHash = previousHash
 		tipHashStr = tipHash.String()
@@ -3793,6 +3812,7 @@ func (pgb *ChainDB) TipToSideChain(mainRoot string) (tipHashStr string, blocksMo
 
 	log.Debugf("Reorg orphaned: %d blocks, %d txns, %d vins, %d addresses, %d votes, %d tickets",
 		blocksMoved, txnsUpdated, vinsUpdated, addrsUpdated, votesUpdated, ticketsUpdated)
+	log.Infof("Miner blocks reverted for %d orphaned block(s).", blocksMoved)
 
 	return
 }
@@ -3952,7 +3972,7 @@ func (pgb *ChainDB) StoreBlock(msgBlock *wire.MsgBlock, isValid, isMainchain,
 
 	// Extract miner address(es) from the coinbase transaction by iterating all
 	// outputs and picking those with regular (non-stake, non-treasury) scripts.
-	if len(msgBlock.Transactions) > 0 {
+	if isMainchain && len(msgBlock.Transactions) > 0 {
 		for _, txOut := range msgBlock.Transactions[0].TxOut {
 			_, addrs := stdscript.ExtractAddrs(txOut.Version, txOut.PkScript, pgb.chainParams)
 			if len(addrs) == 0 {

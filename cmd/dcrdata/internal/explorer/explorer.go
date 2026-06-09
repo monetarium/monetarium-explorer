@@ -534,15 +534,15 @@ func (exp *explorerUI) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgB
 	}
 
 	// Compute the week-lookback threshold for active miner count.
-	minHeight, err := exp.dataSource.GetHeightByTimestamp(ctx, newBlockData.BlockTime.T.Add(-7*24*time.Hour))
+	minHeight := int64(0)
+	lookback := newBlockData.BlockTime.T.Add(-7 * 24 * time.Hour)
+	activeMinersHeight, err := exp.dataSource.GetHeightByTimestamp(ctx, lookback)
 	if err != nil {
 		log.Warnf("Failed to query active miner count height: %v", err)
-		minHeight = 0
+	} else {
+		minHeight = activeMinersHeight
 	}
 	activeMiners, err := exp.dataSource.ActiveMiners(ctx, minHeight)
-	if err != nil {
-		log.Warnf("Failed to query active miner count: %v", err)
-	}
 
 	// Update pageData with block data and chain (home) info.
 	p := exp.pageData
@@ -568,7 +568,9 @@ func (exp *explorerUI) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgB
 	p.HomeInfo.NBlockSubsidy.PoS = blockData.ExtraInfo.NextBlockSubsidy.PoS
 	p.HomeInfo.NBlockSubsidy.PoW = blockData.ExtraInfo.NextBlockSubsidy.PoW
 	p.HomeInfo.NBlockSubsidy.Total = blockData.ExtraInfo.NextBlockSubsidy.Total
-	p.HomeInfo.ActiveMiners = activeMiners
+	if err == nil {
+		p.HomeInfo.ActiveMiners = activeMiners
+	}
 
 	// Total reward = subsidy + mining fees (~16 + <1 VAR)
 	// MiningFee from blockData (computed in collector)

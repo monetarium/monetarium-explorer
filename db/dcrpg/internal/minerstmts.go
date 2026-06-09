@@ -42,4 +42,26 @@ const (
 		WHERE sub.addr IS NOT NULL AND sub.addr != ''
 		GROUP BY sub.addr
 		ON CONFLICT (address) DO NOTHING;`
+
+	RevertOrphanMinerUpdate = `
+		UPDATE miners SET
+			blocks_mined = GREATEST(0, miners.blocks_mined - 1),
+			last_used = CASE
+				WHEN miners.last_used = $1 AND miners.blocks_mined > 1 THEN $1 - 1
+				ELSE miners.last_used
+			END
+		WHERE address IN (
+			SELECT DISTINCT v.script_addresses
+			FROM vouts v
+			JOIN transactions t ON v.tx_hash = t.tx_hash
+			WHERE t.block_height = $1
+			  AND t.tree = 0 AND t.block_index = 0
+			  AND v.script_type IN ('pubkeyhash', 'scripthash', 'pubkey', 'pubkeyalt', 'pubkeyhashalt')
+			  AND v.value > 0
+			  AND v.script_addresses IS NOT NULL
+			  AND v.script_addresses NOT IN ('', 'unknown')
+			  AND v.script_addresses NOT LIKE '{%}'
+		);`
+
+	CleanupMinerZeros = `DELETE FROM miners WHERE blocks_mined <= 0;`
 )
