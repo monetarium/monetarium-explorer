@@ -60,6 +60,8 @@ type DataSource interface {
 	VARCoinSupply(ctx context.Context) (*exptypes.VARCoinSupply, error)
 	SKACoinSupply(ctx context.Context) ([]*exptypes.SKACoinSupplyEntry, error)
 	GetVoteTicketDataByBlock(ctx context.Context, blockHash string) ([]dbtypes.VoteTicketData, error)
+	GetHeightByTimestamp(ctx context.Context, timestamp time.Time) (int64, error)
+	ActiveMiners(ctx context.Context, minHeight int64) (int64, error)
 }
 
 // State represents the current state of block chain.
@@ -686,6 +688,24 @@ func (psh *PubSubHub) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgBl
 	difficulty := blockData.Header.Difficulty
 	hashrate := dbtypes.CalculateHashRate(difficulty, targetTimePerBlock)
 
+	// Active miner count within a week-lookback window — query BEFORE
+	// locking so WS readers aren't blocked by DB round-trips.
+	var activeMinersCount int64
+	var activeMinersOK bool
+	{
+		minHeight := int64(0)
+		lookback := newBlockData.BlockTime.T.Add(-7 * 24 * time.Hour)
+		if h, err := psh.sourceBase.GetHeightByTimestamp(ctx, lookback); err != nil {
+			log.Warnf("Failed to query active miner count height: %v", err)
+		} else {
+			minHeight = h
+		}
+		if count, err := psh.sourceBase.ActiveMiners(ctx, minHeight); err == nil {
+			activeMinersCount = count
+			activeMinersOK = true
+		}
+	}
+
 	// If BlockData contains non-nil PoolInfo, compute actual percentage of DCR
 	// supply staked.
 	stakePerc := 45.0
@@ -717,6 +737,9 @@ func (psh *PubSubHub) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgBl
 	p.GeneralInfo.NBlockSubsidy.PoS = blockData.ExtraInfo.NextBlockSubsidy.PoS
 	p.GeneralInfo.NBlockSubsidy.PoW = blockData.ExtraInfo.NextBlockSubsidy.PoW
 	p.GeneralInfo.NBlockSubsidy.Total = blockData.ExtraInfo.NextBlockSubsidy.Total
+	if activeMinersOK {
+		p.GeneralInfo.ActiveMiners = activeMinersCount
+	}
 
 	// Total reward = subsidy + mining fees (~16 + <1 VAR)
 	// MiningFee from blockData (computed in collector)

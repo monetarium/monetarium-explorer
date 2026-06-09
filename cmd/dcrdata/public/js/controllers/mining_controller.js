@@ -14,7 +14,8 @@ export default class extends Controller {
       'rewardIdx',
       'powSkaRewards',
       'powSubsidy',
-      'powFee'
+      'powFee',
+      'activeMiners'
     ]
   }
 
@@ -47,6 +48,11 @@ export default class extends Controller {
     }
 
     this._renderPoWSkaRewards(ex.pow_ska_rewards)
+
+    const n = ex.active_miners
+    if (n != null && this.hasActiveMinersTarget) {
+      this.activeMinersTarget.textContent = `Mining: ${n} ${n === 1 ? 'miner' : 'miners'}`
+    }
   }
 
   _renderPoWSkaRewards(rewards) {

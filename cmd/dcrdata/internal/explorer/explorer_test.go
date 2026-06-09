@@ -125,6 +125,9 @@ func (m *mockDataSource) GetExplorerBlocks(ctx context.Context, start int, end i
 func (m *mockDataSource) GetBlockHeight(ctx context.Context, hash string) (int64, error) {
 	return 0, nil
 }
+func (m *mockDataSource) GetHeightByTimestamp(ctx context.Context, timestamp time.Time) (int64, error) {
+	return 0, nil
+}
 func (m *mockDataSource) GetBlockHash(ctx context.Context, idx int64) (string, error) {
 	if h, ok := m.heights[idx]; ok {
 		return h, nil
@@ -189,6 +192,10 @@ func (m *mockDataSource) GetBlockSKAFees(ctx context.Context, height int64) (map
 	return nil, nil
 }
 
+func (m *mockDataSource) ActiveMiners(_ context.Context, _ int64) (int64, error) {
+	return 0, nil
+}
+
 // TestStore_PoWSKARewardsFromMFMarker verifies that "PoW SKA Fee Reward" is
 // derived from the authoritative "MF"-marked SSFee split
 // (ExtraInfo.SSFeeTotalsByCoin[ct].PoW) per issue #273, and that the legacy
@@ -208,7 +215,11 @@ func TestStore_PoWSKARewardsFromMFMarker(t *testing.T) {
 			ChainParams: params,
 			wsHub:       NewWebsocketHub(),
 			pageData: &pageData{
-				HomeInfo: &explorerTypes.HomeInfo{},
+				HomeInfo: &explorerTypes.HomeInfo{
+					Params: explorerTypes.ChainParams{
+						BlockTime: 60,
+					},
+				},
 			},
 			invs: &explorerTypes.MempoolInfo{
 				MempoolShort: explorerTypes.MempoolShort{

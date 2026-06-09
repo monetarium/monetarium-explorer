@@ -19,8 +19,8 @@ const atomsToVAR = 1e-8
 const windowScales = ['ticket-price', 'pow-difficulty', 'missed-votes']
 const hybridScales = ['privacy-participation']
 const lineScales = ['ticket-price', 'privacy-participation']
-const modeScales = ['ticket-price']
-const multiYAxisChart = ['ticket-price', 'privacy-participation']
+const modeScales = ['ticket-price', 'hashrate']
+const multiYAxisChart = ['ticket-price', 'privacy-participation', 'hashrate']
 // index 0 represents y1 and 1 represents y2 axes.
 const yValueRanges = { 'ticket-price': [1] }
 const chainworkUnits = ['H', 'kH', 'MH', 'GH', 'TH', 'PH', 'EH', 'ZH', 'YH']
@@ -143,6 +143,15 @@ function legendFormatter(data) {
   yFormatter(div, data, data.dygraph.getOption('legendIndex'))
   dompurify.sanitize(div, { IN_PLACE: true, FORBID_TAGS: ['svg', 'math'] })
   return div.innerHTML
+}
+
+function hashrateYFormatter(div, data) {
+  const visibility = data.dygraph.getOption('visibility')
+  data.series.forEach((series, i) => {
+    if (visibility && visibility[i] === false) return
+    const fmt = i === 0 ? (y) => withBigUnits(y, hashrateUnits) : (y) => Math.round(y).toString()
+    addLegendEntryFmt(div, series, fmt)
+  })
 }
 
 function nightModeOptions(nightModeOn) {
@@ -345,6 +354,8 @@ export default class extends Controller {
       'scaleSelector',
       'ticketsPurchase',
       'ticketsPrice',
+      'hashrateRate',
+      'hashrateMiners',
       'vSelectorItem',
       'vSelector',
       'binSize',
@@ -352,6 +363,8 @@ export default class extends Controller {
       'legendMarker',
       'modeSelector',
       'modeOption',
+      'intervalSelector',
+      'intervalOption',
       'rawDataURL'
     ]
   }
@@ -381,7 +394,15 @@ export default class extends Controller {
       return node
     }
 
-    this.settings = TurboQuery.nullTemplate(['chart', 'zoom', 'scale', 'bin', 'axis', 'visibility'])
+    this.settings = TurboQuery.nullTemplate([
+      'chart',
+      'zoom',
+      'scale',
+      'bin',
+      'axis',
+      'visibility',
+      'interval'
+    ])
     this.settings.mode = this.data.get('mode')
     this.query.update(this.settings)
     this.settings.chart = this.settings.chart || 'ticket-price'
@@ -738,15 +759,46 @@ export default class extends Controller {
         break
 
       case 'hashrate': // Network hashrate over time
-        d = zip2D(data, data.rate, 1, data.offset)
-        {
-          const max = data.rate.length ? data.rate.reduce((a, b) => Math.max(a, b), 0) : 0
-          const p = unitPrefix(max)
-          const label = p ? `Network Hashrate (${p}H/s)` : 'Network Hashrate (H/s)'
-          assign(gOptions, mapDygraphOptions(d, [xlabel, label], false, label, true, false))
+        if (data.active_miners && data.active_miners.length) {
+          d = zip2D(data, data.rate, 1, data.offset)
+          const miners = zip2D(data, data.active_miners, 1, data.offset)
+          d = d.map((pt, i) => [pt[0], pt[1], miners[i][1]])
+          {
+            const max = data.rate.length ? data.rate.reduce((a, b) => Math.max(a, b), 0) : 0
+            const p = unitPrefix(max)
+            const label = p ? `Network Hashrate (${p}H/s)` : 'Network Hashrate (H/s)'
+            assign(
+              gOptions,
+              mapDygraphOptions(d, [xlabel, 'Hashrate', 'Active Miners'], false, label, true, false)
+            )
+          }
+          gOptions.y2label = 'Active Miners'
+          gOptions.series = { 'Active Miners': { axis: 'y2' } }
+          this.visibility = [this.hashrateRateTarget.checked, this.hashrateMinersTarget.checked]
+          gOptions.visibility = this.visibility
+          gOptions.axes.y = { valueRange: [null, null] }
+          gOptions.axes.y2 = {
+            axisLabelFormatter: (y) => Math.round(y),
+            ticker: (min, max, _pixels, _opts, _dygraph) => {
+              const ticks = []
+              for (let i = Math.ceil(min); i <= Math.floor(max); i++) {
+                ticks.push({ v: i, label: String(i) })
+              }
+              return ticks
+            }
+          }
+          yFormatter = hashrateYFormatter
+        } else {
+          d = zip2D(data, data.rate, 1, data.offset)
+          {
+            const max = data.rate.length ? data.rate.reduce((a, b) => Math.max(a, b), 0) : 0
+            const p = unitPrefix(max)
+            const label = p ? `Network Hashrate (${p}H/s)` : 'Network Hashrate (H/s)'
+            assign(gOptions, mapDygraphOptions(d, [xlabel, label], false, label, true, false))
+          }
+          gOptions.axes.y = { valueRange: [null, null] }
+          yFormatter = hashrateYFormatter
         }
-        gOptions.axes.y = { valueRange: [null, null] }
-        yFormatter = customYFormatter((y) => withBigUnits(y, hashrateUnits))
         break
 
       case 'missed-votes':
@@ -769,7 +821,7 @@ export default class extends Controller {
     }
 
     const baseURL = `${this.query.url.protocol}//${this.query.url.host}`
-    this.rawDataURLTarget.textContent = `${baseURL}/api/chart/${chartName}?axis=${this.settings.axis}&bin=${this.settings.bin}`
+    this.rawDataURLTarget.textContent = `${baseURL}/api/chart/${chartName}?axis=${this.settings.axis}&bin=${this.settings.bin}&interval=${this.settings.interval}`
 
     this.chartsView.plotter_.clear()
     this.chartsView.updateOptions(gOptions, false)
@@ -797,6 +849,11 @@ export default class extends Controller {
       this.updateVSelector(selection)
     } else {
       this.vSelectorTarget.classList.add('d-hide')
+    }
+    if (selection === 'hashrate') {
+      this.intervalSelectorTarget.classList.remove('d-hide')
+    } else {
+      this.intervalSelectorTarget.classList.add('d-hide')
     }
     if (
       selectedChart !== selection ||
@@ -828,9 +885,11 @@ export default class extends Controller {
       this.settings.axis = this.selectedAxis()
       if (!this.settings.axis) this.settings.axis = 'time' // Set the default.
       url += `&axis=${this.settings.axis}`
+      if (!this.settings.interval) this.settings.interval = 'week'
+      url += `&interval=${this.settings.interval}`
+      this.setActiveOptionBtn(this.settings.interval, this.intervalOptionTargets)
       this.setActiveOptionBtn(this.settings.axis, this.axisOptionTargets)
       const chartResponse = await requestJSON(url)
-      console.log('got api data', chartResponse, this, selection)
       selectedChart = selection
       this.plotGraph(selection, chartResponse)
       this.query.replace(this.settings)
@@ -956,6 +1015,17 @@ export default class extends Controller {
     this.query.replace(this.settings)
   }
 
+  async setIntervalOption(e) {
+    const target = e.srcElement || e.target
+    const option = target ? target.dataset.option : e
+    if (!option) return
+    this.setActiveOptionBtn(option, this.intervalOptionTargets)
+    if (!target) return // Exit if running for the first time.
+    this.settings.interval = option
+    selectedChart = null // Force re-fetch
+    await this.selectChart()
+  }
+
   async setAxis(e) {
     const target = e.srcElement || e.target
     const option = target ? target.dataset.option : e
@@ -1001,6 +1071,13 @@ export default class extends Controller {
         this.ticketsPriceTarget.checked = this.visibility[0]
         this.ticketsPurchaseTarget.checked = this.visibility[1]
         break
+      case 'hashrate':
+        if (this.visibility.length !== 2) {
+          this.visibility = [true, this.hashrateMinersTarget.checked]
+        }
+        this.hashrateRateTarget.checked = this.visibility[0]
+        this.hashrateMinersTarget.checked = this.visibility[1]
+        break
       default:
         return
     }
@@ -1016,6 +1093,13 @@ export default class extends Controller {
           return
         }
         this.visibility = [this.ticketsPriceTarget.checked, this.ticketsPurchaseTarget.checked]
+        break
+      case 'hashrate':
+        if (!this.hashrateRateTarget.checked && !this.hashrateMinersTarget.checked) {
+          e.currentTarget.checked = true
+          return
+        }
+        this.visibility = [this.hashrateRateTarget.checked, this.hashrateMinersTarget.checked]
         break
       default:
         return

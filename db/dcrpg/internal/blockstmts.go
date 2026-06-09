@@ -110,6 +110,9 @@ const (
 	SelectBlockTimeByHeight = `SELECT time FROM blocks
 		WHERE height = $1 AND is_mainchain = true;`
 
+	SelectHeightByTimestamp = `SELECT height FROM blocks
+		WHERE time <= $1 AND is_mainchain = true ORDER BY time DESC LIMIT 1;`
+
 	// RetrieveBestBlockHeightAny = `SELECT id, hash, height FROM blocks
 	// 	ORDER BY height DESC LIMIT 1;`
 	RetrieveBestBlockHeight = `SELECT id, hash, height FROM blocks

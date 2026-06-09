@@ -22,6 +22,7 @@ var createTableStatements = [][2]string{
 	{"addresses", internal.CreateAddressTable},
 	{"tickets", internal.CreateTicketsTable},
 	{"votes", internal.CreateVotesTable},
+	{"miners", internal.CreateMinersTable},
 	{"misses", internal.CreateMissesTable},
 	{"agendas", internal.CreateAgendasTable},
 	{"agenda_votes", internal.CreateAgendaVotesTable},

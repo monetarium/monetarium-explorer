@@ -1001,6 +1001,12 @@ func (pgb *ChainDB) RegisterCharts(charts *cache.ChartData) {
 		Appender: appendPoolStats,
 	})
 
+	charts.AddUpdater(cache.ChartUpdater{
+		Tag:      "miner ranges",
+		Fetcher:  pgb.minerRanges,
+		Appender: appendMinerRanges,
+	})
+
 	// Load SKA coin supply data into charts.SKASupply
 	if err := pgb.skaSupplyUpdater(charts); err != nil {
 		log.Errorf("failed to load SKA supply data into charts: %v", err)
@@ -1336,6 +1342,18 @@ func (pgb *ChainDB) BlockTimeByHeight(ctx context.Context, height int64) (int64,
 	defer cancel()
 	time, err := retrieveBlockTimeByHeight(ctx, pgb.db, height)
 	return time.UNIX(), pgb.replaceCancelError(err)
+}
+
+// GetHeightByTimestamp queries the DB for the height of the mainchain block at or
+// immediately before the given timestamp.
+func (pgb *ChainDB) GetHeightByTimestamp(ctx context.Context, timestamp time.Time) (int64, error) {
+	ctx, cancel := context.WithTimeout(ctx, pgb.queryTimeout)
+	defer cancel()
+	height, err := retrieveHeightByTimestamp(ctx, pgb.db, timestamp)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, nil
+	}
+	return height, pgb.replaceCancelError(err)
 }
 
 // VotesInBlock returns the number of votes mined in the block with the
@@ -3425,6 +3443,17 @@ func (pgb *ChainDB) chartBlocks(ctx context.Context, charts *cache.ChartData) (*
 	return rows, cancel, nil
 }
 
+// minerRanges fetches all miner range data for the active-miner chart.
+// This is the Fetcher half of a pair that make up a cache.ChartUpdater.
+func (pgb *ChainDB) minerRanges(ctx context.Context, _ *cache.ChartData) (*sql.Rows, func(), error) {
+	ctx, cancel := context.WithTimeout(ctx, pgb.queryTimeout)
+	rows, err := retrieveMiners(ctx, pgb.db)
+	if err != nil {
+		return nil, cancel, fmt.Errorf("minerRanges: %w", pgb.replaceCancelError(err))
+	}
+	return rows, cancel, nil
+}
+
 // coinSupply fetches the coin supply chart data from retrieveCoinSupply.
 // This is the Fetcher half of a pair that make up a cache.ChartUpdater. The
 // Appender half is appendCoinSupply.
@@ -3743,6 +3772,22 @@ func (pgb *ChainDB) TipToSideChain(mainRoot string) (tipHashStr string, blocksMo
 		ticketsUpdated += rowsUpdated
 		log.Debugf("UpdateTicketsMainchain: %v", time.Since(now))
 
+		// 8. Miners. Decrement blocks_mined for any miner addresses found in
+		// this block's coinbase output, adjusting last_used if necessary.
+		now = time.Now()
+		orphanHeight, err := retrieveBlockHeight(pgb.ctx, pgb.db, tipHash)
+		if err != nil {
+			log.Errorf("Failed to get height for orphan block %s: %v", tipHash, err)
+		} else {
+			if _, err := pgb.db.ExecContext(pgb.ctx, internal.RevertOrphanMinerUpdate, orphanHeight, tipHash); err != nil {
+				log.Errorf("Failed to revert miners for orphan block at height %d: %v", orphanHeight, err)
+			}
+			if _, err := pgb.db.ExecContext(pgb.ctx, internal.CleanupMinerZeros); err != nil {
+				log.Errorf("Failed to clean up zero-count miner rows: %v", err)
+			}
+		}
+		log.Debugf("RevertMiners: %v", time.Since(now))
+
 		// move on to next block
 		tipHash = previousHash
 		tipHashStr = tipHash.String()
@@ -3767,6 +3812,7 @@ func (pgb *ChainDB) TipToSideChain(mainRoot string) (tipHashStr string, blocksMo
 
 	log.Debugf("Reorg orphaned: %d blocks, %d txns, %d vins, %d addresses, %d votes, %d tickets",
 		blocksMoved, txnsUpdated, vinsUpdated, addrsUpdated, votesUpdated, ticketsUpdated)
+	log.Infof("Miner blocks reverted for %d orphaned block(s).", blocksMoved)
 
 	return
 }
@@ -3923,6 +3969,33 @@ func (pgb *ChainDB) StoreBlock(msgBlock *wire.MsgBlock, isValid, isMainchain,
 		return
 	}
 	pgb.lastBlock[blockHash] = blockDbID
+
+	// Extract miner address(es) from the coinbase transaction by iterating all
+	// outputs and picking those with regular (non-stake, non-treasury) scripts.
+	if isMainchain && len(msgBlock.Transactions) > 0 {
+		for _, txOut := range msgBlock.Transactions[0].TxOut {
+			_, addrs := stdscript.ExtractAddrs(txOut.Version, txOut.PkScript, pgb.chainParams)
+			if len(addrs) == 0 {
+				continue
+			}
+			sc := dbtypes.NewScriptClass(stdscript.DetermineScriptType(txOut.Version, txOut.PkScript))
+			// Only regular payment scripts (P2PKH, P2SH, P2PK) are PoW rewards.
+			// Skip stake, treasury, nonstandard, nulldata, multisig, and burn types.
+			switch sc {
+			case dbtypes.SCPubKeyHash, dbtypes.SCScriptHash, dbtypes.SCPubKey,
+				dbtypes.SCPubkeyHashAlt, dbtypes.SCPubkeyAlt:
+				// These are PoW-reward-type outputs.
+			default:
+				continue
+			}
+			for _, addr := range addrs {
+				if uerr := upsertMiner(pgb.ctx, pgb.db, addr.String(), int64(dbBlock.Height)); uerr != nil {
+					log.Warnf("Failed to upsert miner %s at height %d: %v",
+						addr, dbBlock.Height, uerr)
+				}
+			}
+		}
+	}
 
 	// Insert the block in the block_chain table with the previous block hash
 	// and an empty string for the next block hash, which may be updated when a
@@ -5315,6 +5388,12 @@ func (pgb *ChainDB) GetBlockByHash(ctx context.Context, hash string) (*wire.MsgB
 		return nil, err
 	}
 	return pgb.Client.GetBlock(ctx, blockHash)
+}
+
+// ActiveMiners returns the number of unique miner addresses with last_used
+// strictly above the given minimum block height.
+func (pgb *ChainDB) ActiveMiners(ctx context.Context, minHeight int64) (int64, error) {
+	return CountActiveMiners(ctx, pgb.db, minHeight)
 }
 
 // GetBlockSKAFees calculates SKA PoW fees (transaction fees) for a block by fetching
