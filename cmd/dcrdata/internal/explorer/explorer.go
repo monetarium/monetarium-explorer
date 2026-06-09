@@ -101,6 +101,7 @@ type explorerDataSource interface {
 	GetExplorerBlock(ctx context.Context, hash string) *types.BlockInfo
 	GetExplorerBlocks(ctx context.Context, start int, end int) []*types.BlockBasic
 	GetBlockHeight(ctx context.Context, hash string) (int64, error)
+	GetHeightByTimestamp(ctx context.Context, timestamp time.Time) (int64, error)
 	GetBlockHash(ctx context.Context, idx int64) (string, error)
 	GetExplorerTx(ctx context.Context, txid string) *types.TxInfo
 	GetTip(context.Context) (*types.WebBasicBlock, error)
@@ -533,13 +534,9 @@ func (exp *explorerUI) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgB
 	}
 
 	// Compute the week-lookback threshold for active miner count.
-	weekNs := int64(7 * 24 * time.Hour)
-	var weekBlocks int64
-	if exp.pageData.HomeInfo.Params.BlockTime > 0 {
-		weekBlocks = weekNs / exp.pageData.HomeInfo.Params.BlockTime
-	}
-	minHeight := newBlockData.Height - weekBlocks
-	if minHeight < 0 {
+	minHeight, err := exp.dataSource.GetHeightByTimestamp(ctx, newBlockData.BlockTime.T.Add(-7*24*time.Hour))
+	if err != nil {
+		log.Warnf("Failed to query active miner count height: %v", err)
 		minHeight = 0
 	}
 	activeMiners, err := exp.dataSource.ActiveMiners(ctx, minHeight)

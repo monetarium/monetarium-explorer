@@ -4020,11 +4020,19 @@ func retrieveBlockHash(ctx context.Context, db *sql.DB, idx int64) (hash dbtypes
 }
 
 // retrieveBlockTimeByHeight retrieves time hash of the main chain block at the
-// given height, if it exists (be sure to check error against sql.ErrNoRows!).
+// specified height.
 func retrieveBlockTimeByHeight(ctx context.Context, db *sql.DB, idx int64) (time dbtypes.TimeDef, err error) {
 	err = db.QueryRowContext(ctx, internal.SelectBlockTimeByHeight, idx).Scan(&time)
 	return
 }
+
+// retrieveHeightByTimestamp retrieves the height of the main chain block at or
+// immediately before the specified timestamp.
+func retrieveHeightByTimestamp(ctx context.Context, db *sql.DB, timestamp time.Time) (height int64, err error) {
+	err = db.QueryRowContext(ctx, internal.SelectHeightByTimestamp, timestamp).Scan(&height)
+	return
+}
+
 
 // retrieveBlockHeight retrieves the height of the block with the given hash, if
 // it exists (be sure to check error against sql.ErrNoRows!).
@@ -5085,8 +5093,8 @@ func retrieveDiff(ctx context.Context, db *sql.DB, timestamp int64) (float64, er
 }
 
 // upsertMiner inserts or updates a miner address record.
-func upsertMiner(db *sql.DB, address string, height int64) error {
-	_, err := db.Exec(internal.UpsertMinerRow, address, height, height)
+func upsertMiner(ctx context.Context, db *sql.DB, address string, height int64) error {
+	_, err := db.ExecContext(ctx, internal.UpsertMinerRow, address, height, height)
 	return err
 }
 

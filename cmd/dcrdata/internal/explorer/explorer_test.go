@@ -125,6 +125,9 @@ func (m *mockDataSource) GetExplorerBlocks(ctx context.Context, start int, end i
 func (m *mockDataSource) GetBlockHeight(ctx context.Context, hash string) (int64, error) {
 	return 0, nil
 }
+func (m *mockDataSource) GetHeightByTimestamp(ctx context.Context, timestamp time.Time) (int64, error) {
+	return 0, nil
+}
 func (m *mockDataSource) GetBlockHash(ctx context.Context, idx int64) (string, error) {
 	if h, ok := m.heights[idx]; ok {
 		return h, nil

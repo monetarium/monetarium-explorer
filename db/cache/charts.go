@@ -80,12 +80,7 @@ const (
 	DefaultInterval = WeekInterval
 )
 
-// Block lookback windows for active miner rolling count (Monetarium: ~144 blocks/day).
-const (
-	blocksPerDay  = 144
-	blocksPerWeek = 1008
-	blocksPerYear = 52560
-)
+
 
 // binLevel specifies the granularity of data.
 type binLevel string
@@ -925,23 +920,25 @@ func (charts *ChartData) SetMinerRanges(ranges []MinerRange) {
 }
 
 // activeMinersCounts computes the per-block active miner count for the given
-// lookback interval using an event sweep over miner range data.
+// lookback interval using an event sweep over miner range data. The lookback
+// is determined empirically from actual block timestamps rather than a fixed
+// block count, ensuring correctness regardless of block production rate.
 func (charts *ChartData) activeMinersCounts(numBlocks int, interval intervalType) []uint64 {
 	if numBlocks == 0 || len(charts.MinerRanges) == 0 {
 		return make([]uint64, numBlocks)
 	}
 
-	var lookback uint64
+	var duration uint64
 	if interval != AllInterval {
 		switch interval {
 		case YearInterval:
-			lookback = blocksPerYear
+			duration = uint64(365 * 24 * 60 * 60)
 		case WeekInterval:
-			lookback = blocksPerWeek
+			duration = uint64(7 * 24 * 60 * 60)
 		case DayInterval:
-			lookback = blocksPerDay
+			duration = uint64(24 * 60 * 60)
 		default:
-			lookback = blocksPerWeek
+			duration = uint64(7 * 24 * 60 * 60)
 		}
 	}
 
@@ -952,10 +949,14 @@ func (charts *ChartData) activeMinersCounts(numBlocks int, interval intervalType
 	events := make([]ev, 0, 2*len(charts.MinerRanges))
 	for _, m := range charts.MinerRanges {
 		events = append(events, ev{height: int(m.FirstSeen), delta: 1})
-		if interval != AllInterval {
-			exit := int(m.LastUsed) + int(lookback)
-			if exit < numBlocks {
-				events = append(events, ev{height: exit + 1, delta: -1})
+		if interval != AllInterval && int(m.LastUsed) < len(charts.Blocks.Time) {
+			tLast := charts.Blocks.Time[m.LastUsed]
+			tExit := tLast + duration
+			exitHeight := sort.Search(len(charts.Blocks.Time), func(i int) bool {
+				return charts.Blocks.Time[i] > tExit
+			})
+			if exitHeight < numBlocks {
+				events = append(events, ev{height: exitHeight, delta: -1})
 			}
 		}
 	}

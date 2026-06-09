@@ -1344,6 +1344,15 @@ func (pgb *ChainDB) BlockTimeByHeight(ctx context.Context, height int64) (int64,
 	return time.UNIX(), pgb.replaceCancelError(err)
 }
 
+// GetHeightByTimestamp queries the DB for the height of the mainchain block at or
+// immediately before the given timestamp.
+func (pgb *ChainDB) GetHeightByTimestamp(ctx context.Context, timestamp time.Time) (int64, error) {
+	ctx, cancel := context.WithTimeout(ctx, pgb.queryTimeout)
+	defer cancel()
+	height, err := retrieveHeightByTimestamp(ctx, pgb.db, timestamp)
+	return height, pgb.replaceCancelError(err)
+}
+
 // VotesInBlock returns the number of votes mined in the block with the
 // specified hash.
 func (pgb *ChainDB) VotesInBlock(ctx context.Context, hash string) (int16, error) {
@@ -3960,7 +3969,7 @@ func (pgb *ChainDB) StoreBlock(msgBlock *wire.MsgBlock, isValid, isMainchain,
 				continue
 			}
 			for _, addr := range addrs {
-				if uerr := upsertMiner(pgb.db, addr.String(), int64(dbBlock.Height)); uerr != nil {
+				if uerr := upsertMiner(pgb.ctx, pgb.db, addr.String(), int64(dbBlock.Height)); uerr != nil {
 					log.Warnf("Failed to upsert miner %s at height %d: %v",
 						addr, dbBlock.Height, uerr)
 				}

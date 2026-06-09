@@ -4,7 +4,7 @@
 <div class="bg-white mb-1 py-2 px-3 mx-1 my-0">
     <div class="my-3 h4">
         <span class="monicon-pickaxe d-inline-block pe-2 h3"></span>
-        <span>Mining: {{.ActiveMiners}} miners</span>
+        <span>Mining: {{.ActiveMiners}} {{if eq .ActiveMiners 1}}miner{{else}}miners{{end}}</span>
     </div>
     <div class="row mt-1">
         <div class="col-12 mb-3 mb-sm-2 mb-md-3 mb-lg-3">
