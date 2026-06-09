@@ -3779,7 +3779,7 @@ func (pgb *ChainDB) TipToSideChain(mainRoot string) (tipHashStr string, blocksMo
 		if err != nil {
 			log.Errorf("Failed to get height for orphan block %s: %v", tipHash, err)
 		} else {
-			if _, err := pgb.db.ExecContext(pgb.ctx, internal.RevertOrphanMinerUpdate, orphanHeight); err != nil {
+			if _, err := pgb.db.ExecContext(pgb.ctx, internal.RevertOrphanMinerUpdate, orphanHeight, tipHash); err != nil {
 				log.Errorf("Failed to revert miners for orphan block at height %d: %v", orphanHeight, err)
 			}
 			if _, err := pgb.db.ExecContext(pgb.ctx, internal.CleanupMinerZeros); err != nil {

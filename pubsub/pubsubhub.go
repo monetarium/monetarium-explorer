@@ -688,6 +688,22 @@ func (psh *PubSubHub) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgBl
 	difficulty := blockData.Header.Difficulty
 	hashrate := dbtypes.CalculateHashRate(difficulty, targetTimePerBlock)
 
+	// Active miner count within a week-lookback window — query BEFORE
+	// locking so WS readers aren't blocked by DB round-trips.
+	var activeMinersCount int64
+	{
+		minHeight := int64(0)
+		lookback := newBlockData.BlockTime.T.Add(-7 * 24 * time.Hour)
+		if h, err := psh.sourceBase.GetHeightByTimestamp(ctx, lookback); err != nil {
+			log.Warnf("Failed to query active miner count height: %v", err)
+		} else {
+			minHeight = h
+		}
+		if count, err := psh.sourceBase.ActiveMiners(ctx, minHeight); err == nil {
+			activeMinersCount = count
+		}
+	}
+
 	// If BlockData contains non-nil PoolInfo, compute actual percentage of DCR
 	// supply staked.
 	stakePerc := 45.0
@@ -719,20 +735,7 @@ func (psh *PubSubHub) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgBl
 	p.GeneralInfo.NBlockSubsidy.PoS = blockData.ExtraInfo.NextBlockSubsidy.PoS
 	p.GeneralInfo.NBlockSubsidy.PoW = blockData.ExtraInfo.NextBlockSubsidy.PoW
 	p.GeneralInfo.NBlockSubsidy.Total = blockData.ExtraInfo.NextBlockSubsidy.Total
-
-	// Active miner count within a week-lookback window.
-	{
-		minHeight := int64(0)
-		lookback := newBlockData.BlockTime.T.Add(-7 * 24 * time.Hour)
-		if h, err := psh.sourceBase.GetHeightByTimestamp(ctx, lookback); err != nil {
-			log.Warnf("Failed to query active miner count height: %v", err)
-		} else {
-			minHeight = h
-		}
-		if count, err := psh.sourceBase.ActiveMiners(ctx, minHeight); err == nil {
-			p.GeneralInfo.ActiveMiners = count
-		}
-	}
+	p.GeneralInfo.ActiveMiners = activeMinersCount
 
 	// Total reward = subsidy + mining fees (~16 + <1 VAR)
 	// MiningFee from blockData (computed in collector)

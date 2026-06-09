@@ -60,6 +60,7 @@ const (
 			FROM vouts v
 			JOIN transactions t ON v.tx_hash = t.tx_hash
 			WHERE t.block_height = $1
+			  AND t.block_hash = $2
 			  AND t.tree = 0 AND t.block_index = 0
 			  AND v.script_type IN ('pubkeyhash', 'scripthash', 'pubkey', 'pubkeyalt', 'pubkeyhashalt')
 			  AND v.value > 0
