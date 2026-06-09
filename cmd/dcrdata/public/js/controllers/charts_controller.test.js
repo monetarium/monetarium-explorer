@@ -123,6 +123,10 @@ function makeController() {
   c.chartsViewTarget = {}
   c.ticketsPriceTarget = { checked: true }
   c.ticketsPurchaseTarget = { checked: true }
+  c.hashrateRateTarget = { checked: true }
+  c.hashrateMinersTarget = { checked: true }
+  c.intervalSelectorTarget = { classList: { add: vi.fn(), remove: vi.fn() } }
+  c.intervalOptionTargets = []
   return c
 }
 

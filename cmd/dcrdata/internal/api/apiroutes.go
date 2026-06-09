@@ -1895,6 +1895,7 @@ func (c *appContext) ChartTypeData(w http.ResponseWriter, r *http.Request) {
 		bin = r.URL.Query().Get("zoom")
 	}
 	axis := r.URL.Query().Get("axis")
+	interval := r.URL.Query().Get("interval")
 
 	// Check if this is an SKA supply chart and if data needs to be loaded
 	if c.charts != nil && cache.IsSKASupplyChart(chartType) {
@@ -1943,7 +1944,7 @@ func (c *appContext) ChartTypeData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	chartData, err := c.charts.Chart(chartType, bin, axis)
+	chartData, err := c.charts.Chart(chartType, bin, axis, interval)
 	if err != nil {
 		log.Warnf(`Error fetching chart %q at bin level '%s': %v`, chartType, bin, err)
 		if strings.Contains(err.Error(), "not initialized") || strings.Contains(err.Error(), "no SKA supply data found") {

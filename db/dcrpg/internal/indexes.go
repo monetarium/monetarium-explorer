@@ -63,6 +63,9 @@ const (
 
 	IndexOfHeightOnStatsTable = "uix_stats_height" // REMOVED
 
+	// miners table
+
+	IndexOfMinersTableOnLastUsed = "ix_miners_last_used"
 )
 
 // AddressesIndexNames are the names of the indexes on the addresses table.
@@ -98,4 +101,5 @@ var IndexDescriptions = map[string]string{
 	IndexOfMissesTableOnHashes:            "misses on ticket hash and block hash",
 	IndexOfAgendasTableOnName:             "agendas on agenda name",
 	IndexOfAgendaVotesTableOnRowIDs:       "agenda_votes on votes table row ID and agendas table row ID",
+	IndexOfMinersTableOnLastUsed:          "miners on last_used",
 }

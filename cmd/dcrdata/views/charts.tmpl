@@ -147,6 +147,28 @@
                                     <span class="checkmark tickets-bought"></span>
                                 </label>
                             </li>
+                            <li class="nav-item" data-charts-target="vSelectorItem" data-charts="hashrate">
+                                <label class="customcheck ms-2 d-inline-flex">Hashrate
+                                    <input
+                                        type="checkbox"
+                                        checked="checked"
+                                        data-action="click->charts#setVisibility"
+                                        data-charts-target="hashrateRate"
+                                    >
+                                    <span class="checkmark hashrate-rate"></span>
+                                </label>
+                            </li>
+                            <li class="nav-item" data-charts-target="vSelectorItem" data-charts="hashrate">
+                                <label class="customcheck mx-2 d-inline-flex">Active Miners
+                                    <input
+                                        type="checkbox"
+                                        checked="checked"
+                                        data-action="click->charts#setVisibility"
+                                        data-charts-target="hashrateMiners"
+                                    >
+                                    <span class="checkmark hashrate-miners"></span>
+                                </label>
+                            </li>
                         </ul>
                     </div>
                 </div>
@@ -168,6 +190,18 @@
                                 Stepped
                             </li>
                         </ul>
+                    </div>
+                </div>
+
+                <div class="chart-control-wrapper me-2 mb-1 d-hide" data-charts-target="intervalSelector">
+                    <div class="chart-control-label">INTERVAL</div>
+                    <div class="chart-control">
+                        <div class="btn-group" role="group">
+                            <button type="button" class="btn btn-outline-secondary" data-charts-target="intervalOption" data-action="click->charts#setIntervalOption" data-option="all">All</button>
+                            <button type="button" class="btn btn-outline-secondary" data-charts-target="intervalOption" data-action="click->charts#setIntervalOption" data-option="year">Year</button>
+                            <button type="button" class="btn btn-outline-secondary active" data-charts-target="intervalOption" data-action="click->charts#setIntervalOption" data-option="week">Week</button>
+                            <button type="button" class="btn btn-outline-secondary" data-charts-target="intervalOption" data-action="click->charts#setIntervalOption" data-option="day">Day</button>
+                        </div>
                     </div>
                 </div>
             </div>

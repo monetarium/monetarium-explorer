@@ -101,6 +101,7 @@ type explorerDataSource interface {
 	GetExplorerBlock(ctx context.Context, hash string) *types.BlockInfo
 	GetExplorerBlocks(ctx context.Context, start int, end int) []*types.BlockBasic
 	GetBlockHeight(ctx context.Context, hash string) (int64, error)
+	GetHeightByTimestamp(ctx context.Context, timestamp time.Time) (int64, error)
 	GetBlockHash(ctx context.Context, idx int64) (string, error)
 	GetExplorerTx(ctx context.Context, txid string) *types.TxInfo
 	GetTip(context.Context) (*types.WebBasicBlock, error)
@@ -122,6 +123,7 @@ type explorerDataSource interface {
 	SKACoinEmissionHeights(ctx context.Context, coinTypes []uint8) (map[uint8]int64, error)
 	GetBlockSKAFees(ctx context.Context, height int64) (map[uint8]string, error)
 	GetVoteTicketDataByBlock(ctx context.Context, blockHash string) ([]dbtypes.VoteTicketData, error)
+	ActiveMiners(ctx context.Context, minHeight int64) (int64, error)
 }
 
 type PoliteiaBackend interface {
@@ -531,6 +533,17 @@ func (exp *explorerUI) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgB
 		stakePerc = blockData.PoolInfo.Value / dcrutil.Amount(blockData.ExtraInfo.CoinSupply).ToCoin()
 	}
 
+	// Compute the week-lookback threshold for active miner count.
+	minHeight := int64(0)
+	lookback := newBlockData.BlockTime.T.Add(-7 * 24 * time.Hour)
+	activeMinersHeight, err := exp.dataSource.GetHeightByTimestamp(ctx, lookback)
+	if err != nil {
+		log.Warnf("Failed to query active miner count height: %v", err)
+	} else {
+		minHeight = activeMinersHeight
+	}
+	activeMiners, err := exp.dataSource.ActiveMiners(ctx, minHeight)
+
 	// Update pageData with block data and chain (home) info.
 	p := exp.pageData
 	p.Lock()
@@ -555,6 +568,9 @@ func (exp *explorerUI) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgB
 	p.HomeInfo.NBlockSubsidy.PoS = blockData.ExtraInfo.NextBlockSubsidy.PoS
 	p.HomeInfo.NBlockSubsidy.PoW = blockData.ExtraInfo.NextBlockSubsidy.PoW
 	p.HomeInfo.NBlockSubsidy.Total = blockData.ExtraInfo.NextBlockSubsidy.Total
+	if err == nil {
+		p.HomeInfo.ActiveMiners = activeMiners
+	}
 
 	// Total reward = subsidy + mining fees (~16 + <1 VAR)
 	// MiningFee from blockData (computed in collector)
