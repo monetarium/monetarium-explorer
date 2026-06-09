@@ -1016,7 +1016,7 @@ export default class extends Controller {
     this.query.replace(this.settings)
   }
 
-  async setInterval(e) {
+  async setIntervalOption(e) {
     const target = e.srcElement || e.target
     const option = target ? target.dataset.option : e
     if (!option) return
