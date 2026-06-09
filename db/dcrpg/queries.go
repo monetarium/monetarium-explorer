@@ -5105,7 +5105,7 @@ func CountMiners(ctx context.Context, db *sql.DB) (int64, error) {
 }
 
 // CountActiveMiners returns the number of unique miner addresses with last_used
-// at or above the given minimum block height.
+// strictly above the given minimum block height.
 func CountActiveMiners(ctx context.Context, db *sql.DB, minHeight int64) (int64, error) {
 	var count int64
 	err := db.QueryRowContext(ctx, internal.CountActiveMiners, minHeight).Scan(&count)

@@ -691,6 +691,7 @@ func (psh *PubSubHub) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgBl
 	// Active miner count within a week-lookback window — query BEFORE
 	// locking so WS readers aren't blocked by DB round-trips.
 	var activeMinersCount int64
+	var activeMinersOK bool
 	{
 		minHeight := int64(0)
 		lookback := newBlockData.BlockTime.T.Add(-7 * 24 * time.Hour)
@@ -701,6 +702,7 @@ func (psh *PubSubHub) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgBl
 		}
 		if count, err := psh.sourceBase.ActiveMiners(ctx, minHeight); err == nil {
 			activeMinersCount = count
+			activeMinersOK = true
 		}
 	}
 
@@ -735,7 +737,9 @@ func (psh *PubSubHub) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgBl
 	p.GeneralInfo.NBlockSubsidy.PoS = blockData.ExtraInfo.NextBlockSubsidy.PoS
 	p.GeneralInfo.NBlockSubsidy.PoW = blockData.ExtraInfo.NextBlockSubsidy.PoW
 	p.GeneralInfo.NBlockSubsidy.Total = blockData.ExtraInfo.NextBlockSubsidy.Total
-	p.GeneralInfo.ActiveMiners = activeMinersCount
+	if activeMinersOK {
+		p.GeneralInfo.ActiveMiners = activeMinersCount
+	}
 
 	// Total reward = subsidy + mining fees (~16 + <1 VAR)
 	// MiningFee from blockData (computed in collector)
