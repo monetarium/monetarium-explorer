@@ -102,7 +102,7 @@
                 </div>{{/* END OF PRIMARY INFO CARD */ -}}
 
                 {{/* PRE-VOTING */}}
-                {{if or (not .NetworkUpgraded) .VotingTriggered}}
+                {{if and (or (not .NetworkUpgraded) .VotingTriggered) .Agendas}}
                   <div class="col-24 col-lg-12 pt-2 px-2 text-center">
                     {{if .VotingTriggered}}
                       <div class="bg-white d-inline-block p-2 fs16 text-center mx-2 border">Upgrade complete. A vote has been triggered</div>

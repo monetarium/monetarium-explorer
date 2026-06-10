@@ -100,25 +100,29 @@ func TestVotingCardTemplate(t *testing.T) {
 		}
 	})
 
-	// Case 4 — Empty SKA slice
+	// Case 4 — Empty SKA slice. The placeholder text appears twice: once in the
+	// visible {{else}} branch and once in the inert ska-vote-empty-template the
+	// JS clones on live blocks (issue #436).
 	t.Run("EmptySKASlice", func(t *testing.T) {
 		out := renderVotingCard(t, tmpl, makeHomeInfo(types.VoteVARReward{}, []types.SKAVoteReward{}))
-		if !strings.Contains(out, "No SKA rewards available") {
-			t.Error("expected 'No SKA rewards available' in output")
+		if got := strings.Count(out, "No SKA rewards available"); got != 2 {
+			t.Errorf("expected placeholder in visible branch + inert template (2), got %d", got)
 		}
 		if strings.Contains(out, "SKA1") || strings.Contains(out, "SKA2") {
 			t.Error("expected no SKA symbol rows for empty SKA slice")
 		}
 	})
 
-	// Case 5 — Single SKA entry
+	// Case 5 — Single SKA entry. The visible {{else}} branch must not render, so
+	// the placeholder text appears exactly once: in the inert
+	// ska-vote-empty-template only (issue #436).
 	t.Run("SingleSKAEntry", func(t *testing.T) {
 		ska := []types.SKAVoteReward{
 			{CoinType: 1, Symbol: "SKA1", PerBlock: "97178596780181388", PerYear: "38980675541825918"},
 		}
 		out := renderVotingCard(t, tmpl, makeHomeInfo(types.VoteVARReward{}, ska))
-		if strings.Contains(out, "No SKA rewards available") {
-			t.Error("should not show placeholder when SKA entries are present")
+		if got := strings.Count(out, "No SKA rewards available"); got != 1 {
+			t.Errorf("expected placeholder only in inert template (1), got %d", got)
 		}
 		if !strings.Contains(out, "SKA1") {
 			t.Error("expected symbol 'SKA1' in output")
@@ -164,6 +168,17 @@ func TestVotingCardTemplate(t *testing.T) {
 		// rest significant digits must appear
 		if !strings.Contains(out, "456789") {
 			t.Error("expected rest decimal digits in output")
+		}
+	})
+
+	// Case 8 — empty-state template present for JS live-update (issue #436).
+	// The voting controller clears the skaVoteRewards container on every
+	// websocket block and clones this template to restore the placeholder
+	// when a block carries no SKA rewards; without it the text vanishes.
+	t.Run("SKAVoteEmptyTemplatePresent", func(t *testing.T) {
+		out := renderVotingCard(t, tmpl, makeHomeInfo(types.VoteVARReward{}, nil))
+		if !strings.Contains(out, `id="ska-vote-empty-template"`) {
+			t.Error("expected ska-vote-empty-template element for JS live-update")
 		}
 	})
 }
