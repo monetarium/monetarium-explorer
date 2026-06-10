@@ -423,6 +423,9 @@ export default class extends Controller {
     this.processNightMode = (params) => {
       const opts = nightModeOptions(params.nightMode)
       if (selectedChart === 'hashrate') {
+        // axis: 'y2' intentionally omitted — Dygraphs updateOptions does a
+        // recursive merge (not replace), so existing axis binding is preserved.
+        // Only color needs to be overridden for theme toggle.
         opts.series = {
           'Active Miners': { color: params.nightMode ? '#2970ff' : '#c60' }
         }
