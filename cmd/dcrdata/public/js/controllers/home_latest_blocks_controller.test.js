@@ -1041,3 +1041,60 @@ describe('blocklist_controller — size cell formatting', () => {
     expect(getSubRowSizeCell(tbody, 1001, 2)).toBe('10 kB')
   })
 })
+
+// ---------------------------------------------------------------------------
+// Height-gap resilience — the live websocket can skip a height (busy chain,
+// stale initial render, or a block missed during the connect window). The old
+// code only accepted height === tip or tip+1 and silently dropped anything else;
+// because the DOM tip never advanced, one gap froze the table permanently. The
+// table must always track the newest block it is told about.
+// ---------------------------------------------------------------------------
+
+describe('blocklist_controller — height-gap resilience', () => {
+  const tipId = (tbody) =>
+    tbody.querySelector('tr[data-coin-accordion-target="blockRow"]').dataset.blockId
+  const blockRowCount = (tbody) =>
+    tbody.querySelectorAll('tr[data-coin-accordion-target="blockRow"]').length
+
+  it('inserts a new block whose height skips ahead (gap) instead of wedging', () => {
+    const { tbody, ctrl } = buildTable(1000, 3)
+    ctrl._processBlock(makeBlock(1002)) // skips 1001
+    expect(tipId(tbody)).toBe('1002')
+  })
+
+  it('keeps updating after a height gap (does not wedge permanently)', () => {
+    const { tbody, ctrl } = buildTable(1000, 3)
+    ctrl._processBlock(makeBlock(1002)) // gap
+    ctrl._processBlock(makeBlock(1003)) // next real block
+    expect(tipId(tbody)).toBe('1003')
+  })
+
+  it('keeps the block-row count constant across a gap insert', () => {
+    const { tbody, ctrl } = buildTable(1000, 3, SKA_ROWS_3)
+    const before = blockRowCount(tbody)
+    ctrl._processBlock(makeBlock(1002, { skaCoinRows: SKA_ROWS_3 }))
+    expect(blockRowCount(tbody)).toBe(before)
+  })
+
+  it('ignores a block older than the current tip (stale/reorg-behind)', () => {
+    const { tbody, ctrl } = buildTable(1000, 3)
+    const before = blockRowCount(tbody)
+    ctrl._processBlock(makeBlock(999)) // older than tip
+    expect(tipId(tbody)).toBe('1000') // tip unchanged
+    expect(blockRowCount(tbody)).toBe(before) // nothing added/removed
+  })
+
+  it('still replaces the tip in place when the same height is re-sent (reorg)', () => {
+    const { tbody, ctrl } = buildTable(1000, 3)
+    const before = blockRowCount(tbody)
+    ctrl._processBlock(makeBlock(1000, { tx: 9 })) // same height, new content
+    expect(tipId(tbody)).toBe('1000')
+    expect(blockRowCount(tbody)).toBe(before)
+    const txCell = Array.from(
+      tbody
+        .querySelector('tr[data-block-id="1000"][data-coin-accordion-target="blockRow"]')
+        .querySelectorAll('td')
+    ).find((td) => td.dataset.type === 'tx')
+    expect(txCell.textContent).toBe('9')
+  })
+})

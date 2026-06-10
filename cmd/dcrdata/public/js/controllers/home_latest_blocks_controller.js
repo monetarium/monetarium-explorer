@@ -28,9 +28,17 @@ export default class extends Controller {
     const lastHeight = parseInt(firstBlockRow.dataset.height)
 
     if (block.height === lastHeight) {
+      // Same height re-sent (reorg / tip refresh): drop the current tip's rows so
+      // the rebuilt version below replaces it in place.
       const toRemove = this.tableTarget.querySelectorAll(`tr[data-block-id="${lastHeight}"]`)
       toRemove.forEach((r) => this.tableTarget.removeChild(r))
-    } else if (block.height === lastHeight + 1) {
+    } else if (block.height > lastHeight) {
+      // Any newer block advances the tip. Using > (not === lastHeight + 1) keeps
+      // the table live across height gaps: a skipped block — busy chain, stale
+      // initial render, or one missed during the websocket connect window —
+      // would otherwise match neither branch and freeze updates permanently,
+      // because the DOM tip never advances. Drop the oldest block's rows to keep
+      // the row count stable.
       const lastBlockRow = blockRows[blockRows.length - 1]
       const oldHeight = lastBlockRow.dataset.blockId
       const toRemove = this.tableTarget.querySelectorAll(`tr[data-block-id="${oldHeight}"]`)
