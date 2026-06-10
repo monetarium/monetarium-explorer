@@ -526,7 +526,17 @@ export default class extends Controller {
         gOptions.visibility = this.visibility
         gOptions.axes.y2 = {
           valueRange: [0, windowSize * 20 * 8],
-          axisLabelFormatter: (y) => Math.round(y)
+          axisLabelFormatter: (y) => Math.round(y),
+          ticker: (min, max, _pixels, _opts, _dygraph) => {
+            const span = max - min
+            if (span <= 0) return []
+            const step = Math.pow(10, Math.floor(Math.log10(span / 5)))
+            const ticks = []
+            for (let v = Math.ceil(min / step) * step; v <= max; v += step) {
+              ticks.push({ v: v, label: String(v) })
+            }
+            return ticks
+          }
         }
         yFormatter = customYFormatter((y) => `${y.toFixed(8)} VAR`)
         break
@@ -778,6 +788,7 @@ export default class extends Controller {
           gOptions.visibility = this.visibility
           gOptions.axes.y = { valueRange: [null, null] }
           gOptions.axes.y2 = {
+            valueRange: [0, null],
             axisLabelFormatter: (y) => Math.round(y),
             ticker: (min, max, _pixels, _opts, _dygraph) => {
               const ticks = []
