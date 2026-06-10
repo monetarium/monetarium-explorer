@@ -171,6 +171,13 @@
                             </div>
                         </div>
                     </template>
+
+                    {{/* Empty-state placeholder cloned by voting_controller when a
+                         live block carries no SKA rewards (issue #436). Mirrors the
+                         server-rendered empty branch above. */}}
+                    <template id="ska-vote-empty-template">
+                        <div class="fs12 lh1rem text-black-50">No SKA rewards available</div>
+                    </template>
                 </div>
             </div>
         </div> {{/* end voting card */}}

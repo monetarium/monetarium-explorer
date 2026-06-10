@@ -62,6 +62,15 @@ export default class extends Controller {
     const container = this.skaVoteRewardsTarget
     container.innerHTML = ''
 
+    // A websocket block with no SKA rewards (e.g. mainnet, where ska_vote_rewards
+    // is omitted from the payload) must restore the server-rendered placeholder
+    // rather than leave the container empty (issue #436).
+    if (!Array.isArray(rewards) || rewards.length === 0) {
+      const emptyTmpl = document.getElementById('ska-vote-empty-template')
+      if (emptyTmpl) container.appendChild(document.importNode(emptyTmpl.content, true))
+      return
+    }
+
     rewards.forEach((r) => {
       const clone = document.importNode(tmpl.content, true)
 
