@@ -165,7 +165,7 @@ function nightModeOptions(nightModeOn) {
   return {
     rangeSelectorAlpha: 0.4,
     gridLineColor: '#C4CBD2',
-    colors: ['#2970FF', '#006600', '#FF0090']
+    colors: ['#2970FF', '#c60', '#FF0090']
   }
 }
 
