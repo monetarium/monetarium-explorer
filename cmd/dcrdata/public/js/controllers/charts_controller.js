@@ -165,7 +165,7 @@ function nightModeOptions(nightModeOn) {
   return {
     rangeSelectorAlpha: 0.4,
     gridLineColor: '#C4CBD2',
-    colors: ['#2970FF', '#c60', '#FF0090']
+    colors: ['#2970FF', '#006600', '#FF0090']
   }
 }
 
@@ -421,7 +421,13 @@ export default class extends Controller {
     )
     this.drawInitialGraph()
     this.processNightMode = (params) => {
-      this.chartsView.updateOptions(nightModeOptions(params.nightMode))
+      const opts = nightModeOptions(params.nightMode)
+      if (selectedChart === 'hashrate') {
+        opts.series = {
+          'Active Miners': { color: params.nightMode ? '#2970ff' : '#c60' }
+        }
+      }
+      this.chartsView.updateOptions(opts)
     }
     globalEventBus.on('NIGHT_MODE', this.processNightMode)
   }
@@ -783,7 +789,9 @@ export default class extends Controller {
             )
           }
           gOptions.y2label = 'Active Miners'
-          gOptions.series = { 'Active Miners': { axis: 'y2' } }
+          gOptions.series = {
+            'Active Miners': { axis: 'y2', color: darkEnabled() ? '#2970ff' : '#c60' }
+          }
           this.visibility = [this.hashrateRateTarget.checked, this.hashrateMinersTarget.checked]
           gOptions.visibility = this.visibility
           gOptions.axes.y = { valueRange: [null, null] }
