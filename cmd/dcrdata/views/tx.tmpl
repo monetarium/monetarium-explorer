@@ -52,15 +52,15 @@
             <div class="d-inline-block fs14 break-word rounded medium-sans clipboard">{{.TxID}}{{template "copyTextIcon"}}</div>
           </div>
           <div class="row py-2">
-            <div class="col-8 text-start">
+            <div class="col-24 col-sm-8 text-start">
                 <span class="text-secondary fs13">Total Sent</span>
                 <br>
-                 <span class="lh1rem d-inline-block pt-1"
+                 <span class="lh1rem d-inline-block pt-1 wrap-decimal"
                   ><span class="fs18 fs14-decimal fw-bold">{{if eq .CoinType 0}}{{template "decimalParts" (float64AsDecimalParts .Total 8 true 2)}}{{else}}{{template "decimalParts" (skaDecimalParts .TotalRaw true 2)}}{{end}}</span>&nbsp;<span class="text-secondary fs14">{{coinSymbol .CoinType}}</span>
                 </span>
 
             </div>
-            <div class="col-8 text-start"{{if $isMempool}} data-tx-target="unconfirmed" data-txid="{{.TxID}}"{{end}}>
+            <div class="col-24 col-sm-8 text-start"{{if $isMempool}} data-tx-target="unconfirmed" data-txid="{{.TxID}}"{{end}}>
                 <span class="text-secondary fs13"><span class="d-none d-sm-inline">Included in Block</span><span class="d-sm-none">Block #</span></span>
                 <br>
                 <span class="fs18 fw-bold lh1rem d-inline-block pt-1">
@@ -84,10 +84,10 @@
                 <span class="fs16 text-secondary lh1rem  d-inline-block jsonly"><span class="mp-unconfirmed-time" data-time-target="age" data-tx-target="age" data-age="{{.Time.UNIX}}"></span> ago</span>
 
             </div>
-            <div class="col-8 text-start">
+            <div class="col-24 col-sm-8 text-start">
                 <span class="text-secondary fs13">Fee</span>
                 <br>
-                 <span class="lh1rem d-inline-block pt-1"
+                 <span class="lh1rem d-inline-block pt-1 wrap-decimal"
                   ><span class="fs18 fs14-decimal fw-bold">{{if eq .CoinType 0}}{{template "decimalParts" (float64AsDecimalParts .Fee.ToCoin 8 true 2)}}{{else}}{{template "decimalParts" (skaDecimalParts .FeeRaw true 2)}}{{end}}</span>&nbsp;<span class="text-secondary fs14">{{coinSymbol .CoinType}}</span>
                 </span>
 
@@ -486,7 +486,7 @@
                             <a href="/block/{{.BlockHeight}}">{{.BlockHeight}}</a>
                         {{end}}
                         </td>
-                        <td class="mono fs13 text-end shrink-to-fit">{{if lt .AmountIn 0.0}} N/A {{else}}
+                        <td class="mono fs13 text-end wrap-decimal">{{if lt .AmountIn 0.0}} N/A {{else}}
                         {{if eq $.Data.CoinType 0}}{{template "decimalParts" (float64AsDecimalParts .AmountIn 8 false)}}{{else}}{{template "decimalParts" (skaDecimalParts .ValueRaw false)}}{{end}} {{end}}
                         </td>
                     </tr>
@@ -559,7 +559,7 @@
                               {{end}}
                             {{end}}
                         </td>
-			                  <td class="text-end mono fs13">
+			                  <td class="text-end mono fs13 wrap-decimal">
                           {{if eq $.Data.CoinType 0}}{{template "decimalParts" (float64AsDecimalParts .Amount 8 false)}}{{else}}{{template "decimalParts" (skaDecimalParts .ValueRaw false)}}{{end}}
                         </td>
                     </tr>
