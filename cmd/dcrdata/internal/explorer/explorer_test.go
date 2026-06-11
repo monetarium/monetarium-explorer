@@ -518,8 +518,6 @@ func TestBuildTicketPoolChartsData_UsesDataSourceMempool(t *testing.T) {
 	})
 }
 
-// --- Fixture loader (block 4423) ---
-
 func TestStore_MiningFeeFromRealBlock4423(t *testing.T) {
 	params := chaincfg.MainNetParams()
 	mockDS := &mockDataSource{

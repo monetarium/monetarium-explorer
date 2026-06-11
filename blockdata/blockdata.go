@@ -663,11 +663,15 @@ func BlockSKAPoWRewardsFromSTx(msgBlock *wire.MsgBlock) map[uint8]string {
 
 // computeMinerVARFeeAtoms reads the miner's VAR fee from the coinbase
 // transaction by finding the P2PKH/P2PK/P2SH output (miner's payment) and
-// subtracting the PoW subsidy.
+// subtracting the PoW subsidy. Among all matching outputs, the one with the
+// highest value is selected as the miner payout (subsidy + fees). This avoids
+// false positives from non-miner outputs such as legacy org-fund P2SH scripts
+// that may appear before the miner output in the coinbase.
 func computeMinerVARFeeAtoms(msgBlock *wire.MsgBlock, powSubsidy int64) int64 {
 	if len(msgBlock.Transactions) == 0 {
 		return 0
 	}
+	var minerOutputValue int64
 	for _, txOut := range msgBlock.Transactions[0].TxOut {
 		if txOut.CoinType != cointype.CoinTypeVAR {
 			continue
@@ -680,12 +684,13 @@ func computeMinerVARFeeAtoms(msgBlock *wire.MsgBlock, powSubsidy int64) int64 {
 			stdscript.STPubKeyEd25519,
 			stdscript.STPubKeySchnorrSecp256k1,
 			stdscript.STScriptHash:
-			fee := txOut.Value - powSubsidy
-			if fee < 0 {
-				fee = 0
+			if txOut.Value > minerOutputValue {
+				minerOutputValue = txOut.Value
 			}
-			return fee
 		}
 	}
-	return 0
+	if minerOutputValue <= powSubsidy {
+		return 0
+	}
+	return minerOutputValue - powSubsidy
 }

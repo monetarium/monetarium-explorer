@@ -1,11 +1,7 @@
 package blockdata
 
 import (
-	"bytes"
-	"encoding/hex"
-	"encoding/json"
 	"math/big"
-	"os"
 	"testing"
 
 	"github.com/monetarium/monetarium-node/blockchain/stake"
@@ -519,8 +515,11 @@ func TestComputeMinerVARFeeAtoms_TicketInSTransactions(t *testing.T) {
 func TestComputeMinerVARFeeAtoms_BothTrees(t *testing.T) {
 	s := int64(16e8)
 	regFee := int64(1_000)
-	// Only the regular tx fee goes to coinbase.
-	// Ticket fees are distributed via SSFee.
+	// This test is a simplified unit test — it only puts the regular tx fee
+	// in the coinbase. In real blocks the miner receives 50% of ALL VAR fees
+	// (regular + ticket = 52,270 total, miner gets 26,135), which includes
+	// 50% of ticket fees. The full 50% split is validated by the real-block
+	// fixture test (TestComputeMinerVARFeeAtoms_Block4423).
 	block := &wire.MsgBlock{
 		Transactions: []*wire.MsgTx{coinbaseWithP2PKH(s + regFee), newTxWithFee(50_000, regFee)},
 		STransactions: []*wire.MsgTx{
@@ -551,63 +550,20 @@ func TestComputeMinerVARFeeAtoms_CoinbaseNoP2PKH(t *testing.T) {
 	}
 }
 
-type rawTxJSON struct {
-	Hex string `json:"hex"`
-}
-
-type blockJSON struct {
-	RawTx  []rawTxJSON `json:"rawtx"`
-	RawSTx []rawTxJSON `json:"rawstx"`
-}
-
-// loadBlockFixture reads a getblock-style JSON fixture and deserializes all
-// transactions into a wire.MsgBlock.
-func loadBlockFixture(t *testing.T, path string) *wire.MsgBlock {
-	t.Helper()
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read fixture %s: %v", path, err)
-	}
-	var bj blockJSON
-	if err := json.Unmarshal(data, &bj); err != nil {
-		t.Fatalf("unmarshal fixture %s: %v", path, err)
-	}
-	msgBlock := &wire.MsgBlock{}
-	for _, rtx := range bj.RawTx {
-		msgBlock.Transactions = append(msgBlock.Transactions, mustParseHexTx(t, rtx.Hex))
-	}
-	for _, stx := range bj.RawSTx {
-		msgBlock.STransactions = append(msgBlock.STransactions, mustParseHexTx(t, stx.Hex))
-	}
-	return msgBlock
-}
-
-func mustParseHexTx(t *testing.T, rawHex string) *wire.MsgTx {
-	t.Helper()
-	b, err := hex.DecodeString(rawHex)
-	if err != nil {
-		t.Fatalf("hex decode: %v", err)
-	}
-	var tx wire.MsgTx
-	if err := tx.Deserialize(bytes.NewReader(b)); err != nil {
-		t.Fatalf("tx deserialize: %v", err)
-	}
-	return &tx
-}
-
-func TestComputeMinerVARFeeAtoms_Block4423(t *testing.T) {
-	// Block 4423 real values:
+func TestComputeMinerVARFeeAtoms_Block4423Style(t *testing.T) {
+	// Mimics real block 4423 coinbase: 3 outputs (nonstandard vout[0],
+	// OP_RETURN vout[1], P2PKH vout[2] = subsidy + fees). Function must
+	// skip the first two and extract fee from the P2PKH output.
 	powSubsidy := int64(3_200_000_000)
 	minerFee := int64(26_135)
+	coinbase := wire.NewMsgTx()
+	coinbase.AddTxOut(wire.NewTxOut(0, []byte{0x51}))                  // nonstandard (OP_1)
+	coinbase.AddTxOut(wire.NewTxOut(0, []byte{0x6a}))                  // OP_RETURN
+	coinbase.AddTxOut(wire.NewTxOut(powSubsidy+minerFee, p2pkhScript)) // P2PKH miner payout
 
-	block := &wire.MsgBlock{
-		Transactions: []*wire.MsgTx{
-			coinbaseWithP2PKH(powSubsidy + minerFee),
-		},
-	}
-
+	block := &wire.MsgBlock{Transactions: []*wire.MsgTx{coinbase}}
 	got := computeMinerVARFeeAtoms(block, powSubsidy)
 	if got != minerFee {
-		t.Errorf("computeMinerVARFeeAtoms = %d, want %d (diff %d)", got, minerFee, got-minerFee)
+		t.Errorf("got %d, want %d", got, minerFee)
 	}
 }
