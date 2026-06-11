@@ -21,7 +21,7 @@
             {{else}}
               <span class="fs22 monicon-coin-negative"></span>
             {{end}}
-            <span class="d-inline-block ps-1">{{.Type}}</span>
+            <span class="d-inline-block ps-1">{{if .Coinbase}}PoW Reward{{else}}{{.Type}}{{end}}</span>
               <div class="d-inline-block confirmations-box{{if $.IsConfirmedMainchain}} confirmed{{end}} mx-2 fs14"
                 data-controller="newblock"
                 data-newblock-target="confirmations"
@@ -85,10 +85,10 @@
 
             </div>
             <div class="col-24 col-sm-8 text-start">
-                <span class="text-secondary fs13">Fee</span>
+                <span class="text-secondary fs13">{{if .Coinbase}}Fee Reward{{else}}Fee{{end}}</span>
                 <br>
                  <span class="lh1rem d-inline-block pt-1 wrap-decimal"
-                  ><span class="fs18 fs14-decimal fw-bold">{{if eq .CoinType 0}}{{template "decimalParts" (float64AsDecimalParts .Fee.ToCoin 8 true 2)}}{{else}}{{template "decimalParts" (skaDecimalParts .FeeRaw true 2)}}{{end}}</span>&nbsp;<span class="text-secondary fs14">{{coinSymbol .CoinType}}</span>
+                  ><span class="fs18 fs14-decimal fw-bold">{{if .Coinbase}}{{template "decimalParts" (float64AsDecimalParts .FeeReward 8 true 2)}}{{else if eq .CoinType 0}}{{template "decimalParts" (float64AsDecimalParts .Fee.ToCoin 8 true 2)}}{{else}}{{template "decimalParts" (skaDecimalParts .FeeRaw true 2)}}{{end}}</span>&nbsp;<span class="text-secondary fs14">{{coinSymbol .CoinType}}</span>
                 </span>
 
             </div>
