@@ -1,7 +1,11 @@
 package blockdata
 
 import (
+	"bytes"
+	"encoding/hex"
+	"encoding/json"
 	"math/big"
+	"os"
 	"testing"
 
 	"github.com/monetarium/monetarium-node/blockchain/stake"
@@ -550,3 +554,65 @@ func TestComputeMiningFee_NonTicketSTransactionsExcluded(t *testing.T) {
 		t.Errorf("got %d, want %d (nonTicket fee of 9_999 must not be counted)", got, want)
 	}
 }
+
+type rawTxJSON struct {
+	Hex string `json:"hex"`
+}
+
+type blockJSON struct {
+	RawTx  []rawTxJSON `json:"rawtx"`
+	RawSTx []rawTxJSON `json:"rawstx"`
+}
+
+// loadBlockFixture reads a getblock-style JSON fixture and deserializes all
+// transactions into a wire.MsgBlock.
+func loadBlockFixture(t *testing.T, path string) *wire.MsgBlock {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read fixture %s: %v", path, err)
+	}
+	var bj blockJSON
+	if err := json.Unmarshal(data, &bj); err != nil {
+		t.Fatalf("unmarshal fixture %s: %v", path, err)
+	}
+	msgBlock := &wire.MsgBlock{}
+	for _, rtx := range bj.RawTx {
+		msgBlock.Transactions = append(msgBlock.Transactions, mustParseHexTx(t, rtx.Hex))
+	}
+	for _, stx := range bj.RawSTx {
+		msgBlock.STransactions = append(msgBlock.STransactions, mustParseHexTx(t, stx.Hex))
+	}
+	return msgBlock
+}
+
+func mustParseHexTx(t *testing.T, rawHex string) *wire.MsgTx {
+	t.Helper()
+	b, err := hex.DecodeString(rawHex)
+	if err != nil {
+		t.Fatalf("hex decode: %v", err)
+	}
+	var tx wire.MsgTx
+	if err := tx.Deserialize(bytes.NewReader(b)); err != nil {
+		t.Fatalf("tx deserialize: %v", err)
+	}
+	return &tx
+}
+
+// TestComputeMiningFee_Block4423 computes the mining fee from a real block
+// fixture by subtracting the PoW subsidy from the miner's coinbase output.
+// Block 4423: coinbase vout[2] = 32.00026135 VAR, PoW subsidy = 32 VAR.
+func TestComputeMiningFee_Block4423(t *testing.T) {
+	block := loadBlockFixture(t, "testdata/block4423.json")
+
+	got := computeMiningFee(block)
+	// coinbase vout[2] value = 3,200,026,135 atoms
+	// PoW subsidy at height 4423 = 3,200,000,000 atoms
+	// expected fee = 3,200,026,135 - 3,200,000,000 = 26,135
+	want := int64(26_135)
+	if got != want {
+		t.Errorf("computeMiningFee(block4423) = %d, want %d (diff %d)", got, want, got-want)
+	}
+}
+
+

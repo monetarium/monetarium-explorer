@@ -1,10 +1,14 @@
 package explorer
 
 import (
+	"bytes"
 	"context"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math/big"
+	"os"
 	"testing"
 	"time"
 
@@ -515,4 +519,109 @@ func TestBuildTicketPoolChartsData_UsesDataSourceMempool(t *testing.T) {
 			t.Errorf("errMsg = %q, want %q", errMsg, "Error: unknown interval: nope")
 		}
 	})
+}
+
+// --- Fixture loader (block 4423) ---
+
+type rawTxJSON struct {
+	Hex string `json:"hex"`
+}
+
+type blockJSON struct {
+	RawTx  []rawTxJSON `json:"rawtx"`
+	RawSTx []rawTxJSON `json:"rawstx"`
+}
+
+func loadBlock4423(t *testing.T) *wire.MsgBlock {
+	t.Helper()
+	data, err := os.ReadFile("../../../../blockdata/testdata/block4423.json")
+	if err != nil {
+		t.Fatalf("read fixture: %v", err)
+	}
+	var bj blockJSON
+	if err := json.Unmarshal(data, &bj); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	msgBlock := &wire.MsgBlock{}
+	for _, rtx := range bj.RawTx {
+		msgBlock.Transactions = append(msgBlock.Transactions, mustParseHexTx(t, rtx.Hex))
+	}
+	for _, stx := range bj.RawSTx {
+		msgBlock.STransactions = append(msgBlock.STransactions, mustParseHexTx(t, stx.Hex))
+	}
+	return msgBlock
+}
+
+func mustParseHexTx(t *testing.T, rawHex string) *wire.MsgTx {
+	t.Helper()
+	b, err := hex.DecodeString(rawHex)
+	if err != nil {
+		t.Fatalf("hex decode: %v", err)
+	}
+	var tx wire.MsgTx
+	if err := tx.Deserialize(bytes.NewReader(b)); err != nil {
+		t.Fatalf("tx deserialize: %v", err)
+	}
+	return &tx
+}
+
+func TestStore_MiningFeeFromRealBlock4423(t *testing.T) {
+	params := chaincfg.MainNetParams()
+	mockDS := &mockDataSource{
+		blocks:  make(map[string]*explorerTypes.BlockInfo),
+		heights: make(map[int64]string),
+		params:  params,
+	}
+
+	exp := &explorerUI{
+		dataSource:  mockDS,
+		ChainParams: params,
+		wsHub:       NewWebsocketHub(),
+		pageData: &pageData{
+			HomeInfo: &explorerTypes.HomeInfo{
+				Params: explorerTypes.ChainParams{BlockTime: 60},
+			},
+		},
+		invs: &explorerTypes.MempoolInfo{
+			MempoolShort: explorerTypes.MempoolShort{
+				CoinStats: make(map[uint8]explorerTypes.MempoolCoinStats),
+			},
+		},
+	}
+
+	msgBlock := loadBlock4423(t)
+	hash := msgBlock.BlockHash().String()
+	height := int64(4423)
+	mockDS.height = height
+	mockDS.heights[height] = hash
+	mockDS.blocks[hash] = &explorerTypes.BlockInfo{
+		BlockBasic: &explorerTypes.BlockBasic{Height: height, Hash: hash},
+	}
+
+	blockData := &blockdata.BlockData{
+		Header: chainjson.GetBlockHeaderVerboseResult{Height: 4423},
+		ExtraInfo: apitypes.BlockExplorerExtraInfo{
+			NextBlockSubsidy: &chainjson.GetBlockSubsidyResult{
+				Developer: 0, PoS: 0, PoW: 3_200_000_000, Total: 3_200_000_000,
+			},
+			MiningFeeAtoms: 26_135,
+		},
+	}
+
+	if err := exp.Store(blockData, msgBlock); err != nil {
+		t.Fatalf("Store failed: %v", err)
+	}
+
+	exp.pageData.RLock()
+	defer exp.pageData.RUnlock()
+
+	if exp.pageData.HomeInfo.MiningFeeAtoms != 26_135 {
+		t.Errorf("MiningFeeAtoms = %d, want 26135", exp.pageData.HomeInfo.MiningFeeAtoms)
+	}
+	if exp.pageData.HomeInfo.NBlockSubsidy.PoW != 3_200_000_000 {
+		t.Errorf("NBlockSubsidy.PoW = %d, want 3200000000", exp.pageData.HomeInfo.NBlockSubsidy.PoW)
+	}
+	if exp.pageData.HomeInfo.LBlockTotalAtoms != 3_200_026_135 {
+		t.Errorf("LBlockTotalAtoms = %d, want 3200026135", exp.pageData.HomeInfo.LBlockTotalAtoms)
+	}
 }
