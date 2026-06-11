@@ -1,6 +1,7 @@
 import { Controller } from '@hotwired/stimulus'
 import { coinRowsToSKAData, insertSKASubRows, insertVARSubRow } from '../helpers/coin_rows_helper'
 import humanize from '../helpers/humanize_helper'
+import { applyLiveBlock, rebuildBlockTable } from '../helpers/live_block_table'
 import globalEventBus from '../services/event_bus_service'
 import ws from '../services/messagesocket_service'
 
@@ -33,72 +34,32 @@ export default class extends Controller {
 
   _processBlock(blockData) {
     if (!this.hasTableTarget) return
-    const block = blockData.block
-
-    const blockRows = this.tableTarget.querySelectorAll('tr[data-coin-accordion-target="blockRow"]')
-    if (blockRows.length === 0) return
-    const firstBlockRow = blockRows[0]
-    const lastHeight = parseInt(firstBlockRow.dataset.height)
-
-    let isGap = false
-    if (block.height === lastHeight) {
-      // Same height re-sent (reorg / tip refresh): drop the current tip's rows so
-      // the rebuilt version below replaces it in place.
-      const toRemove = this.tableTarget.querySelectorAll(`tr[data-block-id="${lastHeight}"]`)
-      toRemove.forEach((r) => this.tableTarget.removeChild(r))
-    } else if (block.height > lastHeight) {
-      // Any newer block advances the tip. Using > (not === lastHeight + 1) keeps
-      // the table live across height gaps: a skipped block — busy chain, stale
-      // initial render, or one missed during the websocket connect window —
-      // would otherwise match neither branch and freeze updates permanently,
-      // because the DOM tip never advances. Drop the oldest block's rows to keep
-      // the row count stable.
-      isGap = block.height > lastHeight + 1
-      const lastBlockRow = blockRows[blockRows.length - 1]
-      const oldHeight = lastBlockRow.dataset.blockId
-      const toRemove = this.tableTarget.querySelectorAll(`tr[data-block-id="${oldHeight}"]`)
-      toRemove.forEach((r) => this.tableTarget.removeChild(r))
-    } else return
-
-    // Insert before the current first block row (re-queried after removals since
-    // the original firstBlockRow may have been detached).
-    const currentFirstBlockRow = this.tableTarget.querySelector(
-      'tr[data-coin-accordion-target="blockRow"]'
+    // Capture the current tip's link class before applyLiveBlock mutates the
+    // table; the home rows carry it per-row (server-rendered) and the insert
+    // needs it for the new row's height link.
+    const firstRow = this.tableTarget.querySelector('tr[data-coin-accordion-target="blockRow"]')
+    const linkClass = (firstRow && firstRow.dataset.linkClass) || DEFAULT_LINK_CLASS
+    const isGap = applyLiveBlock(this.tableTarget, blockData.block, (block, ref) =>
+      this._insertBlockGroup(block, linkClass, ref)
     )
-    this._insertBlockGroup(block, firstBlockRow.dataset.linkClass, currentFirstBlockRow)
-
     // A gap means blocks were missed (disconnect or slow connect). The insert
     // above kept the table live; pull the full list to fill the missing rows.
     if (isGap) ws.send('getlatestblocks', '')
   }
 
-  // _refreshList rebuilds the entire table from the "getlatestblocks" response —
-  // an array of server BlockBasic objects, newest first. Used to recover the
-  // exact list (including blocks missed while disconnected) after a reconnect or
-  // a detected gap.
+  // _refreshList rebuilds the entire table from the "getlatestblocks" response.
+  // The link class is read from the existing tip row before the rebuild wipes
+  // it, then threaded into each new row.
   _refreshList(evt) {
     if (!this.hasTableTarget) return
-    let blocks
-    try {
-      blocks = JSON.parse(evt)
-    } catch {
-      return
-    }
-    if (!Array.isArray(blocks) || blocks.length === 0) return
-
     const existing = this.tableTarget.querySelector('tr[data-coin-accordion-target="blockRow"]')
     const linkClass = (existing && existing.dataset.linkClass) || DEFAULT_LINK_CLASS
-
-    this.tableTarget.innerHTML = ''
-    for (const block of blocks) {
-      // The websocket newblock path stamps unixStamp client-side; the REST-style
-      // list carries RFC3339 `time`, so derive it the same way here.
-      if (block.unixStamp === undefined && block.time) {
-        block.unixStamp = new Date(block.time).getTime() / 1000
-      }
-      // referenceNode null → append, preserving the server's newest-first order.
-      this._insertBlockGroup(block, linkClass, null)
-    }
+    rebuildBlockTable(
+      this.tableTarget,
+      evt,
+      (block, ref) => this._insertBlockGroup(block, linkClass, ref),
+      'latest blocks refresh'
+    )
   }
 
   // _insertBlockGroup clones the row templates for one block, fills the cells,

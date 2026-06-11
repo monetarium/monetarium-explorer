@@ -1,6 +1,7 @@
 import { Controller } from '@hotwired/stimulus'
 import { coinRowsToSKAData, insertSKASubRows, insertVARSubRow } from '../helpers/coin_rows_helper'
 import humanize from '../helpers/humanize_helper'
+import { applyLiveBlock, rebuildBlockTable } from '../helpers/live_block_table'
 import globalEventBus from '../services/event_bus_service'
 import ws from '../services/messagesocket_service'
 
@@ -42,63 +43,23 @@ export default class extends Controller {
     // Never mutate a historical page: heights there don't track the tip, so a
     // new block must not be pushed onto it.
     if (!this.hasTableTarget || !this.isLatestValue) return
-    const block = blockData.block
-
-    const blockRows = this.tableTarget.querySelectorAll('tr[data-coin-accordion-target="blockRow"]')
-    if (blockRows.length === 0) return
-    const firstBlockRow = blockRows[0]
-    const lastHeight = parseInt(firstBlockRow.dataset.height)
-
-    let isGap = false
-    if (block.height === lastHeight) {
-      // Re-broadcast of the current top block — replace all its rows.
-      const toRemove = this.tableTarget.querySelectorAll(`tr[data-block-id="${lastHeight}"]`)
-      toRemove.forEach((r) => this.tableTarget.removeChild(r))
-    } else if (block.height > lastHeight) {
-      // Any newer block advances the tip. Using > (not === lastHeight + 1) keeps
-      // the page live across height gaps (a block missed during a disconnect or
-      // slow connect): the old === check froze the page permanently because the
-      // DOM tip never advanced. Drop the oldest block's rows to keep the page
-      // length stable.
-      isGap = block.height > lastHeight + 1
-      const lastBlockRow = blockRows[blockRows.length - 1]
-      const oldHeight = lastBlockRow.dataset.blockId
-      const toRemove = this.tableTarget.querySelectorAll(`tr[data-block-id="${oldHeight}"]`)
-      toRemove.forEach((r) => this.tableTarget.removeChild(r))
-    } else return
-
-    // Re-query after removals — firstBlockRow may have been detached.
-    const currentFirstBlockRow = this.tableTarget.querySelector(
-      'tr[data-coin-accordion-target="blockRow"]'
+    const isGap = applyLiveBlock(this.tableTarget, blockData.block, (block, ref) =>
+      this._insertBlockGroup(block, ref)
     )
-    this._insertBlockGroup(block, currentFirstBlockRow)
-
     // A gap means blocks were missed; the insert above kept the page live, now
     // pull the full window to fill the missing rows.
     if (isGap) ws.send('getlatestblocks', String(this.rowsValue))
   }
 
-  // _refreshList rebuilds the table from the "getlatestblocks" response — an
-  // array of server BlockBasic objects, newest first — recovering the exact
-  // window (including blocks missed while disconnected).
+  // _refreshList rebuilds the table from the "getlatestblocks" response.
   _refreshList(evt) {
     if (!this.hasTableTarget) return
-    let blocks
-    try {
-      blocks = JSON.parse(evt)
-    } catch {
-      return
-    }
-    if (!Array.isArray(blocks) || blocks.length === 0) return
-
-    this.tableTarget.innerHTML = ''
-    for (const block of blocks) {
-      if (block.unixStamp === undefined && block.time) {
-        block.unixStamp = new Date(block.time).getTime() / 1000
-      }
-      // referenceNode null → append, preserving the server's newest-first order.
-      this._insertBlockGroup(block, null)
-    }
+    rebuildBlockTable(
+      this.tableTarget,
+      evt,
+      (block, ref) => this._insertBlockGroup(block, ref),
+      'blocks refresh'
+    )
   }
 
   // _insertBlockGroup clones the row templates for one block (11-column blocks

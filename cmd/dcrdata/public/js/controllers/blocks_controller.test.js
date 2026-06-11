@@ -158,7 +158,14 @@ function makeBlock(height, { skaCoinRows = [] } = {}) {
   }
 }
 
-function serverBlock(height) {
+function serverBlock(height, skaCoinRows = []) {
+  const coinRows =
+    skaCoinRows.length > 0
+      ? [
+          { coin_type: 0, symbol: 'VAR', tx_count: 5, amount: '1.23K VAR', size: 12345 },
+          ...skaCoinRows
+        ]
+      : []
   return {
     height: height,
     hash: `hash${height}`,
@@ -170,7 +177,7 @@ function serverBlock(height) {
     revocations: 0,
     version: 9,
     time: '2026-06-10T20:00:00Z',
-    coin_rows: []
+    coin_rows: coinRows
   }
 }
 
@@ -255,11 +262,57 @@ describe('blocks_controller — pagination-aware live updates', () => {
     rows.forEach((r) => expect(r.querySelectorAll('td').length).toBe(11))
   })
 
+  it('_refreshList rebuilds each block with its VAR + SKA sub-rows', () => {
+    const { tbody, ctrl } = buildTable(1000, 3, { skaCoinRows: SKA_ROWS_2 })
+    const serverBlocks = [1005, 1004, 1003].map((h) => serverBlock(h, SKA_ROWS_2))
+    ctrl._refreshList(JSON.stringify(serverBlocks))
+
+    const rows = tbody.querySelectorAll('tr[data-coin-accordion-target="blockRow"]')
+    expect(Array.from(rows).map((r) => r.dataset.blockId)).toEqual(['1005', '1004', '1003'])
+    // each rebuilt group carries 1 VAR + N SKA sub-rows (the VAR-only test above
+    // never exercises SKA sub-row insertion on the rebuild path)
+    expect(
+      tbody.querySelectorAll('tr[data-block-id="1005"][data-coin-accordion-target="subRow"]').length
+    ).toBe(1 + SKA_ROWS_2.length)
+  })
+
+  it('_refreshList does NOT regress the table when the refresh is older than the current tip', () => {
+    // A live block already advanced the DOM tip to 1005; a getlatestblocks
+    // response computed at an older server tip (1003) must be dropped.
+    const { tbody, ctrl } = buildTable(1005, 3)
+    const staleList = [1003, 1002, 1001].map((h) => serverBlock(h))
+    ctrl._refreshList(JSON.stringify(staleList))
+    expect(tipId(tbody)).toBe('1005') // unchanged
+  })
+
+  it('_refreshList skips zero-value placeholder blocks (no hash)', () => {
+    const { tbody, ctrl } = buildTable(1000, 3)
+    const list = [
+      serverBlock(1005),
+      { height: 0, time: '0001-01-01T00:00:00Z', coin_rows: [] }, // placeholder: no hash
+      serverBlock(1003)
+    ]
+    ctrl._refreshList(JSON.stringify(list))
+    const ids = Array.from(tbody.querySelectorAll('tr[data-coin-accordion-target="blockRow"]')).map(
+      (r) => r.dataset.blockId
+    )
+    expect(ids).toEqual(['1005', '1003']) // placeholder dropped
+  })
+
   it('_refreshList ignores empty or unparseable payloads', () => {
     const { tbody, ctrl } = buildTable(1000, 3)
     const before = blockRowCount(tbody)
     ctrl._refreshList('not json')
     ctrl._refreshList(JSON.stringify([]))
     expect(blockRowCount(tbody)).toBe(before)
+  })
+
+  it('disconnect tears down the refresh handlers wired on the latest page', () => {
+    const unsub = vi.fn()
+    ws.registerEvtHandler.mockReturnValue(unsub)
+    const { ctrl } = buildTable(1000, 1, { isLatest: true })
+    ctrl.connect()
+    ctrl.disconnect()
+    expect(unsub).toHaveBeenCalledTimes(2) // getlatestblocksResp + reconnect
   })
 })

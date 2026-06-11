@@ -1190,6 +1190,33 @@ describe('blocklist_controller — reconnect & gap refresh (C1/C2)', () => {
     expect(blockRowCount(tbody)).toBe(before)
   })
 
+  it('_refreshList does NOT regress the table when the refresh is older than the current tip', () => {
+    // A live block already advanced the DOM tip to 1005; a getlatestblocks
+    // response computed at an older server tip (1003) must be dropped, not
+    // rebuild the table backwards.
+    const { tbody, ctrl } = buildTable(1005, 3)
+    const staleList = [1003, 1002, 1001].map((h) => serverBlock(h))
+    ctrl._refreshList(JSON.stringify(staleList))
+    const tipId = tbody.querySelector('tr[data-coin-accordion-target="blockRow"]').dataset.blockId
+    expect(tipId).toBe('1005') // unchanged — the live stream stays authoritative
+  })
+
+  it('_refreshList skips zero-value placeholder blocks (no hash)', () => {
+    // The server pads heights that fail to load with an empty BlockBasic (no
+    // hash, height 0); the rebuild must not render a /block/0 row for them.
+    const { tbody, ctrl } = buildTable(1000, 3)
+    const list = [
+      serverBlock(1005),
+      { height: 0, time: '0001-01-01T00:00:00Z', coin_rows: [] }, // placeholder: no hash
+      serverBlock(1003)
+    ]
+    ctrl._refreshList(JSON.stringify(list))
+    const ids = Array.from(tbody.querySelectorAll('tr[data-coin-accordion-target="blockRow"]')).map(
+      (r) => r.dataset.blockId
+    )
+    expect(ids).toEqual(['1005', '1003']) // placeholder dropped
+  })
+
   it('connect registers reconnect + getlatestblocksResp handlers; disconnect tears them down', () => {
     const unsub = vi.fn()
     ws.registerEvtHandler.mockReturnValue(unsub)
