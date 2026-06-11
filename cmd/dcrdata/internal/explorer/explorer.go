@@ -44,10 +44,11 @@ import (
 )
 
 const (
-	// maxExplorerRows and minExplorerRows are the limits on the number of
-	// blocks/time-window rows that may be shown on the explorer pages.
-	maxExplorerRows = 400
-	minExplorerRows = 10
+	// maxExplorerRows caps the number of blocks/time-window rows that may be
+	// shown on the explorer list pages; defaultExplorerRows is the page size used
+	// when no rows value is supplied in the request.
+	maxExplorerRows     = 400
+	defaultExplorerRows = 100
 
 	// syncStatusInterval is the frequency with startup synchronization progress
 	// signals are sent to websocket clients.

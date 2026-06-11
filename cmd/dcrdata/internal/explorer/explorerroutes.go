@@ -388,11 +388,7 @@ func (exp *explorerUI) StakeDiffWindows(w http.ResponseWriter, r *http.Request) 
 	if offsetWindow > bestWindow {
 		offsetWindow = bestWindow
 	}
-	if rows == 0 {
-		rows = minExplorerRows
-	} else if rows > maxExplorerRows {
-		rows = maxExplorerRows
-	}
+	rows = normalizeExplorerRows(rows)
 
 	windows, err := exp.dataSource.PosIntervals(ctx, rows, offsetWindow)
 	if exp.timeoutErrorPage(w, err, "PosIntervals") {
@@ -519,11 +515,7 @@ func (exp *explorerUI) timeBasedBlocksListing(val string, w http.ResponseWriter,
 		offset = uint64(maxOffset)
 	}
 
-	if rows == 0 {
-		rows = minExplorerRows
-	} else if rows > maxExplorerRows {
-		rows = maxExplorerRows
-	}
+	rows = normalizeExplorerRows(rows)
 
 	data, err := exp.dataSource.TimeBasedIntervals(ctx, grouping, rows, offset)
 	if exp.timeoutErrorPage(w, err, "TimeBasedIntervals") {
@@ -585,6 +577,21 @@ func (exp *explorerUI) timeBasedBlocksListing(val string, w http.ResponseWriter,
 	io.WriteString(w, str)
 }
 
+// normalizeExplorerRows applies the default page size when no rows value was
+// supplied (rows == 0) and caps the result at maxExplorerRows. Sizes between 1
+// and the cap pass through unchanged so the per-page control can still select
+// smaller sizes. It is generic over int64/uint64 so the uint64 callers clamp
+// huge values without the overflow a naive int64 conversion would introduce.
+func normalizeExplorerRows[T int64 | uint64](rows T) T {
+	switch {
+	case rows == 0:
+		return defaultExplorerRows
+	case rows > maxExplorerRows:
+		return maxExplorerRows
+	}
+	return rows
+}
+
 // Blocks is the page handler for the "/blocks" path.
 func (exp *explorerUI) Blocks(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -622,11 +629,7 @@ func (exp *explorerUI) Blocks(w http.ResponseWriter, r *http.Request) {
 	if height > bestBlockHeight {
 		height = bestBlockHeight
 	}
-	if rows == 0 {
-		rows = minExplorerRows
-	} else if rows > maxExplorerRows {
-		rows = maxExplorerRows
-	}
+	rows = normalizeExplorerRows(rows)
 	var end int
 	oldestBlock := height - rows + 1
 	if oldestBlock < 0 {
