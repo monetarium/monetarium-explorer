@@ -590,13 +590,13 @@ func TestBlock4423_KnownFeeValues(t *testing.T) {
 		regFees       = int64(31_130)
 		ticketFees    = int64(21_140)
 		totalVARFees  = int64(52_270)
-		miningFeeCoin = 0.00052270
+		totalVARCoin  = 0.00052270
 	)
 	if regFees+ticketFees != totalVARFees {
 		t.Fatal("broken test: reg + ticket != total")
 	}
 	coin := dcrutil.Amount(totalVARFees).ToCoin()
-	if coin != miningFeeCoin {
-		t.Errorf("dcrutil.Amount(%d).ToCoin() = %.8f, want %.8f", totalVARFees, coin, miningFeeCoin)
+	if coin != totalVARCoin {
+		t.Errorf("dcrutil.Amount(%d).ToCoin() = %.8f, want %.8f", totalVARFees, coin, totalVARCoin)
 	}
 }

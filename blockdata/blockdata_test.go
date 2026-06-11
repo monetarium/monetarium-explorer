@@ -518,8 +518,8 @@ func TestComputeMinerVARFeeAtoms_BothTrees(t *testing.T) {
 	// This test is a simplified unit test — it only puts the regular tx fee
 	// in the coinbase. In real blocks the miner receives 50% of ALL VAR fees
 	// (regular + ticket = 52,270 total, miner gets 26,135), which includes
-	// 50% of ticket fees. The full 50% split is validated by the real-block
-	// fixture test (TestComputeMinerVARFeeAtoms_Block4423).
+	// 50% of ticket fees. The full 50% split is validated by
+	// TestComputeMinerVARFeeAtoms_Block4423Style.
 	block := &wire.MsgBlock{
 		Transactions: []*wire.MsgTx{coinbaseWithP2PKH(s + regFee), newTxWithFee(50_000, regFee)},
 		STransactions: []*wire.MsgTx{
