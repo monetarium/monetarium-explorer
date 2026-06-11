@@ -17,6 +17,7 @@ import (
 	"github.com/monetarium/monetarium-node/cointype"
 	"github.com/monetarium/monetarium-node/dcrutil"
 	chainjson "github.com/monetarium/monetarium-node/rpc/jsonrpc/types"
+	"github.com/monetarium/monetarium-node/txscript/stdscript"
 	"github.com/monetarium/monetarium-node/wire"
 
 	apitypes "github.com/monetarium/monetarium-explorer/api/types"
@@ -247,7 +248,7 @@ func (t *Collector) CollectBlockInfo(hash *chainhash.Hash) (*apitypes.BlockDataB
 	}
 	var miningFee int64
 	if curSubsidy != nil {
-		miningFee = computeMiningFee(msgBlock)
+		miningFee = computeMinerVARFeeAtoms(msgBlock, curSubsidy.PoW)
 	}
 
 	// Work/Stake difficulty
@@ -660,26 +661,31 @@ func BlockSKAPoWRewardsFromSTx(msgBlock *wire.MsgBlock) map[uint8]string {
 	return out
 }
 
-// computeMiningFee calculates total mining fees from a block by summing fees
-// from regular transactions (Transactions tree) and tickets (STransactions tree
-// limited to TxTypeSStx), matching the GetExplorerBlock formula:
-//
-//	getTotalFee(block.Tx) + getTotalFee(block.Tickets)
-func computeMiningFee(msgBlock *wire.MsgBlock) int64 {
-	var miningFee int64
-	for i, tx := range msgBlock.Transactions {
-		if i == 0 {
-			continue // skip coinbase
-		}
-		fee, _ := txhelpers.TxFeeRate(tx)
-		miningFee += int64(fee)
+// computeMinerVARFeeAtoms reads the miner's VAR fee from the coinbase
+// transaction by finding the P2PKH/P2PK/P2SH output (miner's payment) and
+// subtracting the PoW subsidy.
+func computeMinerVARFeeAtoms(msgBlock *wire.MsgBlock, powSubsidy int64) int64 {
+	if len(msgBlock.Transactions) == 0 {
+		return 0
 	}
-	for _, stx := range msgBlock.STransactions {
-		if txhelpers.DetermineTxType(stx) != stake.TxTypeSStx {
-			continue // only include tickets
+	for _, txOut := range msgBlock.Transactions[0].TxOut {
+		if txOut.CoinType != cointype.CoinTypeVAR {
+			continue
 		}
-		fee, _ := txhelpers.TxFeeRate(stx)
-		miningFee += int64(fee)
+		switch stdscript.DetermineScriptType(txOut.Version, txOut.PkScript) {
+		case stdscript.STPubKeyHashEcdsaSecp256k1,
+			stdscript.STPubKeyHashEd25519,
+			stdscript.STPubKeyHashSchnorrSecp256k1,
+			stdscript.STPubKeyEcdsaSecp256k1,
+			stdscript.STPubKeyEd25519,
+			stdscript.STPubKeySchnorrSecp256k1,
+			stdscript.STScriptHash:
+			fee := txOut.Value - powSubsidy
+			if fee < 0 {
+				fee = 0
+			}
+			return fee
+		}
 	}
-	return miningFee
+	return 0
 }

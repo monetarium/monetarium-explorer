@@ -364,69 +364,22 @@ func newTxWithFee(inputAmount, fee int64) *wire.MsgTx {
 	return tx
 }
 
-func TestComputeMiningFee_NoRegularTx(t *testing.T) {
-	coinbase := wire.NewMsgTx()
-	coinbase.AddTxOut(wire.NewTxOut(16e8, nil))
+// p2pkhScript is a minimal valid P2PKH output script for mock coinbase txns.
+var p2pkhScript = func() []byte {
+	s := make([]byte, 25)
+	s[0] = 0x76  // OP_DUP
+	s[1] = 0xa9  // OP_HASH160
+	s[2] = 0x14  // DATA_20 (20 zero bytes for dummy hash)
+	s[23] = 0x88 // OP_EQUALVERIFY
+	s[24] = 0xac // OP_CHECKSIG
+	return s
+}()
 
-	block := &wire.MsgBlock{
-		Transactions: []*wire.MsgTx{coinbase},
-	}
-
-	got := computeMiningFee(block)
-	want := int64(0)
-	if got != want {
-		t.Errorf("got %d, want %d", got, want)
-	}
-}
-
-func TestComputeMiningFee_WithRegularTx(t *testing.T) {
-	coinbase := wire.NewMsgTx()
-	coinbase.AddTxOut(wire.NewTxOut(16e8+10000, nil))
-	regTx := newTxWithFee(100000, 10000)
-
-	block := &wire.MsgBlock{
-		Transactions: []*wire.MsgTx{coinbase, regTx},
-	}
-
-	got := computeMiningFee(block)
-	want := int64(10000)
-	if got != want {
-		t.Errorf("got %d, want %d", got, want)
-	}
-}
-
-func TestComputeMiningFee_NoFees(t *testing.T) {
-	coinbase := wire.NewMsgTx()
-	coinbase.AddTxOut(wire.NewTxOut(16e8, nil))
-	regTx := newTxWithFee(100000, 0)
-
-	block := &wire.MsgBlock{
-		Transactions: []*wire.MsgTx{coinbase, regTx},
-	}
-
-	got := computeMiningFee(block)
-	want := int64(0)
-	if got != want {
-		t.Errorf("got %d, want %d", got, want)
-	}
-}
-
-func TestComputeMiningFee_MultipleRegularTx(t *testing.T) {
-	coinbase := wire.NewMsgTx()
-	coinbase.AddTxOut(wire.NewTxOut(16e8+6000, nil))
-	tx1 := newTxWithFee(10000, 1000)
-	tx2 := newTxWithFee(20000, 2000)
-	tx3 := newTxWithFee(30000, 3000)
-
-	block := &wire.MsgBlock{
-		Transactions: []*wire.MsgTx{coinbase, tx1, tx2, tx3},
-	}
-
-	got := computeMiningFee(block)
-	want := int64(6000)
-	if got != want {
-		t.Errorf("got %d, want %d", got, want)
-	}
+// coinbaseWithP2PKH creates a coinbase tx with one P2PKH output (miner payment).
+func coinbaseWithP2PKH(value int64) *wire.MsgTx {
+	tx := wire.NewMsgTx()
+	tx.AddTxOut(wire.NewTxOut(value, p2pkhScript))
+	return tx
 }
 
 // Reference SStx output scripts copied verbatim from
@@ -492,66 +445,109 @@ func newSStxWithFee(t *testing.T, inputAmount, fee int64) *wire.MsgTx {
 	return tx
 }
 
-func TestComputeMiningFee_TicketInSTransactions(t *testing.T) {
-	coinbase := wire.NewMsgTx()
-	coinbase.AddTxOut(wire.NewTxOut(16e8, nil))
-	ticket := newSStxWithFee(t, 1_000_000, 12_345)
-
+func TestComputeMinerVARFeeAtoms_NoRegularTx(t *testing.T) {
+	s := int64(16e8)
 	block := &wire.MsgBlock{
-		Transactions:  []*wire.MsgTx{coinbase},
-		STransactions: []*wire.MsgTx{ticket},
+		Transactions: []*wire.MsgTx{coinbaseWithP2PKH(s)},
 	}
 
-	got := computeMiningFee(block)
-	want := int64(12_345)
-	if got != want {
-		t.Errorf("got %d, want %d", got, want)
+	got := computeMinerVARFeeAtoms(block, s)
+	if got != 0 {
+		t.Errorf("got %d, want 0", got)
 	}
 }
 
-func TestComputeMiningFee_BothTrees(t *testing.T) {
-	coinbase := wire.NewMsgTx()
-	coinbase.AddTxOut(wire.NewTxOut(16e8+1000, nil))
-	regTx := newTxWithFee(50_000, 1_000)
-	ticket1 := newSStxWithFee(t, 1_000_000, 2_500)
-	ticket2 := newSStxWithFee(t, 2_000_000, 4_000)
-
+func TestComputeMinerVARFeeAtoms_WithRegularTx(t *testing.T) {
+	s := int64(16e8)
+	fee := int64(10_000)
 	block := &wire.MsgBlock{
-		Transactions:  []*wire.MsgTx{coinbase, regTx},
-		STransactions: []*wire.MsgTx{ticket1, ticket2},
+		Transactions: []*wire.MsgTx{coinbaseWithP2PKH(s + fee), newTxWithFee(100_000, fee)},
 	}
 
-	got := computeMiningFee(block)
-	want := int64(1_000 + 2_500 + 4_000)
-	if got != want {
-		t.Errorf("got %d, want %d", got, want)
+	got := computeMinerVARFeeAtoms(block, s)
+	if got != fee {
+		t.Errorf("got %d, want %d", got, fee)
 	}
 }
 
-// TestComputeMiningFee_NonTicketSTransactionsExcluded confirms the STransactions
-// loop's `!= TxTypeSStx` filter actually drops non-ticket entries. A plain
-// (non-stake) MsgTx in STransactions is classified TxTypeRegular by
-// DetermineTxType, so its fee must not contribute to MiningFee — the same code
-// path that excludes votes (SSGen), stake fees (SSFee), and revocations (SSRtx).
-func TestComputeMiningFee_NonTicketSTransactionsExcluded(t *testing.T) {
-	coinbase := wire.NewMsgTx()
-	coinbase.AddTxOut(wire.NewTxOut(16e8, nil))
-	ticket := newSStxWithFee(t, 1_000_000, 7_777)
-	nonTicket := newTxWithFee(500_000, 9_999) // classified TxTypeRegular
-
-	if got := stake.DetermineTxType(nonTicket); got == stake.TxTypeSStx {
-		t.Fatalf("test fixture broken: non-ticket tx is classified as SStx")
+func TestComputeMinerVARFeeAtoms_NoFees(t *testing.T) {
+	s := int64(16e8)
+	block := &wire.MsgBlock{
+		Transactions: []*wire.MsgTx{coinbaseWithP2PKH(s), newTxWithFee(100_000, 0)},
 	}
+
+	got := computeMinerVARFeeAtoms(block, s)
+	if got != 0 {
+		t.Errorf("got %d, want 0", got)
+	}
+}
+
+func TestComputeMinerVARFeeAtoms_MultipleRegularTx(t *testing.T) {
+	s := int64(16e8)
+	fees := []int64{1_000, 2_000, 3_000}
+	totalFee := fees[0] + fees[1] + fees[2]
+	block := &wire.MsgBlock{
+		Transactions: []*wire.MsgTx{
+			coinbaseWithP2PKH(s + totalFee),
+			newTxWithFee(10_000, fees[0]),
+			newTxWithFee(20_000, fees[1]),
+			newTxWithFee(30_000, fees[2]),
+		},
+	}
+
+	got := computeMinerVARFeeAtoms(block, s)
+	if got != totalFee {
+		t.Errorf("got %d, want %d", got, totalFee)
+	}
+}
+
+func TestComputeMinerVARFeeAtoms_TicketInSTransactions(t *testing.T) {
+	s := int64(16e8)
+	// Ticket fees are distributed via SSFee, not coinbase.
+	// Coinbase has only the subsidy.
+	block := &wire.MsgBlock{
+		Transactions:  []*wire.MsgTx{coinbaseWithP2PKH(s)},
+		STransactions: []*wire.MsgTx{newSStxWithFee(t, 1_000_000, 12_345)},
+	}
+
+	got := computeMinerVARFeeAtoms(block, s)
+	if got != 0 {
+		t.Errorf("got %d, want 0 (ticket fees are not in coinbase)", got)
+	}
+}
+
+func TestComputeMinerVARFeeAtoms_BothTrees(t *testing.T) {
+	s := int64(16e8)
+	regFee := int64(1_000)
+	// Only the regular tx fee goes to coinbase.
+	// Ticket fees are distributed via SSFee.
+	block := &wire.MsgBlock{
+		Transactions: []*wire.MsgTx{coinbaseWithP2PKH(s + regFee), newTxWithFee(50_000, regFee)},
+		STransactions: []*wire.MsgTx{
+			newSStxWithFee(t, 1_000_000, 2_500),
+			newSStxWithFee(t, 2_000_000, 4_000),
+		},
+	}
+
+	got := computeMinerVARFeeAtoms(block, s)
+	if got != regFee {
+		t.Errorf("got %d, want %d (only regular tx fee counted)", got, regFee)
+	}
+}
+
+func TestComputeMinerVARFeeAtoms_CoinbaseNoP2PKH(t *testing.T) {
+	// If coinbase has no P2PKH output, fee should be 0.
+	s := int64(16e8)
+	coinbase := wire.NewMsgTx()
+	coinbase.AddTxOut(wire.NewTxOut(s+5_000, nil)) // nil pkScript is not P2PKH
 
 	block := &wire.MsgBlock{
-		Transactions:  []*wire.MsgTx{coinbase},
-		STransactions: []*wire.MsgTx{ticket, nonTicket},
+		Transactions: []*wire.MsgTx{coinbase, newTxWithFee(100_000, 5_000)},
 	}
 
-	got := computeMiningFee(block)
-	want := int64(7_777) // only the ticket's fee
-	if got != want {
-		t.Errorf("got %d, want %d (nonTicket fee of 9_999 must not be counted)", got, want)
+	got := computeMinerVARFeeAtoms(block, s)
+	if got != 0 {
+		t.Errorf("got %d, want 0 (no P2PKH output)", got)
 	}
 }
 
@@ -599,20 +595,15 @@ func mustParseHexTx(t *testing.T, rawHex string) *wire.MsgTx {
 	return &tx
 }
 
-// TestComputeMiningFee_Block4423 computes the mining fee from a real block
-// fixture by subtracting the PoW subsidy from the miner's coinbase output.
-// Block 4423: coinbase vout[2] = 32.00026135 VAR, PoW subsidy = 32 VAR.
-func TestComputeMiningFee_Block4423(t *testing.T) {
+func TestComputeMinerVARFeeAtoms_Block4423(t *testing.T) {
 	block := loadBlockFixture(t, "testdata/block4423.json")
 
-	got := computeMiningFee(block)
-	// coinbase vout[2] value = 3,200,026,135 atoms
+	// coinbase vout[2] (P2PKH) value = 3,200,026,135 atoms
 	// PoW subsidy at height 4423 = 3,200,000,000 atoms
 	// expected fee = 3,200,026,135 - 3,200,000,000 = 26,135
+	got := computeMinerVARFeeAtoms(block, 3_200_000_000)
 	want := int64(26_135)
 	if got != want {
-		t.Errorf("computeMiningFee(block4423) = %d, want %d (diff %d)", got, want, got-want)
+		t.Errorf("computeMinerVARFeeAtoms(block4423) = %d, want %d (diff %d)", got, want, got-want)
 	}
 }
-
-
