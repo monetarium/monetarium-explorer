@@ -487,6 +487,24 @@ func (t *TxInfo) IsImmature() bool {
 	return t.Mature == "False"
 }
 
+// FeeReward is the coinbase "PoW Reward" fee shown on the tx page: the sum of
+// output amounts minus the sum of input amounts, mirroring the values rendered
+// in the "Outputs Created" and "Input Consumed" tables. Inputs displayed as
+// "N/A" (AmountIn < 0) contribute zero, matching the template guard. Coinbase
+// transactions are VAR-only, so float64 (8-dec) is exact here.
+func (t *TxInfo) FeeReward() float64 {
+	var out, in float64
+	for i := range t.Vout {
+		out += t.Vout[i].Amount
+	}
+	for i := range t.Vin {
+		if t.Vin[i].AmountIn >= 0 {
+			in += t.Vin[i].AmountIn
+		}
+	}
+	return out - in
+}
+
 // BlocksToTicketMaturity will return 0 if this isn't an immature ticket.
 func (t *TxInfo) BlocksToTicketMaturity() (blocks int64) {
 	if t.Type != TicketTypeStr {

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/monetarium/monetarium-node/chaincfg"
+	chainjson "github.com/monetarium/monetarium-node/rpc/jsonrpc/types"
 )
 
 func TestTimeDefMarshal(t *testing.T) {
@@ -606,4 +607,62 @@ func TestAddressPrefixes(t *testing.T) {
 			}
 		}
 	})
+}
+
+// mkVin builds a Vin whose embedded chainjson.Vin carries the given AmountIn
+// (in coins), the value the tx page displays in the "Input Consumed" column.
+func mkVin(amountIn float64) Vin {
+	return Vin{Vin: &chainjson.Vin{AmountIn: amountIn}}
+}
+
+func TestFeeReward(t *testing.T) {
+	tests := []struct {
+		name string
+		vin  []Vin
+		vout []Vout
+		want float64
+	}{
+		{
+			name: "coinbase zero-value input, sum of outputs",
+			vin:  []Vin{mkVin(0)},
+			vout: []Vout{{Amount: 10}, {Amount: 2.5}},
+			want: 12.5,
+		},
+		{
+			name: "input shows subsidy, fee-only remainder",
+			vin:  []Vin{mkVin(8)},
+			vout: []Vout{{Amount: 8}, {Amount: 0.5}},
+			want: 0.5,
+		},
+		{
+			name: "N/A input (AmountIn < 0) excluded from input sum",
+			vin:  []Vin{mkVin(-1)},
+			vout: []Vout{{Amount: 3}},
+			want: 3,
+		},
+		{
+			name: "multiple inputs and outputs",
+			vin:  []Vin{mkVin(1), mkVin(2.5), mkVin(-1)},
+			vout: []Vout{{Amount: 5}, {Amount: 0.5}, {Amount: 1}},
+			want: 3, // (5+0.5+1) - (1+2.5)
+		},
+		{
+			// Realistic coinbase shape: a single input carries the full block
+			// subsidy, outputs split that subsidy across payees plus the
+			// collected fees, and FeeReward nets out to the fee remainder.
+			name: "subsidy split across outputs minus single subsidy input",
+			vin:  []Vin{mkVin(900)},
+			vout: []Vout{{Amount: 600}, {Amount: 300}, {Amount: 0.5}},
+			want: 0.5, // (600+300+0.5) - 900
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tx := &TxInfo{Vin: tt.vin, Vout: tt.vout}
+			if got := tx.FeeReward(); got != tt.want {
+				t.Errorf("FeeReward() = %v, want %v", got, tt.want)
+			}
+		})
+	}
 }
