@@ -13,7 +13,41 @@ vi.mock('../services/event_bus_service', () => ({
   default: { on: vi.fn(), off: vi.fn() }
 }))
 
+vi.mock('../services/messagesocket_service', () => ({
+  default: {
+    send: vi.fn(),
+    registerEvtHandler: vi.fn(() => () => {}),
+    deregisterEvtHandler: vi.fn(),
+    deregisterEvtHandlers: vi.fn()
+  }
+}))
+
 const { default: BlocklistController } = await import('./home_latest_blocks_controller.js')
+const { default: ws } = await import('../services/messagesocket_service')
+
+// serverBlock mimics one BlockBasic entry as the "getlatestblocks" websocket
+// command marshals it: RFC3339 `time` (no unixStamp), coin_rows array.
+function serverBlock(height, skaCoinRows = []) {
+  const coinRows =
+    skaCoinRows.length > 0
+      ? [
+          { coin_type: 0, symbol: 'VAR', tx_count: 5, amount: '1.23K VAR', size: 12345 },
+          ...skaCoinRows
+        ]
+      : []
+  return {
+    height: height,
+    hash: `hash${height}`,
+    tx: 5,
+    size: 12345,
+    total: 1234.5,
+    votes: 5,
+    tickets: 3,
+    revocations: 0,
+    time: '2026-06-10T20:00:00Z',
+    coin_rows: coinRows
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -1096,5 +1130,78 @@ describe('blocklist_controller — height-gap resilience', () => {
         .querySelectorAll('td')
     ).find((td) => td.dataset.type === 'tx')
     expect(txCell.textContent).toBe('9')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// C1/C2 — refresh the full list on reconnect and on a detected height gap.
+// The instant gap-fix keeps the table live; a refresh then fills the missing
+// rows from the authoritative server list (getlatestblocks websocket command).
+// ---------------------------------------------------------------------------
+
+describe('blocklist_controller — reconnect & gap refresh (C1/C2)', () => {
+  const blockRowCount = (tbody) =>
+    tbody.querySelectorAll('tr[data-coin-accordion-target="blockRow"]').length
+
+  beforeEach(() => {
+    ws.send.mockClear()
+    ws.registerEvtHandler.mockClear()
+    ws.registerEvtHandler.mockImplementation(() => () => {})
+  })
+
+  it('requests a full refresh (getlatestblocks) when a block arrives with a gap', () => {
+    const { ctrl } = buildTable(1000, 3)
+    ctrl._processBlock(makeBlock(1002)) // gap — skips 1001
+    expect(ws.send).toHaveBeenCalledWith('getlatestblocks', '')
+  })
+
+  it('does NOT request a refresh for a normal consecutive block', () => {
+    const { ctrl } = buildTable(1000, 3)
+    ctrl._processBlock(makeBlock(1001)) // tip + 1
+    expect(ws.send).not.toHaveBeenCalled()
+  })
+
+  it('does NOT request a refresh when the same tip height is re-sent (reorg)', () => {
+    const { ctrl } = buildTable(1000, 3)
+    ctrl._processBlock(makeBlock(1000, { tx: 9 }))
+    expect(ws.send).not.toHaveBeenCalled()
+  })
+
+  it('_refreshList rebuilds the whole table from the server block list (newest first)', () => {
+    const { tbody, ctrl } = buildTable(1000, 3, SKA_ROWS_3)
+    const serverBlocks = [1005, 1004, 1003].map((h) => serverBlock(h, SKA_ROWS_3))
+    ctrl._refreshList(JSON.stringify(serverBlocks))
+
+    const rows = tbody.querySelectorAll('tr[data-coin-accordion-target="blockRow"]')
+    expect(Array.from(rows).map((r) => r.dataset.blockId)).toEqual(['1005', '1004', '1003'])
+    // each rebuilt group has its VAR + SKA sub-rows
+    expect(
+      tbody.querySelectorAll('tr[data-block-id="1005"][data-coin-accordion-target="subRow"]').length
+    ).toBe(1 + SKA_ROWS_3.length)
+    // rebuilt rows are structurally complete (9 cells)
+    rows.forEach((r) => expect(r.querySelectorAll('td').length).toBe(9))
+  })
+
+  it('_refreshList ignores an empty or unparseable payload', () => {
+    const { tbody, ctrl } = buildTable(1000, 3)
+    const before = blockRowCount(tbody)
+    ctrl._refreshList('not json')
+    ctrl._refreshList(JSON.stringify([]))
+    expect(blockRowCount(tbody)).toBe(before)
+  })
+
+  it('connect registers reconnect + getlatestblocksResp handlers; disconnect tears them down', () => {
+    const unsub = vi.fn()
+    ws.registerEvtHandler.mockReturnValue(unsub)
+    const { ctrl } = buildTable(1000, 1)
+    ctrl.data = { get: () => null }
+
+    ctrl.connect()
+    const events = ws.registerEvtHandler.mock.calls.map((c) => c[0])
+    expect(events).toContain('reconnect')
+    expect(events).toContain('getlatestblocksResp')
+
+    ctrl.disconnect()
+    expect(unsub).toHaveBeenCalledTimes(2)
   })
 })

@@ -153,6 +153,23 @@ func (exp *explorerUI) timeoutErrorPage(w http.ResponseWriter, err error, debugS
 	return
 }
 
+// homeBlocksSpan is how many blocks below the tip the home "latest blocks"
+// table shows. Shared by Home() and latestExplorerBlocks() so the server-
+// rendered list and the websocket refresh ("getlatestblocks") never diverge.
+const homeBlocksSpan = 8
+
+// latestExplorerBlocks returns the same block slice the home page renders (tip
+// down to tip-homeBlocksSpan), each with CoinRows populated. It backs the
+// "getlatestblocks" websocket command used to rebuild the table after a
+// reconnect or a detected height gap.
+func (exp *explorerUI) latestExplorerBlocks(ctx context.Context) ([]*types.BlockBasic, error) {
+	height, err := exp.dataSource.GetHeight(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return exp.dataSource.GetExplorerBlocks(ctx, int(height), int(height)-homeBlocksSpan), nil
+}
+
 // Home is the page handler for the "/" path.
 func (exp *explorerUI) Home(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -165,7 +182,7 @@ func (exp *explorerUI) Home(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	blocks := exp.dataSource.GetExplorerBlocks(ctx, int(height), int(height)-8)
+	blocks := exp.dataSource.GetExplorerBlocks(ctx, int(height), int(height)-homeBlocksSpan)
 
 	// Safely retrieve the current inventory pointer.
 	inv := exp.MempoolInventory()
