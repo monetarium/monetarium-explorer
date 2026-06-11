@@ -81,6 +81,10 @@ export function rebuildBlockTable(tableTarget, evt, insertGroup, label) {
   // have advanced the DOM tip after this list was requested, and the response
   // (computed at an older server tip) would visibly regress it. The live stream
   // already has us at or ahead of this list, so drop it.
+  // Strict <, not <=: an equal-tip response is the gap-fill, not a stale one.
+  // applyLiveBlock advances the DOM tip across a height gap but leaves the
+  // skipped rows missing and signals isGap; the refresh that backfills them
+  // arrives at that same tip, so dropping equal-tip would discard the fill.
   const existing = tableTarget.querySelector('tr[data-coin-accordion-target="blockRow"]')
   if (existing) {
     const currentTip = parseInt(existing.dataset.height)
