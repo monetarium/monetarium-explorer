@@ -26,12 +26,12 @@ func TestLatestExplorerBlocks(t *testing.T) {
 	}
 	exp := &explorerUI{dataSource: src}
 
-	blocks, err := exp.latestExplorerBlocks(context.Background())
+	blocks, err := exp.latestExplorerBlocks(context.Background(), homeBlocksSpan)
 	if err != nil {
 		t.Fatalf("latestExplorerBlocks returned error: %v", err)
 	}
 
-	// Requests tip..tip-homeBlocksSpan (the home table range).
+	// Requests tip..tip-span (the home table range for span == homeBlocksSpan).
 	if src.gotBlocksStart != 1000 || src.gotBlocksEnd != 1000-homeBlocksSpan {
 		t.Errorf("requested range = %d..%d, want %d..%d",
 			src.gotBlocksStart, src.gotBlocksEnd, 1000, 1000-homeBlocksSpan)
@@ -48,5 +48,28 @@ func TestLatestExplorerBlocks(t *testing.T) {
 	}
 	if !strings.Contains(string(out), `"coin_rows"`) {
 		t.Errorf("marshaled blocks missing coin_rows: %s", out)
+	}
+}
+
+// span parameterizes the range so /blocks can refresh its own page size, and a
+// span that would reach below genesis clamps the lower bound to -1.
+func TestLatestExplorerBlocksSpan(t *testing.T) {
+	src := &mockDataSource{height: 1000}
+	exp := &explorerUI{dataSource: src}
+
+	if _, err := exp.latestExplorerBlocks(context.Background(), 20); err != nil {
+		t.Fatalf("latestExplorerBlocks returned error: %v", err)
+	}
+	if src.gotBlocksStart != 1000 || src.gotBlocksEnd != 980 {
+		t.Errorf("span=20 range = %d..%d, want 1000..980", src.gotBlocksStart, src.gotBlocksEnd)
+	}
+
+	// A span larger than the tip height clamps the end to -1 (genesis guard).
+	src.height = 5
+	if _, err := exp.latestExplorerBlocks(context.Background(), 20); err != nil {
+		t.Fatalf("latestExplorerBlocks returned error: %v", err)
+	}
+	if src.gotBlocksEnd != -1 {
+		t.Errorf("clamped end = %d, want -1", src.gotBlocksEnd)
 	}
 }

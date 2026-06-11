@@ -158,16 +158,22 @@ func (exp *explorerUI) timeoutErrorPage(w http.ResponseWriter, err error, debugS
 // rendered list and the websocket refresh ("getlatestblocks") never diverge.
 const homeBlocksSpan = 8
 
-// latestExplorerBlocks returns the same block slice the home page renders (tip
-// down to tip-homeBlocksSpan), each with CoinRows populated. It backs the
-// "getlatestblocks" websocket command used to rebuild the table after a
-// reconnect or a detected height gap.
-func (exp *explorerUI) latestExplorerBlocks(ctx context.Context) ([]*types.BlockBasic, error) {
+// latestExplorerBlocks returns the latest blocks (tip down to tip-span), each
+// with CoinRows populated. It backs the "getlatestblocks" websocket command
+// used to rebuild a block table after a reconnect or a detected height gap.
+// span matches the caller's page size: homeBlocksSpan for the home table, the
+// page row count for /blocks, so the refresh reproduces the server-rendered
+// list exactly.
+func (exp *explorerUI) latestExplorerBlocks(ctx context.Context, span int) ([]*types.BlockBasic, error) {
 	height, err := exp.dataSource.GetHeight(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return exp.dataSource.GetExplorerBlocks(ctx, int(height), int(height)-homeBlocksSpan), nil
+	end := int(height) - span
+	if end < 0 {
+		end = -1
+	}
+	return exp.dataSource.GetExplorerBlocks(ctx, int(height), end), nil
 }
 
 // Home is the page handler for the "/" path.
@@ -677,6 +683,11 @@ func (exp *explorerUI) Blocks(w http.ResponseWriter, r *http.Request) {
 
 	oldestHeight := bestBlockHeight % rows
 
+	// isLatest marks the page that tracks the tip (no height param, or height ==
+	// tip). Only that page may live-update; historical pages stay static, so the
+	// blocks controller must not push new blocks onto them.
+	isLatest := height == bestBlockHeight
+
 	str, err := exp.templates.exec("blocks", struct {
 		*CommonPageData
 		Data         []*types.BlockBasic
@@ -687,6 +698,7 @@ func (exp *explorerUI) Blocks(w http.ResponseWriter, r *http.Request) {
 		WindowSize   int64
 		TimeGrouping string
 		Pages        pageNumbers
+		IsLatest     bool
 	}{
 		CommonPageData: exp.commonData(r),
 		Data:           summaries,
@@ -697,6 +709,7 @@ func (exp *explorerUI) Blocks(w http.ResponseWriter, r *http.Request) {
 		WindowSize:     exp.ChainParams.StakeDiffWindowSize,
 		TimeGrouping:   "Blocks",
 		Pages:          calcPagesDesc(int(bestBlockHeight), int(rows), int(height), linkTemplate),
+		IsLatest:       isLatest,
 	})
 
 	if err != nil {

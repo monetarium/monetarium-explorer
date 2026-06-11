@@ -5,7 +5,8 @@
 {{template "html-head" headData .CommonPageData "Monetarium Blocks List"}}
 {{template "navbar" . }}
 {{template "blocksBanner" .}}
-<div class="container px-0 main" data-controller="time pagenavigation blocks">
+<div class="container px-0 main" data-controller="time pagenavigation blocks"
+  data-blocks-is-latest-value="{{.IsLatest}}" data-blocks-rows-value="{{.Rows}}">
   {{$pendingBlocks := 0}}
   {{if gt (len $.Data) 0}}{{$pendingBlocks = ((index .Data 0).Height)}}{{end}}
 

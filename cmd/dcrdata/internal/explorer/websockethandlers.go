@@ -231,11 +231,19 @@ func (exp *explorerUI) RootWebsocket(w http.ResponseWriter, r *http.Request) {
 				webData.Message = string(msg)
 
 			case "getlatestblocks":
-				// Latest blocks for the home table. The home-latest-blocks
-				// controller requests this on reconnect and on a detected height
-				// gap to rebuild the table from authoritative data (filling any
-				// blocks missed while disconnected).
-				blocks, err := exp.latestExplorerBlocks(ctx)
+				// Latest blocks for a block table. The home-latest-blocks and
+				// blocks controllers request this on reconnect and on a detected
+				// height gap to rebuild the table from authoritative data (filling
+				// any blocks missed while disconnected). The optional message is
+				// the page size (blocks count below the tip); empty defaults to
+				// the home table's span.
+				span := homeBlocksSpan
+				if msg.Message != "" {
+					if n, err := strconv.Atoi(msg.Message); err == nil && n > 0 {
+						span = n
+					}
+				}
+				blocks, err := exp.latestExplorerBlocks(ctx, span)
 				if err != nil {
 					log.Warnf("getlatestblocks failed: %v", err)
 					webData.Message = fmt.Sprintf("Error: %v", err)
