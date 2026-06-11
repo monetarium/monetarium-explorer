@@ -89,6 +89,22 @@ table th.addr-hash-column {
   width: 20em;
 }
 
+// SKA amount column. Wider viewports have room for the full 18-decimal value on
+// one line, so default to shrink-to-fit (like VAR). Only at the smallest
+// breakpoint, where horizontal space is tight, do we let the fractional tail
+// wrap — floored at 16ch (15 integer digits + decimal point; ch is exact in a
+// monospace cell) so it can't shatter into tiny chunks when the integer is "0".
+table td.ska-amount-column {
+  width: 1%;
+  white-space: nowrap;
+
+  @media (max-width: #{$breakpoint-sm}) {
+    width: auto;
+    white-space: normal;
+    min-width: 16ch;
+  }
+}
+
 table.table.v3 {
   margin-bottom: 0;
 
