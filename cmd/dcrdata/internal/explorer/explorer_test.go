@@ -587,10 +587,10 @@ func TestStore_MiningFeeFromRealBlock4423(t *testing.T) {
 //   - Miner fee (coinbase P2PKH - PoW subsidy): 26,135 atoms
 func TestBlock4423_KnownFeeValues(t *testing.T) {
 	const (
-		regFees       = int64(31_130)
-		ticketFees    = int64(21_140)
-		totalVARFees  = int64(52_270)
-		totalVARCoin  = 0.00052270
+		regFees      = int64(31_130)
+		ticketFees   = int64(21_140)
+		totalVARFees = int64(52_270)
+		totalVARCoin = 0.00052270
 	)
 	if regFees+ticketFees != totalVARFees {
 		t.Fatal("broken test: reg + ticket != total")
