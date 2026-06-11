@@ -29,6 +29,12 @@ type mockDataSource struct {
 	tpvHeight  int64
 	tpvErr     error
 	summaries  []*apitypes.BlockDataBasic
+
+	// explorerBlocks is returned by GetExplorerBlocks; gotBlocksStart/End record
+	// the range it was last called with (for latestExplorerBlocks tests).
+	explorerBlocks []*explorerTypes.BlockBasic
+	gotBlocksStart int
+	gotBlocksEnd   int
 }
 
 func (m *mockDataSource) BlockHeight(ctx context.Context, hash string) (int64, error) { return 0, nil }
@@ -120,7 +126,9 @@ func (m *mockDataSource) GetExplorerBlock(ctx context.Context, hash string) *exp
 	return m.blocks[hash]
 }
 func (m *mockDataSource) GetExplorerBlocks(ctx context.Context, start int, end int) []*explorerTypes.BlockBasic {
-	return nil
+	m.gotBlocksStart = start
+	m.gotBlocksEnd = end
+	return m.explorerBlocks
 }
 func (m *mockDataSource) GetBlockHeight(ctx context.Context, hash string) (int64, error) {
 	return 0, nil
@@ -149,7 +157,7 @@ func (m *mockDataSource) SendRawTransaction(ctx context.Context, txhex string) (
 func (m *mockDataSource) GetTransactionByHash(ctx context.Context, txid string) (*wire.MsgTx, error) {
 	return nil, nil
 }
-func (m *mockDataSource) GetHeight(context.Context) (int64, error)                          { return 0, nil }
+func (m *mockDataSource) GetHeight(context.Context) (int64, error)                          { return m.height, nil }
 func (m *mockDataSource) TxHeight(ctx context.Context, txid *chainhash.Hash) (height int64) { return 0 }
 func (m *mockDataSource) DCP0010ActivationHeight() int64                                    { return 0 }
 func (m *mockDataSource) DCP0011ActivationHeight() int64                                    { return 0 }

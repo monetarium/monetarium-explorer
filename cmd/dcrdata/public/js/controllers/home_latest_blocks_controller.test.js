@@ -13,7 +13,41 @@ vi.mock('../services/event_bus_service', () => ({
   default: { on: vi.fn(), off: vi.fn() }
 }))
 
+vi.mock('../services/messagesocket_service', () => ({
+  default: {
+    send: vi.fn(),
+    registerEvtHandler: vi.fn(() => () => {}),
+    deregisterEvtHandler: vi.fn(),
+    deregisterEvtHandlers: vi.fn()
+  }
+}))
+
 const { default: BlocklistController } = await import('./home_latest_blocks_controller.js')
+const { default: ws } = await import('../services/messagesocket_service')
+
+// serverBlock mimics one BlockBasic entry as the "getlatestblocks" websocket
+// command marshals it: RFC3339 `time` (no unixStamp), coin_rows array.
+function serverBlock(height, skaCoinRows = []) {
+  const coinRows =
+    skaCoinRows.length > 0
+      ? [
+          { coin_type: 0, symbol: 'VAR', tx_count: 5, amount: '1.23K VAR', size: 12345 },
+          ...skaCoinRows
+        ]
+      : []
+  return {
+    height: height,
+    hash: `hash${height}`,
+    tx: 5,
+    size: 12345,
+    total: 1234.5,
+    votes: 5,
+    tickets: 3,
+    revocations: 0,
+    time: '2026-06-10T20:00:00Z',
+    coin_rows: coinRows
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -1039,5 +1073,162 @@ describe('blocklist_controller — size cell formatting', () => {
     ctrl._processBlock(makeBlock(1001, { size: 9000, skaCoinRows: skaCoinRows }))
     expect(getSubRowSizeCell(tbody, 1001, 1)).toBe('4.0 kB')
     expect(getSubRowSizeCell(tbody, 1001, 2)).toBe('10 kB')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Height-gap resilience — the live websocket can skip a height (busy chain,
+// stale initial render, or a block missed during the connect window). The old
+// code only accepted height === tip or tip+1 and silently dropped anything else;
+// because the DOM tip never advanced, one gap froze the table permanently. The
+// table must always track the newest block it is told about.
+// ---------------------------------------------------------------------------
+
+describe('blocklist_controller — height-gap resilience', () => {
+  const tipId = (tbody) =>
+    tbody.querySelector('tr[data-coin-accordion-target="blockRow"]').dataset.blockId
+  const blockRowCount = (tbody) =>
+    tbody.querySelectorAll('tr[data-coin-accordion-target="blockRow"]').length
+
+  it('inserts a new block whose height skips ahead (gap) instead of wedging', () => {
+    const { tbody, ctrl } = buildTable(1000, 3)
+    ctrl._processBlock(makeBlock(1002)) // skips 1001
+    expect(tipId(tbody)).toBe('1002')
+  })
+
+  it('keeps updating after a height gap (does not wedge permanently)', () => {
+    const { tbody, ctrl } = buildTable(1000, 3)
+    ctrl._processBlock(makeBlock(1002)) // gap
+    ctrl._processBlock(makeBlock(1003)) // next real block
+    expect(tipId(tbody)).toBe('1003')
+  })
+
+  it('keeps the block-row count constant across a gap insert', () => {
+    const { tbody, ctrl } = buildTable(1000, 3, SKA_ROWS_3)
+    const before = blockRowCount(tbody)
+    ctrl._processBlock(makeBlock(1002, { skaCoinRows: SKA_ROWS_3 }))
+    expect(blockRowCount(tbody)).toBe(before)
+  })
+
+  it('ignores a block older than the current tip (stale/reorg-behind)', () => {
+    const { tbody, ctrl } = buildTable(1000, 3)
+    const before = blockRowCount(tbody)
+    ctrl._processBlock(makeBlock(999)) // older than tip
+    expect(tipId(tbody)).toBe('1000') // tip unchanged
+    expect(blockRowCount(tbody)).toBe(before) // nothing added/removed
+  })
+
+  it('still replaces the tip in place when the same height is re-sent (reorg)', () => {
+    const { tbody, ctrl } = buildTable(1000, 3)
+    const before = blockRowCount(tbody)
+    ctrl._processBlock(makeBlock(1000, { tx: 9 })) // same height, new content
+    expect(tipId(tbody)).toBe('1000')
+    expect(blockRowCount(tbody)).toBe(before)
+    const txCell = Array.from(
+      tbody
+        .querySelector('tr[data-block-id="1000"][data-coin-accordion-target="blockRow"]')
+        .querySelectorAll('td')
+    ).find((td) => td.dataset.type === 'tx')
+    expect(txCell.textContent).toBe('9')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// C1/C2 — refresh the full list on reconnect and on a detected height gap.
+// The instant gap-fix keeps the table live; a refresh then fills the missing
+// rows from the authoritative server list (getlatestblocks websocket command).
+// ---------------------------------------------------------------------------
+
+describe('blocklist_controller — reconnect & gap refresh (C1/C2)', () => {
+  const blockRowCount = (tbody) =>
+    tbody.querySelectorAll('tr[data-coin-accordion-target="blockRow"]').length
+
+  beforeEach(() => {
+    ws.send.mockClear()
+    ws.registerEvtHandler.mockClear()
+    ws.registerEvtHandler.mockImplementation(() => () => {})
+  })
+
+  it('requests a full refresh (getlatestblocks) when a block arrives with a gap', () => {
+    const { ctrl } = buildTable(1000, 3)
+    ctrl._processBlock(makeBlock(1002)) // gap — skips 1001
+    expect(ws.send).toHaveBeenCalledWith('getlatestblocks', '')
+  })
+
+  it('does NOT request a refresh for a normal consecutive block', () => {
+    const { ctrl } = buildTable(1000, 3)
+    ctrl._processBlock(makeBlock(1001)) // tip + 1
+    expect(ws.send).not.toHaveBeenCalled()
+  })
+
+  it('does NOT request a refresh when the same tip height is re-sent (reorg)', () => {
+    const { ctrl } = buildTable(1000, 3)
+    ctrl._processBlock(makeBlock(1000, { tx: 9 }))
+    expect(ws.send).not.toHaveBeenCalled()
+  })
+
+  it('_refreshList rebuilds the whole table from the server block list (newest first)', () => {
+    const { tbody, ctrl } = buildTable(1000, 3, SKA_ROWS_3)
+    const serverBlocks = [1005, 1004, 1003].map((h) => serverBlock(h, SKA_ROWS_3))
+    ctrl._refreshList(JSON.stringify(serverBlocks))
+
+    const rows = tbody.querySelectorAll('tr[data-coin-accordion-target="blockRow"]')
+    expect(Array.from(rows).map((r) => r.dataset.blockId)).toEqual(['1005', '1004', '1003'])
+    // each rebuilt group has its VAR + SKA sub-rows
+    expect(
+      tbody.querySelectorAll('tr[data-block-id="1005"][data-coin-accordion-target="subRow"]').length
+    ).toBe(1 + SKA_ROWS_3.length)
+    // rebuilt rows are structurally complete (9 cells)
+    rows.forEach((r) => expect(r.querySelectorAll('td').length).toBe(9))
+  })
+
+  it('_refreshList ignores an empty or unparseable payload', () => {
+    const { tbody, ctrl } = buildTable(1000, 3)
+    const before = blockRowCount(tbody)
+    ctrl._refreshList('not json')
+    ctrl._refreshList(JSON.stringify([]))
+    expect(blockRowCount(tbody)).toBe(before)
+  })
+
+  it('_refreshList does NOT regress the table when the refresh is older than the current tip', () => {
+    // A live block already advanced the DOM tip to 1005; a getlatestblocks
+    // response computed at an older server tip (1003) must be dropped, not
+    // rebuild the table backwards.
+    const { tbody, ctrl } = buildTable(1005, 3)
+    const staleList = [1003, 1002, 1001].map((h) => serverBlock(h))
+    ctrl._refreshList(JSON.stringify(staleList))
+    const tipId = tbody.querySelector('tr[data-coin-accordion-target="blockRow"]').dataset.blockId
+    expect(tipId).toBe('1005') // unchanged — the live stream stays authoritative
+  })
+
+  it('_refreshList skips zero-value placeholder blocks (no hash)', () => {
+    // The server pads heights that fail to load with an empty BlockBasic (no
+    // hash, height 0); the rebuild must not render a /block/0 row for them.
+    const { tbody, ctrl } = buildTable(1000, 3)
+    const list = [
+      serverBlock(1005),
+      { height: 0, time: '0001-01-01T00:00:00Z', coin_rows: [] }, // placeholder: no hash
+      serverBlock(1003)
+    ]
+    ctrl._refreshList(JSON.stringify(list))
+    const ids = Array.from(tbody.querySelectorAll('tr[data-coin-accordion-target="blockRow"]')).map(
+      (r) => r.dataset.blockId
+    )
+    expect(ids).toEqual(['1005', '1003']) // placeholder dropped
+  })
+
+  it('connect registers reconnect + getlatestblocksResp handlers; disconnect tears them down', () => {
+    const unsub = vi.fn()
+    ws.registerEvtHandler.mockReturnValue(unsub)
+    const { ctrl } = buildTable(1000, 1)
+    ctrl.data = { get: () => null }
+
+    ctrl.connect()
+    const events = ws.registerEvtHandler.mock.calls.map((c) => c[0])
+    expect(events).toContain('reconnect')
+    expect(events).toContain('getlatestblocksResp')
+
+    ctrl.disconnect()
+    expect(unsub).toHaveBeenCalledTimes(2)
   })
 })

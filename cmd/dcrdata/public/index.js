@@ -2,6 +2,7 @@
 import { Application } from '@hotwired/stimulus'
 import { definitionsFromContext } from '@hotwired/stimulus-webpack-helpers'
 import 'regenerator-runtime/runtime'
+import { notificationPermission } from './js/helpers/notification_helper'
 import globalEventBus from './js/services/event_bus_service'
 import ws from './js/services/messagesocket_service'
 import { darkEnabled } from './js/services/theme_service'
@@ -24,7 +25,7 @@ document.addEventListener('turbolinks:load', (_e) => {
 })
 
 export function notifyNewBlock(newBlock) {
-  if (window.Notification.permission !== 'granted') return
+  if (notificationPermission() !== 'granted') return
   const block = newBlock.block
   const newBlockNtfn = new window.Notification('New Monetarium Block Mined', {
     body: `Block mined at height ${block.height}`,

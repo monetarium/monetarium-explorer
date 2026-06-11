@@ -153,6 +153,65 @@ func (exp *explorerUI) timeoutErrorPage(w http.ResponseWriter, err error, debugS
 	return
 }
 
+// homeBlocksSpan is how many blocks below the tip the home "latest blocks"
+// table shows. Shared by Home() and latestExplorerBlocks() so the server-
+// rendered list and the websocket refresh ("getlatestblocks") never diverge.
+const homeBlocksSpan = 8
+
+// clampLatestBlocksSpan resolves the optional "getlatestblocks" page-size
+// argument to a block span. An empty, non-numeric, or non-positive argument
+// falls back to homeBlocksSpan; a larger value is capped at maxExplorerRows.
+// The cap matters: latestExplorerBlocks turns the span into one DB round-trip
+// per block (GetExplorerBlocks calls getBlockVerbose per height), so an
+// uncapped client value would let any unauthenticated socket request a
+// tip-to-genesis scan. This mirrors the cap the /blocks HTTP route applies.
+func clampLatestBlocksSpan(message string) int {
+	if n, err := strconv.Atoi(message); err == nil && n > 0 {
+		return min(n, maxExplorerRows)
+	}
+	return homeBlocksSpan
+}
+
+// latestBlocksEnd is the exclusive lower bound (the GetExplorerBlocks "end"
+// argument) for a window of span blocks below height, clamped so the range
+// never reaches below genesis. Shared by Home() and latestExplorerBlocks() so
+// the server-rendered list and the websocket refresh request the identical
+// range — without this single source the two clamps drifted (Home used an
+// unclamped height-span, which at height < span asks for negative heights).
+func latestBlocksEnd(height int64, span int) int {
+	end := int(height) - span
+	if end < 0 {
+		end = -1
+	}
+	return end
+}
+
+// latestExplorerBlocks returns the latest blocks (tip down to tip-span), each
+// with CoinRows populated. It backs the "getlatestblocks" websocket command
+// used to rebuild a block table after a reconnect or a detected height gap.
+// span matches the caller's page size: homeBlocksSpan for the home table, the
+// page row count for /blocks, so the refresh reproduces the server-rendered
+// list exactly.
+func (exp *explorerUI) latestExplorerBlocks(ctx context.Context, span int) ([]*types.BlockBasic, error) {
+	height, err := exp.dataSource.GetHeight(ctx)
+	if err != nil {
+		return nil, err
+	}
+	blocks := exp.dataSource.GetExplorerBlocks(ctx, int(height), latestBlocksEnd(height, span))
+
+	// GetExplorerBlocks pads any height that fails to load with a zero-value
+	// BlockBasic (empty Hash, Height 0). Drop those so the refresh never rebuilds
+	// the table with a /block/0 row carrying a year-0001 timestamp. A real block —
+	// including genesis at height 0 — always has a non-empty hash.
+	filtered := blocks[:0]
+	for _, b := range blocks {
+		if b != nil && b.Hash != "" {
+			filtered = append(filtered, b)
+		}
+	}
+	return filtered, nil
+}
+
 // Home is the page handler for the "/" path.
 func (exp *explorerUI) Home(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -165,7 +224,7 @@ func (exp *explorerUI) Home(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	blocks := exp.dataSource.GetExplorerBlocks(ctx, int(height), int(height)-8)
+	blocks := exp.dataSource.GetExplorerBlocks(ctx, int(height), latestBlocksEnd(height, homeBlocksSpan))
 
 	// Safely retrieve the current inventory pointer.
 	inv := exp.MempoolInventory()
@@ -660,6 +719,11 @@ func (exp *explorerUI) Blocks(w http.ResponseWriter, r *http.Request) {
 
 	oldestHeight := bestBlockHeight % rows
 
+	// isLatest marks the page that tracks the tip (no height param, or height ==
+	// tip). Only that page may live-update; historical pages stay static, so the
+	// blocks controller must not push new blocks onto them.
+	isLatest := height == bestBlockHeight
+
 	str, err := exp.templates.exec("blocks", struct {
 		*CommonPageData
 		Data         []*types.BlockBasic
@@ -670,6 +734,7 @@ func (exp *explorerUI) Blocks(w http.ResponseWriter, r *http.Request) {
 		WindowSize   int64
 		TimeGrouping string
 		Pages        pageNumbers
+		IsLatest     bool
 	}{
 		CommonPageData: exp.commonData(r),
 		Data:           summaries,
@@ -680,6 +745,7 @@ func (exp *explorerUI) Blocks(w http.ResponseWriter, r *http.Request) {
 		WindowSize:     exp.ChainParams.StakeDiffWindowSize,
 		TimeGrouping:   "Blocks",
 		Pages:          calcPagesDesc(int(bestBlockHeight), int(rows), int(height), linkTemplate),
+		IsLatest:       isLatest,
 	})
 
 	if err != nil {

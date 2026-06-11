@@ -230,6 +230,30 @@ func (exp *explorerUI) RootWebsocket(w http.ResponseWriter, r *http.Request) {
 				}
 				webData.Message = string(msg)
 
+			case "getlatestblocks":
+				// Latest blocks for a block table. The home-latest-blocks and
+				// blocks controllers request this on reconnect and on a detected
+				// height gap to rebuild the table from authoritative data (filling
+				// any blocks missed while disconnected). The optional message is
+				// the page size (blocks count below the tip); empty defaults to
+				// the home table's span. Capped at maxExplorerRows so a client
+				// can't request a tip-to-genesis range (see
+				// clampLatestBlocksSpan).
+				span := clampLatestBlocksSpan(msg.Message)
+				blocks, err := exp.latestExplorerBlocks(ctx, span)
+				if err != nil {
+					log.Warnf("getlatestblocks failed: %v", err)
+					webData.Message = fmt.Sprintf("Error: %v", err)
+					break
+				}
+				msg, err := json.Marshal(blocks)
+				if err != nil {
+					log.Warn("Invalid JSON message: ", err)
+					webData.Message = errMsgJSONEncode
+					break
+				}
+				webData.Message = string(msg)
+
 			case "ping":
 				log.Tracef("We've been pinged: %.40s...", msg.Message)
 				continue
