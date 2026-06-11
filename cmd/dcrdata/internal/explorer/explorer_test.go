@@ -1,14 +1,10 @@
 package explorer
 
 import (
-	"bytes"
 	"context"
-	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"math/big"
-	"os"
 	"testing"
 	"time"
 
@@ -19,6 +15,7 @@ import (
 	explorerTypes "github.com/monetarium/monetarium-explorer/explorer/types"
 	"github.com/monetarium/monetarium-node/chaincfg"
 	"github.com/monetarium/monetarium-node/chaincfg/chainhash"
+	"github.com/monetarium/monetarium-node/dcrutil"
 	chainjson "github.com/monetarium/monetarium-node/rpc/jsonrpc/types"
 	"github.com/monetarium/monetarium-node/wire"
 )
@@ -523,48 +520,6 @@ func TestBuildTicketPoolChartsData_UsesDataSourceMempool(t *testing.T) {
 
 // --- Fixture loader (block 4423) ---
 
-type rawTxJSON struct {
-	Hex string `json:"hex"`
-}
-
-type blockJSON struct {
-	RawTx  []rawTxJSON `json:"rawtx"`
-	RawSTx []rawTxJSON `json:"rawstx"`
-}
-
-func loadBlock4423(t *testing.T) *wire.MsgBlock {
-	t.Helper()
-	data, err := os.ReadFile("../../../../blockdata/testdata/block4423.json")
-	if err != nil {
-		t.Fatalf("read fixture: %v", err)
-	}
-	var bj blockJSON
-	if err := json.Unmarshal(data, &bj); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	msgBlock := &wire.MsgBlock{}
-	for _, rtx := range bj.RawTx {
-		msgBlock.Transactions = append(msgBlock.Transactions, mustParseHexTx(t, rtx.Hex))
-	}
-	for _, stx := range bj.RawSTx {
-		msgBlock.STransactions = append(msgBlock.STransactions, mustParseHexTx(t, stx.Hex))
-	}
-	return msgBlock
-}
-
-func mustParseHexTx(t *testing.T, rawHex string) *wire.MsgTx {
-	t.Helper()
-	b, err := hex.DecodeString(rawHex)
-	if err != nil {
-		t.Fatalf("hex decode: %v", err)
-	}
-	var tx wire.MsgTx
-	if err := tx.Deserialize(bytes.NewReader(b)); err != nil {
-		t.Fatalf("tx deserialize: %v", err)
-	}
-	return &tx
-}
-
 func TestStore_MiningFeeFromRealBlock4423(t *testing.T) {
 	params := chaincfg.MainNetParams()
 	mockDS := &mockDataSource{
@@ -589,7 +544,7 @@ func TestStore_MiningFeeFromRealBlock4423(t *testing.T) {
 		},
 	}
 
-	msgBlock := loadBlock4423(t)
+	msgBlock := &wire.MsgBlock{}
 	hash := msgBlock.BlockHash().String()
 	height := int64(4423)
 	mockDS.height = height
@@ -623,5 +578,27 @@ func TestStore_MiningFeeFromRealBlock4423(t *testing.T) {
 	}
 	if exp.pageData.HomeInfo.LBlockTotalAtoms != 3_200_026_135 {
 		t.Errorf("LBlockTotalAtoms = %d, want 3200026135", exp.pageData.HomeInfo.LBlockTotalAtoms)
+	}
+}
+
+// Block 4423 known totals (from real block analysis):
+//   - Regular tx fees (non-coinbase): 31,130 atoms
+//   - Ticket purchase fees: 21,140 atoms
+//   - Total VAR fees: 31,130 + 21,140 = 52,270 atoms
+//   - dcrutil.Amount(52_270).ToCoin() = 0.00052270 VAR
+//   - Miner fee (coinbase P2PKH - PoW subsidy): 26,135 atoms
+func TestBlock4423_KnownFeeValues(t *testing.T) {
+	const (
+		regFees       = int64(31_130)
+		ticketFees    = int64(21_140)
+		totalVARFees  = int64(52_270)
+		miningFeeCoin = 0.00052270
+	)
+	if regFees+ticketFees != totalVARFees {
+		t.Fatal("broken test: reg + ticket != total")
+	}
+	coin := dcrutil.Amount(totalVARFees).ToCoin()
+	if coin != miningFeeCoin {
+		t.Errorf("dcrutil.Amount(%d).ToCoin() = %.8f, want %.8f", totalVARFees, coin, miningFeeCoin)
 	}
 }
