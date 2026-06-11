@@ -158,6 +158,24 @@ func (exp *explorerUI) timeoutErrorPage(w http.ResponseWriter, err error, debugS
 // rendered list and the websocket refresh ("getlatestblocks") never diverge.
 const homeBlocksSpan = 8
 
+// clampLatestBlocksSpan resolves the optional "getlatestblocks" page-size
+// argument to a block span. An empty, non-numeric, or non-positive argument
+// falls back to homeBlocksSpan; a larger value is capped at maxExplorerRows.
+// The cap matters: latestExplorerBlocks turns the span into one DB round-trip
+// per block (GetExplorerBlocks calls getBlockVerbose per height), so an
+// uncapped client value would let any unauthenticated socket request a
+// tip-to-genesis scan. This mirrors the cap the /blocks HTTP route applies.
+func clampLatestBlocksSpan(message string) int {
+	span := homeBlocksSpan
+	if n, err := strconv.Atoi(message); err == nil && n > 0 {
+		span = n
+		if span > maxExplorerRows {
+			span = maxExplorerRows
+		}
+	}
+	return span
+}
+
 // latestExplorerBlocks returns the latest blocks (tip down to tip-span), each
 // with CoinRows populated. It backs the "getlatestblocks" websocket command
 // used to rebuild a block table after a reconnect or a detected height gap.

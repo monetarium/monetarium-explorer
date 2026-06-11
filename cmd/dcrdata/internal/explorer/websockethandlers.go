@@ -236,13 +236,10 @@ func (exp *explorerUI) RootWebsocket(w http.ResponseWriter, r *http.Request) {
 				// height gap to rebuild the table from authoritative data (filling
 				// any blocks missed while disconnected). The optional message is
 				// the page size (blocks count below the tip); empty defaults to
-				// the home table's span.
-				span := homeBlocksSpan
-				if msg.Message != "" {
-					if n, err := strconv.Atoi(msg.Message); err == nil && n > 0 {
-						span = n
-					}
-				}
+				// the home table's span. Capped at maxExplorerRows so a client
+				// can't request a tip-to-genesis range (see
+				// clampLatestBlocksSpan).
+				span := clampLatestBlocksSpan(msg.Message)
 				blocks, err := exp.latestExplorerBlocks(ctx, span)
 				if err != nil {
 					log.Warnf("getlatestblocks failed: %v", err)

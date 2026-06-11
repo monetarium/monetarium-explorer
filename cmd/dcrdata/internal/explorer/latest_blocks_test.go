@@ -3,6 +3,7 @@ package explorer
 import (
 	"context"
 	"encoding/json"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -48,6 +49,35 @@ func TestLatestExplorerBlocks(t *testing.T) {
 	}
 	if !strings.Contains(string(out), `"coin_rows"`) {
 		t.Errorf("marshaled blocks missing coin_rows: %s", out)
+	}
+}
+
+// clampLatestBlocksSpan resolves the optional "getlatestblocks" page-size
+// argument. It must default to the home span for empty/invalid/non-positive
+// input and cap large requests at maxExplorerRows so an unauthenticated client
+// can't ask for a tip-to-genesis range (each block is a DB round-trip).
+func TestClampLatestBlocksSpan(t *testing.T) {
+	tests := []struct {
+		name    string
+		message string
+		want    int
+	}{
+		{"empty defaults to home span", "", homeBlocksSpan},
+		{"invalid defaults to home span", "abc", homeBlocksSpan},
+		{"zero defaults to home span", "0", homeBlocksSpan},
+		{"negative defaults to home span", "-5", homeBlocksSpan},
+		{"valid in-range value passes through", "20", 20},
+		{"at cap passes through", strconv.Itoa(maxExplorerRows), maxExplorerRows},
+		{"just under cap passes through", strconv.Itoa(maxExplorerRows - 1), maxExplorerRows - 1},
+		{"just over cap clamps", strconv.Itoa(maxExplorerRows + 1), maxExplorerRows},
+		{"huge value clamps (DoS guard)", "999999", maxExplorerRows},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := clampLatestBlocksSpan(tt.message); got != tt.want {
+				t.Errorf("clampLatestBlocksSpan(%q) = %d, want %d", tt.message, got, tt.want)
+			}
+		})
 	}
 }
 
