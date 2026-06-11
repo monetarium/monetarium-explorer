@@ -15,14 +15,18 @@ import (
 // and return blocks carrying CoinRows, so the client can rebuild the table
 // identically to the server-rendered list.
 func TestLatestExplorerBlocks(t *testing.T) {
+	// A known block time so the marshaled JSON can be checked for the exact
+	// RFC3339 string the client's `new Date(block.time)` depends on.
+	blockTime := explorerTypes.NewTimeDefFromUNIX(1749585600)
 	src := &mockDataSource{
 		height: 1000,
 		explorerBlocks: []*explorerTypes.BlockBasic{
-			{Height: 1000, CoinRows: []explorerTypes.CoinRowData{
-				{CoinType: 0, Symbol: "VAR", Amount: "12345"},
-				{CoinType: 1, Symbol: "SKA1", Amount: "67890"},
-			}},
-			{Height: 999},
+			{Height: 1000, Hash: "hash1000", BlockTime: blockTime,
+				CoinRows: []explorerTypes.CoinRowData{
+					{CoinType: 0, Symbol: "VAR", Amount: "12345"},
+					{CoinType: 1, Symbol: "SKA1", Amount: "67890"},
+				}},
+			{Height: 999, Hash: "hash999", BlockTime: blockTime},
 		},
 	}
 	exp := &explorerUI{dataSource: src}
@@ -42,13 +46,85 @@ func TestLatestExplorerBlocks(t *testing.T) {
 		t.Fatalf("got %d blocks, want 2", len(blocks))
 	}
 
-	// The JSON the websocket sends must carry coin_rows (what the client renders).
 	out, err := json.Marshal(blocks)
 	if err != nil {
 		t.Fatalf("json.Marshal failed: %v", err)
 	}
-	if !strings.Contains(string(out), `"coin_rows"`) {
-		t.Errorf("marshaled blocks missing coin_rows: %s", out)
+	// The client renders the coin amounts straight from this JSON — assert the
+	// actual values survive, not merely that the key exists.
+	for _, want := range []string{`"coin_rows"`, `"amount":"12345"`, `"amount":"67890"`} {
+		if !strings.Contains(string(out), want) {
+			t.Errorf("marshaled blocks missing %s: %s", want, out)
+		}
+	}
+	// time must marshal as the RFC3339 string the client parses with new Date();
+	// a regression to a UNIX int or wrapper object would break the refresh.
+	if wantTime := blockTime.RFC3339(); !strings.Contains(string(out), wantTime) {
+		t.Errorf("marshaled blocks missing RFC3339 time %q: %s", wantTime, out)
+	}
+}
+
+// latestExplorerBlocks must drop the zero-value placeholder blocks that
+// GetExplorerBlocks emits for heights that fail to load, so the websocket
+// refresh never rebuilds the table with a /block/0 row. A real block —
+// including genesis at height 0 — has a non-empty hash and must survive.
+func TestLatestExplorerBlocksFiltersPlaceholders(t *testing.T) {
+	src := &mockDataSource{
+		height: 1000,
+		explorerBlocks: []*explorerTypes.BlockBasic{
+			{Height: 1000, Hash: "tip"},
+			{},                           // zero-value placeholder for a height that failed to load
+			{Height: 0, Hash: "genesis"}, // genesis: height 0 but real — must survive
+		},
+	}
+	exp := &explorerUI{dataSource: src}
+
+	blocks, err := exp.latestExplorerBlocks(context.Background(), homeBlocksSpan)
+	if err != nil {
+		t.Fatalf("latestExplorerBlocks returned error: %v", err)
+	}
+	if len(blocks) != 2 {
+		t.Fatalf("got %d blocks, want 2 (zero-value placeholder dropped)", len(blocks))
+	}
+	var sawGenesis bool
+	for _, b := range blocks {
+		if b.Hash == "" {
+			t.Errorf("placeholder block (empty hash) leaked into the refresh list")
+		}
+		if b.Height == 0 && b.Hash == "genesis" {
+			sawGenesis = true
+		}
+	}
+	if !sawGenesis {
+		t.Error("genesis block (height 0, real hash) was incorrectly filtered out")
+	}
+}
+
+// latestBlocksEnd is the single source of the GetExplorerBlocks "end" argument
+// shared by Home() and latestExplorerBlocks(); the two must request the same
+// range so the server-rendered list and the websocket refresh never diverge,
+// including the below-genesis clamp at low chain heights.
+func TestLatestBlocksEnd(t *testing.T) {
+	tests := []struct {
+		name   string
+		height int64
+		span   int
+		want   int
+	}{
+		{"normal range", 1000, homeBlocksSpan, 1000 - homeBlocksSpan},
+		{"full page span", 1000, maxExplorerRows, 1000 - maxExplorerRows},
+		{"end exactly zero", 8, 8, 0},
+		{"end below genesis clamps to -1", 5, 8, -1},
+		{"tip at genesis clamps to -1", 0, homeBlocksSpan, -1},
+		{"span of one at genesis", 1, 1, 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := latestBlocksEnd(tt.height, tt.span); got != tt.want {
+				t.Errorf("latestBlocksEnd(%d, %d) = %d, want %d",
+					tt.height, tt.span, got, tt.want)
+			}
+		})
 	}
 }
 

@@ -166,14 +166,24 @@ const homeBlocksSpan = 8
 // uncapped client value would let any unauthenticated socket request a
 // tip-to-genesis scan. This mirrors the cap the /blocks HTTP route applies.
 func clampLatestBlocksSpan(message string) int {
-	span := homeBlocksSpan
 	if n, err := strconv.Atoi(message); err == nil && n > 0 {
-		span = n
-		if span > maxExplorerRows {
-			span = maxExplorerRows
-		}
+		return min(n, maxExplorerRows)
 	}
-	return span
+	return homeBlocksSpan
+}
+
+// latestBlocksEnd is the exclusive lower bound (the GetExplorerBlocks "end"
+// argument) for a window of span blocks below height, clamped so the range
+// never reaches below genesis. Shared by Home() and latestExplorerBlocks() so
+// the server-rendered list and the websocket refresh request the identical
+// range — without this single source the two clamps drifted (Home used an
+// unclamped height-span, which at height < span asks for negative heights).
+func latestBlocksEnd(height int64, span int) int {
+	end := int(height) - span
+	if end < 0 {
+		end = -1
+	}
+	return end
 }
 
 // latestExplorerBlocks returns the latest blocks (tip down to tip-span), each
@@ -187,11 +197,19 @@ func (exp *explorerUI) latestExplorerBlocks(ctx context.Context, span int) ([]*t
 	if err != nil {
 		return nil, err
 	}
-	end := int(height) - span
-	if end < 0 {
-		end = -1
+	blocks := exp.dataSource.GetExplorerBlocks(ctx, int(height), latestBlocksEnd(height, span))
+
+	// GetExplorerBlocks pads any height that fails to load with a zero-value
+	// BlockBasic (empty Hash, Height 0). Drop those so the refresh never rebuilds
+	// the table with a /block/0 row carrying a year-0001 timestamp. A real block —
+	// including genesis at height 0 — always has a non-empty hash.
+	filtered := blocks[:0]
+	for _, b := range blocks {
+		if b != nil && b.Hash != "" {
+			filtered = append(filtered, b)
+		}
 	}
-	return exp.dataSource.GetExplorerBlocks(ctx, int(height), end), nil
+	return filtered, nil
 }
 
 // Home is the page handler for the "/" path.
@@ -206,7 +224,7 @@ func (exp *explorerUI) Home(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	blocks := exp.dataSource.GetExplorerBlocks(ctx, int(height), int(height)-homeBlocksSpan)
+	blocks := exp.dataSource.GetExplorerBlocks(ctx, int(height), latestBlocksEnd(height, homeBlocksSpan))
 
 	// Safely retrieve the current inventory pointer.
 	inv := exp.MempoolInventory()
