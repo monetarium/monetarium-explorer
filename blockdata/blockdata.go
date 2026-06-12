@@ -658,10 +658,12 @@ func BlockSKAPoWRewardsFromSTx(msgBlock *wire.MsgBlock) map[uint8]string {
 }
 
 // computeMinerVARFeeAtoms computes the miner's VAR fee as the total VAR value
-// created by the coinbase transaction: Σ(VAR outputs) − Σ(VAR inputs). The
+// created by the coinbase transaction: Σ(VAR outputs) − Σ(inputs). The
 // coinbase input values carry the actual vote-scaled subsidy assigned by the
 // node (correct for any vote count 0-5), while the outputs carry subsidy plus
 // fees. This matches the PoW-Reward tx page's FeeReward by construction.
+// Inputs are not filtered by coin type (a VAR coinbase has no non-VAR inputs
+// under the single-coin invariant).
 func computeMinerVARFeeAtoms(msgBlock *wire.MsgBlock) int64 {
 	if len(msgBlock.Transactions) == 0 {
 		return 0
