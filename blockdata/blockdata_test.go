@@ -576,11 +576,12 @@ func TestComputeMinerVARFeeAtoms_Block4423Style(t *testing.T) {
 // correctly extracts the miner fee when the coinbase carries a vote-scaled
 // subsidy (e.g. 4 votes instead of the maximum 5). The old approach of
 // subtracting a hardcoded 5-vote subsidy from the RPC would fail here:
-//   fullSubsidy = 1_600_000_000
-//   voteScaledSubsidy = fullSubsidy * 4 / 5 = 1_280_000_000
-//   minerOutput = voteScaledSubsidy + fee = 1_280_010_000
-//   OLD: minerOutput - fullSubsidy = -319_990_000 → clamped to 0  ← BUG
-//   NEW: minerOutput - voteScaledSubsidy = 10_000  ← CORRECT
+//
+//	fullSubsidy = 1_600_000_000
+//	voteScaledSubsidy = fullSubsidy * 4 / 5 = 1_280_000_000
+//	minerOutput = voteScaledSubsidy + fee = 1_280_010_000
+//	OLD: minerOutput - fullSubsidy = -319_990_000 → clamped to 0  ← BUG
+//	NEW: minerOutput - voteScaledSubsidy = 10_000  ← CORRECT
 func TestComputeMinerVARFeeAtoms_FourVoteBlock(t *testing.T) {
 	fullSubsidy := int64(1_600_000_000)
 	voteScaledSubsidy := fullSubsidy * 4 / 5
