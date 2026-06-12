@@ -33,7 +33,16 @@ class EventBus {
   publish(eventType, args) {
     const eventCallbacksPair = findEventCallbacksPair(eventType)
     if (!eventCallbacksPair) return
-    eventCallbacksPair.callbacks.forEach((callback) => callback(args))
+    // Isolate subscribers: one throwing callback must not prevent the rest from
+    // running. Iterate a copy so a subscriber that unsubscribes mid-publish does
+    // not skip its neighbour.
+    eventCallbacksPair.callbacks.slice().forEach((callback) => {
+      try {
+        callback(args)
+      } catch (err) {
+        console.error(`EventBus: subscriber for "${eventType}" threw:`, err)
+      }
+    })
   }
 }
 

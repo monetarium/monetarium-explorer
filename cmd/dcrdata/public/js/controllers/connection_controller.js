@@ -1,4 +1,5 @@
 import { Controller } from '@hotwired/stimulus'
+import { requestNotifyPermission as requestNotifyPermissionSafe } from '../helpers/notification_helper'
 import ws from '../services/messagesocket_service'
 
 export default class extends Controller {
@@ -48,7 +49,6 @@ export default class extends Controller {
   }
 
   requestNotifyPermission() {
-    if (window.Notification.permission === 'granted') return
-    if (window.Notification.permission !== 'denied') window.Notification.requestPermission()
+    requestNotifyPermissionSafe()
   }
 }

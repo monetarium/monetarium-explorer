@@ -1,6 +1,7 @@
 /* global Turbolinks */
 import { Controller } from '@hotwired/stimulus'
 import dompurify from 'dompurify'
+import { notificationPermission } from '../helpers/notification_helper'
 import globalEventBus from '../services/event_bus_service'
 import ws from '../services/messagesocket_service'
 
@@ -93,7 +94,7 @@ export default class extends Controller {
             'Blockchain synchronization complete. You will be redirected to the home page shortly.'
           this.messageTarget.querySelector('h5').textContent = msg
           setTimeout(() => Turbolinks.visit('/'), 10000)
-          if (window.Notification.permission === 'granted') {
+          if (notificationPermission() === 'granted') {
             const ntfn = new window.Notification('Blockchain Sync Complete', {
               body: msg,
               icon: '/images/monetarium144x128.png?v=2'

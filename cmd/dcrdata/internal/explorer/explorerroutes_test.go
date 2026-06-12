@@ -377,6 +377,51 @@ func TestPageNumbers(t *testing.T) {
 	}
 }
 
+// TestNormalizeExplorerRows covers the shared page-size defaulting/clamping used
+// by the /blocks, /ticketpricewindows and time-based listing handlers. The
+// default (rows == 0) must be 100 per issue #449; sizes in (0, max] pass through
+// so the per-page control can still select smaller sizes; sizes above the cap
+// clamp to maxExplorerRows. The uint64 path must clamp huge values without
+// overflowing (a naive int64 conversion would wrap them negative).
+func TestNormalizeExplorerRows(t *testing.T) {
+	t.Run("int64", func(t *testing.T) {
+		cases := []struct {
+			name string
+			in   int64
+			want int64
+		}{
+			{"zero defaults to 100", 0, 100},
+			{"small size passes through", 10, 10},
+			{"mid size passes through", 50, 50},
+			{"exactly max passes through", 400, 400},
+			{"above max is clamped", 401, 400},
+		}
+		for _, c := range cases {
+			if got := normalizeExplorerRows(c.in); got != c.want {
+				t.Errorf("%s: normalizeExplorerRows(%d) = %d, want %d", c.name, c.in, got, c.want)
+			}
+		}
+	})
+
+	t.Run("uint64", func(t *testing.T) {
+		cases := []struct {
+			name string
+			in   uint64
+			want uint64
+		}{
+			{"zero defaults to 100", 0, 100},
+			{"small size passes through", 20, 20},
+			{"above max is clamped", 401, 400},
+			{"huge value is clamped without overflow", ^uint64(0), 400},
+		}
+		for _, c := range cases {
+			if got := normalizeExplorerRows(c.in); got != c.want {
+				t.Errorf("%s: normalizeExplorerRows(%d) = %d, want %d", c.name, c.in, got, c.want)
+			}
+		}
+	})
+}
+
 // func TestTxPageResponseCodes(t *testing.T) {
 // 	var wiredDBStub testTxPageWiredDBStub
 // 	var chainDBStub ChainDBStub
