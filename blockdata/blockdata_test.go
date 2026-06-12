@@ -504,8 +504,10 @@ func TestComputeMinerVARFeeAtoms_MultipleRegularTx(t *testing.T) {
 
 func TestComputeMinerVARFeeAtoms_TicketInSTransactions(t *testing.T) {
 	s := int64(16e8)
-	// Ticket fees are distributed via SSFee, not coinbase.
-	// Coinbase has only the subsidy.
+	// This test uses a coinbase with ONLY the subsidy and no fees, so the
+	// result is 0 regardless of how ticket fees are split. In real blocks
+	// the miner's 50% share of ticket fees DOES reach the coinbase (see
+	// TestComputeMinerVARFeeAtoms_BothTrees).
 	block := &wire.MsgBlock{
 		Transactions:  []*wire.MsgTx{coinbaseWithP2PKH(s, s)},
 		STransactions: []*wire.MsgTx{newSStxWithFee(t, 1_000_000, 12_345)},
@@ -513,7 +515,7 @@ func TestComputeMinerVARFeeAtoms_TicketInSTransactions(t *testing.T) {
 
 	got := computeMinerVARFeeAtoms(block)
 	if got != 0 {
-		t.Errorf("got %d, want 0 (ticket fees are not in coinbase)", got)
+		t.Errorf("got %d, want 0 (coinbase has subsidy only, no fees)", got)
 	}
 }
 
