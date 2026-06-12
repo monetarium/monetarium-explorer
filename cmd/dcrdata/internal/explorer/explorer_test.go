@@ -518,7 +518,12 @@ func TestBuildTicketPoolChartsData_UsesDataSourceMempool(t *testing.T) {
 	})
 }
 
-func TestStore_MiningFeeFromRealBlock4423(t *testing.T) {
+// TestStore_PropagatesMiningFeeAtoms verifies that Store copies
+// ExtraInfo.MiningFeeAtoms from blockData into HomeInfo. It does NOT
+// test the mining fee computation itself (that happens in the collector,
+// which calls computeMinerVARFeeAtoms). A full collector-path test
+// requires the 5-vote subsidy mismatch to be resolved first.
+func TestStore_PropagatesMiningFeeAtoms(t *testing.T) {
 	params := chaincfg.MainNetParams()
 	mockDS := &mockDataSource{
 		blocks:  make(map[string]*explorerTypes.BlockInfo),
@@ -542,6 +547,7 @@ func TestStore_MiningFeeFromRealBlock4423(t *testing.T) {
 		},
 	}
 
+	// Empty block is fine — Store does not inspect msgBlock for fee data.
 	msgBlock := &wire.MsgBlock{}
 	hash := msgBlock.BlockHash().String()
 	height := int64(4423)
