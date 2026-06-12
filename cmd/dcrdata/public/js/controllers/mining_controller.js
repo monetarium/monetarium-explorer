@@ -30,7 +30,12 @@ export default class extends Controller {
       8,
       2
     )
-    this.powSubsidyTarget.innerHTML = humanize.decimalParts(ex.subsidy.pow / 100000000, false, 8, 2)
+    this.powSubsidyTarget.innerHTML = humanize.decimalParts(
+      (ex.cblock_subsidy || ex.subsidy).pow / 100000000,
+      false,
+      8,
+      2
+    )
     this.powFeeTarget.innerHTML = humanize.decimalParts(
       (ex.mining_fee_atoms || 0) / 100000000,
       false,

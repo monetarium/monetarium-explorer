@@ -737,6 +737,14 @@ func (psh *PubSubHub) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgBl
 	p.GeneralInfo.NBlockSubsidy.PoS = blockData.ExtraInfo.NextBlockSubsidy.PoS
 	p.GeneralInfo.NBlockSubsidy.PoW = blockData.ExtraInfo.NextBlockSubsidy.PoW
 	p.GeneralInfo.NBlockSubsidy.Total = blockData.ExtraInfo.NextBlockSubsidy.Total
+	if blockData.ExtraInfo.CurrentBlockSubsidy != nil {
+		p.GeneralInfo.CBlockSubsidy.Dev = blockData.ExtraInfo.CurrentBlockSubsidy.Developer
+		p.GeneralInfo.CBlockSubsidy.PoS = blockData.ExtraInfo.CurrentBlockSubsidy.PoS
+		p.GeneralInfo.CBlockSubsidy.PoW = blockData.ExtraInfo.CurrentBlockSubsidy.PoW
+		p.GeneralInfo.CBlockSubsidy.Total = blockData.ExtraInfo.CurrentBlockSubsidy.Total
+	} else {
+		p.GeneralInfo.CBlockSubsidy = p.GeneralInfo.NBlockSubsidy
+	}
 	if activeMinersOK {
 		p.GeneralInfo.ActiveMiners = activeMinersCount
 	}
@@ -744,9 +752,9 @@ func (psh *PubSubHub) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgBl
 	// Total reward = subsidy + mining fees (~16 + <1 VAR)
 	// MiningFee from blockData (computed in collector)
 	p.GeneralInfo.MiningFeeAtoms = blockData.ExtraInfo.MiningFeeAtoms
-	p.GeneralInfo.LBlockTotal = dcrutil.Amount(p.GeneralInfo.NBlockSubsidy.PoW).ToCoin() + dcrutil.Amount(blockData.ExtraInfo.MiningFeeAtoms).ToCoin()
-	p.GeneralInfo.LBlockTotalAtoms = p.GeneralInfo.NBlockSubsidy.PoW + blockData.ExtraInfo.MiningFeeAtoms
-	log.Debugf("PUB LBlockTotalAtoms: %d (MiningFee: %.8f, NBlockSubsidy.PoW: %d)", p.GeneralInfo.LBlockTotalAtoms, dcrutil.Amount(blockData.ExtraInfo.MiningFeeAtoms).ToCoin(), p.GeneralInfo.NBlockSubsidy.PoW)
+	p.GeneralInfo.LBlockTotal = dcrutil.Amount(p.GeneralInfo.CBlockSubsidy.PoW).ToCoin() + dcrutil.Amount(blockData.ExtraInfo.MiningFeeAtoms).ToCoin()
+	p.GeneralInfo.LBlockTotalAtoms = p.GeneralInfo.CBlockSubsidy.PoW + blockData.ExtraInfo.MiningFeeAtoms
+	log.Debugf("PUB LBlockTotalAtoms: %d (MiningFee: %.8f, CBlockSubsidy.PoW: %d)", p.GeneralInfo.LBlockTotalAtoms, dcrutil.Amount(blockData.ExtraInfo.MiningFeeAtoms).ToCoin(), p.GeneralInfo.CBlockSubsidy.PoW)
 
 	// If BlockData contains non-nil PoolInfo, copy values.
 	p.GeneralInfo.PoolInfo = exptypes.TicketPoolInfo{}
