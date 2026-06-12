@@ -900,6 +900,7 @@ type HomeInfo struct {
 	IdxInRewardWindow     int                  `json:"reward_idx"`
 	Difficulty            float64              `json:"difficulty"`
 	RewardPeriod          string               `json:"reward_period"`
+	CBlockSubsidy         BlockSubsidy         `json:"cblock_subsidy"`
 	NBlockSubsidy         BlockSubsidy         `json:"subsidy"`
 	MiningFeeAtoms        int64                `json:"mining_fee_atoms"`
 	LBlockTotal           float64              `json:"lblock_total"`

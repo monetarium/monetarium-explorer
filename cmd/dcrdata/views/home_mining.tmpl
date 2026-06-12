@@ -35,7 +35,7 @@
             <div class="fs12 fs12-decimal lh1rem text-black-50 label-value-grid">
                 <span class="text-start">Subsidy:</span>
                 <span class="text-start">
-                    <span class="mono" data-mining-target="powSubsidy">{{template "decimalParts" (float64AsDecimalParts (toFloat64Amount .NBlockSubsidy.PoW) 8 false 2)}}</span>
+                    <span class="mono" data-mining-target="powSubsidy">{{template "decimalParts" (float64AsDecimalParts (toFloat64Amount .CBlockSubsidy.PoW) 8 false 2)}}</span>
                 </span>
                 <span class="text-start">Fee:</span>
                 <span class="text-start">
