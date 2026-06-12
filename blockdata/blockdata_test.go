@@ -540,26 +540,29 @@ func TestComputeMinerVARFeeAtoms_BothTrees(t *testing.T) {
 }
 
 func TestComputeMinerVARFeeAtoms_CoinbaseNoP2PKH(t *testing.T) {
-	// If coinbase has no P2PKH output, fee should be 0.
+	// With the conservation approach (Σoutputs − Σinputs), ALL VAR value
+	// creation in the coinbase counts as fee, regardless of script type.
+	// A nil-script output carrying value over the input is still fee.
 	s := int64(16e8)
+	fee := int64(5_000)
 	coinbase := wire.NewMsgTx()
 	coinbase.AddTxIn(&wire.TxIn{ValueIn: s})
-	coinbase.AddTxOut(wire.NewTxOut(s+5_000, nil)) // nil pkScript is not P2PKH
+	coinbase.AddTxOut(wire.NewTxOut(s+fee, nil)) // nil pkScript carries value too
 
 	block := &wire.MsgBlock{
-		Transactions: []*wire.MsgTx{coinbase, newTxWithFee(100_000, 5_000)},
+		Transactions: []*wire.MsgTx{coinbase, newTxWithFee(100_000, fee)},
 	}
 
 	got := computeMinerVARFeeAtoms(block)
-	if got != 0 {
-		t.Errorf("got %d, want 0 (no P2PKH output)", got)
+	if got != fee {
+		t.Errorf("got %d, want %d", got, fee)
 	}
 }
 
 func TestComputeMinerVARFeeAtoms_Block4423Style(t *testing.T) {
 	// Mimics real block 4423 coinbase: 3 outputs (nonstandard vout[0],
-	// OP_RETURN vout[1], P2PKH vout[2] = subsidy + fees). Function must
-	// skip the first two and extract fee from the P2PKH output.
+	// OP_RETURN vout[1], P2PKH vout[2] = subsidy + fees). The conservation
+	// approach (Σoutputs − Σinputs) works because vout[0,1] are zero-value.
 	powSubsidy := int64(3_200_000_000)
 	minerFee := int64(26_135)
 	coinbase := wire.NewMsgTx()

@@ -17,7 +17,6 @@ import (
 	"github.com/monetarium/monetarium-node/cointype"
 	"github.com/monetarium/monetarium-node/dcrutil"
 	chainjson "github.com/monetarium/monetarium-node/rpc/jsonrpc/types"
-	"github.com/monetarium/monetarium-node/txscript/stdscript"
 	"github.com/monetarium/monetarium-node/wire"
 
 	apitypes "github.com/monetarium/monetarium-explorer/api/types"
@@ -658,51 +657,32 @@ func BlockSKAPoWRewardsFromSTx(msgBlock *wire.MsgBlock) map[uint8]string {
 	return out
 }
 
-// computeMinerVARFeeAtoms reads the miner's VAR fee from the coinbase
-// transaction by finding the P2PKH/P2PK/P2SH output (miner's payment) and
-// subtracting the actual vote-scaled subsidy carried in the coinbase inputs.
-// This matches the PoW-Reward tx page's FeeReward (outputs − inputs) by
-// construction and works correctly for any vote count (0-5), unlike passing
-// a hardcoded 5-vote subsidy from an RPC call.
-//
-// Among all matching outputs, the one with the highest value is selected as
-// the miner payout (subsidy + fees). This avoids false positives from
-// non-miner outputs such as legacy org-fund P2SH scripts that may appear
-// before the miner output in the coinbase.
+// computeMinerVARFeeAtoms computes the miner's VAR fee as the total VAR value
+// created by the coinbase transaction: Σ(VAR outputs) − Σ(VAR inputs). The
+// coinbase input values carry the actual vote-scaled subsidy assigned by the
+// node (correct for any vote count 0-5), while the outputs carry subsidy plus
+// fees. This matches the PoW-Reward tx page's FeeReward by construction.
 func computeMinerVARFeeAtoms(msgBlock *wire.MsgBlock) int64 {
 	if len(msgBlock.Transactions) == 0 {
 		return 0
 	}
 	coinbase := msgBlock.Transactions[0]
 
-	// Sum the coinbase input values, which carry the actual vote-scaled
-	// subsidy assigned by the node (not a full 5-vote value from RPC).
 	var inputTotal int64
 	for _, txIn := range coinbase.TxIn {
 		inputTotal += txIn.ValueIn
 	}
 
-	// Find the highest-value P2PKH/P2PK/P2SH VAR output (miner payout).
-	var minerOutputValue int64
+	var outputTotal int64
 	for _, txOut := range coinbase.TxOut {
-		if txOut.CoinType != cointype.CoinTypeVAR {
-			continue
-		}
-		switch stdscript.DetermineScriptType(txOut.Version, txOut.PkScript) {
-		case stdscript.STPubKeyHashEcdsaSecp256k1,
-			stdscript.STPubKeyHashEd25519,
-			stdscript.STPubKeyHashSchnorrSecp256k1,
-			stdscript.STPubKeyEcdsaSecp256k1,
-			stdscript.STPubKeyEd25519,
-			stdscript.STPubKeySchnorrSecp256k1,
-			stdscript.STScriptHash:
-			if txOut.Value > minerOutputValue {
-				minerOutputValue = txOut.Value
-			}
+		if txOut.CoinType == cointype.CoinTypeVAR {
+			outputTotal += txOut.Value
 		}
 	}
-	if minerOutputValue <= inputTotal {
+
+	fee := outputTotal - inputTotal
+	if fee < 0 {
 		return 0
 	}
-	return minerOutputValue - inputTotal
+	return fee
 }
