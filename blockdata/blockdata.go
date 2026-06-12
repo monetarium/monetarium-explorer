@@ -196,8 +196,9 @@ func (t *Collector) CollectBlockInfo(hash *chainhash.Hash) (*apitypes.BlockDataB
 	height := header.Height
 	txLen := len(msgBlock.Transactions) + len(msgBlock.STransactions)
 
-	// Current block subsidy.
-	curSubsidy, err := t.dcrdChainSvr.GetBlockSubsidy(ctx, int64(height), 5)
+	// Current block subsidy — use actual voters so vote-scaled values are
+	// correct even when voters are offline (<5 votes).
+	curSubsidy, err := t.dcrdChainSvr.GetBlockSubsidy(ctx, int64(height), header.Voters)
 	if err != nil {
 		log.Errorf("GetBlockSubsidy for %d failed: %v", height, err)
 	}
@@ -245,10 +246,7 @@ func (t *Collector) CollectBlockInfo(hash *chainhash.Hash) (*apitypes.BlockDataB
 	if feeInfoBlock == nil {
 		log.Error("FeeInfoBlock failed")
 	}
-	var miningFee int64
-	if curSubsidy != nil {
-		miningFee = computeMiningFee(msgBlock)
-	}
+	miningFee := computeMinerVARFeeAtoms(msgBlock)
 
 	// Work/Stake difficulty
 	diff := txhelpers.GetDifficultyRatio(header.Bits, t.netParams)
@@ -660,26 +658,34 @@ func BlockSKAPoWRewardsFromSTx(msgBlock *wire.MsgBlock) map[uint8]string {
 	return out
 }
 
-// computeMiningFee calculates total mining fees from a block by summing fees
-// from regular transactions (Transactions tree) and tickets (STransactions tree
-// limited to TxTypeSStx), matching the GetExplorerBlock formula:
-//
-//	getTotalFee(block.Tx) + getTotalFee(block.Tickets)
-func computeMiningFee(msgBlock *wire.MsgBlock) int64 {
-	var miningFee int64
-	for i, tx := range msgBlock.Transactions {
-		if i == 0 {
-			continue // skip coinbase
-		}
-		fee, _ := txhelpers.TxFeeRate(tx)
-		miningFee += int64(fee)
+// computeMinerVARFeeAtoms computes the miner's VAR fee as the total VAR value
+// created by the coinbase transaction: Σ(VAR outputs) − Σ(inputs). The
+// coinbase input values carry the actual vote-scaled subsidy assigned by the
+// node (correct for any vote count 0-5), while the outputs carry subsidy plus
+// fees. This matches the PoW-Reward tx page's FeeReward by construction.
+// Inputs are not filtered by coin type (a VAR coinbase has no non-VAR inputs
+// under the single-coin invariant).
+func computeMinerVARFeeAtoms(msgBlock *wire.MsgBlock) int64 {
+	if len(msgBlock.Transactions) == 0 {
+		return 0
 	}
-	for _, stx := range msgBlock.STransactions {
-		if txhelpers.DetermineTxType(stx) != stake.TxTypeSStx {
-			continue // only include tickets
-		}
-		fee, _ := txhelpers.TxFeeRate(stx)
-		miningFee += int64(fee)
+	coinbase := msgBlock.Transactions[0]
+
+	var inputTotal int64
+	for _, txIn := range coinbase.TxIn {
+		inputTotal += txIn.ValueIn
 	}
-	return miningFee
+
+	var outputTotal int64
+	for _, txOut := range coinbase.TxOut {
+		if txOut.CoinType == cointype.CoinTypeVAR {
+			outputTotal += txOut.Value
+		}
+	}
+
+	fee := outputTotal - inputTotal
+	if fee < 0 {
+		return 0
+	}
+	return fee
 }
