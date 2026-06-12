@@ -6,6 +6,7 @@ import (
 
 	"github.com/monetarium/monetarium-node/blockchain/stake"
 	"github.com/monetarium/monetarium-node/cointype"
+	"github.com/monetarium/monetarium-node/dcrutil"
 	"github.com/monetarium/monetarium-node/wire"
 )
 
@@ -612,5 +613,27 @@ func TestComputeMinerVARFeeAtoms_ZeroVoteBlock(t *testing.T) {
 	got := computeMinerVARFeeAtoms(block)
 	if got != fee {
 		t.Errorf("got %d, want %d", got, fee)
+	}
+}
+
+// Block 4423 known totals (from real block analysis):
+//   - Regular tx fees (non-coinbase): 31,130 atoms
+//   - Ticket purchase fees: 21,140 atoms
+//   - Total VAR fees: 31,130 + 21,140 = 52,270 atoms
+//   - dcrutil.Amount(52_270).ToCoin() = 0.00052270 VAR
+//   - Miner fee (coinbase P2PKH - PoW subsidy): 26,135 atoms
+func TestBlock4423_KnownFeeValues(t *testing.T) {
+	const (
+		regFees      = int64(31_130)
+		ticketFees   = int64(21_140)
+		totalVARFees = int64(52_270)
+		totalVARCoin = 0.00052270
+	)
+	if regFees+ticketFees != totalVARFees {
+		t.Fatal("broken test: reg + ticket != total")
+	}
+	coin := dcrutil.Amount(totalVARFees).ToCoin()
+	if coin != totalVARCoin {
+		t.Errorf("dcrutil.Amount(%d).ToCoin() = %.8f, want %.8f", totalVARFees, coin, totalVARCoin)
 	}
 }
