@@ -808,7 +808,11 @@ type BlockExplorerExtraInfo struct {
 	CoinSupply          int64                            `json:"coin_supply"`
 	CurrentBlockSubsidy *chainjson.GetBlockSubsidyResult `json:"current_block_subsidy"`
 	NextBlockSubsidy    *chainjson.GetBlockSubsidyResult `json:"next_block_subsidy"`
-	MiningFeeAtoms      int64                            `json:"mining_fee_atoms"`
+	// MiningFeeAtoms is the miner's 50% share of VAR transaction fees (not total
+	// block fees). Computed as Σ(VAR coinbase outputs) − Σ(coinbase inputs),
+	// which matches the tx page's FeeReward by construction. The other 50%
+	// goes to the ticket seller via SSFee.
+	MiningFeeAtoms int64 `json:"mining_fee_atoms"`
 	// CoinAmounts holds per-coin totals (VAR key=0, SKAn key=n) as decimal atom strings.
 	CoinAmounts map[uint8]string `json:"coin_amounts,omitempty"`
 	// CoinTxStats holds per-coin tx count and size (key 0=VAR, 1-255=SKAn).

@@ -524,3 +524,70 @@ func TestBuildTicketPoolChartsData_UsesDataSourceMempool(t *testing.T) {
 		}
 	})
 }
+
+// TestStore_PropagatesMiningFeeAtoms verifies that Store copies
+// ExtraInfo.MiningFeeAtoms from blockData into HomeInfo. It does NOT
+// test the mining fee computation itself (that happens in the collector,
+// which calls computeMinerVARFeeAtoms). A full collector-path test
+// requires the 5-vote subsidy mismatch to be resolved first.
+func TestStore_PropagatesMiningFeeAtoms(t *testing.T) {
+	params := chaincfg.MainNetParams()
+	mockDS := &mockDataSource{
+		blocks:  make(map[string]*explorerTypes.BlockInfo),
+		heights: make(map[int64]string),
+		params:  params,
+	}
+
+	exp := &explorerUI{
+		dataSource:  mockDS,
+		ChainParams: params,
+		wsHub:       NewWebsocketHub(),
+		pageData: &pageData{
+			HomeInfo: &explorerTypes.HomeInfo{
+				Params: explorerTypes.ChainParams{BlockTime: 60},
+			},
+		},
+		invs: &explorerTypes.MempoolInfo{
+			MempoolShort: explorerTypes.MempoolShort{
+				CoinStats: make(map[uint8]explorerTypes.MempoolCoinStats),
+			},
+		},
+	}
+
+	// Empty block is fine — Store does not inspect msgBlock for fee data.
+	msgBlock := &wire.MsgBlock{}
+	hash := msgBlock.BlockHash().String()
+	height := int64(4423)
+	mockDS.height = height
+	mockDS.heights[height] = hash
+	mockDS.blocks[hash] = &explorerTypes.BlockInfo{
+		BlockBasic: &explorerTypes.BlockBasic{Height: height, Hash: hash},
+	}
+
+	blockData := &blockdata.BlockData{
+		Header: chainjson.GetBlockHeaderVerboseResult{Height: 4423},
+		ExtraInfo: apitypes.BlockExplorerExtraInfo{
+			NextBlockSubsidy: &chainjson.GetBlockSubsidyResult{
+				Developer: 0, PoS: 0, PoW: 3_200_000_000, Total: 3_200_000_000,
+			},
+			MiningFeeAtoms: 26_135,
+		},
+	}
+
+	if err := exp.Store(blockData, msgBlock); err != nil {
+		t.Fatalf("Store failed: %v", err)
+	}
+
+	exp.pageData.RLock()
+	defer exp.pageData.RUnlock()
+
+	if exp.pageData.HomeInfo.MiningFeeAtoms != 26_135 {
+		t.Errorf("MiningFeeAtoms = %d, want 26135", exp.pageData.HomeInfo.MiningFeeAtoms)
+	}
+	if exp.pageData.HomeInfo.NBlockSubsidy.PoW != 3_200_000_000 {
+		t.Errorf("NBlockSubsidy.PoW = %d, want 3200000000", exp.pageData.HomeInfo.NBlockSubsidy.PoW)
+	}
+	if exp.pageData.HomeInfo.LBlockTotalAtoms != 3_200_026_135 {
+		t.Errorf("LBlockTotalAtoms = %d, want 3200026135", exp.pageData.HomeInfo.LBlockTotalAtoms)
+	}
+}
