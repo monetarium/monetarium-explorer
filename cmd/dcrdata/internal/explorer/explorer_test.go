@@ -583,5 +583,3 @@ func TestStore_PropagatesMiningFeeAtoms(t *testing.T) {
 		t.Errorf("LBlockTotalAtoms = %d, want 3200026135", exp.pageData.HomeInfo.LBlockTotalAtoms)
 	}
 }
-
-
