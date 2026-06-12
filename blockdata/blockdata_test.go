@@ -373,6 +373,8 @@ var p2pkhScript = func() []byte {
 
 // coinbaseWithP2PKH creates a coinbase tx with one TxIn carrying the actual
 // vote-scaled subsidy and one P2PKH output (miner payment = subsidy + fees).
+//
+//nolint:unparam // subsidy is always 16e8 in current tests; kept for semantic clarity
 func coinbaseWithP2PKH(subsidy, output int64) *wire.MsgTx {
 	tx := wire.NewMsgTx()
 	tx.AddTxIn(&wire.TxIn{ValueIn: subsidy})
