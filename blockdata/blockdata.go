@@ -196,8 +196,9 @@ func (t *Collector) CollectBlockInfo(hash *chainhash.Hash) (*apitypes.BlockDataB
 	height := header.Height
 	txLen := len(msgBlock.Transactions) + len(msgBlock.STransactions)
 
-	// Current block subsidy.
-	curSubsidy, err := t.dcrdChainSvr.GetBlockSubsidy(ctx, int64(height), 5)
+	// Current block subsidy — use actual voters so vote-scaled values are
+	// correct even when voters are offline (<5 votes).
+	curSubsidy, err := t.dcrdChainSvr.GetBlockSubsidy(ctx, int64(height), header.Voters)
 	if err != nil {
 		log.Errorf("GetBlockSubsidy for %d failed: %v", height, err)
 	}
