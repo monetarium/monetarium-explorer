@@ -371,10 +371,12 @@ var p2pkhScript = func() []byte {
 	return s
 }()
 
-// coinbaseWithP2PKH creates a coinbase tx with one P2PKH output (miner payment).
-func coinbaseWithP2PKH(value int64) *wire.MsgTx {
+// coinbaseWithP2PKH creates a coinbase tx with one TxIn carrying the actual
+// vote-scaled subsidy and one P2PKH output (miner payment = subsidy + fees).
+func coinbaseWithP2PKH(subsidy, output int64) *wire.MsgTx {
 	tx := wire.NewMsgTx()
-	tx.AddTxOut(wire.NewTxOut(value, p2pkhScript))
+	tx.AddTxIn(&wire.TxIn{ValueIn: subsidy})
+	tx.AddTxOut(wire.NewTxOut(output, p2pkhScript))
 	return tx
 }
 
@@ -444,10 +446,10 @@ func newSStxWithFee(t *testing.T, inputAmount, fee int64) *wire.MsgTx {
 func TestComputeMinerVARFeeAtoms_NoRegularTx(t *testing.T) {
 	s := int64(16e8)
 	block := &wire.MsgBlock{
-		Transactions: []*wire.MsgTx{coinbaseWithP2PKH(s)},
+		Transactions: []*wire.MsgTx{coinbaseWithP2PKH(s, s)},
 	}
 
-	got := computeMinerVARFeeAtoms(block, s)
+	got := computeMinerVARFeeAtoms(block)
 	if got != 0 {
 		t.Errorf("got %d, want 0", got)
 	}
@@ -457,10 +459,10 @@ func TestComputeMinerVARFeeAtoms_WithRegularTx(t *testing.T) {
 	s := int64(16e8)
 	fee := int64(10_000)
 	block := &wire.MsgBlock{
-		Transactions: []*wire.MsgTx{coinbaseWithP2PKH(s + fee), newTxWithFee(100_000, fee)},
+		Transactions: []*wire.MsgTx{coinbaseWithP2PKH(s, s+fee), newTxWithFee(100_000, fee)},
 	}
 
-	got := computeMinerVARFeeAtoms(block, s)
+	got := computeMinerVARFeeAtoms(block)
 	if got != fee {
 		t.Errorf("got %d, want %d", got, fee)
 	}
@@ -469,10 +471,10 @@ func TestComputeMinerVARFeeAtoms_WithRegularTx(t *testing.T) {
 func TestComputeMinerVARFeeAtoms_NoFees(t *testing.T) {
 	s := int64(16e8)
 	block := &wire.MsgBlock{
-		Transactions: []*wire.MsgTx{coinbaseWithP2PKH(s), newTxWithFee(100_000, 0)},
+		Transactions: []*wire.MsgTx{coinbaseWithP2PKH(s, s), newTxWithFee(100_000, 0)},
 	}
 
-	got := computeMinerVARFeeAtoms(block, s)
+	got := computeMinerVARFeeAtoms(block)
 	if got != 0 {
 		t.Errorf("got %d, want 0", got)
 	}
@@ -484,14 +486,14 @@ func TestComputeMinerVARFeeAtoms_MultipleRegularTx(t *testing.T) {
 	totalFee := fees[0] + fees[1] + fees[2]
 	block := &wire.MsgBlock{
 		Transactions: []*wire.MsgTx{
-			coinbaseWithP2PKH(s + totalFee),
+			coinbaseWithP2PKH(s, s+totalFee),
 			newTxWithFee(10_000, fees[0]),
 			newTxWithFee(20_000, fees[1]),
 			newTxWithFee(30_000, fees[2]),
 		},
 	}
 
-	got := computeMinerVARFeeAtoms(block, s)
+	got := computeMinerVARFeeAtoms(block)
 	if got != totalFee {
 		t.Errorf("got %d, want %d", got, totalFee)
 	}
@@ -502,11 +504,11 @@ func TestComputeMinerVARFeeAtoms_TicketInSTransactions(t *testing.T) {
 	// Ticket fees are distributed via SSFee, not coinbase.
 	// Coinbase has only the subsidy.
 	block := &wire.MsgBlock{
-		Transactions:  []*wire.MsgTx{coinbaseWithP2PKH(s)},
+		Transactions:  []*wire.MsgTx{coinbaseWithP2PKH(s, s)},
 		STransactions: []*wire.MsgTx{newSStxWithFee(t, 1_000_000, 12_345)},
 	}
 
-	got := computeMinerVARFeeAtoms(block, s)
+	got := computeMinerVARFeeAtoms(block)
 	if got != 0 {
 		t.Errorf("got %d, want 0 (ticket fees are not in coinbase)", got)
 	}
@@ -521,14 +523,14 @@ func TestComputeMinerVARFeeAtoms_BothTrees(t *testing.T) {
 	// 50% of ticket fees. The full 50% split is validated by
 	// TestComputeMinerVARFeeAtoms_Block4423Style.
 	block := &wire.MsgBlock{
-		Transactions: []*wire.MsgTx{coinbaseWithP2PKH(s + regFee), newTxWithFee(50_000, regFee)},
+		Transactions: []*wire.MsgTx{coinbaseWithP2PKH(s, s+regFee), newTxWithFee(50_000, regFee)},
 		STransactions: []*wire.MsgTx{
 			newSStxWithFee(t, 1_000_000, 2_500),
 			newSStxWithFee(t, 2_000_000, 4_000),
 		},
 	}
 
-	got := computeMinerVARFeeAtoms(block, s)
+	got := computeMinerVARFeeAtoms(block)
 	if got != regFee {
 		t.Errorf("got %d, want %d (only regular tx fee counted)", got, regFee)
 	}
@@ -538,13 +540,14 @@ func TestComputeMinerVARFeeAtoms_CoinbaseNoP2PKH(t *testing.T) {
 	// If coinbase has no P2PKH output, fee should be 0.
 	s := int64(16e8)
 	coinbase := wire.NewMsgTx()
+	coinbase.AddTxIn(&wire.TxIn{ValueIn: s})
 	coinbase.AddTxOut(wire.NewTxOut(s+5_000, nil)) // nil pkScript is not P2PKH
 
 	block := &wire.MsgBlock{
 		Transactions: []*wire.MsgTx{coinbase, newTxWithFee(100_000, 5_000)},
 	}
 
-	got := computeMinerVARFeeAtoms(block, s)
+	got := computeMinerVARFeeAtoms(block)
 	if got != 0 {
 		t.Errorf("got %d, want 0 (no P2PKH output)", got)
 	}
@@ -557,13 +560,54 @@ func TestComputeMinerVARFeeAtoms_Block4423Style(t *testing.T) {
 	powSubsidy := int64(3_200_000_000)
 	minerFee := int64(26_135)
 	coinbase := wire.NewMsgTx()
+	coinbase.AddTxIn(&wire.TxIn{ValueIn: powSubsidy})
 	coinbase.AddTxOut(wire.NewTxOut(0, []byte{0x51}))                  // nonstandard (OP_1)
 	coinbase.AddTxOut(wire.NewTxOut(0, []byte{0x6a}))                  // OP_RETURN
 	coinbase.AddTxOut(wire.NewTxOut(powSubsidy+minerFee, p2pkhScript)) // P2PKH miner payout
 
 	block := &wire.MsgBlock{Transactions: []*wire.MsgTx{coinbase}}
-	got := computeMinerVARFeeAtoms(block, powSubsidy)
+	got := computeMinerVARFeeAtoms(block)
 	if got != minerFee {
 		t.Errorf("got %d, want %d", got, minerFee)
+	}
+}
+
+// TestComputeMinerVARFeeAtoms_FourVoteBlock verifies that the function
+// correctly extracts the miner fee when the coinbase carries a vote-scaled
+// subsidy (e.g. 4 votes instead of the maximum 5). The old approach of
+// subtracting a hardcoded 5-vote subsidy from the RPC would fail here:
+//   fullSubsidy = 1_600_000_000
+//   voteScaledSubsidy = fullSubsidy * 4 / 5 = 1_280_000_000
+//   minerOutput = voteScaledSubsidy + fee = 1_280_010_000
+//   OLD: minerOutput - fullSubsidy = -319_990_000 → clamped to 0  ← BUG
+//   NEW: minerOutput - voteScaledSubsidy = 10_000  ← CORRECT
+func TestComputeMinerVARFeeAtoms_FourVoteBlock(t *testing.T) {
+	fullSubsidy := int64(1_600_000_000)
+	voteScaledSubsidy := fullSubsidy * 4 / 5
+	fee := int64(10_000)
+	coinbase := wire.NewMsgTx()
+	coinbase.AddTxIn(&wire.TxIn{ValueIn: voteScaledSubsidy})
+	coinbase.AddTxOut(wire.NewTxOut(voteScaledSubsidy+fee, p2pkhScript))
+
+	block := &wire.MsgBlock{Transactions: []*wire.MsgTx{coinbase}}
+	got := computeMinerVARFeeAtoms(block)
+	if got != fee {
+		t.Errorf("got %d, want %d", got, fee)
+	}
+}
+
+// TestComputeMinerVARFeeAtoms_ZeroVoteBlock verifies the function handles a
+// block before stake validation height (no votes, full subsidy in coinbase).
+func TestComputeMinerVARFeeAtoms_ZeroVoteBlock(t *testing.T) {
+	subsidy := int64(1_600_000_000)
+	fee := int64(5_000)
+	coinbase := wire.NewMsgTx()
+	coinbase.AddTxIn(&wire.TxIn{ValueIn: subsidy})
+	coinbase.AddTxOut(wire.NewTxOut(subsidy+fee, p2pkhScript))
+
+	block := &wire.MsgBlock{Transactions: []*wire.MsgTx{coinbase}}
+	got := computeMinerVARFeeAtoms(block)
+	if got != fee {
+		t.Errorf("got %d, want %d", got, fee)
 	}
 }

@@ -246,10 +246,7 @@ func (t *Collector) CollectBlockInfo(hash *chainhash.Hash) (*apitypes.BlockDataB
 	if feeInfoBlock == nil {
 		log.Error("FeeInfoBlock failed")
 	}
-	var miningFee int64
-	if curSubsidy != nil {
-		miningFee = computeMinerVARFeeAtoms(msgBlock, curSubsidy.PoW)
-	}
+	miningFee := computeMinerVARFeeAtoms(msgBlock)
 
 	// Work/Stake difficulty
 	diff := txhelpers.GetDifficultyRatio(header.Bits, t.netParams)
@@ -663,16 +660,31 @@ func BlockSKAPoWRewardsFromSTx(msgBlock *wire.MsgBlock) map[uint8]string {
 
 // computeMinerVARFeeAtoms reads the miner's VAR fee from the coinbase
 // transaction by finding the P2PKH/P2PK/P2SH output (miner's payment) and
-// subtracting the PoW subsidy. Among all matching outputs, the one with the
-// highest value is selected as the miner payout (subsidy + fees). This avoids
-// false positives from non-miner outputs such as legacy org-fund P2SH scripts
-// that may appear before the miner output in the coinbase.
-func computeMinerVARFeeAtoms(msgBlock *wire.MsgBlock, powSubsidy int64) int64 {
+// subtracting the actual vote-scaled subsidy carried in the coinbase inputs.
+// This matches the PoW-Reward tx page's FeeReward (outputs − inputs) by
+// construction and works correctly for any vote count (0-5), unlike passing
+// a hardcoded 5-vote subsidy from an RPC call.
+//
+// Among all matching outputs, the one with the highest value is selected as
+// the miner payout (subsidy + fees). This avoids false positives from
+// non-miner outputs such as legacy org-fund P2SH scripts that may appear
+// before the miner output in the coinbase.
+func computeMinerVARFeeAtoms(msgBlock *wire.MsgBlock) int64 {
 	if len(msgBlock.Transactions) == 0 {
 		return 0
 	}
+	coinbase := msgBlock.Transactions[0]
+
+	// Sum the coinbase input values, which carry the actual vote-scaled
+	// subsidy assigned by the node (not a full 5-vote value from RPC).
+	var inputTotal int64
+	for _, txIn := range coinbase.TxIn {
+		inputTotal += txIn.ValueIn
+	}
+
+	// Find the highest-value P2PKH/P2PK/P2SH VAR output (miner payout).
 	var minerOutputValue int64
-	for _, txOut := range msgBlock.Transactions[0].TxOut {
+	for _, txOut := range coinbase.TxOut {
 		if txOut.CoinType != cointype.CoinTypeVAR {
 			continue
 		}
@@ -689,8 +701,8 @@ func computeMinerVARFeeAtoms(msgBlock *wire.MsgBlock, powSubsidy int64) int64 {
 			}
 		}
 	}
-	if minerOutputValue <= powSubsidy {
+	if minerOutputValue <= inputTotal {
 		return 0
 	}
-	return minerOutputValue - powSubsidy
+	return minerOutputValue - inputTotal
 }
