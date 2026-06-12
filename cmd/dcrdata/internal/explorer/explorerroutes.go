@@ -234,11 +234,12 @@ func (exp *explorerUI) Home(w http.ResponseWriter, r *http.Request) {
 	exp.pageData.RLock()
 
 	homeInfo := exp.pageData.HomeInfo
-	// Initialize LBlockTotal (subsidy + fees) if not yet set
-	// Use NBlockSubsidy for subsidy, MiningFeeAtoms will be 0 if not populated yet
-	if homeInfo.LBlockTotalAtoms == 0 && homeInfo.IdxBlockInWindow > 0 && homeInfo.NBlockSubsidy.PoW > 0 {
-		homeInfo.LBlockTotalAtoms = homeInfo.NBlockSubsidy.PoW
-		homeInfo.LBlockTotal = dcrutil.Amount(homeInfo.NBlockSubsidy.PoW).ToCoin()
+	// Initialize LBlockTotal (subsidy + fees) if not yet set.
+	// Use CBlockSubsidy (actual vote-scaled subsidy) — NBlockSubsidy is
+	// the next-block projected max and would be wrong for <5-vote blocks.
+	if homeInfo.LBlockTotalAtoms == 0 && homeInfo.IdxBlockInWindow > 0 && homeInfo.CBlockSubsidy.PoW > 0 {
+		homeInfo.LBlockTotalAtoms = homeInfo.CBlockSubsidy.PoW
+		homeInfo.LBlockTotal = dcrutil.Amount(homeInfo.CBlockSubsidy.PoW).ToCoin()
 		homeInfo.MiningFeeAtoms = 0
 	}
 
