@@ -1187,6 +1187,14 @@ export default class extends Controller {
   renderHashrateShares(data) {
     const miners = data.miners || []
     const total = data.total || 0
+    const sumTop = miners.reduce((s, m) => s + m.blocks_mined, 0)
+    const othersBlocks = total - sumTop
+    const othersPresent = othersBlocks > 0
+
+    // Build pie segments: top 25 + an "Others" slice for the remainder
+    const segments = othersPresent
+      ? miners.concat([{ address: 'Others', blocks_mined: othersBlocks }])
+      : miners
 
     const canvas = document.getElementById('hashrateSharesPie')
     const ctx = canvas.getContext('2d')
@@ -1213,11 +1221,13 @@ export default class extends Controller {
       return
     }
 
-    const colors = miners.map((_, i) => `hsl(${(i * 137.5) % 360}, 65%, 55%)`)
+    const colors = segments.map((_, i) =>
+      i === segments.length - 1 && othersPresent ? '#ccc' : `hsl(${(i * 137.5) % 360}, 65%, 55%)`
+    )
 
-    // Sort miners by blocks_mined descending (server should already do this)
+    // Draw pie segments (includes Others)
     let startAngle = -Math.PI / 2
-    miners.forEach((m, i) => {
+    segments.forEach((m, i) => {
       const pct = m.blocks_mined / total
       const endAngle = startAngle + pct * Math.PI * 2
       ctx.beginPath()
@@ -1249,7 +1259,8 @@ export default class extends Controller {
       startAngle = endAngle
     })
 
-    this.buildTableRows(miners, total, colors)
+    // Show table only for top miners (no Others row)
+    this.buildTableRows(miners, total, colors.slice(0, miners.length))
     this.chartWrapperTarget.classList.remove('loading')
   }
 

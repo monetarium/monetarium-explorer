@@ -134,3 +134,6 @@ func (noopDS) LoadSKAFeesForCoin(_ context.Context, _ *cache.ChartData, _ uint8)
 func (noopDS) GetMinerHashrateShares(_ context.Context, _ *time.Time) ([]dbtypes.MinerShareData, error) {
 	return nil, nil
 }
+func (noopDS) GetTotalBlocksMined(_ context.Context, _ *time.Time) (int32, error) {
+	return 0, nil
+}

@@ -112,6 +112,7 @@ type DataSource interface {
 	LoadSKASupplyForCoin(ctx context.Context, charts *cache.ChartData, coinType uint8) error
 	LoadSKAFeesForCoin(ctx context.Context, charts *cache.ChartData, coinType uint8) error
 	GetMinerHashrateShares(ctx context.Context, since *time.Time) ([]dbtypes.MinerShareData, error)
+	GetTotalBlocksMined(ctx context.Context, since *time.Time) (int32, error)
 }
 
 // dcrdata application context used by all route handlers
@@ -1966,9 +1967,11 @@ func (c *appContext) ChartTypeData(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		var total int32
-		for _, m := range miners {
-			total += m.BlocksMined
+		total, err := c.DataSource.GetTotalBlocksMined(r.Context(), since)
+		if err != nil {
+			apiLog.Errorf("GetTotalBlocksMined: %v", err)
+			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+			return
 		}
 
 		resp := struct {
