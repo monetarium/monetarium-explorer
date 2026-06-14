@@ -1282,7 +1282,7 @@ export default class extends Controller {
       const tr = document.createElement('tr')
       tr.innerHTML = `
         <td>${i + 1}</td>
-        <td><span class="color-swatch" style="display:inline-block;width:12px;height:12px;border-radius:2px;background:${color}"></span></td>
+        <td><span class="color-swatch" style="background:${color}"></span></td>
         <td>${pct}%</td>
         <td><a href="/address/${encodeURIComponent(addr)}">${dompurify.sanitize(displayAddr)}</a></td>
       `
