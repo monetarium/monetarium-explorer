@@ -872,8 +872,10 @@ export default class extends Controller {
     }
     if (selection === 'hashrate') {
       this.intervalSelectorTarget.classList.remove('d-hide')
+      this.chartsViewTarget.classList.add('chart-hashrate')
     } else {
       this.intervalSelectorTarget.classList.add('d-hide')
+      this.chartsViewTarget.classList.remove('chart-hashrate')
     }
     if (
       selectedChart !== selection ||
