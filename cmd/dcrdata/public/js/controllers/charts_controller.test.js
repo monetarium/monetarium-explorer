@@ -120,7 +120,7 @@ function makeController() {
   c.legendMarkerTarget = { remove: vi.fn(), removeAttribute: vi.fn() }
   c.legendEntryTarget = { remove: vi.fn(), removeAttribute: vi.fn() }
   c.rawDataURLTarget = { textContent: '' }
-  c.chartsViewTarget = {}
+  c.chartsViewTarget = { classList: { add: vi.fn(), remove: vi.fn() } }
   c.ticketsPriceTarget = { checked: true }
   c.ticketsPurchaseTarget = { checked: true }
   c.hashrateRateTarget = { checked: true }
