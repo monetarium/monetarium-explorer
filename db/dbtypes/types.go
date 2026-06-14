@@ -2641,3 +2641,9 @@ func (a *AddressInfo) PostProcess(tipHeight uint32) {
 		tx.BlockHeight = tipHeight - uint32(tx.Confirmations) + 1
 	}
 }
+
+// MinerShareData holds per-address miner share data for the hashrate-shares chart.
+type MinerShareData struct {
+	Address     string `json:"address"`
+	BlocksMined int32  `json:"blocks_mined"`
+}

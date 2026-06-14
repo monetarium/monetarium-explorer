@@ -25,6 +25,7 @@ const multiYAxisChart = ['ticket-price', 'privacy-participation', 'hashrate']
 const yValueRanges = { 'ticket-price': [1] }
 const chainworkUnits = ['H', 'kH', 'MH', 'GH', 'TH', 'PH', 'EH', 'ZH', 'YH']
 const hashrateUnits = ['H/s', 'kH/s', 'MH/s', 'GH/s', 'TH/s', 'PH/s', 'EH/s']
+const pieCharts = ['hashrate-shares']
 let ticketPoolSizeTarget, windowSize, avgBlockTime
 let rawCoinSupply, rawPoolValue
 let yFormatter, legendEntry, legendMarker, legendElement
@@ -47,6 +48,10 @@ function isModeEnabled(chart) {
 
 function hasMultipleVisibility(chart) {
   return multiYAxisChart.indexOf(chart) > -1
+}
+
+function isPieChart(chart) {
+  return pieCharts.indexOf(chart) > -1
 }
 
 function intComma(amount) {
@@ -365,7 +370,8 @@ export default class extends Controller {
       'modeOption',
       'intervalSelector',
       'intervalOption',
-      'rawDataURL'
+      'rawDataURL',
+      'hashrateSharesContainer'
     ]
   }
 
@@ -853,6 +859,37 @@ export default class extends Controller {
     const selection = (this.settings.chart = this.chartSelectTarget.value)
     this.customLimits = null
     this.chartWrapperTarget.classList.add('loading')
+
+    if (isPieChart(selection)) {
+      this.binSelectorTarget.classList.add('d-hide')
+      this.scaleSelectorTarget.classList.add('d-hide')
+      this.modeSelectorTarget.classList.add('d-hide')
+      this.vSelectorTarget.classList.add('d-hide')
+      this.zoomSelectorTarget.classList.add('d-hide')
+      this.intervalSelectorTarget.classList.remove('d-hide')
+      this.chartsViewTarget.classList.add('d-hide')
+      this.hashrateSharesContainerTarget.classList.remove('d-hide')
+
+      this.showIntervalOption('month')
+      this.hideIntervalOption('year')
+
+      if (!this.settings.interval) this.settings.interval = 'month'
+      const url = `/api/chart/${selection}?interval=${this.settings.interval}`
+      this.setActiveOptionBtn(this.settings.interval, this.intervalOptionTargets)
+      const chartResponse = await requestJSON(url)
+      selectedChart = selection
+      this.renderHashrateShares(chartResponse)
+
+      const baseURL = `${this.query.url.protocol}//${this.query.url.host}`
+      this.rawDataURLTarget.textContent = `${baseURL}/api/chart/${selection}?interval=${this.settings.interval}`
+      this.query.replace(this.settings)
+      return
+    }
+
+    this.chartsViewTarget.classList.remove('d-hide')
+    this.hashrateSharesContainerTarget.classList.add('d-hide')
+    this.zoomSelectorTarget.classList.remove('d-hide')
+
     if (isScaleDisabled(selection)) {
       this.scaleSelectorTarget.classList.add('d-hide')
       this.vSelectorTarget.classList.remove('d-hide')
@@ -872,8 +909,14 @@ export default class extends Controller {
     }
     if (selection === 'hashrate') {
       this.intervalSelectorTarget.classList.remove('d-hide')
+      this.showIntervalOption('year')
+      this.hideIntervalOption('month')
     } else {
       this.intervalSelectorTarget.classList.add('d-hide')
+    }
+    if (selection !== 'hashrate') {
+      this.showIntervalOption('year')
+      this.showIntervalOption('month')
     }
     if (
       selectedChart !== selection ||
@@ -1127,6 +1170,109 @@ export default class extends Controller {
     this.chartsView.updateOptions({ visibility: this.visibility })
     this.settings.visibility = this.visibility.join('-')
     this.query.replace(this.settings)
+  }
+
+  showIntervalOption(option) {
+    this.intervalOptionTargets.forEach((el) => {
+      if (el.dataset.option === option) el.classList.remove('d-hide')
+    })
+  }
+
+  hideIntervalOption(option) {
+    this.intervalOptionTargets.forEach((el) => {
+      if (el.dataset.option === option) el.classList.add('d-hide')
+    })
+  }
+
+  renderHashrateShares(data) {
+    const miners = data.miners || []
+    const total = data.total || 0
+
+    const canvas = document.getElementById('hashrateSharesPie')
+    const ctx = canvas.getContext('2d')
+    const dpr = window.devicePixelRatio || 1
+    const rect = canvas.getBoundingClientRect()
+    canvas.width = rect.width * dpr
+    canvas.height = rect.height * dpr
+    ctx.scale(dpr, dpr)
+    const w = rect.width
+    const h = rect.height
+    const cx = w / 2
+    const cy = h / 2
+    const r = Math.min(cx, cy) - 10
+
+    ctx.clearRect(0, 0, w, h)
+
+    if (!miners.length || !total) {
+      ctx.fillStyle = '#999'
+      ctx.font = '14px monospace'
+      ctx.textAlign = 'center'
+      ctx.fillText('No data', cx, cy)
+      this.buildTableRows(miners, total, [])
+      this.chartWrapperTarget.classList.remove('loading')
+      return
+    }
+
+    const colors = miners.map((_, i) => `hsl(${(i * 137.5) % 360}, 65%, 55%)`)
+
+    // Sort miners by blocks_mined descending (server should already do this)
+    let startAngle = -Math.PI / 2
+    miners.forEach((m, i) => {
+      const pct = m.blocks_mined / total
+      const endAngle = startAngle + pct * Math.PI * 2
+      ctx.beginPath()
+      ctx.moveTo(cx, cy)
+      ctx.arc(cx, cy, r, startAngle, endAngle)
+      ctx.closePath()
+      ctx.fillStyle = colors[i]
+      ctx.fill()
+      startAngle = endAngle
+    })
+
+    // Draw rank labels on top 5 segments (if segment is large enough)
+    startAngle = -Math.PI / 2
+    miners.forEach((m, i) => {
+      const pct = m.blocks_mined / total
+      const endAngle = startAngle + pct * Math.PI * 2
+      const midAngle = startAngle + (endAngle - startAngle) / 2
+      const labelR = r * 0.65
+      const lx = cx + Math.cos(midAngle) * labelR
+      const ly = cy + Math.sin(midAngle) * labelR
+
+      if (i < 5 && pct >= 0.03) {
+        ctx.fillStyle = '#fff'
+        ctx.font = 'bold 14px monospace'
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'middle'
+        ctx.fillText(String(i + 1), lx, ly)
+      }
+      startAngle = endAngle
+    })
+
+    this.buildTableRows(miners, total, colors)
+    this.chartWrapperTarget.classList.remove('loading')
+  }
+
+  buildTableRows(miners, total, colors) {
+    const tbody = document.getElementById('hashrateSharesTableBody')
+    if (!tbody) return
+    tbody.innerHTML = ''
+
+    miners.forEach((m, i) => {
+      const pct = total > 0 ? ((m.blocks_mined / total) * 100).toFixed(1) : '0.0'
+      const color = colors[i] || '#ccc'
+      const addr = m.address || ''
+      const displayAddr = addr.length > 20 ? `${addr.slice(0, 12)}…${addr.slice(-8)}` : addr
+
+      const tr = document.createElement('tr')
+      tr.innerHTML = `
+        <td>${i + 1}</td>
+        <td><span class="color-swatch" style="display:inline-block;width:12px;height:12px;border-radius:2px;background:${color}"></span></td>
+        <td>${pct}%</td>
+        <td><a href="/address/${encodeURIComponent(addr)}">${dompurify.sanitize(displayAddr)}</a></td>
+      `
+      tbody.appendChild(tr)
+    })
   }
 
   setActiveOptionBtn(opt, optTargets) {

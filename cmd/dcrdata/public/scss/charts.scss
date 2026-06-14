@@ -569,6 +569,13 @@ body.darkBG .customcheck input:checked ~ .hashrate-miners {
   height: 80px;
 }
 
+.hashrate-shares-container canvas {
+  display: block;
+  margin: 0 auto;
+  max-width: 100%;
+  max-height: 65vh;
+}
+
 .meter > canvas {
   width: 110px;
   height: 110px;
@@ -624,4 +631,49 @@ body.darkBG {
 
 .tp-outputs-align {
   width: inherit;
+}
+
+.hashrate-shares-container {
+  width: 100%;
+  max-width: 1000px;
+  margin: 0 auto;
+  min-height: 73vh;
+}
+
+.hashrate-shares-container .row {
+  min-height: 73vh;
+}
+
+.hashrate-shares-table {
+  font-size: 0.9rem;
+}
+
+.hashrate-shares-table th,
+.hashrate-shares-table td {
+  padding: 0.3rem 0.5rem;
+  vertical-align: middle;
+}
+
+.hashrate-shares-table .color-swatch {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+}
+
+.hashrate-shares-table td:first-child {
+  text-align: center;
+  font-weight: 600;
+  width: 2rem;
+}
+
+.hashrate-shares-table td:nth-child(3) {
+  text-align: right;
+  width: 5rem;
+}
+
+.hashrate-shares-table td:nth-child(4) {
+  max-width: 16rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }

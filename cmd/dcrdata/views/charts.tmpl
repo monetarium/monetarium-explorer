@@ -37,8 +37,9 @@
                               {{end}}
                              <option value="duration-btw-blocks">Duration Between Blocks</option>
                             <option value="chainwork">Total Work</option>
-                            <option value="hashrate">Hashrate</option>
-                            <option value="missed-votes">Missed Votes</option>
+                             <option value="hashrate">Hashrate</option>
+                             <option value="hashrate-shares">Hashrate Shares</option>
+                             <option value="missed-votes">Missed Votes</option>
                         </select>
                     </div>
                 </div>
@@ -199,6 +200,7 @@
                         <div class="btn-group" role="group">
                             <button type="button" class="btn btn-outline-secondary" data-charts-target="intervalOption" data-action="click->charts#setIntervalOption" data-option="all">All</button>
                             <button type="button" class="btn btn-outline-secondary" data-charts-target="intervalOption" data-action="click->charts#setIntervalOption" data-option="year">Year</button>
+                            <button type="button" class="btn btn-outline-secondary" data-charts-target="intervalOption" data-action="click->charts#setIntervalOption" data-option="month">Month</button>
                             <button type="button" class="btn btn-outline-secondary active" data-charts-target="intervalOption" data-action="click->charts#setIntervalOption" data-option="week">Week</button>
                             <button type="button" class="btn btn-outline-secondary" data-charts-target="intervalOption" data-action="click->charts#setIntervalOption" data-option="day">Day</button>
                         </div>
@@ -212,6 +214,26 @@
             <div
                 class="chartview"
                 data-charts-target="chartsView">
+            </div>
+            <div class="d-hide hashrate-shares-container" data-charts-target="hashrateSharesContainer">
+                <div class="row">
+                    <div class="col-md-12">
+                        <canvas id="hashrateSharesPie" width="400" height="400"></canvas>
+                    </div>
+                    <div class="col-md-12">
+                        <table class="table table-sm hashrate-shares-table">
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th></th>
+                                    <th>%</th>
+                                    <th>Address</th>
+                                </tr>
+                            </thead>
+                            <tbody id="hashrateSharesTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
             <div class="d-flex flex-wrap justify-content-center align-items-center mb-1 mt-1">
                 <div class="chart-control chart-control-wrapper">
