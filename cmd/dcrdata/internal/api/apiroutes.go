@@ -111,6 +111,8 @@ type DataSource interface {
 	GetMempoolPriceCountTime() *apitypes.PriceCountTime
 	LoadSKASupplyForCoin(ctx context.Context, charts *cache.ChartData, coinType uint8) error
 	LoadSKAFeesForCoin(ctx context.Context, charts *cache.ChartData, coinType uint8) error
+	GetMinerHashrateShares(ctx context.Context, since *time.Time) ([]dbtypes.MinerShareData, error)
+	GetTotalBlocksMined(ctx context.Context, since *time.Time) (int64, error)
 }
 
 // dcrdata application context used by all route handlers
@@ -1937,6 +1939,52 @@ func (c *appContext) ChartTypeData(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		}
+	}
+
+	// Hashrate shares chart is special: it queries the miners table directly,
+	// not the in-memory chart cache.
+	if chartType == cache.HashrateShares {
+		var since *time.Time
+		switch cache.ParseInterval(interval) {
+		case cache.YearInterval:
+			t := time.Now().AddDate(-1, 0, 0)
+			since = &t
+		case cache.MonthInterval:
+			t := time.Now().AddDate(0, -1, 0)
+			since = &t
+		case cache.WeekInterval:
+			t := time.Now().AddDate(0, 0, -7)
+			since = &t
+		case cache.DayInterval:
+			t := time.Now().AddDate(0, 0, -1)
+			since = &t
+		}
+
+		miners, err := c.DataSource.GetMinerHashrateShares(r.Context(), since)
+		if err != nil {
+			apiLog.Errorf("GetMinerHashrateShares: %v", err)
+			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+			return
+		}
+
+		total, err := c.DataSource.GetTotalBlocksMined(r.Context(), since)
+		if err != nil {
+			apiLog.Errorf("GetTotalBlocksMined: %v", err)
+			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+			return
+		}
+
+		resp := struct {
+			Interval string                   `json:"interval"`
+			Total    int64                    `json:"total"`
+			Miners   []dbtypes.MinerShareData `json:"miners"`
+		}{
+			Interval: interval,
+			Total:    total,
+			Miners:   miners,
+		}
+		writeJSON(w, resp, m.GetIndentCtx(r))
+		return
 	}
 
 	if c.charts == nil {

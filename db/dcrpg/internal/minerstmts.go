@@ -70,4 +70,54 @@ const (
 		);`
 
 	CleanupMinerZeros = `DELETE FROM miners WHERE blocks_mined <= 0;`
+
+	// SelectMinersByBlocksMined returns top 25 miners ordered by blocks_mined (all-time).
+	SelectMinersByBlocksMined = `SELECT address, blocks_mined FROM miners WHERE blocks_mined > 0 ORDER BY blocks_mined DESC LIMIT 25`
+
+	// SelectTotalBlocksMined returns the sum of all blocks mined (all-time total).
+	SelectTotalBlocksMined = `SELECT COALESCE(SUM(blocks_mined), 0) FROM miners WHERE blocks_mined > 0`
+
+	// SelectMinersByBlocksMinedSince returns top 25 miners ordered by blocks_mined
+	// within a time window (block_time >= $1::TIMESTAMPTZ). This is the same approach
+	// as BackfillMiners but bounded by block time.
+	SelectMinersByBlocksMinedSince = `
+		SELECT sub.addr, COUNT(*)::INT4 as blocks_mined
+		FROM (
+			SELECT DISTINCT v.script_addresses AS addr, t.block_height AS height
+			FROM vouts v
+			JOIN transactions t ON v.tx_hash = t.tx_hash
+			WHERE t.tree = 0
+			  AND t.block_index = 0
+			  AND t.is_mainchain = true
+			  AND v.script_type IN ('pubkeyhash', 'scripthash', 'pubkey', 'pubkeyalt', 'pubkeyhashalt')
+			  AND v.value > 0
+			  AND v.script_addresses IS NOT NULL
+			  AND v.script_addresses NOT IN ('', 'unknown')
+			  AND v.script_addresses NOT LIKE '{%}'
+			  AND t.block_time >= $1
+		) sub
+		WHERE sub.addr IS NOT NULL AND sub.addr != ''
+		GROUP BY sub.addr
+		ORDER BY blocks_mined DESC
+		LIMIT 25`
+
+	// SelectTotalBlocksMinedSince returns the total block count within a time
+	// window, using the same DISTINCT (addr, height) approach as SelectMinersByBlocksMinedSince.
+	SelectTotalBlocksMinedSince = `
+		SELECT COUNT(*)::INT8
+		FROM (
+			SELECT DISTINCT v.script_addresses AS addr, t.block_height AS height
+			FROM vouts v
+			JOIN transactions t ON v.tx_hash = t.tx_hash
+			WHERE t.tree = 0
+			  AND t.block_index = 0
+			  AND t.is_mainchain = true
+			  AND v.script_type IN ('pubkeyhash', 'scripthash', 'pubkey', 'pubkeyalt', 'pubkeyhashalt')
+			  AND v.value > 0
+			  AND v.script_addresses IS NOT NULL
+			  AND v.script_addresses NOT IN ('', 'unknown')
+			  AND v.script_addresses NOT LIKE '{%}'
+			  AND t.block_time >= $1
+		) sub
+		WHERE sub.addr IS NOT NULL AND sub.addr != ''`
 )

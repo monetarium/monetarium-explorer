@@ -3454,6 +3454,31 @@ func (pgb *ChainDB) minerRanges(ctx context.Context, _ *cache.ChartData) (*sql.R
 	return rows, cancel, nil
 }
 
+// GetMinerHashrateShares returns top 25 miners ordered by blocks_mined,
+// optionally filtered by a time threshold. If since is nil, returns all-time data.
+func (pgb *ChainDB) GetMinerHashrateShares(ctx context.Context, since *time.Time) ([]dbtypes.MinerShareData, error) {
+	ctx, cancel := context.WithTimeout(ctx, pgb.queryTimeout)
+	defer cancel()
+	miners, err := retrieveMinerHashrateShares(ctx, pgb.db, since)
+	if err != nil {
+		return nil, pgb.replaceCancelError(fmt.Errorf("GetMinerHashrateShares: %w", err))
+	}
+	return miners, nil
+}
+
+// GetTotalBlocksMined returns the total number of blocks mined across all
+// miners, optionally filtered by a time threshold. If since is nil, returns
+// all-time data.
+func (pgb *ChainDB) GetTotalBlocksMined(ctx context.Context, since *time.Time) (int64, error) {
+	ctx, cancel := context.WithTimeout(ctx, pgb.queryTimeout)
+	defer cancel()
+	total, err := retrieveTotalBlocksMined(ctx, pgb.db, since)
+	if err != nil {
+		return 0, pgb.replaceCancelError(fmt.Errorf("GetTotalBlocksMined: %w", err))
+	}
+	return total, nil
+}
+
 // coinSupply fetches the coin supply chart data from retrieveCoinSupply.
 // This is the Fetcher half of a pair that make up a cache.ChartUpdater. The
 // Appender half is appendCoinSupply.

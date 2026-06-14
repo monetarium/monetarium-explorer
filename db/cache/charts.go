@@ -66,16 +66,20 @@ const (
 
 	// SKA fee chart prefix (fees/N where N is coin type)
 	SKAFeePrefix = "fees/"
+
+	// HashrateShares chart type for pie chart + table of miner distribution.
+	HashrateShares = "hashrate-shares"
 )
 
 // intervalType specifies the lookback interval for the active-miner rolling count.
 type intervalType string
 
 const (
-	AllInterval  intervalType = "all"
-	YearInterval intervalType = "year"
-	WeekInterval intervalType = "week"
-	DayInterval  intervalType = "day"
+	AllInterval   intervalType = "all"
+	MonthInterval intervalType = "month"
+	YearInterval  intervalType = "year"
+	WeekInterval  intervalType = "week"
+	DayInterval   intervalType = "day"
 
 	DefaultInterval = WeekInterval
 )
@@ -172,7 +176,7 @@ func ParseAxis(aType string) axisType {
 // ParseInterval returns the matching interval type, else the default.
 func ParseInterval(s string) intervalType {
 	switch intervalType(s) {
-	case AllInterval, YearInterval, WeekInterval, DayInterval:
+	case AllInterval, MonthInterval, YearInterval, WeekInterval, DayInterval:
 		return intervalType(s)
 	}
 	return DefaultInterval
@@ -938,6 +942,8 @@ func (charts *ChartData) activeMinersCounts(numBlocks int, interval intervalType
 		switch interval {
 		case YearInterval:
 			duration = uint64(365 * 24 * 60 * 60)
+		case MonthInterval:
+			duration = uint64(30 * 24 * 60 * 60)
 		case WeekInterval:
 			duration = uint64(7 * 24 * 60 * 60)
 		case DayInterval:

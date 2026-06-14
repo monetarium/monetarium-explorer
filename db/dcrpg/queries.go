@@ -5126,3 +5126,52 @@ func bigAddSKA(acc *big.Int, s string) {
 		acc.Add(acc, v)
 	}
 }
+
+// retrieveMinerHashrateShares returns top 25 miners ordered by blocks_mined.
+// If since is nil, returns all-time data from the miners table.
+// If since is set, counts coinbase outputs >= since.
+func retrieveMinerHashrateShares(ctx context.Context, db *sql.DB, since *time.Time) ([]dbtypes.MinerShareData, error) {
+	var rows *sql.Rows
+	var err error
+	if since != nil {
+		rows, err = db.QueryContext(ctx, internal.SelectMinersByBlocksMinedSince, *since)
+	} else {
+		rows, err = db.QueryContext(ctx, internal.SelectMinersByBlocksMined)
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer closeRows(rows)
+
+	var miners []dbtypes.MinerShareData
+	for rows.Next() {
+		var m dbtypes.MinerShareData
+		if err := rows.Scan(&m.Address, &m.BlocksMined); err != nil {
+			return nil, err
+		}
+		miners = append(miners, m)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return miners, nil
+}
+
+// retrieveTotalBlocksMined returns the total number of blocks mined by all
+// miners. If since is nil, uses the miners table sum; otherwise counts
+// coinbase outputs within the time window.
+func retrieveTotalBlocksMined(ctx context.Context, db *sql.DB, since *time.Time) (int64, error) {
+	var total int64
+	if since != nil {
+		err := db.QueryRowContext(ctx, internal.SelectTotalBlocksMinedSince, *since).Scan(&total)
+		if err != nil {
+			return 0, err
+		}
+	} else {
+		err := db.QueryRowContext(ctx, internal.SelectTotalBlocksMined).Scan(&total)
+		if err != nil {
+			return 0, err
+		}
+	}
+	return total, nil
+}
