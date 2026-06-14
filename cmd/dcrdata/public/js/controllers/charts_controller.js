@@ -18,7 +18,7 @@ let Dygraph // lazy loaded on connect
 const atomsToVAR = 1e-8
 const windowScales = ['ticket-price', 'pow-difficulty', 'missed-votes']
 const hybridScales = ['privacy-participation']
-const lineScales = ['ticket-price', 'privacy-participation']
+const lineScales = ['ticket-price', 'privacy-participation', 'hashrate']
 const modeScales = ['ticket-price', 'hashrate']
 const multiYAxisChart = ['ticket-price', 'privacy-participation', 'hashrate']
 // index 0 represents y1 and 1 represents y2 axes.
