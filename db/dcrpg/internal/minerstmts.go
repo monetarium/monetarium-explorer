@@ -104,7 +104,7 @@ const (
 	// SelectTotalBlocksMinedSince returns the total block count within a time
 	// window, using the same DISTINCT (addr, height) approach as SelectMinersByBlocksMinedSince.
 	SelectTotalBlocksMinedSince = `
-		SELECT COUNT(*)::INT4
+		SELECT COUNT(*)::INT8
 		FROM (
 			SELECT DISTINCT v.script_addresses AS addr, t.block_height AS height
 			FROM vouts v

@@ -5160,8 +5160,8 @@ func retrieveMinerHashrateShares(ctx context.Context, db *sql.DB, since *time.Ti
 // retrieveTotalBlocksMined returns the total number of blocks mined by all
 // miners. If since is nil, uses the miners table sum; otherwise counts
 // coinbase outputs within the time window.
-func retrieveTotalBlocksMined(ctx context.Context, db *sql.DB, since *time.Time) (int32, error) {
-	var total int32
+func retrieveTotalBlocksMined(ctx context.Context, db *sql.DB, since *time.Time) (int64, error) {
+	var total int64
 	if since != nil {
 		err := db.QueryRowContext(ctx, internal.SelectTotalBlocksMinedSince, *since).Scan(&total)
 		if err != nil {

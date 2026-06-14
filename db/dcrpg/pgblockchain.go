@@ -3469,7 +3469,7 @@ func (pgb *ChainDB) GetMinerHashrateShares(ctx context.Context, since *time.Time
 // GetTotalBlocksMined returns the total number of blocks mined across all
 // miners, optionally filtered by a time threshold. If since is nil, returns
 // all-time data.
-func (pgb *ChainDB) GetTotalBlocksMined(ctx context.Context, since *time.Time) (int32, error) {
+func (pgb *ChainDB) GetTotalBlocksMined(ctx context.Context, since *time.Time) (int64, error) {
 	ctx, cancel := context.WithTimeout(ctx, pgb.queryTimeout)
 	defer cancel()
 	total, err := retrieveTotalBlocksMined(ctx, pgb.db, since)

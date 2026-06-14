@@ -1200,6 +1200,10 @@ export default class extends Controller {
     const ctx = canvas.getContext('2d')
     const dpr = window.devicePixelRatio || 1
     const rect = canvas.getBoundingClientRect()
+    if (!rect.width || !rect.height) {
+      window.requestAnimationFrame(() => this.renderHashrateShares(data))
+      return
+    }
     canvas.width = rect.width * dpr
     canvas.height = rect.height * dpr
     ctx.scale(dpr, dpr)
