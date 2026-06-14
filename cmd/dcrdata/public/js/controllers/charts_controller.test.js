@@ -220,3 +220,33 @@ describe('ChartsController URL persistence', () => {
     )
   })
 })
+
+describe('ChartsController hashrate chart', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('selecting hashrate adds chart-hashrate class to chartview', async () => {
+    const c = makeController()
+    await c.connect()
+
+    c.chartSelectTarget.value = 'hashrate'
+    await c.selectChart()
+
+    expect(c.chartsViewTarget.classList.add).toHaveBeenCalledWith('chart-hashrate')
+  })
+
+  it('switching away from hashrate removes chart-hashrate class', async () => {
+    const c = makeController()
+    await c.connect()
+
+    c.chartSelectTarget.value = 'hashrate'
+    await c.selectChart()
+
+    c.chartSelectTarget.value = 'ticket-price'
+    await c.selectChart()
+
+    expect(c.chartsViewTarget.classList.add).toHaveBeenCalledWith('chart-hashrate')
+    expect(c.chartsViewTarget.classList.remove).toHaveBeenCalledWith('chart-hashrate')
+  })
+})
