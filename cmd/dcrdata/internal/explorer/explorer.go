@@ -392,7 +392,7 @@ func New(cfg *ExplorerConfig) *explorerUI {
 	exp.templates = newTemplates(cfg.Viewsfolder, cfg.ReloadHTML, commonTemplates, funcMap)
 
 	tmpls := []string{"home", "blocks", "mempool", "block", "tx", "address",
-		"rawtx", "status", "parameters", "agenda", "agendas", "charts",
+		"rawtx", "status", "parameters", "agenda", "agendas", "charts", "hashrate_shares",
 		"sidechains", "disapproved", "ticketpool", "visualblocks",
 		"windows", "timelisting", "addresstable", "proposals", "proposal",
 		"insight_root", "attackcost", "verify_message"}

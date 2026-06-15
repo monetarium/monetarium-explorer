@@ -3,6 +3,7 @@ package explorer
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"sort"
 	"strconv"
@@ -152,4 +153,35 @@ func (exp *explorerUI) HashrateSharesData(w http.ResponseWriter, r *http.Request
 	if err := json.NewEncoder(w).Encode(resp); err != nil {
 		log.Errorf("hashrate-shares: encode: %v", err)
 	}
+}
+
+// HashrateShares renders the standalone /hashrate-shares page shell. The pie and
+// table are populated client-side by the hashrate_shares Stimulus controller,
+// which fetches /hashrate-shares/data.
+func (exp *explorerUI) HashrateShares(w http.ResponseWriter, r *http.Request) {
+	exp.pageData.RLock()
+	skaSupply := exp.pageData.HomeInfo.SKACoinSupply
+	exp.pageData.RUnlock()
+
+	activeSKATypes := make([]uint8, len(skaSupply))
+	for i, entry := range skaSupply {
+		activeSKATypes[i] = entry.CoinType
+	}
+
+	str, err := exp.templates.exec("hashrate_shares", struct {
+		*CommonPageData
+		ActiveSKATypes []uint8
+	}{
+		CommonPageData: exp.commonData(r),
+		ActiveSKATypes: activeSKATypes,
+	})
+	if err != nil {
+		log.Errorf("Template execute failure: %v", err)
+		exp.StatusPage(w, defaultErrorCode, defaultErrorMessage, "", ExpStatusError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/html")
+	w.WriteHeader(http.StatusOK)
+	io.WriteString(w, str)
 }
