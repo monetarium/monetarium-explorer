@@ -434,4 +434,23 @@ describe('controller mempool-tile lifecycle', () => {
     expect(boxTarget.children).toHaveLength(4)
     expect(mempoolTiles[0]).toBe(boxTarget.firstChild)
   })
+
+  it('_handleVisualBlocksUpdate with empty boxTarget does not throw', () => {
+    const emptyBox = document.createElement('div')
+    c.boxTarget = emptyBox
+    expect(() =>
+      c._handleVisualBlocksUpdate({
+        block: {
+          height: 1,
+          time: '2026-01-01T00:00:00Z',
+          size: 1,
+          formatted_bytes: '1 B',
+          Votes: [],
+          Tickets: [],
+          Revs: []
+        }
+      })
+    ).not.toThrow()
+    expect(emptyBox.children).toHaveLength(0)
+  })
 })
