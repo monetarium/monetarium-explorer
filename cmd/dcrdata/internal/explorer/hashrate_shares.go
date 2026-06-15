@@ -116,7 +116,7 @@ func (exp *explorerUI) HashrateSharesData(w http.ResponseWriter, r *http.Request
 	switch interval {
 	case "all", "month", "week", "day":
 	default:
-		interval = "all"
+		interval = "week"
 	}
 
 	ctx := r.Context()

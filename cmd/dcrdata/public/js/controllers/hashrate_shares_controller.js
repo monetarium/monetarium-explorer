@@ -112,7 +112,7 @@ export default class extends Controller {
   static targets = ['pie', 'tableBody', 'rowTemplate', 'intervalOption', 'empty', 'pieWrap']
 
   connect() {
-    this.interval = 'all'
+    this.interval = 'week'
     this._reqSeq = (this._reqSeq || 0) + 1
     this.fetchAndRender(this._reqSeq)
   }
