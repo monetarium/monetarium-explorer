@@ -5,34 +5,78 @@ description: Generate a tasks.json file for the Monetarium Explorer issue-creati
 
 # Generate tasks.json for create-issues.js
 
-This project drives bulk GitHub issue creation through a single Node.js script (`.github/scripts/generate-issues/create-issues.js`) that consumes a `tasks.json` file. This skill covers **how to execute** that task: where the file goes, the script's schema, validation, and the safe run procedure. It does **not** restate the team's planning rules — those live in one place (below).
+This project drives bulk GitHub issue creation through a single Node.js script (`.github/scripts/generate-issues/create-issues.js`) that consumes a `tasks.json` file. This skill is the canonical home for the **generic issue-writing best-practices** — how to size an issue, when to split it, and how to write a good body. The **project-specific conventions** — the domain-prefix set, the allowed labels, the no-default-assignee model, the board, and the script itself — live in the team doc, linked below.
 
-## Authoritative rules — read this first, every time
+## Generic best-practice here, project specifics in the doc
 
-[`.github/scripts/generate-issues/GITHUB_ISSUES_AND_PROJECT_BOARD.md`](../../../.github/scripts/generate-issues/GITHUB_ISSUES_AND_PROJECT_BOARD.md) is the **single source of truth** for all issue-planning policy. **Read it in full before drafting** — not "only if a question comes up". It is binding; if anything in this skill ever appears to conflict with it, the doc wins and this skill should be fixed.
+[`GITHUB_ISSUES_AND_PROJECT_BOARD.md`](../../../.github/scripts/generate-issues/GITHUB_ISSUES_AND_PROJECT_BOARD.md) holds the **project-specific** instructions. Consult it for the concretes this skill points to:
 
-It owns, and this skill deliberately does **not** duplicate:
+- the **domain-prefix table** (§3.4) and the **allowed label set** (§7),
+- the **no-default-assignee model** (§4), and the **board** / **PR-merge** conventions (§5–6),
+- the **milestone / `config.json`** (§2) and the **`create-issues.js`** schema, run procedure, and lifecycle (§8).
 
-- **Issue granularity** (§3): the **default is one full-stack `issue` = one PR**, split by feature/task/bug, **never** by layer; don't oversplit (§3.1–3.2).
-- **The large-feature exception** (§3.3): `parent` + sub-issues only when a feature genuinely can't land in one PR, split into **vertical slices** (each a one-PR full-stack unit), never into layer pairs; no childless `parent`.
-- **Domain prefixes** (§3.4): every title carries exactly one prefix from the canonical set.
-- **Assignment** (§4): issues are created **unassigned** — omit `assignee`. The only reasonable assignee is a Feature Owner on a `parent`.
-- **The allowed label set** (§7).
+This skill owns the generic principles that follow (single source of truth, granularity, decomposition, spec-not-plan). The division of labor: **on a generic principle the skill is canonical; on a project-specific concrete the doc wins.** Apply both together.
 
-Apply those rules from the doc. The rest of this skill is mechanics.
+## Issues are the single source of truth
+
+All feature discussion, bug reports, and decisions belong **in the GitHub issue**, not in external messengers — that one searchable history is what the client and the team rely on. Two consequences when drafting:
+
+- The body must stand on its own as the working record of the change — which is why a client request relayed over a messenger is preserved verbatim (see "Preserving the original client request").
+- The issue captures the *spec*, not the implementation; the build history lives in the PR that closes it (see "Write issues as specs, not implementation plans").
+
+## Issue granularity: one issue, one PR
+
+The team is staffed by **full-stack developers** and most work is small bugs and improvements, so issue structure is deliberately flat:
+
+- The **default unit of work is one `type: issue`** that a single developer delivers in **one Pull Request**, covering the change end-to-end — backend, frontend, tests, docs — as one piece.
+- **Split by what the change is** (feature / task / bug), **never by which layer it touches.** An `[API]` issue plus a `[UI]` issue for the *same* fix is the classic anti-pattern: one developer implements the whole thing, so the split only adds coordination overhead.
+- **Don't oversplit** — over-decomposition is the most common planning failure. Checkbox steps inside the body are planning detail, not a reason to spin up more issues. One self-contained change → one issue.
+
+## Large features: parent + vertical-slice sub-issues
+
+A two-level hierarchy is reserved for a feature that genuinely **cannot land in one PR**:
+
+- One **`parent`** (`issue_type: Feature`) describing the user-visible scope, plus **two or more `sub-issue`s** (`issue_type: Task`).
+- Each sub-issue is a **vertical slice** — itself a one-PR, full-stack unit (e.g. the "list view" and the "detail drawer" of one page) — **never a layer split** (no `[DATA]` + `[UI]` pair for a single slice).
+- A `parent` **must** have sub-issues; a childless parent is invalid, and a feature too small to slice is a plain `type: issue`. Only two levels — no deeper nesting.
+- The `parent` is the one place a default `assignee` is reasonable (a Feature Owner coordinating the slices); the slices themselves stay unassigned.
+
+## Titles and labels — the principle here, the sets in the doc
+
+- **One domain prefix per title.** Every title starts with exactly **one** prefix marking the *domain* (not a layer), so the board scans at a glance. Choose the single dominant domain; never combine (❌ `[BLOCKS][API]`). The canonical set and how to extend it are the doc's prefix table (§3.4).
+- **Labels are a small strict set, and optional.** Set at most the one label matching the *kind* of change (`bug` / `enhancement` / `refactoring`) when it adds value; otherwise omit it and leave the issue unlabeled. The prefix carries the domain, the label the kind — don't over-label. Only labels that already exist in the repo are allowed (the approved set is §7).
+- **Omit `assignee`.** New issues go into an unassigned pool and are self-assigned on pickup — the team's model is §4. The only `assignee` you set is a Feature Owner on a `parent`.
+
+## Write issues as specs, not implementation plans
+
+An issue is a **spec**: it states *what* must change and *why*, and what "done" looks like — not *how* to build it. The granularity sections above govern how to **split** work into issues; this governs how to **write** each one. The audience is the whole team and the client / product owner (see "Issues are the single source of truth"), most of whom read the issue without ever opening the code. The implementation — the file-by-file changes, the function names, the actual diff — belongs in the **PR** that closes the issue, authored by whoever picks it up. An issue that prescribes the implementation goes stale the moment the code moves, and quietly pre-decides an approach the implementer may well improve on.
+
+Keep each body lean and outcome-focused:
+
+- **Problem / outcome** — a short statement of the user-visible need or defect and the goal. A reader should grasp what's wanted without domain-internal knowledge.
+- **Scope** — a few bullets on what the change covers (and, where useful, what it explicitly doesn't). Checkbox bullets are good, but as *requirement* sub-tasks ("ticket-price chart respects the new default"), not a code walkthrough.
+- **Acceptance criteria** — observable, testable outcomes a reviewer checks to call it done ("the API returns the SKA total at height `h`", "the supply card renders with no scientific notation"). This is the part worth being precise about.
+- **References** — link the spec / wiki / related issues. **Link, don't transcribe**: a pasted-in spec rots out of sync with its source.
+
+Leave **out** of the body (it lives in the PR instead):
+
+- A step-by-step implementation recipe — which files to edit, which functions to add, line numbers.
+- Internal code invariants copied wholesale out of `wiki/code-analysis/` (lock order, memoized-pointer no-mutate, both-transports parity, …). The implementer is already told to read those before touching the area (CLAUDE.md); re-pasting them into every issue bloats the body. If one is genuinely an *acceptance* concern, condense it to a single "must not regress" outcome line and link the page — don't embed the analysis.
+
+**Don't reverse-engineer a plan from source to write the spec.** Drafting an issue does not require reading the Go / JS source — your inputs are the user's request and the wiki. Opening source files to reconstruct an implementation is exactly what produces the bloated, brittle, over-prescribed bodies this section exists to prevent. If the request is genuinely unclear, ask the user; don't go spelunking.
 
 ## Sourcing issue content from the wiki
 
-The repo ships a curated `wiki/` (`wiki/index.md`). Use it to fill issue bodies instead of re-deriving scope — this is drafting technique, not policy. Because issues are now **single and full-stack**, one issue body draws on **both** kinds of wiki page at once:
+The repo ships a curated `wiki/` (`wiki/index.md`). Use it to source issue content instead of re-deriving scope — or worse, reading source to reconstruct it (see the section above). This is drafting technique, not policy.
 
-- **If `wiki/specs/<area>/spec.md` exists, that spec is the issue.** Link it and **lift its acceptance checklist verbatim** into the issue body rather than paraphrasing.
-- **If `wiki/code-analysis/<area>/` exists, mine it for "must preserve" acceptance items** — `patterns.md` invariants and `impact.md` failure modes (memoized-pointer no-mutate, lock order, both-transports parity, SKA atoms staying `big.Int`-derived strings, etc.). These go in the **same** issue, not a separate backend/data-only one.
-- The change may cascade across several Go modules (7-module workspace) and both transports (HTTP template + WebSocket). That is still **one** issue — the full-stack developer owns it end to end.
+- **If `wiki/specs/<area>/spec.md` exists, that spec is the issue.** Link it, and lift its **acceptance checklist** into the body — acceptance is exactly the spec-level content an issue should carry. Summarize the scope in a sentence or two; **link the spec rather than transcribe it**.
+- **`wiki/code-analysis/<area>/` is for the implementer, not the issue body.** It documents internal mechanics — invariants in `patterns.md`, failure modes in `impact.md` — that the developer reads *when they implement*. Don't mine it into the spec. At most, if one invariant is a real *acceptance* constraint, condense it to a single "must not regress" line (e.g. "both transports stay in parity", "SKA atoms stay `big.Int`-derived strings") and link the page.
+- A change may cascade across several Go modules (7-module workspace) and both transports (HTTP template + WebSocket). That breadth shapes *how the work is split* (see "Issue granularity" above — still usually one full-stack issue), not how much implementation detail the body carries. Describe the outcome, not the cascade.
 - A `[DOCS]` issue is warranted when refreshing those code-analysis files (`flow.compact.md`, `patterns.md`, `impact.md`) is itself a distinct piece of work after a change lands.
 
 ## Preserving the original client request
 
-Issues are the project's **single source of truth** — [`GITHUB_ISSUES_AND_PROJECT_BOARD.md` §1](../../../.github/scripts/generate-issues/GITHUB_ISSUES_AND_PROJECT_BOARD.md) requires that discussion live in the issue, "not in external messengers." A client request that arrives over a messenger — often in a language other than the one the issue is written in — and gets silently rewritten into the issue body loses that record, and any translation drift becomes invisible. So when an issue's content originates from a **client-provided request** (a message or spec the user pastes in, in *any* language), preserve the client's exact wording inside the issue.
+Issues are the project's **single source of truth** (see "Issues are the single source of truth" above) — discussion lives in the issue, "not in external messengers." A client request that arrives over a messenger — often in a language other than the one the issue is written in — and gets silently rewritten into the issue body loses that record, and any translation drift becomes invisible. So when an issue's content originates from a **client-provided request** (a message or spec the user pastes in, in *any* language), preserve the client's exact wording inside the issue.
 
 - **How to recognize it (the trigger).** A client citation is the user *forwarding someone else's words*, not describing the work in their own. In priority order:
   1. **Explicit demarcation** — the user marked it: a quoted/fenced block, a `Client:` / `From the client:` lead-in (or its equivalent in another language), or an obviously pasted or forwarded chat chunk. That marked span *is* the citation; take it as-is.
@@ -61,9 +105,9 @@ Issues are the project's **single source of truth** — [`GITHUB_ISSUES_AND_PROJ
 ## Workflow
 
 1. **Check the slot for a leftover `tasks.json`** (see "File location and shape"). A successful live run auto-archives the file, so any `tasks.json` present is a **previous batch left pending or abandoned** — **never append to or merge with it.** Treat it as stale: confirm with the user, then **overwrite** it for the new batch.
-2. **Read the authoritative doc** (above), then understand the work: the user-visible change, the layers it touches, and any constraints.
-3. **Decide the shape per §3** — default to a **single `type: issue`** (full-stack, one PR). Use `parent` + vertical-slice sub-issues **only** for the large-feature exception of §3.3.
-4. **Pick the one domain prefix** from the §3.4 canonical set; **omit `assignee`** (§4).
+2. **Read the principles above** (and the doc for the project concretes they point to), then understand the work from the request and the wiki — the user-visible change and what "done" means. You're writing a spec, not a plan: don't open source to reverse-engineer an implementation (see "Write issues as specs, not implementation plans"). If the request is unclear, ask the user.
+3. **Decide the shape** (see "Issue granularity" / "Large features" above) — default to a **single `type: issue`** (full-stack, one PR). Use `parent` + vertical-slice sub-issues **only** for the large-feature exception.
+4. **Pick the one domain prefix** from the doc's canonical set (§3.4); **omit `assignee`** (§4).
 5. **Draft the JSON** following the schema below, sourcing content from the wiki. For client-sourced work, end each issue body with the verbatim original snippet (see "Preserving the original client request").
 6. **Validate locally** in dry-run mode (see "Validate"). Never invoke a live run yourself.
 
@@ -90,7 +134,7 @@ This is the `create-issues.js` schema (a script contract, not team policy). The 
 - `type` — one of `parent`, `sub-issue`, `issue`. Anything else fails validation. **Default to `issue`.**
 - `parent` — required when `type` is `sub-issue`; must reference an existing `id` whose task is `type: parent`.
 - `issue_type` — `Feature` for parents, `Task` otherwise. Defaults apply if omitted; set it explicitly.
-- `description` — markdown body. The script auto-appends `\n\nPart of #<parent-number>` to sub-issues — do not write that yourself. When the work comes from a client request, end the body with the verbatim original-request block (see "Preserving the original client request").
+- `description` — markdown body. Write it as a **spec**, not an implementation plan: problem / outcome, scope, acceptance criteria, and links — no file-by-file recipe or transcribed code internals (see "Write issues as specs, not implementation plans"). The script auto-appends `\n\nPart of #<parent-number>` to sub-issues — do not write that yourself. When the work comes from a client request, end the body with the verbatim original-request block (see "Preserving the original client request").
 - `assignee` — **omit by default** (unassigned pool, §4). Only set it for a `parent`'s Feature Owner.
 - `labels` — array from the doc's allowed set only (§7). **Optional**: set the one label matching the kind of change (`bug` / `enhancement` / `refactoring`) when it adds value; omitting `labels` leaves the issue **unlabeled** (the script no longer force-defaults to `enhancement`). There is **no** per-task `milestone` field — the script applies the milestone globally from `config.json` (§8.2).
 
@@ -117,14 +161,14 @@ The default shape is a **single full-stack issue**:
       "type": "issue",
       "issue_type": "Task",
       "title": "[<DOMAIN>] <concise full-stack change>",
-      "description": "<scope + checkbox steps; spec acceptance checklist lifted verbatim; code-analysis 'must preserve' invariants>\n\n---\n\n**Original client request (<lang>):**\n\n> <client's verbatim words; omit this block for non-client work>",
+      "description": "<problem + outcome; scope bullets; acceptance criteria (lift the spec's checklist) — link the spec, no code-level implementation recipe>\n\n---\n\n**Original client request (<lang>):**\n\n> <client's verbatim words; omit this block for non-client work>",
       "labels": ["bug"]
     }
   ]
 }
 ```
 
-For the large-feature exception (`parent` + vertical-slice sub-issues), use the worked example in the authoritative doc §8.4.
+For the large-feature exception (`parent` + vertical-slice sub-issues), use the doc's §8.4 worked example.
 
 ## Validate
 
@@ -140,9 +184,10 @@ Fix any `❌` lines before reporting done. Do **not** run the live command (`nod
 
 ## Common mistakes (mechanics)
 
-Planning mistakes (over-decomposition, splitting by layer, wrong prefix, adding an assignee) are governed by the authoritative doc — follow it. The script-mechanics traps:
+The planning principles above (granularity, decomposition, spec-not-plan) and the doc's project concretes (prefix set §3.4, labels §7, assignee model §4) govern *what* to draft. This list catches the recurring traps — drafting and script-mechanics both:
 
-- **Oversplitting one change into multiple issues.** The default is a single full-stack `issue`; reach for `parent` + sub-issues only for the §3.3 exception.
+- **Writing an implementation plan instead of a spec.** Issue bodies state problem, scope, and acceptance — not a file-by-file recipe or code-analysis invariants copied wholesale, and you don't read source to draft one (see "Write issues as specs, not implementation plans"). The implementation lives in the PR that closes the issue.
+- **Oversplitting one change into multiple issues.** The default is a single full-stack `issue`; reach for `parent` + sub-issues only for the large-feature exception (see "Large features" above).
 - **Adding an `assignee`.** Issues are created unassigned (§4); only a `parent` Feature Owner gets one.
 - **Writing `Part of #N` into a sub-issue description.** The script appends it automatically; duplicating produces ugly output.
 - **Adding a `milestone` field to a task.** The milestone is applied globally from `config.json` (or `--milestone` / `MILESTONE`) — a per-task field is noise.
