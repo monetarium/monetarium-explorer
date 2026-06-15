@@ -81,6 +81,16 @@
                 </div>
             </div>
         </div>
+
+        {{/* Row template cloned per miner by the hashrate-shares controller. */}}
+        <template data-hashrate-shares-target="rowTemplate">
+            <tr>
+                <td class="text-end" data-type="rank"></td>
+                <td><span class="hashrate-shares-swatch" data-type="swatch"></span></td>
+                <td class="text-end mono" data-type="percent"></td>
+                <td class="break-word" data-type="addr"></td>
+            </tr>
+        </template>
     </div>
 
 {{ template "footer" . }}

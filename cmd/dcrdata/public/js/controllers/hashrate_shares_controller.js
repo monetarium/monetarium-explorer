@@ -1,5 +1,4 @@
 import { Controller } from '@hotwired/stimulus'
-import dompurify from 'dompurify'
 import { requestJSON } from '../helpers/http'
 
 // Pie geometry constants (SVG viewBox is 360x360).
@@ -51,6 +50,40 @@ export function colorForIndex(i) {
   return PALETTE[i % PALETTE.length]
 }
 
+// buildRows clones the row <template> once per miner and fills each cell via
+// textContent / attributes, returning the resulting <tr> elements.
+//
+// No HTML is parsed from the data, so untrusted values (reward addresses) stay
+// inert without a sanitizer — textContent never interprets markup. Cloning a
+// <template> also preserves the <tr>/<td> structure, which a row string fed
+// through innerHTML would lose (the HTML parser drops bare table tags outside a
+// table context).
+export function buildRows(rowTemplate, miners) {
+  return miners.map((m, i) => {
+    const row = document.importNode(rowTemplate.content, true).querySelector('tr')
+    row.querySelector('[data-type="rank"]').textContent = m.isOthers ? '' : String(m.rank)
+    row.querySelector('[data-type="swatch"]').style.background = m.isOthers
+      ? OTHERS_COLOR
+      : colorForIndex(i)
+    row.querySelector('[data-type="percent"]').textContent = `${m.percent}%`
+
+    const addr = row.querySelector('[data-type="addr"]')
+    if (m.isOthers) {
+      const span = document.createElement('span')
+      span.className = 'text-secondary'
+      span.textContent = 'Others'
+      addr.appendChild(span)
+    } else {
+      const link = document.createElement('a')
+      link.className = 'mono'
+      link.href = `/address/${m.address}`
+      link.textContent = middleTruncate(m.address)
+      addr.appendChild(link)
+    }
+    return row
+  })
+}
+
 export function sliceLabelFits(sweepRadians) {
   return sweepRadians >= MIN_LABEL_SWEEP
 }
@@ -75,7 +108,7 @@ export function arcPath(start, end) {
 const SVGNS = 'http://www.w3.org/2000/svg'
 
 export default class extends Controller {
-  static targets = ['pie', 'tableBody', 'intervalOption', 'empty', 'pieWrap']
+  static targets = ['pie', 'tableBody', 'rowTemplate', 'intervalOption', 'empty', 'pieWrap']
 
   connect() {
     this.interval = 'all'
@@ -124,21 +157,7 @@ export default class extends Controller {
     this.emptyTarget.classList.toggle('d-hide', !empty)
     this.pieWrapTarget.classList.toggle('d-hide', empty)
     if (empty) this.emptyTarget.textContent = emptyStateMessage(isError)
-    const rows = miners.map((m, i) => {
-      const color = m.isOthers ? OTHERS_COLOR : colorForIndex(i)
-      const rank = m.isOthers ? '' : m.rank
-      const swatch = `<span class="hashrate-shares-swatch" style="background:${color}"></span>`
-      const addr = m.isOthers
-        ? '<span class="text-secondary">Others</span>'
-        : `<a class="mono" href="/address/${m.address}">${middleTruncate(m.address)}</a>`
-      return `<tr>
-        <td class="text-end">${rank}</td>
-        <td>${swatch}</td>
-        <td class="text-end mono">${m.percent}%</td>
-        <td class="break-word">${addr}</td>
-      </tr>`
-    })
-    this.tableBodyTarget.innerHTML = dompurify.sanitize(rows.join(''))
+    this.tableBodyTarget.replaceChildren(...buildRows(this.rowTemplateTarget, miners))
   }
 
   renderPie(miners) {
