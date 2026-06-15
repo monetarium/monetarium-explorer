@@ -386,7 +386,7 @@ export default class extends Controller {
     const tile = normaliseWsBlock(block)
 
     const box = this.boxTarget
-    const mempoolTile = box.firstChild
+    const mempoolTile = box.querySelector('[data-role="mempool-tile"]')
     if (!mempoolTile) return
     box.insertBefore(newBlockHtmlElement(tile), mempoolTile.nextSibling)
     const vis = this.visibleBlocks()
