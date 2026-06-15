@@ -76,6 +76,9 @@ export default class extends Controller {
         if (this.hasProgressBarTarget) {
           this.progressBarTarget.dataset.confirmHeight = block.height
         }
+        // Seed the confirmation-block-height so newblock_controller
+        // can increment the count on each subsequent new block.
+        this.confirmationsTarget.dataset.confirmationBlockHeight = block.height
         delete this.unconfirmedTarget.dataset.txTarget
       }
     }
