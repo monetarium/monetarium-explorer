@@ -1,4 +1,5 @@
 import { Controller } from '@hotwired/stimulus'
+import dompurify from 'dompurify'
 import { requestJSON } from '../helpers/http'
 
 // Pie geometry constants (SVG viewBox is 360x360).
@@ -99,6 +100,8 @@ export default class extends Controller {
     } catch (err) {
       if (seq !== this._reqSeq) return
       console.error('hashrate-shares fetch failed', err)
+      this.renderTable([])
+      this.renderPie([])
       return
     }
     if (seq !== this._reqSeq) return
@@ -125,7 +128,7 @@ export default class extends Controller {
         <td class="break-word">${addr}</td>
       </tr>`
     })
-    this.tableBodyTarget.innerHTML = rows.join('')
+    this.tableBodyTarget.innerHTML = dompurify.sanitize(rows.join(''))
   }
 
   renderPie(miners) {
