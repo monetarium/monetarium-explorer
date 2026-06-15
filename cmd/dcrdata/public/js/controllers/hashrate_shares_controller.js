@@ -1,3 +1,4 @@
+/* global Turbolinks */
 import { Controller } from '@hotwired/stimulus'
 import { requestJSON } from '../helpers/http'
 
@@ -132,7 +133,7 @@ export default class extends Controller {
   selectChart(e) {
     const value = e.currentTarget.value
     if (value === 'hashrate-shares') return
-    window.location.assign(`/charts?chart=${encodeURIComponent(value)}`)
+    Turbolinks.visit(`/charts?chart=${encodeURIComponent(value)}`)
   }
 
   async fetchAndRender(seq) {
