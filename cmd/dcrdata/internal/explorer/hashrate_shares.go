@@ -1,8 +1,12 @@
 package explorer
 
 import (
+	"context"
+	"encoding/json"
+	"net/http"
 	"sort"
 	"strconv"
+	"time"
 
 	"github.com/monetarium/monetarium-explorer/db/dbtypes"
 )
@@ -69,4 +73,83 @@ func minerShares(rows []dbtypes.MinerRewardCount) (total int64, views []MinerSha
 	}
 
 	return total, views
+}
+
+// intervalMinHeight maps an interval label to the minimum block height of the
+// window, relative to the chain tip time. "all" (and anything unrecognized)
+// returns 0 (whole chain). day/week/month subtract the corresponding duration
+// from the tip time and map it to a height via the data source.
+func (exp *explorerUI) intervalMinHeight(ctx context.Context, interval string) (int64, error) {
+	var dur time.Duration
+	switch interval {
+	case "day":
+		dur = 24 * time.Hour
+	case "week":
+		dur = 7 * 24 * time.Hour
+	case "month":
+		dur = 30 * 24 * time.Hour
+	default: // "all"
+		return 0, nil
+	}
+
+	exp.pageData.RLock()
+	hasTip := exp.pageData.BlockInfo != nil && exp.pageData.BlockInfo.BlockBasic != nil
+	var tipTime time.Time
+	if hasTip {
+		tipTime = exp.pageData.BlockInfo.BlockTime.T
+	}
+	exp.pageData.RUnlock()
+
+	if !hasTip {
+		// No tip yet (early startup): fall back to whole chain.
+		return 0, nil
+	}
+
+	return exp.dataSource.GetHeightByTimestamp(ctx, tipTime.Add(-dur))
+}
+
+// HashrateSharesData serves the per-interval miner hashrate-share data as JSON
+// for the /hashrate-shares page controller. Query param: ?interval=all|month|week|day.
+func (exp *explorerUI) HashrateSharesData(w http.ResponseWriter, r *http.Request) {
+	interval := r.URL.Query().Get("interval")
+	switch interval {
+	case "all", "month", "week", "day":
+	default:
+		interval = "all"
+	}
+
+	ctx := r.Context()
+	minHeight, err := exp.intervalMinHeight(ctx, interval)
+	if err != nil {
+		log.Errorf("hashrate-shares: intervalMinHeight: %v", err)
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+
+	rows, err := exp.dataSource.MinerHashrateShares(ctx, minHeight)
+	if err != nil {
+		log.Errorf("hashrate-shares: MinerHashrateShares: %v", err)
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+
+	total, views := minerShares(rows)
+	if views == nil {
+		views = []MinerShareView{} // emit [] not null
+	}
+
+	resp := struct {
+		Interval string           `json:"interval"`
+		Total    int64            `json:"total"`
+		Miners   []MinerShareView `json:"miners"`
+	}{
+		Interval: interval,
+		Total:    total,
+		Miners:   views,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		log.Errorf("hashrate-shares: encode: %v", err)
+	}
 }
