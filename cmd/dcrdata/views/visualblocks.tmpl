@@ -23,9 +23,8 @@
                 class="blocks-holder"
                 data-visualBlocks-target="box"
             >
-                <!-- Mempool tile -->
                 {{with .Mempool}}
-                <div class="block visible" data-visualBlocks-target="block">
+                <div class="block visible" data-role="mempool-tile" data-visualBlocks-target="block">
                     <div class="block-info">
                         <a class="color-code" href="/mempool">Mempool</a>
                         <div class="mono amount" style="line-height: 1;">
@@ -138,7 +137,6 @@
                 </div>
                 {{end}}
 
-                <!-- Block tiles -->
                 {{range $index, $block := .Blocks}}
                 <div class="{{if lt $index 10}}block visible{{else}}block{{end}}" data-visualBlocks-target="block">
                 {{with $block}}

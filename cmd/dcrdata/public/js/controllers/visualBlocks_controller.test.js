@@ -354,3 +354,103 @@ describe('visualBlocks reconnect resync', () => {
     expect(wsRegistered.reconnect[0].unsub).toHaveBeenCalledTimes(1)
   })
 })
+
+// ---------------------------------------------------------------------------
+// Controller method integration — DOM mutation from mempool/block events
+// ---------------------------------------------------------------------------
+
+describe('controller mempool-tile lifecycle', () => {
+  let c
+  let boxTarget
+
+  beforeEach(() => {
+    c = new mod.default()
+    boxTarget = document.createElement('div')
+    c.boxTarget = boxTarget
+    c.setupTooltips = vi.fn()
+
+    // Initial state: mempool tile + 3 block tiles
+    const mempoolEl = document.createElement('div')
+    mempoolEl.className = 'block visible'
+    mempoolEl.setAttribute('data-role', 'mempool-tile')
+    mempoolEl.setAttribute('data-visualBlocks-target', 'block')
+    boxTarget.appendChild(mempoolEl)
+
+    for (let i = 0; i < 3; i++) {
+      const el = document.createElement('div')
+      el.className = 'block visible'
+      el.setAttribute('data-visualBlocks-target', 'block')
+      el.textContent = `block-${i}`
+      boxTarget.appendChild(el)
+    }
+  })
+
+  it('handleMempoolUpdate replaces the mempool tile in place, preserving count', () => {
+    c.handleMempoolUpdate(JSON.stringify(makeMempoolFixture()))
+
+    const mempoolTiles = boxTarget.querySelectorAll('[data-role="mempool-tile"]')
+    expect(mempoolTiles).toHaveLength(1)
+    expect(mempoolTiles[0]).toBe(boxTarget.firstChild)
+    expect(boxTarget.children).toHaveLength(4)
+  })
+
+  it('_handleVisualBlocksUpdate inserts new block after mempool tile, trims last', () => {
+    c._handleVisualBlocksUpdate({
+      block: {
+        height: 100,
+        time: '2026-01-01T00:00:00Z',
+        size: 4096,
+        formatted_bytes: '4.1 kB',
+        Votes: [],
+        Tickets: [],
+        Revs: []
+      }
+    })
+
+    const mempoolTiles = boxTarget.querySelectorAll('[data-role="mempool-tile"]')
+    expect(mempoolTiles).toHaveLength(1)
+    expect(mempoolTiles[0]).toBe(boxTarget.firstChild)
+    expect(boxTarget.children).toHaveLength(4)
+    // Second child should be the new block tile (not block-0)
+    expect(boxTarget.children[1].textContent).not.toBe('block-0')
+  })
+
+  it('mempool tile remains singular after both mempool and block updates', () => {
+    c.handleMempoolUpdate(JSON.stringify(makeMempoolFixture()))
+    c._handleVisualBlocksUpdate({
+      block: {
+        height: 101,
+        time: '2026-01-01T00:00:01Z',
+        size: 2048,
+        formatted_bytes: '2.0 kB',
+        Votes: [],
+        Tickets: [],
+        Revs: []
+      }
+    })
+
+    const mempoolTiles = boxTarget.querySelectorAll('[data-role="mempool-tile"]')
+    expect(mempoolTiles).toHaveLength(1)
+    expect(boxTarget.children).toHaveLength(4)
+    expect(mempoolTiles[0]).toBe(boxTarget.firstChild)
+  })
+
+  it('_handleVisualBlocksUpdate with empty boxTarget does not throw', () => {
+    const emptyBox = document.createElement('div')
+    c.boxTarget = emptyBox
+    expect(() =>
+      c._handleVisualBlocksUpdate({
+        block: {
+          height: 1,
+          time: '2026-01-01T00:00:00Z',
+          size: 1,
+          formatted_bytes: '1 B',
+          Votes: [],
+          Tickets: [],
+          Revs: []
+        }
+      })
+    ).not.toThrow()
+    expect(emptyBox.children).toHaveLength(0)
+  })
+})
