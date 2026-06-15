@@ -5117,6 +5117,26 @@ func retrieveMiners(ctx context.Context, db *sql.DB) (*sql.Rows, error) {
 	return db.QueryContext(ctx, internal.SelectMiners)
 }
 
+// retrieveMinerRewardCounts returns per-miner reward-transaction counts at or
+// above minHeight, ordered descending by count.
+func retrieveMinerRewardCounts(ctx context.Context, db *sql.DB, minHeight int64) ([]dbtypes.MinerRewardCount, error) {
+	rows, err := db.QueryContext(ctx, internal.SelectMinerRewardCounts, minHeight)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []dbtypes.MinerRewardCount
+	for rows.Next() {
+		var m dbtypes.MinerRewardCount
+		if err := rows.Scan(&m.Address, &m.Count); err != nil {
+			return nil, err
+		}
+		out = append(out, m)
+	}
+	return out, rows.Err()
+}
+
 // bigAddSKA adds a decimal-string SKA atom value into a *big.Int accumulator.
 func bigAddSKA(acc *big.Int, s string) {
 	if s == "" || s == "0" {
