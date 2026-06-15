@@ -770,6 +770,11 @@ func _main(ctx context.Context) error {
 		withCache.Get("/disapproved", explore.DisapprovedBlocks)
 		withCache.Get("/mempool", explore.Mempool)
 		withCache.Get("/charts", explore.Charts)
+		withCache.Get("/hashrate-shares", explore.HashrateShares)
+		// Data endpoint is NOT under withCache: it varies by ?interval= and is
+		// fetched on demand by the controller, so it must not share the page's
+		// block-scoped ETag/Last-Modified caching.
+		r.Get("/hashrate-shares/data", explore.HashrateSharesData)
 		withCache.Get("/treasury", func(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "treasury not available", http.StatusGone)
 		})
