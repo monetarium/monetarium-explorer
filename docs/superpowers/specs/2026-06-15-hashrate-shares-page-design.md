@@ -144,10 +144,17 @@ of "all").
 New standalone page (no coupling to `charts_controller.js`):
 
 - **`views/hashrate_shares.tmpl`** — page shell with:
+  - Built on `commonData` like every other explorer page, so the canonical URL and title
+    (`"Monetarium Hashrate Shares"`) are handled by the shared `html-head` / `CommonPageData`
+    machinery. No new breadcrumb/sitemap/active-nav infrastructure is introduced — the project
+    has none, and this page follows the existing pages' conventions exactly.
   - The same CHART `<select>` as `/charts`, with `Hashrate Shares` pre-selected; choosing any
     other option navigates to `/charts?chart={value}`. (So the new page is reachable from the
     `/charts` CHART dropdown *and* lets the user jump back.)
   - An INTERVAL pill group (All / Month / Week / Day).
+  - A short caption clarifying that shares are computed **per reward address** — a single mining
+    operator that rotates payout addresses appears as several entries. (Consistent with the
+    explorer's existing miner notion: the `miners` table is keyed by reward address.)
   - An empty pie container (`<svg>` target) on one side and an empty table on the other.
 - **`charts.tmpl`** — add `<option value="hashrate-shares">Hashrate Shares</option>` to the CHART
   `<select>`, positioned **between `hashrate` and `missed-votes`**. The charts controller's
@@ -156,14 +163,22 @@ New standalone page (no coupling to `charts_controller.js`):
 - **`public/js/controllers/hashrate_shares_controller.js`** — Stimulus controller:
   - Fetches `/hashrate-shares/data?interval=…` via the existing `requestJSON` http helper.
   - **Pie:** hand-rolled **SVG** arc paths (no new dependency — consistent with this repo's
-    minimalist frontend). Full pie, no center hole. Each slice filled from a fixed categorical
-    palette (25 distinct colors) + neutral gray for "Others".
+    minimalist frontend). Full pie, no center hole. Each slice filled by index from a **fixed
+    25-entry color array defined in the controller** (following the existing per-controller
+    `colors: [...]` convention used by `address_controller.js`, `charts_controller.js`, etc.) +
+    neutral gray for "Others". The palette is chosen to be visually distinct in both light and
+    dark themes. (No formal WCAG-contrast conformance is mandated — the project's existing charts
+    do not impose one, and adding it would be a new project-wide standard out of scope here.)
   - **Rank labels:** placed at each slice's centroid **only when the label geometrically fits**
     (slice sweep angle ≥ a threshold derived from label size). This naturally numbers the
-    largest slices (≥ 5 in typical distributions) and skips slivers. "Others" is never numbered.
-  - **Table:** ≤ 25 rows (+ Others): rank · color swatch (same hex as the slice) · percent
-    (1 dp) · middle-truncated reward address (`Vs1abc…wxyz`) linking to `/address/{addr}`.
-    "Others" row has no rank/link.
+    largest slices (≥ 5 in typical distributions) and skips slivers. Because slivers are never
+    numbered, the "a `#24` label floating on an invisible slice" failure mode cannot occur — a
+    rank number only appears where its slice is large enough to hold it. "Others" is never numbered.
+  - **Table:** ≤ 25 rows (+ Others). Columns: rank · color swatch (same hex as the slice) ·
+    percent (1 dp) · reward address. The address column header reads **"Reward Address"** (the
+    issue's own term, and accurate — these are payout addresses, not necessarily distinct
+    operators). The address is middle-truncated (`Vs1abc…wxyz`) and links to `/address/{addr}`.
+    The "Others" row has no rank number and no link.
   - Pure helpers split out for unit testing: arc-path geometry, rank-fit decision, address
     middle-truncation, deterministic color-by-index assignment.
 - **`public/scss/`** — styles for the pie/table layout (two-column on wide screens, stacked on
@@ -181,10 +196,55 @@ New standalone page (no coupling to `charts_controller.js`):
   element or split into two semicircle arcs).
 - **> 25 miners:** top 25 + Others (§3).
 - **Rounding:** displayed 1-dp shares may sum to 99.9–100.1; not force-normalized.
-- **Genesis coinbase** is excluded naturally (its outputs are invalid/zero-value and/or the
-  block is filtered by the predicate; behavior matches `BackfillMiners`).
+- **Genesis coinbase:** behavior is **identical to the existing miner-tracking path** because
+  the windowed query reuses the same predicate as `BackfillMiners` / the live `upsertMiner`
+  sync path. Whatever the genesis block's coinbase resolves to under that predicate, this page
+  counts it exactly as the rest of the explorer already does (e.g. the home-page active-miner
+  count) — so there is no off-by-one *relative to the explorer's own numbers*. The earlier draft
+  claimed genesis is "excluded naturally"; that was an unverified assumption and is dropped. The
+  actual genesis inclusion/exclusion is confirmed against the live DB during implementation (a
+  one-row check on the genesis coinbase), and noted in the implementation, but it does not block
+  the design since consistency with existing tracking is guaranteed by predicate reuse.
 
-## 9. Testing
+## 9. Performance considerations
+
+The **"All"** interval is the heaviest path: with `minHeight = 0` the query scans every
+mainchain coinbase over the full chain, joins to `vouts`, and groups by address. As the chain
+grows this could become one of the explorer's heavier pages.
+
+- **Verify the query plan during implementation.** Run `EXPLAIN ANALYZE` for the "All" query on
+  a realistic DB. The coinbase predicate (`tree = 0 AND block_index = 0`) is not served by the
+  existing `transactions(block_hash, block_index, tree)` index for a height-range/full scan, so
+  a seq scan is plausible. If so, add a supporting index — e.g. a partial index
+  `CREATE INDEX ... ON transactions (block_height) WHERE tree = 0 AND block_index = 0` — as a
+  normal schema/index addition (the codebase already manages such indexes in
+  `db/dcrpg/internal/indexes.go`). (Note: DB-backed tests are not reliably runnable in this
+  environment per project notes, so the EXPLAIN check may have to run wherever a seeded DB is
+  available.)
+- **Windowed intervals (Day/Week/Month)** touch only recent heights and are bounded; they are
+  not a concern beyond the same index consideration.
+- **Caching:** the result changes at most once per new block. A short-TTL / per-interval cache
+  (invalidated on new block, like the existing chart caches) is an available optimization if the
+  scan cost is material. Not required for correctness.
+- **Fast-path fallback for "All":** the existing `miners` table already maintains a live,
+  backfilled all-time `blocks_mined` per reward address (incrementally via `upsertMiner`), so
+  `SELECT address, blocks_mined FROM miners ORDER BY blocks_mined DESC` answers the "All" case
+  without any chain scan. **Caveat:** `blocks_mined` increments once per reward *output*, whereas
+  the issue's definition counts reward *transactions* — these differ only for the rare coinbase
+  that pays the same address in multiple outputs. The default design keeps the single, exact
+  DISTINCT-scan path for definitional fidelity; the `miners` table is documented here as a ready
+  fallback if "All" scan cost proves prohibitive in production, accepting the minor counting
+  nuance. The choice is finalized in the implementation plan against the measured query cost.
+
+## 10. Accessibility note
+
+No formal accessibility/WCAG standard is introduced — the project's existing charts do not have
+one, and adding a project-wide standard is out of scope for this issue. The design does, however,
+inherently avoid color being the *sole* carrier of information: the table conveys the full data
+(rank number, exact percentage, and reward address) independently of the pie's colors. Basic,
+zero-cost niceties already used elsewhere (a page `<title>`, sensible link text) apply as normal.
+
+## 11. Testing
 
 - **Go:** unit-test the pure `minerShares` function with exact-string assertions on the
   formatted percentages and ranks, including: empty input, single miner, exactly 25, > 25
@@ -195,9 +255,28 @@ New standalone page (no coupling to `charts_controller.js`):
   share sets, the rank-fit threshold decision, address middle-truncation (exact strings), and
   deterministic color assignment. Test files live at `public/js/**/*.test.js`.
 
-## 10. Out of scope
+## 12. Out of scope
 
 - Real-time websocket updates (the page computes on load / interval change only).
 - Any change to the existing Dygraphs time-series charts.
 - Per-coin (SKA) hashrate — not applicable (SKA is not mineable).
 - Reusing or merging PR #460.
+- New project-wide standards: formal WCAG/accessibility conformance, breadcrumbs, a sitemap, or
+  a top-nav active-state mechanism. The project has none of these today; this page follows the
+  existing pages' conventions and does not introduce them.
+
+## 13. Review-feedback dispositions
+
+Recorded so the deliberate choices are traceable.
+
+| # | Review point | Disposition |
+| - | ------------ | ----------- |
+| 1 | "All"-mode query performance | **Accepted** — added §9 Performance considerations (EXPLAIN plan, optional partial index, caching, `miners`-table fallback). |
+| 2 | "miner" vs "reward address" terminology | **Accepted** — column header "Reward Address" + page caption; feature title stays "Hashrate Shares" per the issue. |
+| 3 | Unproven genesis claim | **Accepted** — dropped the hand-wave; tied to predicate-reuse consistency, exact behavior verified during implementation (§8). |
+| 4 | Define the color palette | **Accepted** — fixed 25-entry array in the controller (existing per-controller `colors:` convention). |
+| 4 | WCAG conformance in dark theme | **Rejected** — would introduce a new project-wide standard; project's charts have none. Palette only required to be visually distinct (§7, §10, §12). |
+| 5 | Rounding vs rank labels on tiny slices | **Accepted (already mitigated)** — the fit-rule never numbers slivers (§7). |
+| 6 | Canonical URL / page title | **Accepted** — handled via `commonData` like every page (§7). |
+| 6 | Breadcrumbs / sitemap / active-nav | **Rejected** — patterns the project does not have (§12). |
+| — | Dedicated Accessibility section | **Rejected as a new standard**, but the design already keeps data non-color-only via the table (§10). |
