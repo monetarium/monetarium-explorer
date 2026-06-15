@@ -65,6 +65,9 @@ export default class extends Controller {
   _processBlock(blockData) {
     const block = blockData.block
     this.blocktimeTarget.dataset.stamp = block.unixStamp
+    // A live new block is by definition fresh, so clear the stale flag outright
+    // here — unlike the reconnect resync (_refreshBlocktime), which can land on
+    // a genuinely overdue tip and so lets setAges re-evaluate the red.
     this.blocktimeTarget.classList.remove('text-danger')
     this.blocktimeTarget.textContent = humanize.timeSince(block.unixStamp)
   }
