@@ -2641,3 +2641,12 @@ func (a *AddressInfo) PostProcess(tipHeight uint32) {
 		tx.BlockHeight = tipHeight - uint32(tx.Confirmations) + 1
 	}
 }
+
+// MinerRewardCount is one miner reward address and how many PoW-reward (coinbase)
+// transactions paid it within a queried block-height window. Used by the
+// hashrate-shares page. Count is the number of distinct coinbase blocks that paid
+// the address (DISTINCT (address, height)).
+type MinerRewardCount struct {
+	Address string
+	Count   int64
+}

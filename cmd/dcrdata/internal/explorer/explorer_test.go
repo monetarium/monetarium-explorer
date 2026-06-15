@@ -204,6 +204,10 @@ func (m *mockDataSource) ActiveMiners(_ context.Context, _ int64) (int64, error)
 	return 0, nil
 }
 
+func (m *mockDataSource) MinerHashrateShares(_ context.Context, _ int64) ([]dbtypes.MinerRewardCount, error) {
+	return nil, nil
+}
+
 // TestStore_PoWSKARewardsFromMFMarker verifies that "PoW SKA Fee Reward" is
 // derived from the authoritative "MF"-marked SSFee split
 // (ExtraInfo.SSFeeTotalsByCoin[ct].PoW) per issue #273, and that the legacy

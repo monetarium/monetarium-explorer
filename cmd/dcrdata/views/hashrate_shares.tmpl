@@ -1,0 +1,99 @@
+{{define "hashrate_shares"}}
+<!DOCTYPE html>
+<html lang="en">
+{{template "html-head" headData .CommonPageData "Monetarium Hashrate Shares"}}
+    {{template "navbar" . }}
+
+    <div data-controller="hashrate-shares" class="container main">
+
+        <div class="d-flex flex-wrap justify-content-center align-items-center chart-controls mb-1 mt-1">
+            <div class="chart-control-wrapper me-2 mb-1">
+                <div class="chart-control-label">CHART</div>
+                <div class="chart-control">
+                    <select
+                        id="selectBox"
+                        class="form-control chart-form-control dropdown"
+                        data-action="hashrate-shares#selectChart"
+                    >
+                        <option value="ticket-price">Ticket Price</option>
+                        <option value="ticket-pool-size">Ticket Pool Size</option>
+                        <option value="ticket-pool-value">Ticket Pool Value</option>
+                        <option value="stake-participation">Stake Participation</option>
+                        <option value="block-size">Block Size</option>
+                        <option value="blockchain-size">Blockchain Size</option>
+                        <option value="tx-count">Transaction Count</option>
+                        <option value="pow-difficulty">PoW Difficulty</option>
+                        <option value="coin-supply/0">Circulation (VAR)</option>
+                        {{range $t := .ActiveSKATypes}}<option value="coin-supply/{{$t}}">Circulation (SKA{{$t}})</option>
+                         {{end}}<option value="fees">Fees (VAR)</option>
+                         {{range $t := .ActiveSKATypes}}<option value="fees/{{$t}}">Fees (SKA{{$t}})</option>
+                          {{end}}
+                         <option value="duration-btw-blocks">Duration Between Blocks</option>
+                        <option value="chainwork">Total Work</option>
+                        <option value="hashrate">Hashrate</option>
+                        <option value="hashrate-shares" selected>Hashrate Shares</option>
+                        <option value="missed-votes">Missed Votes</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="chart-control-wrapper me-2 mb-1">
+                <div class="chart-control-label">INTERVAL</div>
+                <div class="chart-control">
+                    <ul class="nav nav-pills">
+                        <li class="nav-item nav-link" data-hashrate-shares-target="intervalOption"
+                            data-action="click->hashrate-shares#setInterval" data-option="all">All</li>
+                        <li class="nav-item nav-link" data-hashrate-shares-target="intervalOption"
+                            data-action="click->hashrate-shares#setInterval" data-option="month">Month</li>
+                        <li class="nav-item nav-link active" data-hashrate-shares-target="intervalOption"
+                            data-action="click->hashrate-shares#setInterval" data-option="week">Week</li>
+                        <li class="nav-item nav-link" data-hashrate-shares-target="intervalOption"
+                            data-action="click->hashrate-shares#setInterval" data-option="day">Day</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <p class="text-center text-secondary fs13 mb-2">
+            Share of network hashrate approximated from PoW Reward (coinbase) transactions,
+            per <strong>reward address</strong>. An operator using multiple payout addresses
+            appears as multiple entries.
+        </p>
+
+        <div class="hashrate-shares-layout d-flex flex-wrap justify-content-center align-items-start">
+            <div class="hashrate-shares-pie-wrap" data-hashrate-shares-target="pieWrap">
+                <svg data-hashrate-shares-target="pie" viewBox="0 0 360 360" class="hashrate-shares-pie"></svg>
+            </div>
+            <div class="hashrate-shares-table-wrap">
+                <table class="table table-sm hashrate-shares-table">
+                    <thead>
+                        <tr>
+                            <th class="text-end">#</th>
+                            <th></th>
+                            <th class="text-end">%</th>
+                            <th>Reward Address</th>
+                        </tr>
+                    </thead>
+                    <tbody data-hashrate-shares-target="tableBody"></tbody>
+                </table>
+                <div class="d-hide text-secondary p-3" data-hashrate-shares-target="empty">
+                    No PoW Reward transactions in the selected period.
+                </div>
+            </div>
+        </div>
+
+        {{/* Row template cloned per miner by the hashrate-shares controller. */}}
+        <template data-hashrate-shares-target="rowTemplate">
+            <tr>
+                <td class="text-end" data-type="rank"></td>
+                <td><span class="hashrate-shares-swatch" data-type="swatch"></span></td>
+                <td class="text-end mono" data-type="percent"></td>
+                <td class="break-word" data-type="addr"></td>
+            </tr>
+        </template>
+    </div>
+
+{{ template "footer" . }}
+</body>
+</html>
+{{end}}

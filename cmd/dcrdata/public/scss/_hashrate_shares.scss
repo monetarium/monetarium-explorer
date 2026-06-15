@@ -1,0 +1,38 @@
+.hashrate-shares-layout {
+  gap: 2rem;
+}
+
+.hashrate-shares-pie-wrap {
+  flex: 0 0 360px;
+  max-width: 360px;
+}
+
+.hashrate-shares-pie {
+  width: 100%;
+  height: auto;
+}
+
+.hashrate-shares-rank {
+  fill: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  pointer-events: none;
+}
+
+.hashrate-shares-table-wrap {
+  flex: 1 1 320px;
+  min-width: 280px;
+}
+
+.hashrate-shares-swatch {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border-radius: 2px;
+  vertical-align: middle;
+}
+
+.hashrate-shares-table td,
+.hashrate-shares-table th {
+  vertical-align: middle;
+}
