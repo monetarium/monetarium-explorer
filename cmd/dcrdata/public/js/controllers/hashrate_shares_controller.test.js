@@ -4,6 +4,9 @@ import {
   colorForIndex,
   sliceLabelFits,
   arcPath,
+  emptyStateMessage,
+  EMPTY_MESSAGE,
+  ERROR_MESSAGE,
   PIE,
   PALETTE
 } from './hashrate_shares_controller'
@@ -45,5 +48,17 @@ describe('arcPath', () => {
     // path arc segment is "A 165 165 0 <largeArc> 1 ..." (PIE.r === 165)
     expect(arcPath(0, Math.PI / 2)).toContain('165 0 0 1') // <180deg -> large-arc 0
     expect(arcPath(0, (3 * Math.PI) / 2)).toContain('165 0 1 1') // >180deg -> large-arc 1
+  })
+})
+
+describe('emptyStateMessage', () => {
+  it('reports an empty period when the fetch succeeded with no miners', () => {
+    expect(emptyStateMessage(false)).toBe('No PoW Reward transactions in the selected period.')
+  })
+  it('reports a distinct failure message when the fetch errored', () => {
+    expect(emptyStateMessage(true)).toBe('Could not load hashrate shares. Please try again.')
+  })
+  it('never conflates the empty period and the fetch-error states', () => {
+    expect(ERROR_MESSAGE).not.toBe(EMPTY_MESSAGE)
   })
 })

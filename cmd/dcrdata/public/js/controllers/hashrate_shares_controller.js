@@ -38,6 +38,15 @@ export const OTHERS_COLOR = '#adb5bd'
 // Minimum slice sweep (radians) for a rank number to fit inside the slice.
 export const MIN_LABEL_SWEEP = 0.18 // ~10.3 degrees
 
+// Distinct empty-table messages: a genuinely empty period and a fetch failure
+// must read differently so a 500/network error is not mistaken for "no data".
+export const EMPTY_MESSAGE = 'No PoW Reward transactions in the selected period.'
+export const ERROR_MESSAGE = 'Could not load hashrate shares. Please try again.'
+
+export function emptyStateMessage(isError) {
+  return isError ? ERROR_MESSAGE : EMPTY_MESSAGE
+}
+
 export function colorForIndex(i) {
   return PALETTE[i % PALETTE.length]
 }
@@ -100,7 +109,7 @@ export default class extends Controller {
     } catch (err) {
       if (seq !== this._reqSeq) return
       console.error('hashrate-shares fetch failed', err)
-      this.renderTable([])
+      this.renderTable([], true)
       this.renderPie([])
       return
     }
@@ -110,10 +119,11 @@ export default class extends Controller {
     this.renderPie(miners)
   }
 
-  renderTable(miners) {
+  renderTable(miners, isError = false) {
     const empty = !miners.length
     this.emptyTarget.classList.toggle('d-hide', !empty)
     this.pieWrapTarget.classList.toggle('d-hide', empty)
+    if (empty) this.emptyTarget.textContent = emptyStateMessage(isError)
     const rows = miners.map((m, i) => {
       const color = m.isOthers ? OTHERS_COLOR : colorForIndex(i)
       const rank = m.isOthers ? '' : m.rank
