@@ -5396,6 +5396,16 @@ func (pgb *ChainDB) ActiveMiners(ctx context.Context, minHeight int64) (int64, e
 	return CountActiveMiners(ctx, pgb.db, minHeight)
 }
 
+// MinerHashrateShares returns per-miner PoW-reward (coinbase) transaction counts
+// for all reward addresses that received at least one reward at or above
+// minHeight, ordered descending by count. minHeight = 0 covers the whole chain.
+func (pgb *ChainDB) MinerHashrateShares(ctx context.Context, minHeight int64) ([]dbtypes.MinerRewardCount, error) {
+	ctx, cancel := context.WithTimeout(ctx, pgb.queryTimeout)
+	defer cancel()
+	rows, err := retrieveMinerRewardCounts(ctx, pgb.db, minHeight)
+	return rows, pgb.replaceCancelError(err)
+}
+
 // GetBlockSKAFees calculates SKA PoW fees (transaction fees) for a block by fetching
 // the raw block via RPC and computing: sum(inputs) - sum(outputs) = miner fee.
 func (pgb *ChainDB) GetBlockSKAFees(ctx context.Context, height int64) (map[uint8]string, error) {

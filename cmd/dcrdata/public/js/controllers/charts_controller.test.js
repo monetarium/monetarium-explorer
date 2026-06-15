@@ -120,7 +120,7 @@ function makeController() {
   c.legendMarkerTarget = { remove: vi.fn(), removeAttribute: vi.fn() }
   c.legendEntryTarget = { remove: vi.fn(), removeAttribute: vi.fn() }
   c.rawDataURLTarget = { textContent: '' }
-  c.chartsViewTarget = {}
+  c.chartsViewTarget = { classList: { add: vi.fn(), remove: vi.fn() } }
   c.ticketsPriceTarget = { checked: true }
   c.ticketsPurchaseTarget = { checked: true }
   c.hashrateRateTarget = { checked: true }
@@ -218,5 +218,35 @@ describe('ChartsController URL persistence', () => {
         axis: 'height'
       })
     )
+  })
+})
+
+describe('ChartsController hashrate chart', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('selecting hashrate adds chart-hashrate class to chartview', async () => {
+    const c = makeController()
+    await c.connect()
+
+    c.chartSelectTarget.value = 'hashrate'
+    await c.selectChart()
+
+    expect(c.chartsViewTarget.classList.add).toHaveBeenCalledWith('chart-hashrate')
+  })
+
+  it('switching away from hashrate removes chart-hashrate class', async () => {
+    const c = makeController()
+    await c.connect()
+
+    c.chartSelectTarget.value = 'hashrate'
+    await c.selectChart()
+
+    c.chartSelectTarget.value = 'ticket-price'
+    await c.selectChart()
+
+    expect(c.chartsViewTarget.classList.add).toHaveBeenCalledWith('chart-hashrate')
+    expect(c.chartsViewTarget.classList.remove).toHaveBeenCalledWith('chart-hashrate')
   })
 })

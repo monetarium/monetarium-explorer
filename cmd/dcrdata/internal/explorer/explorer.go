@@ -125,6 +125,7 @@ type explorerDataSource interface {
 	GetBlockSKAFees(ctx context.Context, height int64) (map[uint8]string, error)
 	GetVoteTicketDataByBlock(ctx context.Context, blockHash string) ([]dbtypes.VoteTicketData, error)
 	ActiveMiners(ctx context.Context, minHeight int64) (int64, error)
+	MinerHashrateShares(ctx context.Context, minHeight int64) ([]dbtypes.MinerRewardCount, error)
 }
 
 type PoliteiaBackend interface {
@@ -391,7 +392,7 @@ func New(cfg *ExplorerConfig) *explorerUI {
 	exp.templates = newTemplates(cfg.Viewsfolder, cfg.ReloadHTML, commonTemplates, funcMap)
 
 	tmpls := []string{"home", "blocks", "mempool", "block", "tx", "address",
-		"rawtx", "status", "parameters", "agenda", "agendas", "charts",
+		"rawtx", "status", "parameters", "agenda", "agendas", "charts", "hashrate_shares",
 		"sidechains", "disapproved", "ticketpool", "visualblocks",
 		"windows", "timelisting", "addresstable", "proposals", "proposal",
 		"insight_root", "attackcost", "verify_message"}
@@ -569,6 +570,15 @@ func (exp *explorerUI) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgB
 	p.HomeInfo.NBlockSubsidy.PoS = blockData.ExtraInfo.NextBlockSubsidy.PoS
 	p.HomeInfo.NBlockSubsidy.PoW = blockData.ExtraInfo.NextBlockSubsidy.PoW
 	p.HomeInfo.NBlockSubsidy.Total = blockData.ExtraInfo.NextBlockSubsidy.Total
+	if blockData.ExtraInfo.CurrentBlockSubsidy != nil {
+		p.HomeInfo.CBlockSubsidy.Dev = blockData.ExtraInfo.CurrentBlockSubsidy.Developer
+		p.HomeInfo.CBlockSubsidy.PoS = blockData.ExtraInfo.CurrentBlockSubsidy.PoS
+		p.HomeInfo.CBlockSubsidy.PoW = blockData.ExtraInfo.CurrentBlockSubsidy.PoW
+		p.HomeInfo.CBlockSubsidy.Total = blockData.ExtraInfo.CurrentBlockSubsidy.Total
+	} else {
+		// Fall back to next block subsidy if current is unavailable.
+		p.HomeInfo.CBlockSubsidy = p.HomeInfo.NBlockSubsidy
+	}
 	if err == nil {
 		p.HomeInfo.ActiveMiners = activeMiners
 	}
@@ -576,8 +586,8 @@ func (exp *explorerUI) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgB
 	// Total reward = subsidy + mining fees (~16 + <1 VAR)
 	// MiningFee from blockData (computed in collector)
 	p.HomeInfo.MiningFeeAtoms = blockData.ExtraInfo.MiningFeeAtoms
-	p.HomeInfo.LBlockTotal = dcrutil.Amount(p.HomeInfo.NBlockSubsidy.PoW).ToCoin() + dcrutil.Amount(blockData.ExtraInfo.MiningFeeAtoms).ToCoin()
-	p.HomeInfo.LBlockTotalAtoms = p.HomeInfo.NBlockSubsidy.PoW + blockData.ExtraInfo.MiningFeeAtoms
+	p.HomeInfo.LBlockTotal = dcrutil.Amount(p.HomeInfo.CBlockSubsidy.PoW).ToCoin() + dcrutil.Amount(blockData.ExtraInfo.MiningFeeAtoms).ToCoin()
+	p.HomeInfo.LBlockTotalAtoms = p.HomeInfo.CBlockSubsidy.PoW + blockData.ExtraInfo.MiningFeeAtoms
 	log.Debugf("MiningFee: %.8f, Total: %.8f", dcrutil.Amount(blockData.ExtraInfo.MiningFeeAtoms).ToCoin(), p.HomeInfo.LBlockTotal)
 
 	// New Supply section data

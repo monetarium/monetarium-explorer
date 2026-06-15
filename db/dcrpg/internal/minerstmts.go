@@ -70,4 +70,32 @@ const (
 		);`
 
 	CleanupMinerZeros = `DELETE FROM miners WHERE blocks_mined <= 0;`
+
+	// SelectMinerRewardCounts returns, for every miner reward address that
+	// received at least one PoW-reward (coinbase) transaction at or above
+	// $1 (minHeight), the number of distinct coinbase blocks that paid it,
+	// ordered descending. The predicate matches BackfillMiners exactly (the
+	// codebase's canonical definition of a miner-reward output): coinbase =
+	// tree 0 / block_index 0 / mainchain; recipient = a single payment-script
+	// address (no multisig sets) with value > 0. minHeight = 0 selects the
+	// whole chain ("All").
+	SelectMinerRewardCounts = `
+		SELECT sub.addr, COUNT(*)::INT8 AS reward_tx_count
+		FROM (
+			SELECT DISTINCT v.script_addresses AS addr, t.block_height AS height
+			FROM vouts v
+			JOIN transactions t ON v.tx_hash = t.tx_hash
+			WHERE t.tree = 0
+			  AND t.block_index = 0
+			  AND t.is_mainchain = true
+			  AND t.block_height >= $1
+			  AND v.script_type IN ('pubkeyhash', 'scripthash', 'pubkey', 'pubkeyalt', 'pubkeyhashalt')
+			  AND v.value > 0
+			  AND v.script_addresses IS NOT NULL
+			  AND v.script_addresses NOT IN ('', 'unknown')
+			  AND v.script_addresses NOT LIKE '{%}'
+		) sub
+		WHERE sub.addr IS NOT NULL AND sub.addr != ''
+		GROUP BY sub.addr
+		ORDER BY reward_tx_count DESC`
 )

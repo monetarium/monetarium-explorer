@@ -242,7 +242,7 @@ export function makeMempoolBlock(mempool) {
 
   const countFor = (symbol) => mempoolRegularCountForSymbol(mempool.CoinStats, symbol)
 
-  return makeNode(`<div class="block visible" data-visualBlocks-target="block">
+  return makeNode(`<div class="block visible" data-role="mempool-tile" data-visualBlocks-target="block">
     ${header}
     <div class="block-rows">
         ${makeVoteElements(mempool.Votes)}
@@ -386,7 +386,9 @@ export default class extends Controller {
     const tile = normaliseWsBlock(block)
 
     const box = this.boxTarget
-    box.insertBefore(newBlockHtmlElement(tile), box.firstChild.nextSibling)
+    const mempoolTile = box.querySelector('[data-role="mempool-tile"]')
+    if (!mempoolTile) return
+    box.insertBefore(newBlockHtmlElement(tile), mempoolTile.nextSibling)
     const vis = this.visibleBlocks()
     vis[vis.length - 1].classList.remove('visible')
     box.removeChild(box.lastChild)
@@ -397,7 +399,10 @@ export default class extends Controller {
     const raw = JSON.parse(evt)
     raw.Time = Math.round(new Date().getTime() / 1000)
     const tile = normaliseMempool(raw)
-    this.boxTarget.replaceChild(makeMempoolBlock(tile), this.boxTarget.firstChild)
+    const mempoolTile = this.boxTarget.querySelector('[data-role="mempool-tile"]')
+    if (mempoolTile) {
+      mempoolTile.replaceWith(makeMempoolBlock(tile))
+    }
     this.setupTooltips()
   }
 

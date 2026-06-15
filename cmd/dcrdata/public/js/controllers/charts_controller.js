@@ -1,3 +1,4 @@
+/* global Turbolinks */
 import { Controller } from '@hotwired/stimulus'
 import dompurify from 'dompurify'
 import { assign, map, merge } from 'lodash-es'
@@ -851,6 +852,10 @@ export default class extends Controller {
 
   async selectChart() {
     const selection = (this.settings.chart = this.chartSelectTarget.value)
+    if (selection === 'hashrate-shares') {
+      Turbolinks.visit('/hashrate-shares')
+      return
+    }
     this.customLimits = null
     this.chartWrapperTarget.classList.add('loading')
     if (isScaleDisabled(selection)) {
@@ -872,8 +877,10 @@ export default class extends Controller {
     }
     if (selection === 'hashrate') {
       this.intervalSelectorTarget.classList.remove('d-hide')
+      this.chartsViewTarget.classList.add('chart-hashrate')
     } else {
       this.intervalSelectorTarget.classList.add('d-hide')
+      this.chartsViewTarget.classList.remove('chart-hashrate')
     }
     if (
       selectedChart !== selection ||
