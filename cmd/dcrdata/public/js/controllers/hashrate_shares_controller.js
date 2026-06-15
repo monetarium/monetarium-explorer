@@ -69,7 +69,8 @@ export default class extends Controller {
 
   connect() {
     this.interval = 'all'
-    this.fetchAndRender()
+    this._reqSeq = (this._reqSeq || 0) + 1
+    this.fetchAndRender(this._reqSeq)
   }
 
   setInterval(e) {
@@ -79,7 +80,8 @@ export default class extends Controller {
     this.intervalOptionTargets.forEach((el) => {
       el.classList.toggle('active', el.dataset.option === option)
     })
-    this.fetchAndRender()
+    this._reqSeq = (this._reqSeq || 0) + 1
+    this.fetchAndRender(this._reqSeq)
   }
 
   // Navigate to /charts for any non-hashrate-shares selection (parity with the
@@ -90,14 +92,16 @@ export default class extends Controller {
     window.location.assign(`/charts?chart=${encodeURIComponent(value)}`)
   }
 
-  async fetchAndRender() {
+  async fetchAndRender(seq) {
     let data
     try {
       data = await requestJSON(`/hashrate-shares/data?interval=${this.interval}`)
     } catch (err) {
+      if (seq !== this._reqSeq) return
       console.error('hashrate-shares fetch failed', err)
       return
     }
+    if (seq !== this._reqSeq) return
     const miners = (data && data.miners) || []
     this.renderTable(miners)
     this.renderPie(miners)
@@ -106,6 +110,7 @@ export default class extends Controller {
   renderTable(miners) {
     const empty = !miners.length
     this.emptyTarget.classList.toggle('d-hide', !empty)
+    this.pieWrapTarget.classList.toggle('d-hide', empty)
     const rows = miners.map((m, i) => {
       const color = m.isOthers ? OTHERS_COLOR : colorForIndex(i)
       const rank = m.isOthers ? '' : m.rank
@@ -137,7 +142,7 @@ export default class extends Controller {
       c.setAttribute('cx', PIE.cx)
       c.setAttribute('cy', PIE.cy)
       c.setAttribute('r', PIE.r)
-      c.setAttribute('fill', miners[0].isOthers ? OTHERS_COLOR : colorForIndex(0))
+      c.setAttribute('fill', colorForIndex(0))
       svg.appendChild(c)
       return
     }
