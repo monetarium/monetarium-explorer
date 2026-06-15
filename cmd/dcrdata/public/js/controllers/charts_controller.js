@@ -851,6 +851,10 @@ export default class extends Controller {
 
   async selectChart() {
     const selection = (this.settings.chart = this.chartSelectTarget.value)
+    if (selection === 'hashrate-shares') {
+      window.location.assign('/hashrate-shares')
+      return
+    }
     this.customLimits = null
     this.chartWrapperTarget.classList.add('loading')
     if (isScaleDisabled(selection)) {
