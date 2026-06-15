@@ -387,6 +387,7 @@ export default class extends Controller {
 
     const box = this.boxTarget
     const mempoolTile = box.firstChild
+    if (!mempoolTile) return
     box.insertBefore(newBlockHtmlElement(tile), mempoolTile.nextSibling)
     const vis = this.visibleBlocks()
     vis[vis.length - 1].classList.remove('visible')
