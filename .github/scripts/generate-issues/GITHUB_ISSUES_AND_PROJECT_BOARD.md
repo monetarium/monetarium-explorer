@@ -6,7 +6,8 @@ To maintain a professional and transparent development process for the **Monetar
 
 ## 1. Single Source of Truth
 
-- All feature discussions, bug reports, and technical decisions must take place within **GitHub Issues**, not in external messengers. This ensures a searchable history for the client and the team.
+- All feature discussions, bug reports, and technical decisions take place within **GitHub Issues**, not in external messengers — a searchable history for the client and the team.
+- The generic issue-writing principles this implies (the issue as a standalone record; spec, not implementation) live in the [`generate-tasks-json` skill](../../../.claude/skills/generate-tasks-json/SKILL.md).
 
 ---
 
@@ -18,44 +19,9 @@ To maintain a professional and transparent development process for the **Monetar
 
 ---
 
-## 3. Issue Granularity: One Issue, One PR
+## 3. Issue Granularity & Domain Prefixes
 
-The team is staffed by **full-stack developers**, and most incoming work is small bugs and improvements. Issue structure reflects that.
-
----
-
-### 3.1. Default: a single, full-stack issue
-
-- The **default unit of work is one `type: issue`** that a single developer can deliver in **one Pull Request**.
-- An issue is **full-stack**: it covers the change end-to-end — backend, frontend, tests, and any docs — as one piece of work.
-- Split work by **feature / task / bug**, i.e. by _what the change is_, **never by which layer it touches**.
-- For internal planning, put checkbox steps in the issue description. That is planning detail, not a reason to create more issues.
-
-**Rationale:** with full-stack developers each implementing a change whole, splitting one small change across layers (a `[API]` issue + a `[UI]` issue for the same fix) only adds coordination overhead with no benefit. One developer, one issue, one PR.
-
----
-
-### 3.2. Don't oversplit
-
-Over-decomposition is the most common planning failure. Before creating more than one issue for a piece of work, stop.
-
-- ❌ Do **not** split a single change by layer (backend vs. frontend, DB vs. API vs. UI).
-- ❌ Do **not** split an issue to match _who_ might do the work.
-- ✅ One self-contained change → **one issue**.
-
----
-
-### 3.3. Exception: large features (Feature + sub-issues)
-
-A **two-level hierarchy** is reserved for a feature that genuinely **cannot land in one PR**:
-
-- One **`parent`** issue (`issue_type: Feature`) describing the user-visible scope.
-- Two or more **`sub-issue`s** (`issue_type: Task`), each split as a **vertical slice / sub-feature** that is itself a one-PR, full-stack unit (e.g. "list view" and "detail drawer" of the same page).
-- Sub-issues are **vertical slices, never layers**. Do not produce a `[DATA]` + `[UI]` pair for one slice.
-- A `parent` **must** have sub-issues — a childless `parent` is invalid. A feature too small to slice is a single `type: issue`, not an empty parent.
-- Only **two levels** are allowed: Feature → sub-issues. No deeper nesting.
-
-**Feature Owner (the one place a default assignee is reasonable):** the `parent` may be assigned to one developer responsible for coordination and integration of the slices. The slices themselves stay unassigned and are picked up per §4.
+The **granularity model** — one full-stack issue per PR, split by _what the change is_ (never by layer), kept from over-decomposing, plus the large-feature exception (a `parent` with vertical-slice sub-issues, the one place a Feature-Owner `assignee` is reasonable) — is generic issue-writing guidance and lives in the [`generate-tasks-json` skill](../../../.claude/skills/generate-tasks-json/SKILL.md). This section keeps the **project-specific** piece: the domain-prefix set.
 
 ---
 
@@ -229,7 +195,7 @@ Everyone picks up the change via git.
 
 **Rules:**
 
-- Default to a **single `issue`** per piece of work (§3.1). Use `parent` + `sub-issue`s only for the large-feature exception (§3.3).
+- Default to a **single `issue`** per piece of work; use `parent` + `sub-issue`s only for the large-feature exception — see the granularity model in the [`generate-tasks-json` skill](../../../.claude/skills/generate-tasks-json/SKILL.md).
 - Every title carries **exactly one domain prefix** (§3.4).
 - Do **not** split by layer or by developer specialization.
 - **Omit `assignee`** — issues are created unassigned (§4). The one reasonable exception is a Feature Owner on a `parent`.
@@ -248,7 +214,7 @@ Everyone picks up the change via git.
       "type": "issue",
       "issue_type": "Task",
       "title": "[CHARTS] Default Tickets-Bought visibility to checked on Ticket Price chart",
-      "description": "Full-stack fix. Spec/context: link any relevant wiki/specs or wiki/code-analysis. Steps:\n\n- [ ] ...\n- [ ] ...\n\nAcceptance: lift the spec's acceptance checklist; preserve invariants from the area's wiki/code-analysis patterns.md (e.g. SKA atoms stay big.Int-derived strings).",
+      "description": "Full-stack fix. Spec/context: link the relevant wiki/specs or wiki/code-analysis (link, don't transcribe). Steps:\n\n- [ ] ...\n- [ ] ...\n\nAcceptance: lift the spec's acceptance checklist; note any hard invariant as a one-line 'must not regress' constraint and link the page (e.g. SKA atoms stay big.Int-derived strings) — implementation goes in the PR, not the issue.",
       "labels": ["bug"]
     }
   ]
@@ -277,7 +243,7 @@ Note: no `assignee` (unassigned pool), no per-task `milestone` (applied globally
       "parent": "feature-blocks-list",
       "issue_type": "Task",
       "title": "[BLOCKS] Blocks list — main table (full-stack)",
-      "description": "Full-stack slice: data + rendering + tests for the paginated block table. Acceptance: the spec's table checklist; preserve wiki/code-analysis/block invariants.",
+      "description": "Full-stack slice: data + rendering + tests for the paginated block table. Acceptance: the spec's table checklist; note any block invariant as a one-line 'must not regress' constraint and link wiki/code-analysis.",
       "labels": ["enhancement"]
     },
     {
