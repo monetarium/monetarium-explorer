@@ -25,7 +25,7 @@ The **granularity model** — one full-stack issue per PR, split by _what the ch
 
 ---
 
-### 3.4. Domain Prefixes
+### 3.1. Domain Prefixes
 
 Every issue title begins with **exactly one domain prefix**, identifying _which part of the explorer_ the issue concerns. Prefixes survive full-stack issues (a prefix marks the **domain**, not a layer) and make the board scannable at a glance.
 
@@ -144,7 +144,7 @@ We use a **strict and predefined set of labels**. Only labels that already exist
 ### 7.3. Notes
 
 - Labels are **optional**: set the one label matching the kind of change (`bug` / `enhancement` / `refactoring`) when it adds value; omitting `labels` leaves the issue unlabeled. Avoid over-labeling beyond that one kind label.
-- Classification relies primarily on **structure** (single issue vs. Feature + sub-issues) and **domain prefixes** (§3.4). The `bug` / `enhancement` / `refactoring` labels carry the _kind_ of change; the prefix carries the _domain_. (`[INFRA]` / `[DOCS]` overlap the `infrastructure` / `documentation` labels — that redundancy is acceptable: the prefix scans on the board, the label filters.)
+- Classification relies primarily on **structure** (single issue vs. Feature + sub-issues) and **domain prefixes** (§3.1). The `bug` / `enhancement` / `refactoring` labels carry the _kind_ of change; the prefix carries the _domain_. (`[INFRA]` / `[DOCS]` overlap the `infrastructure` / `documentation` labels — that redundancy is acceptable: the prefix scans on the board, the label filters.)
 
 ---
 
@@ -196,7 +196,7 @@ Everyone picks up the change via git.
 **Rules:**
 
 - Default to a **single `issue`** per piece of work; use `parent` + `sub-issue`s only for the large-feature exception — see the granularity model in the [`generate-tasks-json` skill](../../../.claude/skills/generate-tasks-json/SKILL.md).
-- Every title carries **exactly one domain prefix** (§3.4).
+- Every title carries **exactly one domain prefix** (§3.1).
 - Do **not** split by layer or by developer specialization.
 - **Omit `assignee`** — issues are created unassigned (§4). The one reasonable exception is a Feature Owner on a `parent`.
 

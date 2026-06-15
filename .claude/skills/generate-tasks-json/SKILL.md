@@ -11,7 +11,7 @@ This project drives bulk GitHub issue creation through a single Node.js script (
 
 [`GITHUB_ISSUES_AND_PROJECT_BOARD.md`](../../../.github/scripts/generate-issues/GITHUB_ISSUES_AND_PROJECT_BOARD.md) holds the **project-specific** instructions. Consult it for the concretes this skill points to:
 
-- the **domain-prefix table** (§3.4) and the **allowed label set** (§7),
+- the **domain-prefix table** (§3.1) and the **allowed label set** (§7),
 - the **no-default-assignee model** (§4), and the **board** / **PR-merge** conventions (§5–6),
 - the **milestone / `config.json`** (§2) and the **`create-issues.js`** schema, run procedure, and lifecycle (§8).
 
@@ -43,7 +43,7 @@ A two-level hierarchy is reserved for a feature that genuinely **cannot land in 
 
 ## Titles and labels — the principle here, the sets in the doc
 
-- **One domain prefix per title.** Every title starts with exactly **one** prefix marking the *domain* (not a layer), so the board scans at a glance. Choose the single dominant domain; never combine (❌ `[BLOCKS][API]`). The canonical set and how to extend it are the doc's prefix table (§3.4).
+- **One domain prefix per title.** Every title starts with exactly **one** prefix marking the *domain* (not a layer), so the board scans at a glance. Choose the single dominant domain; never combine (❌ `[BLOCKS][API]`). The canonical set and how to extend it are the doc's prefix table (§3.1).
 - **Labels are a small strict set, and optional.** Set at most the one label matching the *kind* of change (`bug` / `enhancement` / `refactoring`) when it adds value; otherwise omit it and leave the issue unlabeled. The prefix carries the domain, the label the kind — don't over-label. Only labels that already exist in the repo are allowed (the approved set is §7).
 - **Omit `assignee`.** New issues go into an unassigned pool and are self-assigned on pickup — the team's model is §4. The only `assignee` you set is a Feature Owner on a `parent`.
 
@@ -107,7 +107,7 @@ Issues are the project's **single source of truth** (see "Issues are the single 
 1. **Check the slot for a leftover `tasks.json`** (see "File location and shape"). A successful live run auto-archives the file, so any `tasks.json` present is a **previous batch left pending or abandoned** — **never append to or merge with it.** Treat it as stale: confirm with the user, then **overwrite** it for the new batch.
 2. **Read the principles above** (and the doc for the project concretes they point to), then understand the work from the request and the wiki — the user-visible change and what "done" means. You're writing a spec, not a plan: don't open source to reverse-engineer an implementation (see "Write issues as specs, not implementation plans"). If the request is unclear, ask the user.
 3. **Decide the shape** (see "Issue granularity" / "Large features" above) — default to a **single `type: issue`** (full-stack, one PR). Use `parent` + vertical-slice sub-issues **only** for the large-feature exception.
-4. **Pick the one domain prefix** from the doc's canonical set (§3.4); **omit `assignee`** (§4).
+4. **Pick the one domain prefix** from the doc's canonical set (§3.1); **omit `assignee`** (§4).
 5. **Draft the JSON** following the schema below, sourcing content from the wiki. For client-sourced work, end each issue body with the verbatim original snippet (see "Preserving the original client request").
 6. **Validate locally** in dry-run mode (see "Validate"). Never invoke a live run yourself.
 
@@ -130,7 +130,7 @@ The script reads/writes `tasks.json` in its gitignored runtime dir, `.github/scr
 This is the `create-issues.js` schema (a script contract, not team policy). The validator enforces:
 
 - `id` — required, unique string. Wires `parent` ↔ `sub-issue` locally; not posted to GitHub. Use stable kebab-case slugs (`fix-ticket-price-default`).
-- `title` — required, what appears on GitHub. Carries exactly one domain prefix (§3.4).
+- `title` — required, what appears on GitHub. Carries exactly one domain prefix (§3.1).
 - `type` — one of `parent`, `sub-issue`, `issue`. Anything else fails validation. **Default to `issue`.**
 - `parent` — required when `type` is `sub-issue`; must reference an existing `id` whose task is `type: parent`.
 - `issue_type` — `Feature` for parents, `Task` otherwise. Defaults apply if omitted; set it explicitly.
@@ -184,7 +184,7 @@ Fix any `❌` lines before reporting done. Do **not** run the live command (`nod
 
 ## Common mistakes (mechanics)
 
-The planning principles above (granularity, decomposition, spec-not-plan) and the doc's project concretes (prefix set §3.4, labels §7, assignee model §4) govern *what* to draft. This list catches the recurring traps — drafting and script-mechanics both:
+The planning principles above (granularity, decomposition, spec-not-plan) and the doc's project concretes (prefix set §3.1, labels §7, assignee model §4) govern *what* to draft. This list catches the recurring traps — drafting and script-mechanics both:
 
 - **Writing an implementation plan instead of a spec.** Issue bodies state problem, scope, and acceptance — not a file-by-file recipe or code-analysis invariants copied wholesale, and you don't read source to draft one (see "Write issues as specs, not implementation plans"). The implementation lives in the PR that closes the issue.
 - **Oversplitting one change into multiple issues.** The default is a single full-stack `issue`; reach for `parent` + sub-issues only for the large-feature exception (see "Large features" above).
