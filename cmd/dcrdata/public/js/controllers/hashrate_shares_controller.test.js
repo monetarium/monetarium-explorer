@@ -1,32 +1,40 @@
 import { describe, it, expect } from 'vitest'
 import {
-  middleTruncate,
   colorForIndex,
+  swatchColor,
   sliceLabelFits,
   arcPath,
   emptyStateMessage,
   buildRows,
+  pieSlices,
+  pageCount,
+  clampPage,
+  paginate,
+  pageItems,
   EMPTY_MESSAGE,
   ERROR_MESSAGE,
+  OTHERS_COLOR,
   PIE,
+  PIE_SLICES,
   PALETTE
 } from './hashrate_shares_controller'
-
-describe('middleTruncate', () => {
-  it('truncates the middle of a long address', () => {
-    // head 8 = "VsAbCdEf", tail 6 = "Yz1234"
-    expect(middleTruncate('VsAbCdEfGhIjKlMnOpQrStUvWxYz1234', 8, 6)).toBe('VsAbCdEf…Yz1234')
-  })
-  it('keeps short strings unchanged', () => {
-    expect(middleTruncate('short', 8, 6)).toBe('short')
-  })
-})
 
 describe('colorForIndex', () => {
   it('is deterministic and wraps the palette', () => {
     expect(colorForIndex(0)).toBe(PALETTE[0])
     expect(colorForIndex(1)).toBe(PALETTE[1])
     expect(colorForIndex(PALETTE.length)).toBe(PALETTE[0]) // wraps
+  })
+})
+
+describe('swatchColor', () => {
+  it('colors ranks within the pie by their slice color', () => {
+    expect(swatchColor(1)).toBe(colorForIndex(0))
+    expect(swatchColor(PIE_SLICES)).toBe(colorForIndex(PIE_SLICES - 1))
+  })
+  it('greys out ranks beyond the pie (the "Others" bucket)', () => {
+    expect(swatchColor(PIE_SLICES + 1)).toBe(OTHERS_COLOR)
+    expect(swatchColor(999)).toBe(OTHERS_COLOR)
   })
 })
 
@@ -52,6 +60,75 @@ describe('arcPath', () => {
   })
 })
 
+describe('pieSlices', () => {
+  function miners(n) {
+    return Array.from({ length: n }, (_, i) => ({ rank: i + 1, count: n - i }))
+  }
+
+  it('passes through when miner count fits the pie', () => {
+    const m = miners(PIE_SLICES)
+    expect(pieSlices(m)).toBe(m) // same reference, no aggregation
+  })
+
+  it('aggregates the tail beyond the pie into a single "Others" slice', () => {
+    const slices = pieSlices(miners(PIE_SLICES + 3))
+    expect(slices).toHaveLength(PIE_SLICES + 1)
+    const others = slices[slices.length - 1]
+    expect(others.isOthers).toBe(true)
+    // ranks 26,27,28 had counts 3,2,1 (n - i with n = 28) => 6
+    expect(others.count).toBe(6)
+  })
+})
+
+describe('pageCount', () => {
+  it('is the ceiling of total over page size', () => {
+    expect(pageCount(0, 25)).toBe(0)
+    expect(pageCount(1, 25)).toBe(1)
+    expect(pageCount(25, 25)).toBe(1)
+    expect(pageCount(26, 25)).toBe(2)
+    expect(pageCount(142, 25)).toBe(6)
+  })
+})
+
+describe('clampPage', () => {
+  it('keeps an in-range page', () => {
+    expect(clampPage(3, 6)).toBe(3)
+  })
+  it('floors below 1 and a non-integer to page 1', () => {
+    expect(clampPage(0, 6)).toBe(1)
+    expect(clampPage(-2, 6)).toBe(1)
+    expect(clampPage(NaN, 6)).toBe(1)
+  })
+  it('caps above the last page to the last page', () => {
+    expect(clampPage(99, 6)).toBe(6)
+  })
+  it('returns page 1 when there are no pages', () => {
+    expect(clampPage(1, 0)).toBe(1)
+  })
+})
+
+describe('paginate', () => {
+  const items = Array.from({ length: 142 }, (_, i) => i)
+  it('slices the requested page', () => {
+    expect(paginate(items, 1, 25)).toEqual(items.slice(0, 25))
+    expect(paginate(items, 2, 25)).toEqual(items.slice(25, 50))
+    expect(paginate(items, 6, 25)).toEqual(items.slice(125, 142)) // short last page
+  })
+})
+
+describe('pageItems', () => {
+  it('is empty for a single page (no pager needed)', () => {
+    expect(pageItems(1, 1)).toEqual([])
+  })
+  it('windows around the current page with ellipses for gaps', () => {
+    expect(pageItems(1, 5)).toEqual([1, 2, 'ellipsis', 5])
+    expect(pageItems(6, 10)).toEqual([1, 'ellipsis', 5, 6, 7, 'ellipsis', 10])
+  })
+  it('never emits an ellipsis for an adjacent gap', () => {
+    expect(pageItems(2, 3)).toEqual([1, 2, 3])
+  })
+})
+
 describe('buildRows', () => {
   // Mirrors the <template> in hashrate_shares.tmpl that the controller clones.
   function rowTemplate() {
@@ -61,7 +138,7 @@ describe('buildRows', () => {
       '<td class="text-end" data-type="rank"></td>' +
       '<td><span class="hashrate-shares-swatch" data-type="swatch"></span></td>' +
       '<td class="text-end mono" data-type="percent"></td>' +
-      '<td class="break-word" data-type="addr"></td>' +
+      '<td class="position-relative clipboard hashrate-shares-addr" data-type="addr"></td>' +
       '</tr>'
     return t
   }
@@ -82,28 +159,35 @@ describe('buildRows', () => {
     expect(tbody.querySelectorAll('td')).toHaveLength(8)
   })
 
-  it('populates rank, percent, swatch color and a linked address', () => {
+  it('populates rank, percent, swatch color and a full-address link', () => {
     const tr = buildRows(rowTemplate(), [{ rank: 1, percent: '91.0', address: ADDR, count: 9 }])[0]
     expect(tr.querySelector('[data-type="rank"]').textContent).toBe('1')
     expect(tr.querySelector('[data-type="percent"]').textContent).toBe('91.0%')
     expect(tr.querySelector('[data-type="swatch"]').style.background).not.toBe('')
-    const a = tr.querySelector('a')
+    const a = tr.querySelector('a.elidedhash')
     expect(a.getAttribute('href')).toBe(`/address/${ADDR}`)
-    expect(a.textContent).toBe(middleTruncate(ADDR))
+    // Full address is the actual text content (the CSS elides it responsively);
+    // this is what the clipboard control copies.
+    expect(a.textContent).toBe(ADDR)
   })
 
-  it('renders the Others bucket as plain text with no rank or link', () => {
-    const tr = buildRows(rowTemplate(), [{ isOthers: true, percent: '5.0', count: 1 }])[0]
-    expect(tr.querySelector('[data-type="rank"]').textContent).toBe('')
-    expect(tr.querySelector('a')).toBeNull()
-    expect(tr.querySelector('[data-type="addr"]').textContent).toBe('Others')
+  it('adds a clipboard copy control to each address cell', () => {
+    const tr = buildRows(rowTemplate(), [{ rank: 1, percent: '91.0', address: ADDR, count: 9 }])[0]
+    const addr = tr.querySelector('[data-type="addr"]')
+    const copy = addr.querySelector('.monicon-copy')
+    expect(copy).not.toBeNull()
+    expect(copy.dataset.controller).toBe('clipboard')
+    expect(copy.dataset.action).toBe('click->clipboard#copyTextToClipboard')
+    // The clipboard controller copies parentNode.textContent.split(' ')[0],
+    // so the cell's text must be exactly the address.
+    expect(addr.textContent.trim().split(' ')[0]).toBe(ADDR)
   })
 
   it('never interprets an address as HTML (XSS-safe, no sanitizer needed)', () => {
     const evil = '<b>x</b>'
     const tr = buildRows(rowTemplate(), [{ rank: 1, percent: '1.0', address: evil, count: 1 }])[0]
     expect(tr.querySelector('b')).toBeNull()
-    expect(tr.querySelector('a').textContent).toBe(evil)
+    expect(tr.querySelector('a.elidedhash').textContent).toBe(evil)
   })
 
   it('returns no rows for an empty miner list', () => {
