@@ -67,25 +67,6 @@
                 <svg data-hashrate-shares-target="pie" viewBox="0 0 360 360" class="hashrate-shares-pie"></svg>
             </div>
             <div class="hashrate-shares-table-wrap">
-                {{/* Pagination header — range + Previous/Next, mirroring the
-                     address transactions table. The nav hides when there is a
-                     single page; the controller toggles it. */}}
-                <div class="d-flex flex-wrap-reverse align-items-center justify-content-end py-1 d-hide"
-                     data-hashrate-shares-target="paginationheader">
-                    <span class="fs12 nowrap text-end" data-hashrate-shares-target="range"></span>
-                    <nav aria-label="hashrate shares navigation"
-                         class="my-1 ms-2 d-hide"
-                         data-hashrate-shares-target="pagebuttons">
-                        <ul class="pagination mb-0 pagination-sm">
-                            <li class="page-item disabled" data-hashrate-shares-target="pageminus">
-                                <a class="page-link" href="#" data-action="click->hashrate-shares#prevPage">Previous</a>
-                            </li>
-                            <li class="page-item" data-hashrate-shares-target="pageplus">
-                                <a class="page-link" href="#" data-action="click->hashrate-shares#nextPage">Next</a>
-                            </li>
-                        </ul>
-                    </nav>
-                </div>
                 <table class="table table-sm hashrate-shares-table">
                     <thead>
                         <tr>
@@ -100,33 +81,17 @@
                 <div class="d-hide text-secondary p-3" data-hashrate-shares-target="empty">
                     No PoW Reward transactions in the selected period.
                 </div>
-                {{/* Numbered page links + arrows, populated by the controller —
-                     same control as the address transactions table. */}}
-                <div class="text-end pe-3 d-hide" data-hashrate-shares-target="tablePagination"></div>
-                {{/* Bottom controls — Download CSV on the left, page size on the
-                     right, mirroring the address transactions table. The whole
-                     wrapper hides with the table when the period is empty (the
-                     controller toggles d-hide), so the link only shows when there
-                     is data to export. The CSV is built client-side from the full
-                     ranked list, so this is a JS action, not a server download URL. */}}
-                <div class="d-flex justify-content-between align-items-center d-hide" data-hashrate-shares-target="pageSizeWrap">
+                {{/* Download CSV — exports the full per-miner list (not the capped
+                     top-25 + "Others" view). The wrapper hides with the table when
+                     the period is empty (the controller toggles d-hide), so the
+                     link only shows when there is data to export. The CSV is built
+                     client-side from the full ranked list, so this is a JS action,
+                     not a server download URL. */}}
+                <div class="d-flex justify-content-end align-items-center d-hide" data-hashrate-shares-target="downloadWrap">
                     <a class="d-inline-block p-2 rounded download text-nowrap" href="#"
                        data-action="click->hashrate-shares#downloadCsv">
                         <span class="monicon-download mx-1"></span> Download CSV
                     </a>
-                    <div class="d-flex align-items-center">
-                        <label class="mb-0 me-1" for="hsPageSize">Page size</label>
-                        <select
-                            id="hsPageSize"
-                            class="form-control-sm me-sm-2 dropdown"
-                            data-hashrate-shares-target="pageSize"
-                            data-action="change->hashrate-shares#changePageSize"
-                        >
-                            <option value="25">25</option>
-                            <option value="50">50</option>
-                            <option value="100">100</option>
-                        </select>
-                    </div>
                 </div>
             </div>
         </div>

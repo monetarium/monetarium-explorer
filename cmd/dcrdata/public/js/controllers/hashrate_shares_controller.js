@@ -37,21 +37,17 @@ export const PALETTE = [
 ]
 export const OTHERS_COLOR = '#adb5bd'
 
-// Number of individually-drawn pie slices. Miners ranked beyond this are folded
-// into a single "Others" slice; their table rows get the grey "Others" swatch.
-// Matches PALETTE.length so every drawn slice has its own color.
+// Number of individually-drawn pie slices / individually-listed table rows.
+// Miners ranked beyond this are folded into a single "Others" slice and a single
+// "Others" table row. Matches PALETTE.length so every drawn slice has its own color.
 export const PIE_SLICES = 25
 
 // Minimum slice sweep (radians) for a rank number to fit inside the slice.
 export const MIN_LABEL_SWEEP = 0.18 // ~10.3 degrees
 
-// Interval filters (mirrors the backend's accepted ?interval values) and table
-// page sizes. The default page size equals PIE_SLICES so page 1 lines up exactly
-// with the pie's drawn slices.
+// Interval filters (mirrors the backend's accepted ?interval values).
 export const INTERVALS = ['all', 'year', 'month', 'week', 'day']
 export const DEFAULT_INTERVAL = 'week'
-export const PAGE_SIZES = [25, 50, 100]
-export const DEFAULT_PAGE_SIZE = 25
 
 // Distinct empty-table messages: a genuinely empty period and a fetch failure
 // must read differently so a 500/network error is not mistaken for "no data".
@@ -72,49 +68,21 @@ export function swatchColor(rank) {
   return rank >= 1 && rank <= PIE_SLICES ? colorForIndex(rank - 1) : OTHERS_COLOR
 }
 
-// pieSlices reduces the full ranked miner list to what the pie draws: the top
-// PIE_SLICES miners verbatim, plus a single { isOthers, count } aggregate for the
-// remainder. Returns the input unchanged when it already fits.
+// pieSlices reduces the full ranked miner list to what the pie and the table draw:
+// the top PIE_SLICES miners verbatim, plus a single { isOthers, count, percent }
+// aggregate for the remainder, where percent is the combined share of every miner
+// ranked beyond PIE_SLICES (1 decimal place, matching the per-miner percents).
+// Returns the input unchanged when it already fits, so a list of <= PIE_SLICES
+// miners draws no "Others" slice and shows no "Others" row.
 export function pieSlices(miners, maxSlices = PIE_SLICES) {
   if (miners.length <= maxSlices) return miners
   const top = miners.slice(0, maxSlices)
+  let total = 0
+  for (const m of miners) total += Number(m.count)
   let othersCount = 0
   for (let i = maxSlices; i < miners.length; i++) othersCount += Number(miners[i].count)
-  return [...top, { isOthers: true, count: othersCount }]
-}
-
-export function pageCount(total, pageSize) {
-  if (total <= 0 || pageSize <= 0) return 0
-  return Math.ceil(total / pageSize)
-}
-
-export function clampPage(page, totalPages) {
-  if (totalPages <= 0) return 1
-  if (!Number.isInteger(page) || page < 1) return 1
-  if (page > totalPages) return totalPages
-  return page
-}
-
-export function paginate(items, page, pageSize) {
-  const start = (page - 1) * pageSize
-  return items.slice(start, start + pageSize)
-}
-
-// pageItems returns the page-button sequence for a windowed pager: always the
-// first and last page, the current page and its neighbors, and the literal
-// 'ellipsis' marker wherever a gap is skipped. Empty when there is a single page.
-export function pageItems(current, totalPages) {
-  if (totalPages <= 1) return []
-  const nums = new Set([1, totalPages, current, current - 1, current + 1])
-  const sorted = [...nums].filter((p) => p >= 1 && p <= totalPages).sort((a, b) => a - b)
-  const items = []
-  let prev = 0
-  for (const p of sorted) {
-    if (p - prev > 1) items.push('ellipsis')
-    items.push(p)
-    prev = p
-  }
-  return items
+  const othersPercent = total > 0 ? ((othersCount / total) * 100).toFixed(1) : '0.0'
+  return [...top, { isOthers: true, count: othersCount, percent: othersPercent }]
 }
 
 // copyIconNode builds the clipboard control appended to each address cell. It
@@ -135,8 +103,9 @@ function copyIconNode() {
   return frag
 }
 
-// buildRows clones the row <template> once per miner and fills each cell via
-// textContent / DOM nodes, returning the resulting <tr> elements.
+// buildRows clones the row <template> once per entry and fills each cell via
+// textContent / DOM nodes, returning the resulting <tr> elements. Each entry is
+// either a ranked miner or the trailing { isOthers, count, percent } aggregate.
 //
 // No HTML is parsed from the data, so untrusted values (reward addresses) stay
 // inert without a sanitizer — humanize.hashElide sets the address via
@@ -146,15 +115,25 @@ function copyIconNode() {
 export function buildRows(rowTemplate, miners) {
   return miners.map((m) => {
     const row = document.importNode(rowTemplate.content, true).querySelector('tr')
-    row.querySelector('[data-type="rank"]').textContent = String(m.rank)
-    row.querySelector('[data-type="swatch"]').style.background = swatchColor(m.rank)
+    row.querySelector('[data-type="rank"]').textContent = m.isOthers ? '' : String(m.rank)
+    row.querySelector('[data-type="swatch"]').style.background = m.isOthers
+      ? OTHERS_COLOR
+      : swatchColor(m.rank)
     row.querySelector('[data-type="percent"]').textContent = `${m.percent}%`
 
-    // Responsive, copyable address: hashElide renders the full address (shown in
-    // full when the column is wide, middle-elided when narrow), and the copy
-    // icon copies the cell's text — the address — via the clipboard controller.
     const addr = row.querySelector('[data-type="addr"]')
-    addr.append(humanize.hashElide(m.address, `/address/${m.address}`, true), copyIconNode())
+    if (m.isOthers) {
+      // The aggregate of every miner ranked beyond the pie — no address, no link.
+      const span = document.createElement('span')
+      span.className = 'text-secondary'
+      span.textContent = 'Others'
+      addr.appendChild(span)
+    } else {
+      // Responsive, copyable address: hashElide renders the full address (shown in
+      // full when the column is wide, middle-elided when narrow), and the copy
+      // icon copies the cell's text — the address — via the clipboard controller.
+      addr.append(humanize.hashElide(m.address, `/address/${m.address}`, true), copyIconNode())
+    }
     return row
   })
 }
@@ -175,8 +154,9 @@ function csvField(value) {
 
 // buildCsv serializes the full ranked miner list to an RFC 4180 CSV string. The
 // whole dataset already lives client-side (this.miners), so the export needs no
-// server round-trip — unlike the address page, whose rows are server-paginated.
-// Records are CRLF-terminated (including the last), matching Go's csv.Writer.
+// server round-trip — and it exports every miner individually, not the capped
+// top-25 + "Others" view shown in the table. Records are CRLF-terminated
+// (including the last), matching Go's csv.Writer.
 export function buildCsv(miners) {
   const lines = [CSV_HEADER.join(',')]
   for (const m of miners) {
@@ -211,29 +191,20 @@ export default class extends Controller {
     'intervalOption',
     'empty',
     'pieWrap',
-    'paginationheader',
-    'range',
-    'pagebuttons',
-    'pageminus',
-    'pageplus',
-    'tablePagination',
-    'pageSizeWrap',
-    'pageSize'
+    'downloadWrap'
   ]
 
   connect() {
     this.miners = []
     this._reqSeq = 0
 
-    // Project the URL query onto the view state so filters/pagination are
-    // shareable and survive reload (mirrors the address page).
+    // Project the URL query onto the view state so the selected interval is
+    // shareable and survives reload (mirrors the address page).
     this.query = new TurboQuery()
-    const settings = (this.settings = TurboQuery.nullTemplate(['interval', 'page', 'n']))
+    const settings = (this.settings = TurboQuery.nullTemplate(['interval']))
     this.query.update(settings)
 
     this.interval = INTERVALS.includes(settings.interval) ? settings.interval : DEFAULT_INTERVAL
-    this.pageSize = PAGE_SIZES.includes(settings.n) ? settings.n : DEFAULT_PAGE_SIZE
-    this.page = Number.isInteger(settings.page) && settings.page > 0 ? settings.page : 1
 
     this.syncControlsUI()
     this.syncUrl()
@@ -245,21 +216,19 @@ export default class extends Controller {
     return this._reqSeq
   }
 
-  // syncControlsUI reflects the current state onto the interval pills and the
-  // page-size selector (which are server-rendered with static defaults).
+  // syncControlsUI reflects the current state onto the interval pills (which are
+  // server-rendered with a static default).
   syncControlsUI() {
     this.intervalOptionTargets.forEach((el) => {
       el.classList.toggle('active', el.dataset.option === this.interval)
     })
-    if (this.hasPageSizeTarget) this.pageSizeTarget.value = String(this.pageSize)
   }
 
-  // syncUrl writes the canonical state back to the address bar, omitting values
-  // that equal their default so a pristine view stays at a clean /hashrate-shares.
+  // syncUrl writes the canonical state back to the address bar, omitting the
+  // interval when it equals the default so a pristine view stays at a clean
+  // /hashrate-shares.
   syncUrl() {
     this.settings.interval = this.interval === DEFAULT_INTERVAL ? null : this.interval
-    this.settings.page = this.page > 1 ? this.page : null
-    this.settings.n = this.pageSize === DEFAULT_PAGE_SIZE ? null : this.pageSize
     this.query.replace(this.settings)
   }
 
@@ -267,31 +236,17 @@ export default class extends Controller {
     const option = e.currentTarget.dataset.option
     if (option === this.interval) return
     this.interval = option
-    this.page = 1 // a new period invalidates the current page
     this.syncControlsUI()
     this.syncUrl()
     this.fetchAndRender(this.nextSeq())
   }
 
-  changePageSize() {
-    const n = parseInt(this.pageSizeTarget.value, 10)
-    this.pageSize = PAGE_SIZES.includes(n) ? n : DEFAULT_PAGE_SIZE
-    this.page = 1 // page indices shift when the size changes
-    this.syncUrl()
-    this.renderTable(this.miners)
-  }
-
-  goToPage(e) {
-    e.preventDefault()
-    this.setPage(parseInt(e.currentTarget.dataset.page, 10))
-  }
-
-  // downloadCsv exports the full ranked miner list (every page, not just the
-  // visible one) as a CSV file, built client-side from this.miners. The address
-  // page streams its CSV from the server because its rows are server-paginated;
-  // here the whole dataset is already in the browser, so a Blob download avoids a
-  // round-trip. The interval is baked into the filename so the export is
-  // self-describing.
+  // downloadCsv exports the full ranked miner list (every miner, not the capped
+  // top-25 + "Others" view) as a CSV file, built client-side from this.miners.
+  // The address page streams its CSV from the server because its rows are
+  // server-paginated; here the whole dataset is already in the browser, so a Blob
+  // download avoids a round-trip. The interval is baked into the filename so the
+  // export is self-describing.
   downloadCsv(e) {
     if (e) e.preventDefault()
     if (!this.miners.length) return
@@ -307,28 +262,6 @@ export default class extends Controller {
     // initiate the click-triggered download asynchronously, and revoking the
     // blob URL synchronously can invalidate it before the download reads it.
     setTimeout(() => URL.revokeObjectURL(url), 0)
-  }
-
-  prevPage(e) {
-    if (e) e.preventDefault()
-    this.setPage(this.page - 1)
-  }
-
-  nextPage(e) {
-    if (e) e.preventDefault()
-    this.setPage(this.page + 1)
-  }
-
-  // setPage clamps to the valid range first (so the URL never records an
-  // out-of-range page), then re-renders the table slice. No refetch — the full
-  // ranked list is already client-side.
-  setPage(page) {
-    const totalPages = pageCount(this.miners.length, this.pageSize)
-    const clamped = clampPage(page, totalPages)
-    if (clamped === this.page) return
-    this.page = clamped
-    this.syncUrl()
-    this.renderTable(this.miners)
   }
 
   // Navigate to /charts for any non-hashrate-shares selection (parity with the
@@ -361,100 +294,16 @@ export default class extends Controller {
     const empty = !miners.length
     this.emptyTarget.classList.toggle('d-hide', !empty)
     this.pieWrapTarget.classList.toggle('d-hide', empty)
-    // Pagination chrome only makes sense when there is data.
-    if (this.hasPaginationheaderTarget) {
-      this.paginationheaderTarget.classList.toggle('d-hide', empty)
-    }
-    if (this.hasPageSizeWrapTarget) this.pageSizeWrapTarget.classList.toggle('d-hide', empty)
+    // The Download CSV control only makes sense when there is data to export.
+    if (this.hasDownloadWrapTarget) this.downloadWrapTarget.classList.toggle('d-hide', empty)
     if (empty) {
       this.emptyTarget.textContent = emptyStateMessage(isError)
       this.tableBodyTarget.replaceChildren()
-      if (this.hasTablePaginationTarget) this.tablePaginationTarget.classList.add('d-hide')
       return
     }
-
-    const totalPages = pageCount(miners.length, this.pageSize)
-    this.page = clampPage(this.page, totalPages)
-    // Re-sync the URL to the page actually shown: a deep-linked or stale
-    // out-of-range ?page= is clamped here, and without this the address bar
-    // would keep recording a page that is not the one on screen (the single-page
-    // pager is hidden, so the user could not otherwise correct it).
-    this.syncUrl()
-    const pageRows = paginate(miners, this.page, this.pageSize)
-    this.tableBodyTarget.replaceChildren(...buildRows(this.rowTemplateTarget, pageRows))
-    this.renderPagination(miners.length, totalPages)
-  }
-
-  // renderPagination updates the range text, the header Previous/Next pills (which
-  // hide entirely on a single page, mirroring the address page), and the numbered
-  // pager below the table.
-  renderPagination(totalItems, totalPages) {
-    if (this.hasRangeTarget) {
-      const first = (this.page - 1) * this.pageSize + 1
-      const last = Math.min(this.page * this.pageSize, totalItems)
-      const suffix = totalItems === 1 ? '' : 's'
-      // Literal en-dash via textContent (not innerHTML) — no markup, no injection.
-      this.rangeTarget.textContent =
-        `showing ${first.toLocaleString()} – ${last.toLocaleString()} of ` +
-        `${totalItems.toLocaleString()} miner${suffix}`
-    }
-    if (this.hasPagebuttonsTarget) {
-      this.pagebuttonsTarget.classList.toggle('d-hide', totalPages <= 1)
-    }
-    if (this.hasPageminusTarget) {
-      this.pageminusTarget.classList.toggle('disabled', this.page <= 1)
-    }
-    if (this.hasPageplusTarget) {
-      this.pageplusTarget.classList.toggle('disabled', this.page >= totalPages)
-    }
-    this.renderNumberedPager(totalPages)
-  }
-
-  // renderNumberedPager fills the bottom pager with windowed page-number links and
-  // left/right arrows — the same control the address transactions table uses. It
-  // is hidden when there is a single page (pageItems returns nothing).
-  renderNumberedPager(totalPages) {
-    if (!this.hasTablePaginationTarget) return
-    const container = this.tablePaginationTarget
-    const items = pageItems(this.page, totalPages)
-    if (!items.length) {
-      container.classList.add('d-hide')
-      container.replaceChildren()
-      return
-    }
-    container.classList.remove('d-hide')
-
-    const nodes = []
-    if (this.page > 1) nodes.push(this.arrowLink('left', this.page - 1))
-    items.forEach((item) => {
-      if (item === 'ellipsis') {
-        const span = document.createElement('span')
-        span.textContent = '…'
-        nodes.push(span)
-        return
-      }
-      const a = document.createElement('a')
-      a.className = `fs18 pager px-1${item === this.page ? ' active' : ''}`
-      a.href = '#'
-      a.textContent = String(item)
-      a.dataset.page = String(item)
-      a.dataset.action = 'click->hashrate-shares#goToPage'
-      nodes.push(a)
-    })
-    if (this.page < totalPages) nodes.push(this.arrowLink('right', this.page + 1))
-    container.replaceChildren(...nodes)
-  }
-
-  arrowLink(dir, page) {
-    const a = document.createElement('a')
-    // fz20/fs20 mirror the address page's markup (the classes are cosmetic
-    // no-ops; the monicon glyph sets the arrow size).
-    const sizeClass = dir === 'left' ? 'fz20' : 'fs20'
-    a.className = `d-inline-block monicon-arrow-${dir} m-1 ${sizeClass}`
-    a.href = '#'
-    a.dataset.page = String(page)
-    a.dataset.action = 'click->hashrate-shares#goToPage'
-    return a
+    // The table mirrors the pie exactly: the top PIE_SLICES miners individually,
+    // plus a single "Others" aggregate row when there are more (issue #474).
+    this.tableBodyTarget.replaceChildren(...buildRows(this.rowTemplateTarget, pieSlices(miners)))
   }
 
   renderPie(slices) {
