@@ -303,7 +303,10 @@ export default class extends Controller {
     document.body.appendChild(a)
     a.click()
     a.remove()
-    URL.revokeObjectURL(url)
+    // Defer the revoke to the next tick: some browsers (e.g. Safari/WebKit)
+    // initiate the click-triggered download asynchronously, and revoking the
+    // blob URL synchronously can invalidate it before the download reads it.
+    setTimeout(() => URL.revokeObjectURL(url), 0)
   }
 
   prevPage(e) {
@@ -372,6 +375,11 @@ export default class extends Controller {
 
     const totalPages = pageCount(miners.length, this.pageSize)
     this.page = clampPage(this.page, totalPages)
+    // Re-sync the URL to the page actually shown: a deep-linked or stale
+    // out-of-range ?page= is clamped here, and without this the address bar
+    // would keep recording a page that is not the one on screen (the single-page
+    // pager is hidden, so the user could not otherwise correct it).
+    this.syncUrl()
     const pageRows = paginate(miners, this.page, this.pageSize)
     this.tableBodyTarget.replaceChildren(...buildRows(this.rowTemplateTarget, pageRows))
     this.renderPagination(miners.length, totalPages)
