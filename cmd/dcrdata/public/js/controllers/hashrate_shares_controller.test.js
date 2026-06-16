@@ -11,6 +11,7 @@ import {
   clampPage,
   paginate,
   pageItems,
+  buildCsv,
   EMPTY_MESSAGE,
   ERROR_MESSAGE,
   OTHERS_COLOR,
@@ -192,6 +193,29 @@ describe('buildRows', () => {
 
   it('returns no rows for an empty miner list', () => {
     expect(buildRows(rowTemplate(), [])).toEqual([])
+  })
+})
+
+describe('buildCsv', () => {
+  it('emits a header plus one CRLF-terminated record per miner', () => {
+    const csv = buildCsv([
+      { rank: 1, address: 'VsAbc', count: 9, percent: '90.0' },
+      { rank: 2, address: 'VsXyz', count: 1, percent: '10.0' }
+    ])
+    expect(csv).toBe(
+      'rank,reward_address,reward_tx_count,percent\r\n' +
+        '1,VsAbc,9,90.0\r\n' +
+        '2,VsXyz,1,10.0\r\n'
+    )
+  })
+
+  it('quotes and escapes fields containing commas or quotes (RFC 4180)', () => {
+    const csv = buildCsv([{ rank: 1, address: 'a,b"c', count: 1, percent: '100.0' }])
+    expect(csv).toBe('rank,reward_address,reward_tx_count,percent\r\n1,"a,b""c",1,100.0\r\n')
+  })
+
+  it('returns just the header for an empty list (still a valid CSV file)', () => {
+    expect(buildCsv([])).toBe('rank,reward_address,reward_tx_count,percent\r\n')
   })
 })
 

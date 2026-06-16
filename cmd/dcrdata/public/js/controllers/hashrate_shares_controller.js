@@ -159,6 +159,32 @@ export function buildRows(rowTemplate, miners) {
   })
 }
 
+// CSV_HEADER names the Download CSV columns. snake_case mirrors the address
+// page's server-streamed CSV (tx_hash, io_index, …) for a consistent export
+// convention across the explorer.
+export const CSV_HEADER = ['rank', 'reward_address', 'reward_tx_count', 'percent']
+
+// csvField escapes one value per RFC 4180: a field is quoted only when it
+// contains a comma, double-quote, or newline, and embedded quotes are doubled.
+// Reward addresses are the only operator-influenced field, so this keeps a
+// hostile address from breaking out of its column.
+function csvField(value) {
+  const s = String(value)
+  return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+}
+
+// buildCsv serializes the full ranked miner list to an RFC 4180 CSV string. The
+// whole dataset already lives client-side (this.miners), so the export needs no
+// server round-trip — unlike the address page, whose rows are server-paginated.
+// Records are CRLF-terminated (including the last), matching Go's csv.Writer.
+export function buildCsv(miners) {
+  const lines = [CSV_HEADER.join(',')]
+  for (const m of miners) {
+    lines.push([m.rank, m.address, m.count, m.percent].map(csvField).join(','))
+  }
+  return lines.map((line) => `${line}\r\n`).join('')
+}
+
 export function sliceLabelFits(sweepRadians) {
   return sweepRadians >= MIN_LABEL_SWEEP
 }
@@ -258,6 +284,26 @@ export default class extends Controller {
   goToPage(e) {
     e.preventDefault()
     this.setPage(parseInt(e.currentTarget.dataset.page, 10))
+  }
+
+  // downloadCsv exports the full ranked miner list (every page, not just the
+  // visible one) as a CSV file, built client-side from this.miners. The address
+  // page streams its CSV from the server because its rows are server-paginated;
+  // here the whole dataset is already in the browser, so a Blob download avoids a
+  // round-trip. The interval is baked into the filename so the export is
+  // self-describing.
+  downloadCsv(e) {
+    if (e) e.preventDefault()
+    if (!this.miners.length) return
+    const blob = new Blob([buildCsv(this.miners)], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `hashrate-shares-${this.interval}.csv`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
   }
 
   prevPage(e) {
