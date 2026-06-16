@@ -78,8 +78,8 @@ func minerShares(rows []dbtypes.MinerRewardCount) (total int64, views []MinerSha
 
 // intervalMinHeight maps an interval label to the minimum block height of the
 // window, relative to the chain tip time. "all" (and anything unrecognized)
-// returns 0 (whole chain). day/week/month subtract the corresponding duration
-// from the tip time and map it to a height via the data source.
+// returns 0 (whole chain). day/week/month/year subtract the corresponding
+// duration from the tip time and map it to a height via the data source.
 func (exp *explorerUI) intervalMinHeight(ctx context.Context, interval string) (int64, error) {
 	var dur time.Duration
 	switch interval {
@@ -89,6 +89,8 @@ func (exp *explorerUI) intervalMinHeight(ctx context.Context, interval string) (
 		dur = 7 * 24 * time.Hour
 	case "month":
 		dur = 30 * 24 * time.Hour
+	case "year":
+		dur = 365 * 24 * time.Hour
 	default: // "all"
 		return 0, nil
 	}
@@ -110,11 +112,11 @@ func (exp *explorerUI) intervalMinHeight(ctx context.Context, interval string) (
 }
 
 // HashrateSharesData serves the per-interval miner hashrate-share data as JSON
-// for the /hashrate-shares page controller. Query param: ?interval=all|month|week|day.
+// for the /hashrate-shares page controller. Query param: ?interval=all|year|month|week|day.
 func (exp *explorerUI) HashrateSharesData(w http.ResponseWriter, r *http.Request) {
 	interval := r.URL.Query().Get("interval")
 	switch interval {
-	case "all", "month", "week", "day":
+	case "all", "year", "month", "week", "day":
 	default:
 		interval = "week"
 	}

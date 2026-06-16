@@ -44,6 +44,8 @@
                         <li class="nav-item nav-link" data-hashrate-shares-target="intervalOption"
                             data-action="click->hashrate-shares#setInterval" data-option="all">All</li>
                         <li class="nav-item nav-link" data-hashrate-shares-target="intervalOption"
+                            data-action="click->hashrate-shares#setInterval" data-option="year">Year</li>
+                        <li class="nav-item nav-link" data-hashrate-shares-target="intervalOption"
                             data-action="click->hashrate-shares#setInterval" data-option="month">Month</li>
                         <li class="nav-item nav-link active" data-hashrate-shares-target="intervalOption"
                             data-action="click->hashrate-shares#setInterval" data-option="week">Week</li>
@@ -54,10 +56,10 @@
             </div>
         </div>
 
-        <p class="text-center text-secondary fs13 mb-2">
-            Share of network hashrate approximated from PoW Reward (coinbase) transactions,
+        <p class="hashrate-shares-heading text-center text-secondary fs13">
+            Network hashrate shares, approximated from PoW reward (coinbase) transactions,
             per <strong>reward address</strong>. An operator using multiple payout addresses
-            appears as multiple entries.
+            will appear as multiple separate entries.
         </p>
 
         <div class="hashrate-shares-layout d-flex flex-wrap justify-content-center align-items-start">
