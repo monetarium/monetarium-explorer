@@ -56,7 +56,7 @@
             </div>
         </div>
 
-        <p class="hashrate-shares-heading text-center text-secondary fs13">
+        <p class="hashrate-shares-heading text-center text-secondary fs15">
             Network hashrate shares, approximated from PoW reward (coinbase) transactions,
             per <strong>reward address</strong>. An operator using multiple payout addresses
             will appear as multiple separate entries.
@@ -81,6 +81,18 @@
                 <div class="d-hide text-secondary p-3" data-hashrate-shares-target="empty">
                     No PoW Reward transactions in the selected period.
                 </div>
+                {{/* Download CSV — exports the full per-miner list (not the capped
+                     top-25 + "Others" view). The wrapper hides with the table when
+                     the period is empty (the controller toggles d-hide), so the
+                     link only shows when there is data to export. The CSV is built
+                     client-side from the full ranked list, so this is a JS action,
+                     not a server download URL. */}}
+                <div class="d-flex justify-content-end align-items-center d-hide" data-hashrate-shares-target="downloadWrap">
+                    <a class="d-inline-block p-2 rounded download text-nowrap" href="#"
+                       data-action="click->hashrate-shares#downloadCsv">
+                        <span class="monicon-download mx-1"></span> Download CSV
+                    </a>
+                </div>
             </div>
         </div>
 
@@ -90,7 +102,7 @@
                 <td class="text-end" data-type="rank"></td>
                 <td><span class="hashrate-shares-swatch" data-type="swatch"></span></td>
                 <td class="text-end mono" data-type="percent"></td>
-                <td class="break-word" data-type="addr"></td>
+                <td class="position-relative clipboard hashrate-shares-addr" data-type="addr"></td>
             </tr>
         </template>
     </div>

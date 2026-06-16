@@ -1,32 +1,37 @@
 import { describe, it, expect } from 'vitest'
 import {
-  middleTruncate,
   colorForIndex,
+  swatchColor,
   sliceLabelFits,
   arcPath,
   emptyStateMessage,
   buildRows,
+  pieSlices,
+  buildCsv,
   EMPTY_MESSAGE,
   ERROR_MESSAGE,
+  OTHERS_COLOR,
   PIE,
+  PIE_SLICES,
   PALETTE
 } from './hashrate_shares_controller'
-
-describe('middleTruncate', () => {
-  it('truncates the middle of a long address', () => {
-    // head 8 = "VsAbCdEf", tail 6 = "Yz1234"
-    expect(middleTruncate('VsAbCdEfGhIjKlMnOpQrStUvWxYz1234', 8, 6)).toBe('VsAbCdEf…Yz1234')
-  })
-  it('keeps short strings unchanged', () => {
-    expect(middleTruncate('short', 8, 6)).toBe('short')
-  })
-})
 
 describe('colorForIndex', () => {
   it('is deterministic and wraps the palette', () => {
     expect(colorForIndex(0)).toBe(PALETTE[0])
     expect(colorForIndex(1)).toBe(PALETTE[1])
     expect(colorForIndex(PALETTE.length)).toBe(PALETTE[0]) // wraps
+  })
+})
+
+describe('swatchColor', () => {
+  it('colors ranks within the pie by their slice color', () => {
+    expect(swatchColor(1)).toBe(colorForIndex(0))
+    expect(swatchColor(PIE_SLICES)).toBe(colorForIndex(PIE_SLICES - 1))
+  })
+  it('greys out ranks beyond the pie (the "Others" bucket)', () => {
+    expect(swatchColor(PIE_SLICES + 1)).toBe(OTHERS_COLOR)
+    expect(swatchColor(999)).toBe(OTHERS_COLOR)
   })
 })
 
@@ -52,6 +57,28 @@ describe('arcPath', () => {
   })
 })
 
+describe('pieSlices', () => {
+  function miners(n) {
+    return Array.from({ length: n }, (_, i) => ({ rank: i + 1, count: n - i }))
+  }
+
+  it('passes through when miner count fits the pie', () => {
+    const m = miners(PIE_SLICES)
+    expect(pieSlices(m)).toBe(m) // same reference, no aggregation
+  })
+
+  it('aggregates the tail beyond the pie into a single "Others" slice', () => {
+    const slices = pieSlices(miners(PIE_SLICES + 3))
+    expect(slices).toHaveLength(PIE_SLICES + 1)
+    const others = slices[slices.length - 1]
+    expect(others.isOthers).toBe(true)
+    // ranks 26,27,28 had counts 3,2,1 (n - i with n = 28) => 6
+    expect(others.count).toBe(6)
+    // total = sum 1..28 = 406; others share = 6/406*100 = 1.477.. -> "1.5"
+    expect(others.percent).toBe('1.5')
+  })
+})
+
 describe('buildRows', () => {
   // Mirrors the <template> in hashrate_shares.tmpl that the controller clones.
   function rowTemplate() {
@@ -61,7 +88,7 @@ describe('buildRows', () => {
       '<td class="text-end" data-type="rank"></td>' +
       '<td><span class="hashrate-shares-swatch" data-type="swatch"></span></td>' +
       '<td class="text-end mono" data-type="percent"></td>' +
-      '<td class="break-word" data-type="addr"></td>' +
+      '<td class="position-relative clipboard hashrate-shares-addr" data-type="addr"></td>' +
       '</tr>'
     return t
   }
@@ -82,20 +109,37 @@ describe('buildRows', () => {
     expect(tbody.querySelectorAll('td')).toHaveLength(8)
   })
 
-  it('populates rank, percent, swatch color and a linked address', () => {
+  it('populates rank, percent, swatch color and a full-address link', () => {
     const tr = buildRows(rowTemplate(), [{ rank: 1, percent: '91.0', address: ADDR, count: 9 }])[0]
     expect(tr.querySelector('[data-type="rank"]').textContent).toBe('1')
     expect(tr.querySelector('[data-type="percent"]').textContent).toBe('91.0%')
     expect(tr.querySelector('[data-type="swatch"]').style.background).not.toBe('')
-    const a = tr.querySelector('a')
+    const a = tr.querySelector('a.elidedhash')
     expect(a.getAttribute('href')).toBe(`/address/${ADDR}`)
-    expect(a.textContent).toBe(middleTruncate(ADDR))
+    // Full address is the actual text content (the CSS elides it responsively);
+    // this is what the clipboard control copies.
+    expect(a.textContent).toBe(ADDR)
   })
 
-  it('renders the Others bucket as plain text with no rank or link', () => {
+  it('adds a clipboard copy control to each address cell', () => {
+    const tr = buildRows(rowTemplate(), [{ rank: 1, percent: '91.0', address: ADDR, count: 9 }])[0]
+    const addr = tr.querySelector('[data-type="addr"]')
+    const copy = addr.querySelector('.monicon-copy')
+    expect(copy).not.toBeNull()
+    expect(copy.dataset.controller).toBe('clipboard')
+    expect(copy.dataset.action).toBe('click->clipboard#copyTextToClipboard')
+    // The clipboard controller copies parentNode.textContent.split(' ')[0],
+    // so the cell's text must be exactly the address.
+    expect(addr.textContent.trim().split(' ')[0]).toBe(ADDR)
+  })
+
+  it('renders the "Others" aggregate as plain text with no rank, link or copy icon', () => {
     const tr = buildRows(rowTemplate(), [{ isOthers: true, percent: '5.0', count: 1 }])[0]
     expect(tr.querySelector('[data-type="rank"]').textContent).toBe('')
+    expect(tr.querySelector('[data-type="percent"]').textContent).toBe('5.0%')
     expect(tr.querySelector('a')).toBeNull()
+    expect(tr.querySelector('.monicon-copy')).toBeNull()
+    expect(tr.querySelector('[data-type="swatch"]').style.background).not.toBe('')
     expect(tr.querySelector('[data-type="addr"]').textContent).toBe('Others')
   })
 
@@ -103,11 +147,34 @@ describe('buildRows', () => {
     const evil = '<b>x</b>'
     const tr = buildRows(rowTemplate(), [{ rank: 1, percent: '1.0', address: evil, count: 1 }])[0]
     expect(tr.querySelector('b')).toBeNull()
-    expect(tr.querySelector('a').textContent).toBe(evil)
+    expect(tr.querySelector('a.elidedhash').textContent).toBe(evil)
   })
 
   it('returns no rows for an empty miner list', () => {
     expect(buildRows(rowTemplate(), [])).toEqual([])
+  })
+})
+
+describe('buildCsv', () => {
+  it('emits a header plus one CRLF-terminated record per miner', () => {
+    const csv = buildCsv([
+      { rank: 1, address: 'VsAbc', count: 9, percent: '90.0' },
+      { rank: 2, address: 'VsXyz', count: 1, percent: '10.0' }
+    ])
+    expect(csv).toBe(
+      'rank,reward_address,reward_tx_count,percent\r\n' +
+        '1,VsAbc,9,90.0\r\n' +
+        '2,VsXyz,1,10.0\r\n'
+    )
+  })
+
+  it('quotes and escapes fields containing commas or quotes (RFC 4180)', () => {
+    const csv = buildCsv([{ rank: 1, address: 'a,b"c', count: 1, percent: '100.0' }])
+    expect(csv).toBe('rank,reward_address,reward_tx_count,percent\r\n1,"a,b""c",1,100.0\r\n')
+  })
+
+  it('returns just the header for an empty list (still a valid CSV file)', () => {
+    expect(buildCsv([])).toBe('rank,reward_address,reward_tx_count,percent\r\n')
   })
 })
 

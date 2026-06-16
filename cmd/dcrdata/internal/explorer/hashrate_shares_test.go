@@ -23,7 +23,7 @@ func TestMinerShares(t *testing.T) {
 			t.Fatalf("len: want 1, got %d", len(views))
 		}
 		v := views[0]
-		if v.Rank != 1 || v.Address != "Vsaaa" || v.Count != 7 || v.Percent != "100.0" || v.IsOthers {
+		if v.Rank != 1 || v.Address != "Vsaaa" || v.Count != 7 || v.Percent != "100.0" {
 			t.Fatalf("unexpected view: %#v", v)
 		}
 	})
@@ -55,9 +55,12 @@ func TestMinerShares(t *testing.T) {
 		}
 	})
 
-	t.Run("more than 25 miners -> top 25 + Others", func(t *testing.T) {
+	t.Run("returns every miner ranked, with no Others cap", func(t *testing.T) {
+		// The view no longer truncates to a top-N + "Others" aggregate: it
+		// returns one ranked row per miner so the client can paginate the full
+		// set (the pie's "Others" bucket is derived client-side). 30 miners in
+		// => 30 ranked rows out.
 		rows := make([]dbtypes.MinerRewardCount, 0, 30)
-		// 25 miners of 100 each, plus 5 miners of 10 each.
 		for i := 0; i < 25; i++ {
 			rows = append(rows, dbtypes.MinerRewardCount{Address: "big", Count: 100})
 		}
@@ -68,31 +71,30 @@ func TestMinerShares(t *testing.T) {
 		if total != 2550 {
 			t.Fatalf("total: want 2550, got %d", total)
 		}
-		if len(views) != 26 {
-			t.Fatalf("len: want 26 (25 + Others), got %d", len(views))
-		}
-		others := views[25]
-		if !others.IsOthers || others.Rank != 0 || others.Count != 50 {
-			t.Fatalf("others: %#v", others)
-		}
-		// 50/2550*100 = 1.96... -> "2.0"
-		if others.Percent != "2.0" {
-			t.Fatalf("others percent: want 2.0, got %q", others.Percent)
+		if len(views) != 30 {
+			t.Fatalf("len: want 30 (one row per miner), got %d", len(views))
 		}
 	})
 
-	t.Run("exactly 25 miners -> no Others", func(t *testing.T) {
-		rows := make([]dbtypes.MinerRewardCount, 0, 25)
-		for i := 0; i < 25; i++ {
-			rows = append(rows, dbtypes.MinerRewardCount{Address: "m", Count: 4})
+	t.Run("ranks are 1-based, contiguous, and ordered by descending count", func(t *testing.T) {
+		views := func() []MinerShareView {
+			_, v := minerShares([]dbtypes.MinerRewardCount{
+				{Address: "c", Count: 5},
+				{Address: "a", Count: 50},
+				{Address: "b", Count: 20},
+			})
+			return v
+		}()
+		want := []struct {
+			rank int
+			addr string
+		}{{1, "a"}, {2, "b"}, {3, "c"}}
+		if len(views) != len(want) {
+			t.Fatalf("len: want %d, got %d", len(want), len(views))
 		}
-		_, views := minerShares(rows)
-		if len(views) != 25 {
-			t.Fatalf("len: want 25, got %d", len(views))
-		}
-		for _, v := range views {
-			if v.IsOthers {
-				t.Fatalf("unexpected Others row when miners == 25")
+		for i, w := range want {
+			if views[i].Rank != w.rank || views[i].Address != w.addr {
+				t.Fatalf("view[%d]: want rank %d addr %q, got %#v", i, w.rank, w.addr, views[i])
 			}
 		}
 	})

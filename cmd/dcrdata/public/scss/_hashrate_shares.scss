@@ -1,5 +1,8 @@
 .hashrate-shares-heading {
   margin-block: 1.5rem;
+  margin-inline: auto;
+  max-width: 46rem;
+  line-height: 1.45;
 }
 
 .hashrate-shares-layout {
@@ -38,5 +41,51 @@
 
 .hashrate-shares-table td,
 .hashrate-shares-table th {
+  vertical-align: middle;
+}
+
+// Distribute the columns across the full table width instead of clustering #,
+// swatch and % at the left edge. Fixed layout makes the percentage widths exact;
+// the address keeps the largest share so it still shows in full when there is
+// room (the elided hash handles the overflow when there isn't).
+.hashrate-shares-table {
+  width: 100%;
+  table-layout: fixed;
+}
+
+.hashrate-shares-table th:nth-child(1),
+.hashrate-shares-table td:nth-child(1) {
+  width: 12%;
+  white-space: nowrap;
+}
+
+.hashrate-shares-table th:nth-child(2),
+.hashrate-shares-table td:nth-child(2) {
+  width: 12%;
+  text-align: center;
+}
+
+.hashrate-shares-table th:nth-child(3),
+.hashrate-shares-table td:nth-child(3) {
+  width: 18%;
+  white-space: nowrap;
+}
+
+// nowrap keeps the address and its copy icon on one line — the elided hash
+// handles the overflow itself.
+.hashrate-shares-table .hashrate-shares-addr {
+  width: 58%;
+  white-space: nowrap;
+}
+
+.hashrate-shares-addr .elidedhash {
+  // Reserve room for the trailing copy icon so a full-width address never pushes
+  // it onto a second line.
+  max-width: calc(100% - 2em);
+  vertical-align: middle;
+}
+
+.hashrate-shares-addr .monicon-copy {
+  margin-left: 0.4em;
   vertical-align: middle;
 }
