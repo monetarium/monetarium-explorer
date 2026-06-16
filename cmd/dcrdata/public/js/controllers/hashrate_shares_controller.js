@@ -286,12 +286,15 @@ export default class extends Controller {
     }
     if (seq !== this._reqSeq) return
     this.miners = (data && data.miners) || []
-    this.renderTable(this.miners)
-    this.renderPie(pieSlices(this.miners))
+    // Compute the top-PIE_SLICES + "Others" view once and render the table and the
+    // pie from the same array, so the two can never disagree (issue #474 AC4).
+    const slices = pieSlices(this.miners)
+    this.renderTable(slices)
+    this.renderPie(slices)
   }
 
-  renderTable(miners, isError = false) {
-    const empty = !miners.length
+  renderTable(slices, isError = false) {
+    const empty = !slices.length
     this.emptyTarget.classList.toggle('d-hide', !empty)
     this.pieWrapTarget.classList.toggle('d-hide', empty)
     // The Download CSV control only makes sense when there is data to export.
@@ -301,9 +304,10 @@ export default class extends Controller {
       this.tableBodyTarget.replaceChildren()
       return
     }
-    // The table mirrors the pie exactly: the top PIE_SLICES miners individually,
-    // plus a single "Others" aggregate row when there are more (issue #474).
-    this.tableBodyTarget.replaceChildren(...buildRows(this.rowTemplateTarget, pieSlices(miners)))
+    // slices is the same array the pie renders: the top PIE_SLICES miners
+    // individually, plus a single "Others" aggregate row when there are more
+    // (issue #474).
+    this.tableBodyTarget.replaceChildren(...buildRows(this.rowTemplateTarget, slices))
   }
 
   renderPie(slices) {
