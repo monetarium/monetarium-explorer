@@ -858,6 +858,63 @@ func TestCoinFeeRateDecimalParts(t *testing.T) {
 	}
 }
 
+// TestCoinDecimalParts pins the rendering of an SSFee (Stake Fee) "Fee Reward"
+// header value. GetExplorerTx stores the net reward (Σoutputs − Σinputs, always
+// ≥ 0) in FeeRaw, and the tx page renders it with
+// `coinDecimalParts .FeeRaw .CoinType true 2` — VAR at 8 decimals, SKA at 18.
+// Asserted as exact literals: the value used to be the negated fee, which the
+// formatter rendered as a positive magnitude for sub-1 VAR amounts only by
+// dropping the sign, and would have shown a minus for larger rewards.
+func TestCoinDecimalParts(t *testing.T) {
+	tests := []struct {
+		name     string
+		atomStr  string
+		coinType uint8
+		expected []string
+	}{
+		{
+			// Live testnet Stake Fee net reward: 14840 atoms = 0.00014840 VAR.
+			name:     "VAR sub-1 reward",
+			atomStr:  "14840",
+			coinType: 0,
+			expected: []string{"0", "00", "01484", "0"},
+		},
+		{
+			// Reward >= 1 VAR: 150000000 atoms = 1.50000000 VAR. The old fee path
+			// (inputs−outputs, negative) would have rendered a leading minus once
+			// the integer part is non-zero; the net-reward path stays positive.
+			name:     "VAR reward >= 1 stays positive",
+			atomStr:  "150000000",
+			coinType: 0,
+			expected: []string{"1", "50", "", "000000"},
+		},
+		{
+			// SKA Stake Fee reward 2.382 SKA = 2382000000000000000 atoms,
+			// rendered at full 18-decimal precision via the big.Int SKA path.
+			name:     "SKA reward full precision",
+			atomStr:  "2382000000000000000",
+			coinType: 1,
+			expected: []string{"2", "38", "2", "000000000000000"},
+		},
+		{
+			// Zero reward (e.g. a Stake Fee that nets out) renders as a plain 0.
+			name:     "SKA zero reward",
+			atomStr:  "0",
+			coinType: 1,
+			expected: []string{"0", "", ""},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := coinDecimalParts(tt.atomStr, tt.coinType, true, 2)
+			if !reflect.DeepEqual(got, tt.expected) {
+				t.Errorf("unexpected result\nexpected: %#v\ngot:      %#v", tt.expected, got)
+			}
+		})
+	}
+}
+
 func TestCoinFeeRateUnit(t *testing.T) {
 	tests := []struct {
 		coinType uint8
