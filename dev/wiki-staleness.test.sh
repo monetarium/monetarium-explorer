@@ -186,5 +186,21 @@ else
 fi
 rm -rf "$FIX4"
 
+# --- pre-push hook smoke test ----------------------------------------------
+make_fixture
+HOOK="$SCRIPT_DIR/hooks/pre-push"
+# Copy detector into the fixture so the hook can find it (fixture ROOT resolves to $FIX)
+mkdir -p "$FIX/dev"
+cp "$SCRIPT_DIR/wiki-staleness.sh" "$FIX/dev/wiki-staleness.sh"
+chmod +x "$FIX/dev/wiki-staleness.sh"
+# simulate pushing the C_META..C1 range over stdin; warn-only must exit 0 and mention windows
+OUT=$( ( cd "$FIX" && printf 'refs/heads/x %s refs/heads/x %s\n' "$C1" "$C_META" | "$HOOK" origin file://"$FIX" ) ); CODE=$?
+assert_code "pre-push warn-only exits 0" 0 $CODE
+case "$OUT" in *"windows"*) echo "ok: pre-push reports stale windows";; *) echo "FAIL: pre-push missing windows"; FAILED=1;; esac
+# strict mode blocks (non-zero) when stale
+( cd "$FIX" && printf 'refs/heads/x %s refs/heads/x %s\n' "$C1" "$C_META" | WIKI_STALENESS_STRICT=1 "$HOOK" origin file://"$FIX" ) >/dev/null; CODE=$?
+assert_code "pre-push strict blocks when stale" 1 $CODE
+rm -rf "$FIX"
+
 rm -rf "$FIX2" "$FIX3"
 [[ $FAILED -eq 0 ]] && echo "ALL PASS" || { echo "SOME FAILED"; exit 1; }

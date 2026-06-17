@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# pre-push — warn (do not block) when pushing code covered by a stale wiki trace.
+# Installed by dev/install-hooks.sh. Set WIKI_STALENESS_STRICT=1 to block instead.
+set -euo pipefail
+
+ROOT=$(git rev-parse --show-toplevel)
+DETECTOR="$ROOT/dev/wiki-staleness.sh"
+[[ -x "$DETECTOR" ]] || exit 0   # detector absent → never block a push
+
+range=""
+while read -r local_ref local_sha remote_ref remote_sha; do
+  [[ "$local_sha" =~ ^0+$ ]] && continue                       # branch deletion
+  if [[ "$remote_sha" =~ ^0+$ ]]; then                          # new branch
+    base=$(git -C "$ROOT" merge-base "$local_sha" origin/develop 2>/dev/null || true)
+    if [[ -n "$base" ]]; then range="${base}..${local_sha}"; else range="$local_sha"; fi
+  else
+    range="${remote_sha}..${local_sha}"
+  fi
+done
+
+[[ -z "$range" ]] && exit 0
+
+if [[ "${WIKI_STALENESS_STRICT:-0}" == "1" ]]; then
+  "$DETECTOR" --changed "$range" --strict
+else
+  "$DETECTOR" --changed "$range" || true
+  exit 0
+fi
