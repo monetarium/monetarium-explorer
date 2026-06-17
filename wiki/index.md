@@ -43,7 +43,7 @@ _Data flow for block rendering, including headers, metrics, and block content pa
 - flow (full): code-analysis/block/flow.full.md — detailed, step-by-step function trace for deep debugging of block logic
 - patterns: code-analysis/block/patterns.md — recurring architectural concepts and invariants to follow when modifying blocks
 - impact: code-analysis/block/impact.md — downstream components and templates that break if block data structures change
-- defect (ska-stake-fee): code-analysis/block/ska-stake-fee.md — fixed-incident postmortem: SKA SSFee rows showed `0` in the block "Stake Fees" table; net-reward `FeeRaw` math, coin-type-from-first-SKA-output, "Fee"→"Rewards" header (#301)
+- defect (ska-stake-fee): code-analysis/block/ska-stake-fee.md — fixed-incident postmortem: SKA SSFee rows showed `0` in the block "Stake Fees" table; net-reward `FeeRaw` math, coin-type-from-first-SKA-output, "Fee"→"Rewards" header (#301). Same defect later fixed on the tx-detail page (#485/#486). Note: SKA SSFee is dormant (SKA staking not planned) — VAR SSFee is the only real case.
 
 ### Transaction
 

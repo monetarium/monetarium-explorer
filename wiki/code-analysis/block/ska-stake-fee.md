@@ -8,6 +8,11 @@
 - `cmd/dcrdata/views/block.tmpl` — column header renamed from "Fee" to "Rewards".
 - Coin type now determined by scanning for the first SKA payout output instead of trusting `TxOut[0]` (which may be a zero-value OP_RETURN marker).
 
+> **Update (2026-06): the tx-detail page was the same defect's second surface.**
+> The fix above covered the **block** page (`GetExplorerBlock` + `block.tmpl`). The **transaction-detail** page (`GetExplorerTx` + the `tx.tmpl` header) had the identical bug — it showed the negated fee via `TxFeeRate` (sign dropped by the formatter for sub-1 VAR) and clamped the SKA path to `0` — and was fixed only later by **PR #485** (header "Fee"→"Fee Reward" for SSFee) and **PR #486** (value via `ssFeeNetReward` + `coinDecimalParts`), both **merged**. The two surfaces now share `ssFeeNetReward`. Lesson: a fix scoped to one render surface (block) does not cover the others (tx-detail); grep for sibling surfaces.
+>
+> **SKA is dormant.** SKA staking / SKA fee-distribution is **not a planned feature** — there are **0** SKA SSFee txs on testnet3 and mainnet (see [staking-rewards §3](../../core/staking-rewards.md)). The SKA branch here (and in #486) is defensive; the only Stake-Fee case that actually occurs is **VAR** SSFee, for which #486's live value is consistency with this page (no reliance on the formatter sign-drop) rather than a user-visible bug fix.
+
 ## Problem
 
 The **Stake Fees** table on `/block/{hash}` displayed `0` for the value column of every SKA stake-fee (SSFee) transaction. Expected: the correct distribution amount (e.g. `5.0 SKA1`). The column is now named **"Rewards"** to match the semantic — SSFee transactions distribute rewards, they don't pay fees.
