@@ -158,6 +158,33 @@ needed.
 
 ---
 
+## Freshness Detection
+
+Each `code-analysis/<domain>/` carries a `meta.yml` manifest so staleness can be detected
+deterministically, without an LLM:
+
+```yaml
+domain: windows
+anchor: 3cdba1e7          # commit the trace was last verified against
+files:                    # repo-root-relative code paths this trace covers (globs allowed)
+  - cmd/dcrdata/internal/explorer/blocks.go
+  - db/dcrpg/blockstats.go
+```
+
+`dev/wiki-staleness.sh` runs `git log <anchor>..HEAD -- <files>` per domain and reports
+**STALE** (a covered file changed since the anchor), **FRESH**, or **UNTRACKED** (no
+`meta.yml`). It never edits traces and never calls the LLM. A warn-only `dev/hooks/pre-push`
+runs it scoped to the commits being pushed.
+
+Refreshing a STALE trace is a **Synthesize** pass: rewrite the flow/impact/patterns files,
+then bump `meta.yml.anchor` to the current `HEAD` and update `files`. Detection and refresh
+move together — the anchor is the "as-of" contract.
+
+Seed a missing manifest with `./dev/wiki-staleness.sh --bootstrap`, then review the generated
+`files` list against the trace (the regex seeds candidates; it is not authoritative).
+
+---
+
 ## What This File Is NOT
 
 - It does not define how analysis works — that is the mutation-analyzer skill

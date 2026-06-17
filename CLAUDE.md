@@ -10,6 +10,9 @@ Use the wiki as the **primary reference for intent, architecture, and convention
 
 Before modifying code in an area covered by a code-analysis trace, **read that area's compact flow and patterns notes first** — they capture invariants the code alone won't reveal. If documentation is missing or inconsistent, say so rather than guessing.
 
+Run `./dev/wiki-staleness.sh` to flag `wiki/code-analysis/` traces that have drifted from the
+code (see [wiki/core/maintenance.md](wiki/core/maintenance.md) § Freshness Detection).
+
 ## What this is
 
 Block explorer for the Monetarium network. The codebase originated from `decred/dcrdata` (history was squashed into a single initial commit; **there is no git upstream and no ongoing sync** — treat this as a standalone codebase, not a fork). It supports the **multi-coin model** introduced by `monetarium-node`: VAR plus up to 255 SKA-type coins (`SKA1`, `SKA2`, …) — many places where the original dcrdata had a single value now carry per-coin-type maps/structs. Backend Go + PostgreSQL; frontend Webpack/SCSS with Hotwired Stimulus (no React).

@@ -155,6 +155,12 @@ does NOT own their creation; it only normalizes recurrence *across* domains afte
 **Index:** every file created, extended, or merged requires a matching `wiki/index.md` update
 in the same turn. The index is the source of truth for what knowledge exists.
 
+**meta.yml:** when writing or refreshing a domain's trace, also write or update
+`wiki/code-analysis/<domain>/meta.yml` with `anchor` set to the output of
+`git rev-parse --short HEAD` and `files` set to the repo-root-relative code paths covered by
+this trace. This is what `dev/wiki-staleness.sh` reads to detect drift — keep it in sync with
+every Synthesize pass.
+
 **Cross-links:** typed and bidirectional when applicable. Types: `depends-on`, `derived-from`,
 `shares-pattern-with`. Place them in a `See also:` block at the bottom of the file. Use
 repo-root-relative `/wiki/...` paths to match the existing corpus, e.g.:
