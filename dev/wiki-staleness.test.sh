@@ -186,6 +186,16 @@ else
 fi
 rm -rf "$FIX4"
 
+# --- Fix 4: malformed --changed range → exit 2 with error message ------
+make_fixture
+OUT=$(run --changed "deadbeef0000..cafebabe0000" 2>&1); CODE=$?
+assert_code "invalid --changed range exits 2" 2 $CODE
+case "$OUT" in
+  *"invalid range:"*) echo "ok: invalid range message printed" ;;
+  *) echo "FAIL: invalid range message missing"; FAILED=1 ;;
+esac
+rm -rf "$FIX"
+
 # --- pre-push hook smoke test ----------------------------------------------
 make_fixture
 HOOK="$SCRIPT_DIR/hooks/pre-push"

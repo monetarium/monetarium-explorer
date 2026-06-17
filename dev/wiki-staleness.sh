@@ -82,6 +82,12 @@ if [[ "$MODE" == "bootstrap" ]]; then
   exit 0
 fi
 
+# --- validate --changed range before main loop ------
+if [[ -n "$CHANGED_RANGE" ]] && ! git -C "$ROOT" log --oneline "$CHANGED_RANGE" -- >/dev/null 2>&1; then
+  echo "invalid range: $CHANGED_RANGE" >&2
+  exit 2
+fi
+
 # --- accumulators (strings, to dodge bash-3.2 array/set -u pitfalls) --------
 STALE=""; FRESH=""; UNTRACKED=""; ERRORS=""
 n_stale=0; n_fresh=0; n_untracked=0; n_errors=0
