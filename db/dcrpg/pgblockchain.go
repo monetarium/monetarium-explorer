@@ -7043,7 +7043,7 @@ func (pgb *ChainDB) GetExplorerTx(ctx context.Context, txid string) *exptypes.Tx
 		return nil
 	}
 
-	txBasic, _ /* txType */ := makeExplorerTxBasic(txraw, ticketPrice, msgTx, pgb.chainParams)
+	txBasic, txType := makeExplorerTxBasic(txraw, ticketPrice, msgTx, pgb.chainParams)
 	tx := &exptypes.TxInfo{
 		TxBasic:       txBasic,
 		BlockHeight:   txraw.BlockHeight,
@@ -7160,6 +7160,24 @@ func (pgb *ChainDB) GetExplorerTx(ctx context.Context, txid string) *exptypes.Tx
 			tx.FeeRateRaw = rate.String()
 			tx.FeeRate = dcrutil.Amount(0) // Clear legacy float representation
 		}
+	}
+
+	// SSFee (Stake Fee) transactions distribute a stake reward, so the page
+	// header shows "Fee Reward" = Σoutputs − Σinputs (the net reward), not a
+	// fee. Mirror the block-page path (getBlockVerbose): detect the SKA payout
+	// coin type — TxOut[0] may be a CoinType-0 marker, so scan for the SKA
+	// output — and store the net reward in FeeRaw. This overrides the generic
+	// fee computed above, which is inputs−outputs (negative for a reward, and
+	// clamped to 0 on the SKA path). The template renders FeeRaw via
+	// coinDecimalParts (VAR 8-dec / SKA 18-dec).
+	if txType == stake.TxTypeSSFee {
+		for _, out := range msgTx.TxOut {
+			if out.CoinType.IsSKA() && out.SKAValue != nil {
+				tx.CoinType = uint8(out.CoinType)
+				break
+			}
+		}
+		tx.FeeRaw = ssFeeNetReward(msgTx).String()
 	}
 
 	if isVote := tx.IsVote(); isVote || tx.IsTicket() {
