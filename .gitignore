@@ -74,3 +74,4 @@ go.work.sum
 .github/scripts/generate-issues/.local/
 .playwright-mcp/
 docs/superpowers
+.tmp
