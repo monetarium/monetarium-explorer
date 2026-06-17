@@ -218,7 +218,38 @@ C2=$(git -C "$FIX" rev-parse --short HEAD)
 OUT=$( ( cd "$FIX" && printf 'refs/heads/a %s refs/heads/a %s\nrefs/heads/b %s refs/heads/b %s\n' "$C1" "$C_META" "$C2" "$C1" | "$HOOK" origin file://"$FIX" ) ); CODE=$?
 assert_code "pre-push multi-ref exits 0 (warn-only)" 0 $CODE
 case "$OUT" in *windows*) echo "ok: multi-ref reports windows (ref a)" ;; *) echo "FAIL: multi-ref dropped windows (ref a)"; FAILED=1 ;; esac
-case "$OUT" in *block*)   echo "ok: multi-ref reports block (ref b)" ;;   *) echo "FAIL: multi-ref dropped block (ref b)"; FAILED=1 ;; esac
+case "$OUT" in *"- block"*)   echo "ok: multi-ref reports block (ref b)" ;;   *) echo "FAIL: multi-ref dropped block (ref b)"; FAILED=1 ;; esac
+rm -rf "$FIX"
+
+# --- new-branch base resolution (remote_sha all-zero, no remote ref yet) -----
+Z40=0000000000000000000000000000000000000000
+copy_detector() { mkdir -p "$1/dev"; cp "$SCRIPT_DIR/wiki-staleness.sh" "$1/dev/wiki-staleness.sh"; chmod +x "$1/dev/wiki-staleness.sh"; }
+
+# (A) origin/develop present → scope to the fork (windows changed in C_META..C1; block did not)
+make_fixture; copy_detector "$FIX"
+git -C "$FIX" update-ref refs/remotes/origin/develop "$C_META"
+OUT=$( ( cd "$FIX" && printf 'refs/heads/feature %s refs/heads/feature %s\n' "$C1" "$Z40" | "$HOOK" origin file://"$FIX" ) 2>&1 ); CODE=$?
+assert_code "new-branch via develop exits 0" 0 $CODE
+case "$OUT" in *windows*) echo "ok: new-branch scopes via develop (windows)" ;; *) echo "FAIL: new-branch develop dropped windows"; FAILED=1 ;; esac
+case "$OUT" in *"- block"*) echo "FAIL: new-branch over-scoped to block"; FAILED=1 ;; *) echo "ok: new-branch did not over-scope to block" ;; esac
+rm -rf "$FIX"
+
+# (B) develop absent, origin/HEAD→origin/main present → fall back to default branch
+make_fixture; copy_detector "$FIX"
+git -C "$FIX" update-ref refs/remotes/origin/main "$C_META"
+git -C "$FIX" symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main
+OUT=$( ( cd "$FIX" && printf 'refs/heads/feature %s refs/heads/feature %s\n' "$C1" "$Z40" | "$HOOK" origin file://"$FIX" ) 2>&1 ); CODE=$?
+assert_code "new-branch via origin/HEAD fallback exits 0" 0 $CODE
+case "$OUT" in *windows*) echo "ok: new-branch falls back to origin/HEAD (windows)" ;; *) echo "FAIL: origin/HEAD fallback dropped windows"; FAILED=1 ;; esac
+case "$OUT" in *"- block"*) echo "FAIL: origin/HEAD fallback over-scoped to block (full history?)"; FAILED=1 ;; *) echo "ok: origin/HEAD fallback did not over-scope" ;; esac
+rm -rf "$FIX"
+
+# (C) no develop, no origin/HEAD → skip the ref (must NOT enumerate full history)
+make_fixture; copy_detector "$FIX"
+OUT=$( ( cd "$FIX" && printf 'refs/heads/feature %s refs/heads/feature %s\n' "$C1" "$Z40" | "$HOOK" origin file://"$FIX" ) 2>&1 ); CODE=$?
+assert_code "new-branch with no base exits 0" 0 $CODE
+case "$OUT" in *skipping*) echo "ok: no-base new-branch skips" ;; *) echo "FAIL: no-base new-branch did not skip"; FAILED=1 ;; esac
+case "$OUT" in *"- block"*) echo "FAIL: no-base enumerated full history (block over-scoped)"; FAILED=1 ;; *) echo "ok: no-base did not enumerate full history" ;; esac
 rm -rf "$FIX"
 
 rm -rf "$FIX2" "$FIX3"

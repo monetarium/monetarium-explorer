@@ -7,6 +7,22 @@ ROOT=$(git rev-parse --show-toplevel)
 DETECTOR="$ROOT/dev/wiki-staleness.sh"
 [[ -x "$DETECTOR" ]] || exit 0   # detector absent → never block a push
 
+# Base for a brand-new branch (no remote ref yet): the fork point from the
+# integration branch, so the range is just this branch's own commits. Working
+# branches here are cut off `develop`, so prefer origin/develop; fall back to the
+# remote's default branch (origin/HEAD, e.g. main) for clones that lack it.
+new_branch_base() {  # $1 = local sha; echoes a base commit, or nothing (rc 1)
+  local sha="$1" ref base default_ref
+  default_ref=$(git -C "$ROOT" symbolic-ref --quiet refs/remotes/origin/HEAD 2>/dev/null \
+                | sed 's|^refs/remotes/||' || true)
+  for ref in origin/develop "$default_ref"; do
+    [[ -n "$ref" ]] || continue
+    base=$(git -C "$ROOT" merge-base "$sha" "$ref" 2>/dev/null || true)
+    [[ -n "$base" ]] && { printf '%s\n' "$base"; return 0; }
+  done
+  return 1
+}
+
 strict="${WIKI_STALENESS_STRICT:-0}"
 rc=0
 checked=0
@@ -17,9 +33,13 @@ checked=0
 # keeps the detector from consuming the remaining ref lines on stdin.
 while read -r local_ref local_sha remote_ref remote_sha; do
   [[ "$local_sha" =~ ^0+$ ]] && continue                       # branch deletion
-  if [[ "$remote_sha" =~ ^0+$ ]]; then                          # new branch
-    base=$(git -C "$ROOT" merge-base "$local_sha" origin/develop 2>/dev/null || true)
-    if [[ -n "$base" ]]; then range="${base}..${local_sha}"; else range="$local_sha"; fi
+  if [[ "$remote_sha" =~ ^0+$ ]]; then                          # new branch (no remote ref yet)
+    base=$(new_branch_base "$local_sha" || true)
+    if [[ -z "$base" ]]; then
+      echo "wiki-staleness: cannot resolve a base for new branch ${local_ref}; skipping (push not blocked)" >&2
+      continue
+    fi
+    range="${base}..${local_sha}"
   else
     range="${remote_sha}..${local_sha}"
   fi
