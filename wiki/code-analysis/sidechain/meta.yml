@@ -1,0 +1,11 @@
+domain: sidechain
+anchor: dff1cd16
+files:
+  - cmd/dcrdata/internal/explorer/explorer.go
+  - cmd/dcrdata/internal/explorer/explorerroutes.go
+  - cmd/dcrdata/views/sidechains.tmpl
+  - db/dbtypes/types.go
+  - db/dcrpg/chainmonitor.go
+  - db/dcrpg/internal/blockstmts.go
+  - db/dcrpg/pgblockchain.go
+  - db/dcrpg/queries.go

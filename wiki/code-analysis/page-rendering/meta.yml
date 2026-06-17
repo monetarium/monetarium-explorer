@@ -1,0 +1,6 @@
+domain: page-rendering
+anchor: dff1cd16
+files:
+  - cmd/dcrdata/internal/explorer/explorer.go
+  - cmd/dcrdata/internal/explorer/explorermiddleware.go
+  - cmd/dcrdata/main.go

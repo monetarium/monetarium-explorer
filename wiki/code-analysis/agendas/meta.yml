@@ -1,0 +1,16 @@
+domain: agendas
+anchor: 06cd9319
+files:
+  - cmd/dcrdata/internal/api/apiroutes.go
+  - cmd/dcrdata/internal/explorer/explorerroutes.go
+  - cmd/dcrdata/public/js/controllers/agenda_controller.js
+  - cmd/dcrdata/public/js/controllers/agendas_controller.js
+  - cmd/dcrdata/views/agenda.tmpl
+  - cmd/dcrdata/views/agendas.tmpl
+  - cmd/dcrdata/views/extras.tmpl
+  - cmd/dcrdata/views/tx.tmpl
+  - db/dbtypes/types.go
+  - db/dcrpg/pgblockchain.go
+  - db/dcrpg/queries.go
+  - gov/agendas/deployments.go
+  - gov/agendas/tracker.go
