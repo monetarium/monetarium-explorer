@@ -174,8 +174,9 @@ func (t *DataCollector) mempoolTxns() ([]exptypes.MempoolTx, txhelpers.MempoolAd
 
 // ticketStage determines whether a ticket purchase tx is "Ready" or "Staging"
 // based on its inputs. If any input's parent tx is still in the mempool
-// (present in txnsStore), the ticket cannot be mined yet and is "Staging".
-// When all inputs are confirmed (parent tx not in txnsStore), it is "Ready".
+// (BlockHeight == 0 in txnsStore), the ticket cannot be mined yet and is
+// "Staging". When all inputs are confirmed (BlockHeight > 0, or the parent
+// could not be resolved at all — pessimistic fallback), it is "Ready".
 func ticketStage(vin []exptypes.MempoolInput, txnsStore txhelpers.TxnsStore) string {
 	for _, in := range vin {
 		hash, err := chainhash.NewHashFromStr(in.TxId)
@@ -184,7 +185,7 @@ func ticketStage(vin []exptypes.MempoolInput, txnsStore txhelpers.TxnsStore) str
 		}
 		txData, ok := txnsStore[*hash]
 		if !ok {
-			continue
+			return "Staging"
 		}
 		if txData.BlockHeight == 0 {
 			return "Staging"
