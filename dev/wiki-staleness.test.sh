@@ -210,6 +210,15 @@ case "$OUT" in *"windows"*) echo "ok: pre-push reports stale windows";; *) echo 
 # strict mode blocks (non-zero) when stale
 ( cd "$FIX" && printf 'refs/heads/x %s refs/heads/x %s\n' "$C1" "$C_META" | WIKI_STALENESS_STRICT=1 "$HOOK" origin file://"$FIX" ) >/dev/null; CODE=$?
 assert_code "pre-push strict blocks when stale" 1 $CODE
+# multi-ref push must check EVERY ref's range, not just the last one (regression)
+echo "// blockchange" >> "$FIX/code/block.go"
+git -C "$FIX" add -A && git -C "$FIX" commit -q -m C2
+C2=$(git -C "$FIX" rev-parse --short HEAD)
+# ref a's range (C_META..C1) drifts windows; ref b's range (C1..C2) drifts block
+OUT=$( ( cd "$FIX" && printf 'refs/heads/a %s refs/heads/a %s\nrefs/heads/b %s refs/heads/b %s\n' "$C1" "$C_META" "$C2" "$C1" | "$HOOK" origin file://"$FIX" ) ); CODE=$?
+assert_code "pre-push multi-ref exits 0 (warn-only)" 0 $CODE
+case "$OUT" in *windows*) echo "ok: multi-ref reports windows (ref a)" ;; *) echo "FAIL: multi-ref dropped windows (ref a)"; FAILED=1 ;; esac
+case "$OUT" in *block*)   echo "ok: multi-ref reports block (ref b)" ;;   *) echo "FAIL: multi-ref dropped block (ref b)"; FAILED=1 ;; esac
 rm -rf "$FIX"
 
 rm -rf "$FIX2" "$FIX3"
