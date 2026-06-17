@@ -85,4 +85,55 @@ ACTUAL_CHANGED=$(run --changed "${C_META}..${C1}")
 assert_eq "changed-scoped report" "$EXPECTED_CHANGED" "$ACTUAL_CHANGED"
 
 rm -rf "$FIX"
+
+# --- Fix 1: empty files list → FRESH ----------------------------------------
+FIX2=$(mktemp -d)
+git -C "$FIX2" init -q
+git -C "$FIX2" config user.email t@t && git -C "$FIX2" config user.name t
+mkdir -p "$FIX2/code" "$FIX2/wiki/code-analysis/nofiles"
+echo "package x" > "$FIX2/code/stuff.go"
+git -C "$FIX2" add -A && git -C "$FIX2" commit -q -m C0
+C0_F2=$(git -C "$FIX2" rev-parse --short HEAD)
+printf 'domain: nofiles\nanchor: %s\nfiles:\n' "$C0_F2" \
+  > "$FIX2/wiki/code-analysis/nofiles/meta.yml"
+git -C "$FIX2" add -A && git -C "$FIX2" commit -q -m "add meta"
+# drift: change code file (should NOT affect nofiles domain)
+echo "// changed" >> "$FIX2/code/stuff.go"
+git -C "$FIX2" add -A && git -C "$FIX2" commit -q -m C1
+run2() { ( cd "$FIX2" && "$DETECTOR" "$@" ); }
+EXPECTED_EMPTYFILES="Wiki staleness report
+
+STALE (0):
+FRESH (1):
+  - nofiles
+UNTRACKED (0):"
+ACTUAL_EMPTYFILES=$(run2)
+assert_eq "empty files list → FRESH" "$EXPECTED_EMPTYFILES" "$ACTUAL_EMPTYFILES"
+
+# --- Fix 2a: --strict exits 0 when all in-scope domains are FRESH ------------
+# Reuse FIX2 fixture: nofiles is FRESH, no STALE domains
+run2 --strict >/dev/null; assert_code "strict exit 0 when all fresh" 0 $?
+
+# --- Fix 2b: invalid anchor → ERRORS section; --strict exits 1 --------------
+FIX3=$(mktemp -d)
+git -C "$FIX3" init -q
+git -C "$FIX3" config user.email t@t && git -C "$FIX3" config user.name t
+mkdir -p "$FIX3/code" "$FIX3/wiki/code-analysis/badanchor"
+echo "package x" > "$FIX3/code/stuff.go"
+printf 'domain: badanchor\nanchor: deadbeef\nfiles:\n  - code/stuff.go\n' \
+  > "$FIX3/wiki/code-analysis/badanchor/meta.yml"
+git -C "$FIX3" add -A && git -C "$FIX3" commit -q -m C0
+run3() { ( cd "$FIX3" && "$DETECTOR" "$@" ); }
+EXPECTED_ERRORS="Wiki staleness report
+
+STALE (0):
+FRESH (0):
+UNTRACKED (0):
+ERRORS (1):
+  - badanchor: invalid or missing anchor"
+ACTUAL_ERRORS=$(run3)
+assert_eq "invalid anchor → ERRORS section" "$EXPECTED_ERRORS" "$ACTUAL_ERRORS"
+run3 --strict >/dev/null; assert_code "strict exit 1 when errors" 1 $?
+
+rm -rf "$FIX2" "$FIX3"
 [[ $FAILED -eq 0 ]] && echo "ALL PASS" || { echo "SOME FAILED"; exit 1; }

@@ -69,6 +69,10 @@ for dir in "$CA_DIR"/*/; do
     ERRORS="${ERRORS}  - ${domain}: invalid or missing anchor"$'\n'; n_errors=$((n_errors+1)); continue
   fi
 
+  if [[ ${#covered[@]} -eq 0 ]]; then
+    FRESH="${FRESH}  - ${domain}"$'\n'; n_fresh=$((n_fresh+1)); continue
+  fi
+
   range="${anchor}..HEAD"
   commits=$(git -C "$ROOT" log --oneline "$range" -- "${covered[@]}" 2>/dev/null | wc -l | tr -d ' ')
   changed=$(git -C "$ROOT" log --name-only --pretty=format: "$range" -- "${covered[@]}" 2>/dev/null \
