@@ -415,6 +415,7 @@ const (
 	TreasurybaseTypeStr  = "Treasurybase"
 	TreasuryAddTypeStr   = "Treasury Add"
 	TreasurySpendTypeStr = "Treasury Spend"
+	SSFeeTypeStr         = "Stake Fee"
 )
 
 // IsTicket checks whether this transaction is a ticket.
@@ -440,6 +441,11 @@ func (t *TxInfo) IsTreasurybase() bool {
 // IsTreasuryAdd checks whether this transaction is a tadd.
 func (t *TxInfo) IsTreasuryAdd() bool {
 	return t.Type == TreasuryAddTypeStr
+}
+
+// IsSSFee checks whether this transaction is an SSFee (Stake Fee) tx.
+func (t *TxInfo) IsSSFee() bool {
+	return t.Type == SSFeeTypeStr
 }
 
 // IsRevocation checks whether this transaction is a revocation.
