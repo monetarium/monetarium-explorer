@@ -23,9 +23,13 @@
 - Пятая часть от 50% субсидии блока.
 - Пятая часть от 50% суммарных VAR-комиссий блока.
 
+> **Механика доставки.** Доля VAR-комиссий доставляется голосующему **не в выходах самого голоса**, а отдельной `TxTypeSSFee`-транзакцией (маркер SF) — см. §3.2. Выходы голоса несут возврат стоимости билета и субсидию (`stake.CalculateRewards(..., subsidy)`); комиссии в них не входят.
+
 **Комиссия за покупку билета** при этом не возвращается и остаётся в сети.
 
 ### 3. Вознаграждение за голос (SKA)
+
+> **Статус фичи (важно).** SKA-стейкинг и распределение SKA-комиссий через SSFee **не предусмотрены** и не используются на практике: в БД explorer-а (testnet3 и mainnet) — **0** SKA SSFee-транзакций. Реально встречается только **VAR** SSFee (см. §3.2). Этот раздел описывает дормантный путь — справочно, а не как действующее поведение.
 
 SKA-монеты не эмитируются через майнинг. Вознаграждение формируется **только из комиссий SKA-транзакций**:
 
@@ -53,6 +57,8 @@ $$\text{Reward per Vote} = \frac{\text{Total SKA Fees in Block}}{\text{Number of
 - Суммирование комиссий: `txhelpers.BlockSSFeeTotals(msgBlock.STransactions)`
 - Сумма комиссий за блок доступна в `blockData.ExtraInfo.SSFeeTotalsByCoin` как `map[uint8]rewardtypes.SSFeeSplit`
 - Разделение на Staker Fee (SF, идёт голосующим) и Miner Fee (MF, идёт майнеру) определяется по SSFee-маркеру в `pkScript` транзакции
+- **SSFee создаётся и для VAR (поправка к §3.1).** Staker-доля комиссий распределяется через `TxTypeSSFee` (маркер SF) для **всех** coin type, включая VAR — node `internal/mining/mining.go:3036-3082` («Both VAR and non-VAR staker fees use SSFee»). Miner-доля: VAR → coinbase, SKA → SSFee (маркер MF, `createMinerSSFeeTx`). Поэтому условие из §3.1 «SSFee создаётся только если потрачены SKA-выходы» верно лишь применительно к SKA; **единственный реально встречающийся случай — VAR SSFee** (`tx_type=103`, ≈28.7k на testnet). Условия создания: `высота ≥ stakeValidationHeight`, `voters > 0`, есть staker-доля комиссий данного coin type.
+- **Структура SSFee и значение в explorer.** Один вход + OP_RETURN-маркер + payment-выход. Вход — это **consolidation/augmentation** UTXO (прежний накопленный баланс), **не награда**; `output = прежний баланс + новая комиссия`. Поэтому награда = `Σвыходы − Σвходы` (`ssFeeNetReward`). Так считают и страница блока (#301, [code-analysis/block/ska-stake-fee.md](../code-analysis/block/ska-stake-fee.md)), и страница транзакции (#485/#486).
 
 ### 4. Расчёт доходности стейкинга
 
