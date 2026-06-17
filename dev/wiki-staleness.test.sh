@@ -135,5 +135,27 @@ ACTUAL_ERRORS=$(run3)
 assert_eq "invalid anchor → ERRORS section" "$EXPECTED_ERRORS" "$ACTUAL_ERRORS"
 run3 --strict >/dev/null; assert_code "strict exit 1 when errors" 1 $?
 
+# --- bootstrap test ---------------------------------------------------------
+make_fixture
+# orphan has no meta.yml; give its trace a code ref + a HEAD= marker
+printf 'See cmd/app/main.go for detail. Revised at HEAD=%s.\n' "$C0" \
+  > "$FIX/wiki/code-analysis/orphan/flow.full.md"
+mkdir -p "$FIX/cmd/app"; echo "package main" > "$FIX/cmd/app/main.go"
+( cd "$FIX" && git add -A && git commit -q -m "orphan trace + code" )
+run --bootstrap >/dev/null
+BOOT_META="$FIX/wiki/code-analysis/orphan/meta.yml"
+EXPECTED_BOOT="domain: orphan
+anchor: $C0
+files:
+  - cmd/app/main.go"
+ACTUAL_BOOT=$(cat "$BOOT_META")
+assert_eq "bootstrap draft meta.yml" "$EXPECTED_BOOT" "$ACTUAL_BOOT"
+# does not overwrite existing (block already has meta.yml)
+BEFORE=$(cat "$FIX/wiki/code-analysis/block/meta.yml")
+run --bootstrap >/dev/null
+AFTER=$(cat "$FIX/wiki/code-analysis/block/meta.yml")
+assert_eq "bootstrap leaves existing meta.yml untouched" "$BEFORE" "$AFTER"
+rm -rf "$FIX"
+
 rm -rf "$FIX2" "$FIX3"
 [[ $FAILED -eq 0 ]] && echo "ALL PASS" || { echo "SOME FAILED"; exit 1; }

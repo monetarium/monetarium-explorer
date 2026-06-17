@@ -10,21 +10,24 @@ CA_DIR="$ROOT/wiki/code-analysis"
 
 STRICT=0
 CHANGED_RANGE=""
+MODE=""
 
 usage() {
   cat <<'EOF'
-Usage: dev/wiki-staleness.sh [--strict] [--changed <range>]
+Usage: dev/wiki-staleness.sh [--strict] [--changed <range>] [--bootstrap]
   (no flags)        Report STALE/FRESH/UNTRACKED for every code-analysis domain.
   --changed <range> Restrict report to domains touched by a git commit range.
   --strict          Exit non-zero if any in-scope domain is STALE.
+  --bootstrap       Write draft meta.yml for every domain lacking one.
 EOF
 }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --strict)  STRICT=1; shift ;;
-    --changed) CHANGED_RANGE="${2:-}"; shift 2 ;;
-    -h|--help) usage; exit 0 ;;
+    --strict)    STRICT=1; shift ;;
+    --changed)   CHANGED_RANGE="${2:-}"; shift 2 ;;
+    --bootstrap) MODE="bootstrap"; shift ;;
+    -h|--help)   usage; exit 0 ;;
     *) echo "unknown arg: $1" >&2; usage >&2; exit 2 ;;
   esac
 done
@@ -40,6 +43,39 @@ meta_files()  {
 }
 
 valid_commit() { git -C "$ROOT" cat-file -e "${1}^{commit}" 2>/dev/null; }
+
+bootstrap_domain() { # $1 = domain dir (trailing slash)
+  local dir="$1" domain meta anchor files f
+  domain=$(basename "$dir")
+  meta="${dir}meta.yml"
+  if [[ -f "$meta" ]]; then echo "skip (exists): $domain"; return; fi
+
+  anchor=$(grep -rhoE 'HEAD=[0-9a-f]{7,40}' "$dir" 2>/dev/null | head -1 | sed 's/HEAD=//' || true)
+  if [[ -z "$anchor" ]]; then
+    anchor=$(git -C "$ROOT" log -1 --format=%h -- "wiki/code-analysis/${domain}/" 2>/dev/null || true)
+  fi
+
+  files=$(grep -rhoE '[A-Za-z0-9_./-]+\.(go|tmpl|js|scss|sql)' "$dir" 2>/dev/null \
+          | sed -E 's#^(\.\./)+##; s/[):,.]*$//' | sort -u || true)
+
+  {
+    echo "domain: $domain"
+    echo "anchor: $anchor"
+    echo "files:"
+    while IFS= read -r f; do
+      [[ -z "$f" ]] && continue
+      [[ -e "$ROOT/$f" ]] && echo "  - $f"
+    done <<EOF
+$files
+EOF
+  } > "$meta"
+  echo "wrote draft: wiki/code-analysis/${domain}/meta.yml (review before committing)"
+}
+
+if [[ "$MODE" == "bootstrap" ]]; then
+  for dir in "$CA_DIR"/*/; do [[ -d "$dir" ]] && bootstrap_domain "$dir"; done
+  exit 0
+fi
 
 # --- accumulators (strings, to dodge bash-3.2 array/set -u pitfalls) --------
 STALE=""; FRESH=""; UNTRACKED=""; ERRORS=""
