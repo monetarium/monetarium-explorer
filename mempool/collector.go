@@ -162,9 +162,35 @@ func (t *DataCollector) mempoolTxns() ([]exptypes.MempoolTx, txhelpers.MempoolAd
 			SKATotals:   txhelpers.SKATotalsFromMsgTx(msgTx),
 			SKAFeeRates: txhelpers.SKAFeeRateMapFromAtoms(tx.SKAFee, msgTx),
 		})
+
+		// Set TicketStage for ticket purchase transactions.
+		if txType == stake.TxTypeSStx {
+			txs[len(txs)-1].TicketStage = ticketStage(txs[len(txs)-1].Vin, txnsStore)
+		}
 	}
 
 	return txs, addrMap, txnsStore, nil
+}
+
+// ticketStage determines whether a ticket purchase tx is "Ready" or "Staging"
+// based on its inputs. If any input's parent tx is still in the mempool
+// (present in txnsStore), the ticket cannot be mined yet and is "Staging".
+// When all inputs are confirmed (parent tx not in txnsStore), it is "Ready".
+func ticketStage(vin []exptypes.MempoolInput, txnsStore txhelpers.TxnsStore) string {
+	for _, in := range vin {
+		hash, err := chainhash.NewHashFromStr(in.TxId)
+		if err != nil {
+			continue
+		}
+		txData, ok := txnsStore[*hash]
+		if !ok {
+			continue
+		}
+		if txData.BlockHeight == 0 {
+			return "Staging"
+		}
+	}
+	return "Ready"
 }
 
 func (t *DataCollector) populateMempoolInputs(ctx context.Context, msgTx *wire.MsgTx, txType stake.TxType, txnsStore txhelpers.TxnsStore) []exptypes.MempoolInput {

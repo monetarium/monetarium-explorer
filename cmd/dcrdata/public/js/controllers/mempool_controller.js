@@ -8,7 +8,7 @@ import ws from '../services/messagesocket_service'
 
 const EMPTY_STATES = {
   regular: { text: 'No transactions in mempool.', colspan: 6 },
-  tickets: { text: 'No tickets in mempool.', colspan: 5 },
+  tickets: { text: 'No tickets in mempool.', colspan: 6 },
   votes: { text: 'No votes in mempool.', colspan: 8 },
   revocations: { text: 'No revocations in mempool.', colspan: 4 }
 }
@@ -111,6 +111,8 @@ function cloneTicketRow(template, tx) {
   tr.querySelector('[data-slot="size"]').textContent = `${tx.size} B`
   tr.querySelector('[data-slot="feeRate"]').textContent = `${tx.fee_rate} VAR/kB`
   setAgeCell(tr.querySelector('[data-slot="age"]'), tx.time)
+  const tsCell = tr.querySelector('[data-slot="ticketStage"]')
+  if (tsCell) tsCell.textContent = tx.ticket_stage || ''
   return tr
 }
 
