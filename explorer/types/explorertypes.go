@@ -487,13 +487,17 @@ func (t *TxInfo) IsImmature() bool {
 	return t.Mature == "False"
 }
 
-// FeeReward is the coinbase "PoW Reward" fee shown on the tx page. "N/A" inputs
-// (AmountIn < 0) contribute zero, matching the template guard; coinbase is
-// VAR-only, so float64 is exact.
+// FeeReward is the net reward (total outputs minus total inputs) shown on the
+// tx page header: the coinbase "Fee Reward" (PoW subsidy) and the stakegen
+// (vote) "Fee Reward" (net stake reward). "N/A" inputs (AmountIn < 0) contribute
+// zero, matching the Inputs Consumed table guard, so the result equals the
+// page's Outputs Created total minus its Inputs Consumed total. Both coinbase
+// and votes are VAR-only (SKA stake rewards flow through separate SSFee txs), so
+// float64 is exact.
 func (t *TxInfo) FeeReward() float64 {
 	var out, in float64
 	for i := range t.Vout {
-		out += t.Vout[i].Amount // deprecated field, safe: VAR-only coinbase sets .Amount (CoinType == 0)
+		out += t.Vout[i].Amount // deprecated field, safe: VAR-only coinbase/vote sets .Amount (CoinType == 0)
 	}
 	for i := range t.Vin {
 		if t.Vin[i].AmountIn >= 0 {

@@ -655,6 +655,17 @@ func TestFeeReward(t *testing.T) {
 			vout: []Vout{{Amount: 600}, {Amount: 300}, {Amount: 0.5}},
 			want: 0.5, // (600+300+0.5) - 900
 		},
+		{
+			// Vote (SSGen) shape: the stakebase subsidy input shows N/A
+			// (AmountIn < 0, excluded), the ticket input is consumed, and the
+			// outputs return the ticket value plus the net stake reward. The
+			// two zero-value outputs are the OP_RETURN block reference and vote
+			// bits. FeeReward is the "Fee Reward" shown in the vote tx header.
+			name: "vote: stakebase N/A input, reward = outputs minus ticket input",
+			vin:  []Vin{mkVin(-1), mkVin(1000)},
+			vout: []Vout{{Amount: 0}, {Amount: 0}, {Amount: 1002.5}},
+			want: 2.5, // (0+0+1002.5) - 1000
+		},
 	}
 
 	for _, tt := range tests {
