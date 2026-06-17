@@ -1504,6 +1504,7 @@ type MempoolTx struct {
 	VoteInfo    *VoteInfo        `json:"vote_info,omitempty"`
 	SKATotals   map[uint8]string `json:"ska_totals,omitempty"`
 	SKAFeeRates map[uint8]string `json:"ska_fee_rates,omitempty"` // SKA fee rate in atoms/kB, keyed by coin type
+	TicketStage string           `json:"ticket_stage,omitempty"`  // "Ready" or "Staging" (ticket purchase tx input confirmation)
 }
 
 func (mpt *MempoolTx) DeepCopy() *MempoolTx {

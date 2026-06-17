@@ -219,36 +219,40 @@
               <div class="row">
                   <div class="col-sm-24">
                   <h4 class="pt-4 pb-2"><span>Tickets</span></h4>
-                      <template data-mempool-target="ticketRowTemplate">
-                          <tr class="flash">
-                              <td class="break-word clipboard">
-                                  <a class="hash" data-slot="hashLink"></a>
-                                  {{template "copyTextIcon"}}
-                              </td>
-                              <td class="mono fs15 text-end" data-slot="amount"></td>
-                              <td class="mono fs15 text-end" data-slot="size"></td>
-                              <td class="mono fs15 text-end" data-slot="feeRate"></td>
-                              <td class="mono fs15 text-end" data-time-target="age" data-slot="age"></td>
-                          </tr>
-                      </template>
+                       <template data-mempool-target="ticketRowTemplate">
+                           <tr class="flash">
+                               <td class="break-word clipboard">
+                                   <a class="hash" data-slot="hashLink"></a>
+                                   {{template "copyTextIcon"}}
+                               </td>
+                               <td class="mono fs15 text-end" data-slot="amount"></td>
+                               <td class="mono fs15 text-end" data-slot="size"></td>
+                               <td class="mono fs15 text-end" data-slot="feeRate"></td>
+                               <td class="mono fs15 text-end" data-time-target="age" data-slot="age"></td>
+                               <td class="mono fs15 text-end" data-slot="ticketStage"></td>
+                           </tr>
+                       </template>
                       <table class="table">
-                          <thead>
-                            <tr>
-                              <th class="position-relative" data-tooltip="Transaction ID">
-                                <span class="d-sm-none">TxID</span>
-                                <span class="d-none d-sm-inline">Transaction ID</span>
-                              </th>
-                              <th class="text-end">Total VAR</th>
-                              <th class="text-end">Size</th>
-                              <th class="text-end position-relative" data-tooltip="Fee Rate">
-                                <span class="d-sm-none">Fee</span>
-                                <span class="d-none d-sm-inline">Fee Rate</span>
-                              </th>
-                              <th class="text-end position-relative" data-tooltip="Time in Mempool">
-                                Age
-                              </th>
-                            </tr>
-                          </thead>
+                           <thead>
+                             <tr>
+                               <th class="position-relative" data-tooltip="Transaction ID">
+                                 <span class="d-sm-none">TxID</span>
+                                 <span class="d-none d-sm-inline">Transaction ID</span>
+                               </th>
+                               <th class="text-end">Total VAR</th>
+                               <th class="text-end">Size</th>
+                               <th class="text-end position-relative" data-tooltip="Fee Rate">
+                                 <span class="d-sm-none">Fee</span>
+                                 <span class="d-none d-sm-inline">Fee Rate</span>
+                               </th>
+                               <th class="text-end position-relative" data-tooltip="Time in Mempool">
+                                 Age
+                               </th>
+                               <th class="text-end position-relative" data-tooltip="Ticket stage: Ready (all inputs confirmed) or Staging (spends an unconfirmed output)">
+                                 Ticket Stage
+                               </th>
+                             </tr>
+                           </thead>
                           <tbody data-mempool-target="ticketTransactions">
                               {{if gt .NumTickets 0 -}}
                               {{- range .Tickets -}}
@@ -263,11 +267,12 @@
                                   <td class="mono fs15 text-end">{{.Size}} B</td>
                                   <td class="mono fs15 text-end">{{printf "%.8f" (.FeeRate)}} VAR/kB</td>
                                   <td class="mono fs15 text-end" data-time-target="age" data-age="{{.Time}}"></td>
-                              </tr>
-                              {{- end -}}
-                              {{- else -}}
-                              <tr class="no-tx-tr">
-                                  <td colspan="5">No tickets in mempool.</td>
+                                  <td class="mono fs15 text-end">{{.TicketStage}}</td>
+                               </tr>
+                               {{- end -}}
+                               {{- else -}}
+                               <tr class="no-tx-tr">
+                                   <td colspan="6">No tickets in mempool.</td>
                               </tr>
                               {{- end}}
                           </tbody>
