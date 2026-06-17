@@ -179,6 +179,11 @@ report to domains whose covered files changed within a git commit range; this fl
 directly. Pass `--strict` to make the detector exit non-zero when anything is stale or has an
 invalid anchor; set `WIKI_STALENESS_STRICT=1` to make the pre-push hook block instead of warn.
 
+**Reading the signal:** STALE means a covered file moved since the anchor — a prompt to review,
+not proof the trace is wrong. Because manifests track whole files, a high-churn shared file
+(e.g. `db/dcrpg/pgblockchain.go`, listed by several domains) marks all of them STALE on any
+change to it, even one unrelated to a given trace's concern.
+
 Refreshing a STALE trace is a **Synthesize** pass: rewrite the flow/impact/patterns files,
 then bump the `anchor` field in `meta.yml` to the current `HEAD` and update `files`. Detection
 and refresh move together — the anchor is the "as-of" contract.
