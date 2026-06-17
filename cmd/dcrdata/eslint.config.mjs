@@ -28,6 +28,7 @@ export default [
         setInterval: 'readonly',
         clearInterval: 'readonly',
         Promise: 'readonly',
+        Blob: 'readonly',
         URL: 'readonly',
         URLSearchParams: 'readonly',
         fetch: 'readonly',

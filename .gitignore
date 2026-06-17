@@ -73,3 +73,4 @@ go.work.sum
 .claude/settings.local.json
 .github/scripts/generate-issues/.local/
 .playwright-mcp/
+docs/superpowers
