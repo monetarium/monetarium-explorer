@@ -157,5 +157,34 @@ AFTER=$(cat "$FIX/wiki/code-analysis/block/meta.yml")
 assert_eq "bootstrap leaves existing meta.yml untouched" "$BEFORE" "$AFTER"
 rm -rf "$FIX"
 
+# --- Fix 3: no anchor found → skip, no meta.yml written -----------------------
+FIX4=$(mktemp -d)
+git -C "$FIX4" init -q
+git -C "$FIX4" config user.email t@t && git -C "$FIX4" config user.name t
+mkdir -p "$FIX4/code" "$FIX4/wiki/code-analysis/block" "$FIX4/wiki/code-analysis/noanchor"
+echo "package x" > "$FIX4/code/block.go"
+git -C "$FIX4" add -A && git -C "$FIX4" commit -q -m C0
+C0_F4=$(git -C "$FIX4" rev-parse --short HEAD)
+printf 'domain: block\nanchor: %s\nfiles:\n  - code/block.go\n' "$C0_F4" \
+  > "$FIX4/wiki/code-analysis/block/meta.yml"
+git -C "$FIX4" add -A && git -C "$FIX4" commit -q -m "add block meta"
+# Create brand-new noanchor domain NOT committed; has prose but no HEAD= marker and no code refs
+mkdir -p "$FIX4/wiki/code-analysis/noanchor"
+echo "prose with no markers" > "$FIX4/wiki/code-analysis/noanchor/flow.full.md"
+run4() { ( cd "$FIX4" && "$DETECTOR" "$@" ); }
+OUT_NOANCHOR=$(run4 --bootstrap)
+# Assert: message 'skip (no anchor found): noanchor' appears in output
+case "$OUT_NOANCHOR" in
+  *"skip (no anchor found): noanchor"*) echo "ok: bootstrap skip message for no anchor" ;;
+  *) echo "FAIL: bootstrap skip message for no anchor"; echo "--- output ---"; printf '%s\n' "$OUT_NOANCHOR"; FAILED=1 ;;
+esac
+# Assert: meta.yml was NOT created
+if [[ ! -f "$FIX4/wiki/code-analysis/noanchor/meta.yml" ]]; then
+  echo "ok: bootstrap did not create meta.yml with no anchor"
+else
+  echo "FAIL: bootstrap created meta.yml with no anchor"; FAILED=1
+fi
+rm -rf "$FIX4"
+
 rm -rf "$FIX2" "$FIX3"
 [[ $FAILED -eq 0 ]] && echo "ALL PASS" || { echo "SOME FAILED"; exit 1; }

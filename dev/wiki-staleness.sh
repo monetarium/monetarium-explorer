@@ -55,6 +55,11 @@ bootstrap_domain() { # $1 = domain dir (trailing slash)
     anchor=$(git -C "$ROOT" log -1 --format=%h -- "wiki/code-analysis/${domain}/" 2>/dev/null || true)
   fi
 
+  if [[ -z "$anchor" ]]; then
+    echo "skip (no anchor found): $domain"
+    return
+  fi
+
   files=$(grep -rhoE '[A-Za-z0-9_./-]+\.(go|tmpl|js|scss|sql)' "$dir" 2>/dev/null \
           | sed -E 's#^(\.\./)+##; s/[):,.]*$//' | sort -u || true)
 
