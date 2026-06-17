@@ -487,15 +487,28 @@ func (t *TxInfo) IsImmature() bool {
 	return t.Mature == "False"
 }
 
-// FeeReward is the coinbase "PoW Reward" fee shown on the tx page. "N/A" inputs
-// (AmountIn < 0) contribute zero, matching the template guard; coinbase is
-// VAR-only, so float64 is exact.
+// FeeReward is the net reward shown in the tx page header for coinbase ("Fee
+// Reward", the PoW fee remainder) and stakegen/vote ("Fee Reward", the net stake
+// reward). It is total outputs minus consumed inputs, where a vote's stakebase
+// input is excluded: that input is newly minted stake reward ("created"), not
+// consumed funds, so the net reward is outputs minus the genuinely-consumed
+// (ticket) inputs. The Inputs Consumed table likewise renders the stakebase as
+// N/A, so the header equals the table's Outputs Created minus Inputs Consumed.
+// Coinbase has no stakebase input, so its value is unchanged (its subsidy input
+// is counted, leaving the fee remainder). "N/A" inputs (AmountIn < 0) contribute
+// zero, matching the table. Coinbase and votes are VAR-only (SKA stake rewards
+// flow through separate SSFee txs), so float64 is exact.
 func (t *TxInfo) FeeReward() float64 {
 	var out, in float64
 	for i := range t.Vout {
-		out += t.Vout[i].Amount // deprecated field, safe: VAR-only coinbase sets .Amount (CoinType == 0)
+		out += t.Vout[i].Amount // deprecated field, safe: VAR-only coinbase/vote sets .Amount (CoinType == 0)
 	}
 	for i := range t.Vin {
+		// A vote's stakebase carries the stake subsidy as AmountIn but is
+		// minted, not consumed — exclude it so the net reward surfaces.
+		if t.Vin[i].IsStakeBase() {
+			continue
+		}
 		if t.Vin[i].AmountIn >= 0 {
 			in += t.Vin[i].AmountIn
 		}
@@ -1491,6 +1504,7 @@ type MempoolTx struct {
 	VoteInfo    *VoteInfo        `json:"vote_info,omitempty"`
 	SKATotals   map[uint8]string `json:"ska_totals,omitempty"`
 	SKAFeeRates map[uint8]string `json:"ska_fee_rates,omitempty"` // SKA fee rate in atoms/kB, keyed by coin type
+	TicketStage string           `json:"ticket_stage,omitempty"`  // "Ready" or "Staging" (ticket purchase tx input confirmation)
 }
 
 func (mpt *MempoolTx) DeepCopy() *MempoolTx {

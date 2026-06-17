@@ -288,6 +288,7 @@ func (p *MempoolMonitor) TxHandler(rawTx *chainjson.TxRawResult) error {
 		p.inventory.LikelyMineable.RegularTotal += tx.TotalOut
 
 	case stake.TxTypeSStx:
+		tx.TicketStage = ticketStage(tx.Vin, p.txnsStore)
 		p.inventory.InvStake[tx.Hash] = struct{}{}
 		p.inventory.Tickets = append([]exptypes.MempoolTx{tx}, p.inventory.Tickets...)
 		p.inventory.NumTickets++
