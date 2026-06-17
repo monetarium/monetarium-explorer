@@ -174,11 +174,14 @@ files:                    # repo-root-relative code paths this trace covers (glo
 `dev/wiki-staleness.sh` runs `git log <anchor>..HEAD -- <files>` per domain and reports
 **STALE** (a covered file changed since the anchor), **FRESH**, or **UNTRACKED** (no
 `meta.yml`). It never edits traces and never calls the LLM. A warn-only `dev/hooks/pre-push`
-runs it scoped to the commits being pushed.
+runs it scoped to the commits being pushed. The hook uses `--changed <range>` to restrict the
+report to domains whose covered files changed within a git commit range; this flag is also usable
+directly. Pass `--strict` to make the detector exit non-zero when anything is stale or has an
+invalid anchor; set `WIKI_STALENESS_STRICT=1` to make the pre-push hook block instead of warn.
 
 Refreshing a STALE trace is a **Synthesize** pass: rewrite the flow/impact/patterns files,
-then bump `meta.yml.anchor` to the current `HEAD` and update `files`. Detection and refresh
-move together — the anchor is the "as-of" contract.
+then bump the `anchor` field in `meta.yml` to the current `HEAD` and update `files`. Detection
+and refresh move together — the anchor is the "as-of" contract.
 
 Seed a missing manifest with `./dev/wiki-staleness.sh --bootstrap`, then review the generated
 `files` list against the trace (the regex seeds candidates; it is not authoritative).
