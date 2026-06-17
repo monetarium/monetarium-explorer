@@ -615,6 +615,13 @@ func mkVin(amountIn float64) Vin {
 	return Vin{Vin: &chainjson.Vin{AmountIn: amountIn}}
 }
 
+// mkStakebaseVin builds a vote's stakebase input: a non-empty Stakebase marks it
+// as newly minted stake reward (IsStakeBase() == true) that carries the subsidy
+// as a positive AmountIn but which FeeReward must exclude from consumed inputs.
+func mkStakebaseVin(amountIn float64) Vin {
+	return Vin{Vin: &chainjson.Vin{AmountIn: amountIn, Stakebase: "01"}}
+}
+
 func TestFeeReward(t *testing.T) {
 	tests := []struct {
 		name string
@@ -656,15 +663,16 @@ func TestFeeReward(t *testing.T) {
 			want: 0.5, // (600+300+0.5) - 900
 		},
 		{
-			// Vote (SSGen) shape: the stakebase subsidy input shows N/A
-			// (AmountIn < 0, excluded), the ticket input is consumed, and the
-			// outputs return the ticket value plus the net stake reward. The
-			// two zero-value outputs are the OP_RETURN block reference and vote
-			// bits. FeeReward is the "Fee Reward" shown in the vote tx header.
-			name: "vote: stakebase N/A input, reward = outputs minus ticket input",
-			vin:  []Vin{mkVin(-1), mkVin(1000)},
-			vout: []Vout{{Amount: 0}, {Amount: 0}, {Amount: 1002.5}},
-			want: 2.5, // (0+0+1002.5) - 1000
+			// Vote (SSGen) shape from a real tx: the stakebase carries the
+			// stake subsidy as a positive AmountIn but is "created", not
+			// consumed, so FeeReward excludes it. The ticket input is consumed
+			// and the single stakegen output returns ticket + reward; the two
+			// zero-value outputs are the OP_RETURN block reference and vote
+			// bits. The net reward equals the stakebase subsidy.
+			name: "vote: stakebase subsidy excluded, reward = outputs minus ticket input",
+			vin:  []Vin{mkStakebaseVin(3.5), mkVin(1000)},
+			vout: []Vout{{Amount: 0}, {Amount: 0}, {Amount: 1003.5}},
+			want: 3.5, // 1003.5 - 1000 (stakebase 3.5 excluded as created reward)
 		},
 	}
 

@@ -487,19 +487,28 @@ func (t *TxInfo) IsImmature() bool {
 	return t.Mature == "False"
 }
 
-// FeeReward is the net reward (total outputs minus total inputs) shown on the
-// tx page header: the coinbase "Fee Reward" (PoW subsidy) and the stakegen
-// (vote) "Fee Reward" (net stake reward). "N/A" inputs (AmountIn < 0) contribute
-// zero, matching the Inputs Consumed table guard, so the result equals the
-// page's Outputs Created total minus its Inputs Consumed total. Both coinbase
-// and votes are VAR-only (SKA stake rewards flow through separate SSFee txs), so
-// float64 is exact.
+// FeeReward is the net reward shown in the tx page header for coinbase ("Fee
+// Reward", the PoW fee remainder) and stakegen/vote ("Fee Reward", the net stake
+// reward). It is total outputs minus consumed inputs, where a vote's stakebase
+// input is excluded: that input is newly minted stake reward ("created"), not
+// consumed funds, so the net reward is outputs minus the genuinely-consumed
+// (ticket) inputs. The Inputs Consumed table likewise renders the stakebase as
+// N/A, so the header equals the table's Outputs Created minus Inputs Consumed.
+// Coinbase has no stakebase input, so its value is unchanged (its subsidy input
+// is counted, leaving the fee remainder). "N/A" inputs (AmountIn < 0) contribute
+// zero, matching the table. Coinbase and votes are VAR-only (SKA stake rewards
+// flow through separate SSFee txs), so float64 is exact.
 func (t *TxInfo) FeeReward() float64 {
 	var out, in float64
 	for i := range t.Vout {
 		out += t.Vout[i].Amount // deprecated field, safe: VAR-only coinbase/vote sets .Amount (CoinType == 0)
 	}
 	for i := range t.Vin {
+		// A vote's stakebase carries the stake subsidy as AmountIn but is
+		// minted, not consumed — exclude it so the net reward surfaces.
+		if t.Vin[i].IsStakeBase() {
+			continue
+		}
 		if t.Vin[i].AmountIn >= 0 {
 			in += t.Vin[i].AmountIn
 		}
