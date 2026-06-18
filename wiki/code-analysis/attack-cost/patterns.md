@@ -20,7 +20,9 @@ projected ticket price) runs in `attackcost_controller.js`.
 ## VAR-Only Legacy Snapshot
 
 **Description:** Reads the legacy flat `HomeInfo.CoinSupply int64` / `TicketPoolInfo`
-(`explorertypes.go:877,1444`) and never the multi-coin `VARCoinSupply`/`SKACoinSupply`.
+(`explorertypes.go:911,1480`) and never the multi-coin `VARCoinSupply`/`SKACoinSupply`.
+`HomeInfo` also carries `CBlockSubsidy` (`:922`) and `ActiveMiners` (`:939`) but neither
+is read by the `AttackCost` handler.
 All coin-amount labels on the page are `VAR`. Shared with `address/patterns.md`
 ("Legacy flat-field shim (residual)") — the address page retains the same
 back-compat legacy flat VAR fields, though its template no longer reads them

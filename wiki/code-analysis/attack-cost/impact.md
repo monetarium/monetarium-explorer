@@ -24,7 +24,7 @@ corrupted magnitudes. Requires a BigInt path, not this one.
 
 **Failure mode:** silent (math), with cross-page blast radius.
 
-**Description:** `explorertypes.go:877,1444` structs are JSON-tagged
+**Description:** `explorertypes.go:911,1480` structs are JSON-tagged
 (`json:"coin_supply"`) and consumed by the HTTP API and home page in addition to
 the `AttackCost` handler in `explorerroutes.go` and the `parseInt`/`÷1e8` reads in
 `attackcost_controller.js`. A units change breaks the JS `/1e8` divisor and
