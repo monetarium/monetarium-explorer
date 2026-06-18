@@ -126,6 +126,36 @@ The charts controller drives all URL state through TurboQuery + `Zoom.validate`,
 
 ---
 
+## Cross-page navigation from a chart `<select>` option
+
+**Appears in:**
+- [/wiki/code-analysis/charts/flow.full.md](flow.full.md)
+
+**Description:**
+`hashrate-shares` is added as a `<select>` option in `charts.tmpl:41` but does not correspond to an `/api/chart/…` endpoint. In `selectChart()` ([charts_controller.js:853](../../../cmd/dcrdata/public/js/controllers/charts_controller.js)), the controller tests for `selection === 'hashrate-shares'`, calls `Turbolinks.visit('/hashrate-shares')`, and returns immediately — no data fetch, no Dygraphs update. The navigation uses `Turbolinks.visit` (same mechanism as `pagenavigation_controller` and all other in-app nav) rather than `window.location.assign`, so the controller's `disconnect()` lifecycle hook fires cleanly and tears down the Dygraphs instance before the body swap. This pattern extends the chart selector beyond a pure chart-type picker into a navigation hub for chart-adjacent pages.
+
+**Constraints:**
+- Any new cross-page option must: (1) add the early-return guard first in `selectChart()`; (2) use `Turbolinks.visit` (not `window.location.assign`) to let the lifecycle fire cleanly.
+- The target page must have its own controller — the charts controller does not survive the Turbolinks body swap.
+- If the target page URL changes (e.g. `/hashrate-shares` → `/miners`), the string in `selectChart()` and the `<option value>` in `charts.tmpl` must be updated together — they are a duplicated pair with no shared constant.
+
+---
+
+## `chart-hashrate` CSS class gate for chart-specific y2label color
+
+**Appears in:**
+- [/wiki/code-analysis/charts/flow.full.md](flow.full.md)
+
+**Description:**
+The Active Miners y2-axis label on the hashrate chart needs to match the `#c60` (orange) series line color in light mode. Rather than a JS `gOptions.y2label`-style color override (which Dygraphs doesn't expose), the approach is a CSS class gate: `selectChart()` ([charts_controller.js:878–883](../../../cmd/dcrdata/public/js/controllers/charts_controller.js)) adds `chart-hashrate` to `chartsViewTarget` (the `<div class="chartview">`) when `hashrate` is selected and removes it for every other selection. The SCSS rule `.chartview.chart-hashrate .dygraph-y2label { color: #c60 }` ([charts.scss:260](../../../cmd/dcrdata/public/scss/charts.scss)) then scopes the override. Dark mode inherits the generic `body.darkBG .chartview .dygraph-y2label { color: #2970ff }` rule ([charts.scss:264](../../../cmd/dcrdata/public/scss/charts.scss)) — no additional dark-mode hashrate rule is needed because `#2970ff` matches the hashrate series color in dark mode.
+
+**Constraints:**
+- The CSS class name in `selectChart()` and in `charts.scss` must stay in sync. Renaming one without the other silently reverts the y2label to the generic default color.
+- The toggle removes the class on non-hashrate selections, so it is inherently stateless across chart switches — no cleanup needed beyond the removal.
+- This approach (add/remove class on the wrapper → SCSS selector) is the correct extension point for future chart-specific label or legend color overrides; avoid JS `gOptions` color hacks.
+
+---
+
 See also:
 - [/wiki/code-analysis/charts/flow.full.md](flow.full.md) (derived-from: §4 cross-layer, §5 constraints, §7 pitfalls)
 - [/wiki/code-analysis/charts/impact.md](impact.md) (shares-pattern-with: the constraints here exist to prevent the risks documented there)

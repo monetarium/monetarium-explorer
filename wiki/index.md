@@ -92,11 +92,11 @@ _Multi-coin aggregation (CoinStats + derived CoinFills), dual collection paths (
 
 ### Charts
 
-_Historical data fetching, cache aggregation, and payload serialization for UI charts. Covers the legacy VAR `coin-supply` pipeline alongside the per-coin SKA `coin-supply/{N}` pipeline (lazy load, `*big.Int` cumulation, exact-precision legend)._
+_Historical data fetching, cache aggregation, and payload serialization for UI charts. Covers the legacy VAR `coin-supply` pipeline alongside the per-coin SKA `coin-supply/{N}` pipeline (lazy load, `*big.Int` cumulation, exact-precision legend). **Revised at `HEAD=09696541`**: hashrate-shares cross-page navigation pattern (`Turbolinks.visit` from chart `<select>`), `chart-hashrate` CSS class gate for Active Miners y2label color, Month interval button addition, updated line refs throughout._
 
-- flow (compact): code-analysis/charts/flow.compact.md — high-level summary of both VAR and SKA chart pipelines
-- flow (full): code-analysis/charts/flow.full.md — detailed, step-by-step function trace covering RPC/SQL → cache → API → controller → Dygraphs for both pipelines
-- patterns: code-analysis/charts/patterns.md — reusable architecture: dual VAR/SKA coin-supply pipelines under one chart-ID namespace, string-precision SKA path, uint8↔string ID coupling, contractual `h` height field, cache-write asymmetry, lockless first-load, TurboQuery+Zoom projection
+- flow (compact): code-analysis/charts/flow.compact.md — high-level summary of both VAR and SKA chart pipelines, cross-page navigation pattern, CSS class gate pattern, mutation checklist
+- flow (full): code-analysis/charts/flow.full.md — detailed, step-by-step function trace covering RPC/SQL → cache → API → controller → Dygraphs for both pipelines; updated line numbers, `hashrate-shares` early-return and `chart-hashrate` class toggle in `selectChart()`
+- patterns: code-analysis/charts/patterns.md — reusable architecture: dual VAR/SKA coin-supply pipelines under one chart-ID namespace, string-precision SKA path, uint8↔string ID coupling, contractual `h` height field, cache-write asymmetry, lockless first-load, TurboQuery+Zoom projection, **cross-page navigation from chart selector (new)**, **`chart-hashrate` CSS class gate for y2label color (new)**
 - impact: code-analysis/charts/impact.md — mutation blast radius: `accumulate`/`uint64` misuse on SKA, legend `float64` precision loss, missing `h` on time-axis, `coinType==0` loader path, concurrent first-load race, `coin-supply`/`coin-supply/0` endpoint duality, `DataSource` mock fan-out, `ActiveSKATypes` dropdown drift
 
 ### VisualBlocks
