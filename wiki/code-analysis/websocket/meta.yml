@@ -1,0 +1,9 @@
+domain: websocket
+anchor: 98c7876a
+files:
+  - cmd/dcrdata/internal/explorer/websocket.go
+  - cmd/dcrdata/internal/explorer/websockethandlers.go
+  - cmd/dcrdata/public/js/controllers/connection_controller.js
+  - cmd/dcrdata/public/js/services/messagesocket_service.js
+  - pubsub/pubsubhub.go
+  - pubsub/types/pubsub_types.go

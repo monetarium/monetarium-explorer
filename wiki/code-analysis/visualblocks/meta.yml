@@ -1,0 +1,15 @@
+domain: visualblocks
+anchor: 38636d52
+files:
+  - cmd/dcrdata/internal/explorer/explorer.go
+  - cmd/dcrdata/internal/explorer/explorerroutes.go
+  - cmd/dcrdata/internal/explorer/templates.go
+  - cmd/dcrdata/internal/explorer/visualblocks_contract_test.go
+  - cmd/dcrdata/internal/explorer/websockethandlers.go
+  - cmd/dcrdata/public/js/controllers/visualBlocks_controller.js
+  - cmd/dcrdata/public/js/controllers/visualBlocks_controller.test.js
+  - cmd/dcrdata/public/scss/_indicator-fill.scss
+  - cmd/dcrdata/public/scss/visualblocks.scss
+  - cmd/dcrdata/views/visualblocks.tmpl
+  - db/dcrpg/pgblockchain.go
+  - explorer/types/explorertypes.go

@@ -1,0 +1,13 @@
+domain: transaction
+anchor: 26e4a94d
+files:
+  - api/types/apitypes.go
+  - cmd/dcrdata/public/js/controllers/homepage_controller.js
+  - cmd/dcrdata/views/home_mempool.tmpl
+  - cmd/dcrdata/views/tx.tmpl
+  - db/dcrpg/pgblockchain.go
+  - explorer/types/explorertypes.go
+  - mempool/collector.go
+  - mempool/monitor.go
+  - pubsub/pubsubhub.go
+  - txhelpers/txhelpers.go

@@ -1,0 +1,14 @@
+domain: ticketpool
+anchor: dff1cd16
+files:
+  - api/types/apitypes.go
+  - cmd/dcrdata/internal/api/apiroutes.go
+  - cmd/dcrdata/internal/explorer/explorerroutes.go
+  - cmd/dcrdata/internal/explorer/websockethandlers.go
+  - cmd/dcrdata/public/js/controllers/ticketpool_controller.js
+  - cmd/dcrdata/views/ticketpool.tmpl
+  - db/dbtypes/types.go
+  - db/dcrpg/internal/stakestmts.go
+  - db/dcrpg/pgblockchain.go
+  - db/dcrpg/queries.go
+  - mempool/mempoolcache.go

@@ -158,6 +158,41 @@ needed.
 
 ---
 
+## Freshness Detection
+
+Each `code-analysis/<domain>/` carries a `meta.yml` manifest so staleness can be detected
+deterministically, without an LLM:
+
+```yaml
+domain: windows
+anchor: 3cdba1e7          # commit the trace was last verified against
+files:                    # repo-root-relative code paths this trace covers (globs allowed)
+  - cmd/dcrdata/internal/explorer/blocks.go
+  - db/dcrpg/blockstats.go
+```
+
+`dev/wiki-staleness.sh` runs `git log <anchor>..HEAD -- <files>` per domain and reports
+**STALE** (a covered file changed since the anchor), **FRESH**, or **UNTRACKED** (no
+`meta.yml`). It never edits traces and never calls the LLM. A warn-only `dev/hooks/pre-push`
+runs it scoped to the commits being pushed. The hook uses `--changed <range>` to restrict the
+report to domains whose covered files changed within a git commit range; this flag is also usable
+directly. Pass `--strict` to make the detector exit non-zero when anything is stale or has an
+invalid anchor; set `WIKI_STALENESS_STRICT=1` to make the pre-push hook block instead of warn.
+
+**Reading the signal:** STALE means a covered file moved since the anchor — a prompt to review,
+not proof the trace is wrong. Because manifests track whole files, a high-churn shared file
+(e.g. `db/dcrpg/pgblockchain.go`, listed by several domains) marks all of them STALE on any
+change to it, even one unrelated to a given trace's concern.
+
+Refreshing a STALE trace is a **Synthesize** pass: rewrite the flow/impact/patterns files,
+then bump the `anchor` field in `meta.yml` to the current `HEAD` and update `files`. Detection
+and refresh move together — the anchor is the "as-of" contract.
+
+Seed a missing manifest with `./dev/wiki-staleness.sh --bootstrap`, then review the generated
+`files` list against the trace (the regex seeds candidates; it is not authoritative).
+
+---
+
 ## What This File Is NOT
 
 - It does not define how analysis works — that is the mutation-analyzer skill
