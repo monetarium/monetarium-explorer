@@ -2,7 +2,7 @@
 
 Recurring patterns and invariants for the `/visualblocks` page. Most are domain-specific; cross-cutting concerns link out to `core/constraints.md`.
 
-Revision: `HEAD=38636d52` (post visualblocks UI rewrite for #270 on top of PR #284 contract).
+Revision: `HEAD=717be5a6` (post visualblocks UI rewrite for #270 on top of PR #284 contract; selector-based mempool-tile lookup + reconnect handler added by `793610c8`/`2218b9c`/`fe58506`/`aa356db6`).
 
 ## 1. Cross-Pipeline Tile Rendering
 
@@ -14,6 +14,7 @@ The same 3-row tile DOM is produced two ways and then mutated in place:
 Implications:
 
 - Two render code paths must produce structurally identical DOM (class names, attribute shapes, `data-*` hooks, `title` JSON shapes). The `38636d52` rewrite materially enlarges the DOM both pipelines emit — the indicator-fill block alone adds one `<div class="total-bar">` plus N `<div class="fill-bar">` per tile, each with its own track + segments + markers.
+- **`data-role="mempool-tile"` is now a structural contract.** Both the server-rendered template (`visualblocks.tmpl:27`) and the JS-built tile (`makeMempoolBlock`, `793610c8`) MUST emit this attribute. Both WS event handlers locate the mempool tile via `querySelector('[data-role="mempool-tile"]')`. If either emitter drops the attribute, both handlers silently no-op (null guard returns early) and the page goes stale. HTML comments inside the blocks-holder create `Text` nodes that displace `firstChild`; don't add them.
 - DOM trim is dual: template's `clipSlice 30` (per-tile internals, tickets only post-rewrite — the transactions row is gone) + JS `splice(30)` mirror it.
 - See [core/constraints.md#C3](../../core/constraints.md#C3) (template + WebSocket parity) and [core/constraints.md#C8](../../core/constraints.md#C8) (dual-transport shape asymmetry — narrowed by the contract).
 
@@ -178,16 +179,17 @@ Implication: this is the contract-enforcement floor. The test does NOT cover DOM
 
 ---
 
-## 11. Vitest DOM-Shape Pin (new in `38636d52`)
+## 11. Vitest DOM-Shape Pin (new in `38636d52`; extended in `aa356db6`, `793610c8`, `e72ee50c`)
 
-`cmd/dcrdata/public/js/controllers/visualBlocks_controller.test.js` is the first frontend test in this domain. 15 tests across four describe blocks:
+`cmd/dcrdata/public/js/controllers/visualBlocks_controller.test.js` is the frontend contract for this domain. 19 tests across five describe blocks:
 
 - `makeMempoolBlock` (6 tests): header size + pct + no DCR; no legacy rewards / transactions / fund classes; three vote states + coin:VAR title; indicator-fill with one TOTAL + one fill-bar per CoinFills entry; tooltip JSON carries coin + txCount from `CoinStats.regular_count`; ticket title carries `coin:"VAR"`.
 - `newBlockHtmlElement` (5 tests): same surface for block tiles; FillBar `txCount` derived from `RegularCoinCounts`; block-rows order is votes → tickets → indicator-fill.
 - `normaliseWsBlock` (2 tests): reads `height`/`time`/`size`/`formatted_bytes` from BlockBasic's lowercase JSON tags; normalises nested votes from `voted`/`vote_valid` to `Voted`/`VoteValid` PascalCase.
-- `visualBlocks reconnect resync` (2 tests, added after `38636d52`): re-requests the trimmed mempool on the synthetic `'reconnect'` event; removes its own `'reconnect'` handler on `disconnect`.
+- `visualBlocks reconnect resync` (2 tests, `aa356db6`): re-requests the trimmed mempool on the synthetic `'reconnect'` event; removes its own `'reconnect'` handler on `disconnect`.
+- `controller mempool-tile lifecycle` (4 tests, `793610c8`/`e72ee50c`): `handleMempoolUpdate` replaces the mempool tile in place; `_handleVisualBlocksUpdate` inserts after the mempool tile and trims the last; mempool tile remains singular after both update types; empty-box null guard (no throw, no insertion).
 
-Implication: every future tile-DOM change must run this file and either confirm assertions pass or update them. The WS-shape regression test specifically guards the `/block/undefined` bug class.
+Implication: every future tile-DOM change must run this file and either confirm assertions pass or update them. The WS-shape regression test guards the `/block/undefined` bug class; the lifecycle suite guards the `data-role="mempool-tile"` DOM contract.
 
 ---
 
