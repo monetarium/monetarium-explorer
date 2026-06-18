@@ -17,7 +17,7 @@ shared risk this domain *grounds* concretely.
 **Trigger:**
 `exp.dataSource.GetTip(ctx)` fails inside `exp.commonData(r)` (DB down,
 migration, tip query error). `commonData` logs and returns `nil`
-([explorerroutes.go:2307-2311](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L2307-L2311)).
+([explorerroutes.go:2417-2420](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L2417-L2420)).
 
 **Failure mode:** loud (HTTP error page).
 
@@ -28,13 +28,13 @@ migration, tip query error). `commonData` logs and returns `nil`
 **Description:**
 The `nil *CommonPageData` is still embedded in the
 `struct{ *CommonPageData; ExtendedParams }` payload
-([explorerroutes.go:1953-1964](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L1953-L1964)).
+([explorerroutes.go:2023-2034](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L2023-L2034)).
 `parameters.tmpl` dereferences `.ChainParams.*` on ~40 rows (first at
 [parameters.tmpl:9](../../../cmd/dcrdata/views/parameters.tmpl) —
 `{{.ChainParams.Name}}`), so template execution fails immediately → the
 handler falls to
 `StatusPage(defaultErrorCode, defaultErrorMessage, "", ExpStatusError)`
-([explorerroutes.go:1966-1970](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L1966-L1970)).
+([explorerroutes.go:2036-2039](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L2036-L2039)).
 This is the parameters-grounded instance of the cross-domain *commonData Nil
 Render Crash*: a single DB tip failure takes down every server-rendered page,
 not just `/parameters`. See
@@ -111,9 +111,9 @@ boundary, and the template must only see those pre-formatted strings.
 
 **Trigger:**
 `exp.pageData.BlockchainInfo == nil` — the normal state for any non-tip render
-([blockdata/blockdata.go:338-340](../../../blockdata/blockdata.go#L338-L340))
+([blockdata/blockdata.go:335-337](../../../blockdata/blockdata.go#L335-L337))
 or when `GetBlockChainInfo` RPC warned-and-continued
-([blockdata/blockdata.go:334-337](../../../blockdata/blockdata.go#L334-L337)).
+([blockdata/blockdata.go:332-334](../../../blockdata/blockdata.go#L332-L334)).
 
 **Failure mode:** silent (HTTP 200, possibly stale value).
 
@@ -123,7 +123,7 @@ or when `GetBlockChainInfo` RPC warned-and-continued
 
 **Description:**
 The handler falls back to `int64(params.MaximumBlockSizes[0])`
-([explorerroutes.go:1918](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L1918)),
+([explorerroutes.go:1988](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L1988)),
 the launch-time consensus default, which can differ from the node's current
 `MaxBlockSize`. The page shows the fallback with no indication it is not live.
 This is **intended** behavior (the page is block-scoped via `withCache`; only
@@ -146,7 +146,7 @@ the fallback to "force fresh data" instead crashes every non-tip render.
 
 **Description:**
 `params.MaximumBlockSizes[0]`
-([explorerroutes.go:1918](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L1918))
+([explorerroutes.go:1988](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L1988))
 has **no bounds check**. `[INFERRED]` — relies on `monetarium-node` always
 populating this slice for known networks; true for mainnet/testnet/simnet but
 not guaranteed for a custom params build. A custom `chaincfg.Params` with an
@@ -171,14 +171,14 @@ holding `pageData.RLock()`.
 **Description:**
 The handler correctly brackets its read in
 `exp.pageData.RLock()` … `exp.pageData.RUnlock()`
-([explorerroutes.go:1913-1920](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L1913-L1920)),
+([explorerroutes.go:1983-1990](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L1983-L1990)),
 while the background writer `(*explorerUI).Store` reassigns
 `p.BlockchainInfo = blockData.BlockchainInfo` under `p.Lock()`
-([explorer.go:536,540](../../../cmd/dcrdata/internal/explorer/explorer.go#L536-L540)).
+([explorer.go:555](../../../cmd/dcrdata/internal/explorer/explorer.go#L555)).
 Any new read of a `pageData` field added outside the existing RLock window
 races against `Store` on every block. The same field is also read (correctly,
 under RLock) by `StoreMPData`
-([explorer.go:473-474](../../../cmd/dcrdata/internal/explorer/explorer.go#L473-L474))
+([explorer.go:478](../../../cmd/dcrdata/internal/explorer/explorer.go#L478))
 — it is shared mutable state, not parameters-private. For the full multi-lock
 map and the (loud) lock-order-inversion deadlock rule, see
 `/wiki/code-analysis/page-rendering/impact.md` → *Lock-Order Inversion Against

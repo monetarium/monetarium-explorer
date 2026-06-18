@@ -59,38 +59,38 @@ monetarium-node
 
 ### Capture at startup
 
-- **Location:** `cmd/dcrdata/internal/explorer/explorer.go:339-341`
+- **Location:** `cmd/dcrdata/internal/explorer/explorer.go:343-345`
 - **Data structures:** `exp.ChainParams *chaincfg.Params`, `exp.NetName`
 - **Transformations:** `exp.ChainParams = exp.dataSource.GetChainParams()` once;
   `exp.NetName = netName(exp.ChainParams)`. **Process-lifetime constant.**
 
 ### Dynamic field source (RPC)
 
-- **Location:** `blockdata/blockdata.go:333-353`
+- **Location:** `blockdata/blockdata.go:331-351`
 - **Data structures:** `chainjson.GetBlockChainInfoResult` (field
   `BlockData.BlockchainInfo`, defined `blockdata/blockdata.go:38`)
 - **Transformations:** `chainInfo, err := t.dcrdChainSvr.GetBlockChainInfo(ctx)`.
-  Critically, `blockdata.go:338-340` **nulls** `chainInfo` unless
+  Critically, `blockdata.go:335-337` **nulls** `chainInfo` unless
   `chainInfo.BestBlockHash == hash.String()` — `GetBlockChainInfo` is only
   valid at the chain tip.
 
 ### Store into pageData
 
-- **Location:** `cmd/dcrdata/internal/explorer/explorer.go:536-540`
-- **Data structures:** `pageData` (struct `explorer.go:206-213`,
+- **Location:** `cmd/dcrdata/internal/explorer/explorer.go:553-555`
+- **Data structures:** `pageData` (struct `explorer.go:210-215`,
   `RWMutex`-guarded), field `BlockchainInfo *chainjson.GetBlockChainInfoResult`
 - **Transformations:** under `p.Lock()`: `p.BlockchainInfo = blockData.BlockchainInfo`.
 
 ### Handler
 
-- **Location:** `cmd/dcrdata/internal/explorer/explorerroutes.go:1907-1974`
+- **Location:** `cmd/dcrdata/internal/explorer/explorerroutes.go:1976-2044`
 - **Data structures:** anonymous `struct{ *CommonPageData; ExtendedParams }`;
   `ExtendedParams{ MaximumBlockSize int64; ActualTicketPoolSize int64; AddressPrefix []types.AddrPrefix; SKACoins []types.SKACoinParam }`
 - **Transformations:**
   - `addrPrefix := types.AddressPrefixes(params)`
   - `actualTicketPoolSize := int64(params.TicketPoolSize * params.TicketsPerBlock)`
   - `maxBlockSize`: under `pageData.RLock()`, `BlockchainInfo.MaxBlockSize` if
-    non-nil, else `int64(params.MaximumBlockSizes[0])` (`:1914-1920`)
+    non-nil, else `int64(params.MaximumBlockSizes[0])` (`:1983-1990`)
   - `emissionHeights map[uint8]int64` is built per request: call
     `exp.dataSource.SKACoinSupply(ctx)` for the list of CoinTypes ever
     observed on chain, gather those not in `params.InitialSKATypes` into a
@@ -112,11 +112,11 @@ monetarium-node
 
 ### commonData (shared header)
 
-- **Location:** `explorerroutes.go:2304-2342`
+- **Location:** `explorerroutes.go:2414-2453`
 - **Data structures:** `*CommonPageData{ Tip, Version, ChainParams, BlockTimeUnix, NetName, … }`
 - **Transformations:** `GetTip(ctx)` → `exptypes.WebBasicBlock` (Postgres,
-  `db/dcrpg/pgblockchain.go:7306-7325`). On error logs and **returns `nil`**
-  (`:2310`). Re-injects `exp.ChainParams` and
+  `db/dcrpg/pgblockchain.go:7431-7450`). On error logs and **returns `nil`**
+  (`:2419`). Re-injects `exp.ChainParams` and
   `BlockTimeUnix = int64(exp.ChainParams.TargetTimePerBlock.Seconds())`.
 
 ### AddressPrefixes transform
@@ -221,7 +221,7 @@ Notes:
 
 ### Route
 
-- **Location:** `cmd/dcrdata/main.go:779`
+- **Location:** `cmd/dcrdata/main.go:784`
 - `withCache.Get("/parameters", explore.ParametersPage)` where
   `withCache = r.With(explore.ETagAndLastModifiedIntercept)`
   (`explorermiddleware.go:193`).
@@ -233,7 +233,7 @@ Notes:
 - **Dual param injection (brittle):** the template binds `.ChainParams` from
   `CommonPageData` (via `commonData`) **and** `.ExtendedParams` from the
   handler's anonymous struct, merged by Go struct embedding at the
-  `templates.exec` call (`explorerroutes.go:1953-1964`). Adding a template row
+  `templates.exec` call (`explorerroutes.go:2023-2034`). Adding a template row
   requires knowing which of the two sources owns the field.
 - **`commonData` is shared by every page**, not just `/parameters`. Changing it
   to satisfy this page risks all pages. Page-specific data belongs in
@@ -251,8 +251,8 @@ Notes:
 ## Section 5 — Critical Constraints
 
 - **Lock discipline:** `pageData.BlockchainInfo` must be read under
-  `pageData.RLock()` (`explorerroutes.go:1913-1920`); writer `Store` holds
-  `p.Lock()` (`explorer.go:536`). Reading outside the RLock is a data race.
+  `pageData.RLock()` (`explorerroutes.go:1983-1990`); writer `Store` holds
+  `p.Lock()` (`explorer.go:555`). Reading outside the RLock is a data race.
 - **Tip-only RPC validity:** `BlockchainInfo` is intentionally `nil` for
   non-tip blocks (`blockdata.go:338-340`); the handler fallback to
   `params.MaximumBlockSizes[0]` exists precisely for this.
@@ -302,14 +302,14 @@ When modifying `/parameters` data, check:
 **Direct dependencies**
 
 - `parameters.tmpl` field names must exist on `*chaincfg.Params` (via
-  `.ChainParams`) or on `ExtendedParams` (`explorerroutes.go:2158-2164`).
-- `AddressPrefixes` callers: only `ParametersPage` (`explorerroutes.go:2146`).
+  `.ChainParams`) or on `ExtendedParams` (`explorerroutes.go:2016-2021`).
+- `AddressPrefixes` callers: only `ParametersPage` (`explorerroutes.go:1980`).
   Adding a new address kind = one row inline in the literal; adding a new
   recognised network = one entry in `lookupAddrPrefixSet` plus the
   corresponding `addrPrefixSet` var. There are no longer any parallel
   slices to keep index-aligned.
 - `buildSKACoinParams` callers: only `ParametersPage`
-  (`explorerroutes.go:2173`). The `types.SKACoinParam` shape is consumed by
+  (`explorerroutes.go:2032`). The `types.SKACoinParam` shape is consumed by
   `parameters.tmpl` only — changing a field name there means updating both
   the type and the template.
 - `SKACoinParam.Pending` consumers: only the badge cascade at
@@ -334,7 +334,7 @@ When modifying `/parameters` data, check:
 - RPC: `GetBlockChainInfo` → `chainjson.GetBlockChainInfoResult`
   (`blockdata.go:334`).
 - DB: `GetTip` → `retrieveLatestBlockSummary` SQL
-  (`pgblockchain.go:7319-7348`).
+  (`pgblockchain.go:7431-7450`).
 
 **Rendering layers**
 
@@ -345,7 +345,7 @@ When modifying `/parameters` data, check:
 
 - `templates.exec("parameters", …)` error →
   `StatusPage(defaultErrorCode, …, ExpStatusError)`
-  (`explorerroutes.go:2176-2179`). Causes: missing template field; `commonData`
+  (`explorerroutes.go:2036-2039`). Causes: missing template field; `commonData`
   nil (DB down) → nil `*CommonPageData` → nil `.ChainParams` deref.
 - `GetTip` DB error → nil `CommonPageData` → cascades to the above.
 
@@ -415,9 +415,9 @@ When modifying `/parameters` data, check:
 
 ## Section 8 — Evidence
 
-- Route: `cmd/dcrdata/main.go:810`
-- Handler: `cmd/dcrdata/internal/explorer/explorerroutes.go:2143-2186`
-- `commonData`: `explorerroutes.go:2534-2572`
+- Route: `cmd/dcrdata/main.go:784`
+- Handler: `cmd/dcrdata/internal/explorer/explorerroutes.go:1976-2044`
+- `commonData`: `explorerroutes.go:2414-2453`
 - `AddressPrefixes` (+ per-net `addrPrefixSet` table):
   `explorer/types/explorertypes.go`
 - `SKACoinParam` view-model (incl. `Pending` and `Active` semantics):
@@ -433,13 +433,13 @@ When modifying `/parameters` data, check:
   (`db/dcrpg/pgblockchain.go`) + `SelectSKACoinEmissionHeights` SQL
   (`db/dcrpg/internal/vinoutstmts.go`)
 - SKA per-coin badge cascade: `cmd/dcrdata/views/parameters.tmpl:329`
-- ChainParams capture: `cmd/dcrdata/internal/explorer/explorer.go:369-371`
-- `pageData` struct: `explorer.go:230-233`
-- `Store` (writes `BlockchainInfo`): `explorer.go:536-572` (assignment `:572`)
-- `StoreMPData` (other reader): `explorer.go:504-506`
-- RPC source / tip-nil gate: `blockdata/blockdata.go:38,332-357` (`:339-341`)
-- `GetChainParams`: `db/dcrpg/pgblockchain.go:6408-6410`
-- `GetTip`: `db/dcrpg/pgblockchain.go:7319-7348`
+- ChainParams capture: `cmd/dcrdata/internal/explorer/explorer.go:343-345`
+- `pageData` struct: `explorer.go:210-215`
+- `Store` (writes `BlockchainInfo`): `explorer.go:508 (BlockchainInfo assignment at :555)`
+- `StoreMPData` (other reader): `explorer.go:476-478`
+- RPC source / tip-nil gate: `blockdata/blockdata.go:38,331-357` (`:335-337`)
+- `GetChainParams`: `db/dcrpg/pgblockchain.go:6419-6421`
+- `GetTip`: `db/dcrpg/pgblockchain.go:7431-7450`
 - ETag middleware: `cmd/dcrdata/internal/explorer/explorermiddleware.go:193`
 - Template: `cmd/dcrdata/views/parameters.tmpl` (Chain / Subsidy / Stake /
   Rule-change / Address / SKA coin sections)

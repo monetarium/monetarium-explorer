@@ -1,5 +1,5 @@
 domain: parameters
-anchor: dff1cd16
+anchor: c0cf86f4
 files:
   - blockdata/blockdata.go
   - cmd/dcrdata/internal/explorer/explorer.go
