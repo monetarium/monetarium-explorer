@@ -184,7 +184,9 @@ _The `/market` page and the entire `exchanges/` pipeline were **removed** from t
 
 ### Page-Rendering (cross-domain consolidation)
 
-_Mode-4 consolidation of the shared mechanics behind every server-rendered HTML page (block, mempool, visualblocks, parameters, charts, address). Not a flow — read alongside the per-domain flows it links. Covers out-of-band shared `pageData`/`invs` state, the multi-lock discipline, `*CommonPageData` struct-embedding template injection, and block-scoped ETag caching._
+_Full flow trace of `explorerUI` page rendering: `Store`/`StoreMPData` saver fan-out, `pageData`/`invs` shared state with multi-lock discipline, `commonData` → `GetTip` per-request, `*CommonPageData` struct-embedding, `withCache` ETag middleware, `normalizeExplorerRows` list-page helper, and handlers for `Home`, `Blocks`, `HashrateShares`/`HashrateSharesData` (two-handler split), `AgendasPage`/`AgendaPage`. **Refreshed at `HEAD=a8a64e4b`**: added `flow.full.md` + `flow.compact.md`; extended coverage to `explorerroutes.go` and `hashrate_shares.go`; added `normalizeExplorerRows` and two-handler-split patterns; added `withCache` data-endpoint and `CBlockSubsidy`/`NBlockSubsidy` confusion risks._
 
-- patterns: code-analysis/page-rendering/patterns.md — out-of-band shared page state via saver fan-out, `pageData`/`invsMtx` lock discipline, `*CommonPageData` embedding, block-scoped ETag cache
-- impact: code-analysis/page-rendering/impact.md — `commonData` nil render crash (all pages), saver writer/reader drift (HTML≠WS), lock-order inversion against `Store`
+- flow (full): code-analysis/page-rendering/flow.full.md — end-to-end trace from `blockdata` fan-out through `Store`/`StoreMPData`, middleware, `commonData`, all page handlers, template execution
+- flow (compact): code-analysis/page-rendering/flow.compact.md — LLM-optimized 200-word summary with mutation checklist
+- patterns: code-analysis/page-rendering/patterns.md — out-of-band shared page state via saver fan-out, `pageData`/`invsMtx` lock discipline, `*CommonPageData` embedding, block-scoped ETag cache, `normalizeExplorerRows` list-page row helper, two-handler shell+data split
+- impact: code-analysis/page-rendering/impact.md — `commonData` nil render crash (all pages), saver writer/reader drift (HTML≠WS), lock-order inversion against `Store`, data endpoint misplaced under `withCache`, `CBlockSubsidy`/`NBlockSubsidy` confusion
