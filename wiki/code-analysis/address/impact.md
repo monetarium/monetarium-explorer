@@ -1,16 +1,37 @@
 # Address area — mutation impact (consolidated)
 
-> Code-grounded as of `HEAD = 1b670255` (PR #265/#266 + the `db/dcrpg` coin-filter
-> series). This single file replaces the former `summary.impact.md`,
-> `transactions.impact.md`, and `charts.impact.md`, which documented the
-> *pre-multi-coin-frontend migration* — that migration has **shipped**, so their
-> central thesis ("backend complete, frontend VAR-only, template would crash if
-> flat fields removed") is false. Folded in this `Consolidate: address` pass.
-> Only the still-true blast radius is carried forward below.
+> Code-grounded as of `HEAD = a48ea0e1` (original multi-coin at `1b670255`;
+> post-launch fixes through 2026-06-18). This single file replaced the former
+> sub-area impact notes in the prior Consolidate pass; updated in this Refresh pass.
 
 Maps how a change to address-page data structures / multi-coin logic propagates,
 and where it fails. Layers that **do not share code**: DB aggregation,
 mempool overlay, REST/CSV, server templates, Stimulus controller.
+
+---
+
+## Risk: `utxoStore.set()` drops `SKAValue` — SKA amount-flow chart shows 0 sent
+
+**Trigger:** removing or ignoring the `skaValue string` parameter in `utxoStore.set()`
+(`db/dcrpg/pgblockchain.go:176`), or failing to pass `vout.SKAValue` when calling it.
+
+**Failure mode:** silent — the chart renders normally but `sent_ska` is always 0 for
+every SKA address; the balance line equals the received line. No log, no error.
+
+**Description:** `utxoStore.set()` (and its exported twin `Set()`) now carry a
+`skaValue string` eighth parameter and store it in `UTXOData.SKAValue` (`:186`/`:196`).
+Prior to commit `b13091c8`, the field was dropped; `insertSpendingAddressRow` then
+read an empty `SKAValue` from the utxo cache and wrote `ska_value=''` to the
+`addresses` table. `selectAddressAmountFlowByAddress` treats `''` as NULL via
+`NULLIF(ska_value,'')`, so `COALESCE(SUM(...),0)` → `'0'` → `sent_ska` was always
+zero, making the chart balance track received exactly. The fix is entirely in the
+utxo cache layer — the DB stores no incorrect history (rows already written with
+`ska_value=''` remain stale for that time window).
+
+**Constraint (C1):** any future refactor of `utxoStore.set()` or `UTXOData` must
+preserve the `SKAValue` pass-through. The callers are `pgblockchain.go:4707`
+(`utxoCache.Set(...)`, receiving from `vout.SKAValue`) and `:4325` (the
+`Reinit` path, receiving from `utxo.SKAValue`).
 
 ---
 

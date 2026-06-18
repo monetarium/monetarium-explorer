@@ -1,11 +1,8 @@
 # Address area — recurring patterns
 
-> Code-grounded as of `HEAD = 1b670255` (PR #265/#266 + the `db/dcrpg` coin-filter
-> series). The pre-#265/#266 "backend multi-coin, frontend VAR-only, migration
-> pending" framing is **overturned**: the address page is multi-coin end-to-end on
-> both backend and frontend. The three former sub-area impact notes
-> (`summary/transactions/charts.impact.md`) were folded into a single
-> [impact.md](impact.md) in this same `Consolidate: address` pass.
+> Code-grounded as of `HEAD = a48ea0e1` (original multi-coin at `1b670255`;
+> post-launch fixes through 2026-06-18). The three former sub-area impact notes
+> were folded into a single [impact.md](impact.md) in the prior Consolidate pass.
 
 Patterns extracted from [flow.full.md](flow.full.md) and grounded in current code.
 Each recurs across 2+ surfaces of the address area; cross-domain links noted.
@@ -112,20 +109,34 @@ Any SQL that aggregates address-level monetary values must emit **both** a VAR `
 
 ---
 
-## VAR-only stake metrics
+## VAR-only stake metrics (code is multi-coin aware; practice is VAR-only)
 
 **Appears in:** [flow.full.md](flow.full.md), [impact.md](impact.md).
 
 **Description:**
-"Stake" semantics (inherited from Decred consensus) apply to **VAR only**. Three places carry the assumption:
+"Stake" semantics (inherited from Decred consensus) apply to **VAR only in production**,
+but the code was generalised to multi-coin in the post-`1b670255` fixes:
 
-- `AddressBalance.FromStake`/`ToStake float64` — computed in `ReduceAddressHistory` as VAR-only ratios.
-- `ChartsData.Tickets`/`Votes`/`RevokeTx` from `selectAddressTxTypesByAddress` (`tx_type` 1/2/3) — with coin-filtered SQL these are zero for `coinType > 0`.
-- The summary-card stake rows are gated by `HasStakeOutputs()`/`HasStakeInputs()` (both compare the VAR float) — they never fire for pure-SKA addresses.
+- `CoinBalance.FromStake`/`ToStake float64` — now computed **per-coin** by
+  `retrieveAddressBalance` (queries.go:1600-1619): VAR via `int64` accumulators;
+  SKA via per-coin `skaFromStake *big.Int` accumulators. In practice, SKA
+  `FromStake` is always 0.0 (SKA staking not planned — see project memory).
+- `HasStakeOutputs()`/`HasStakeInputs()` (types.go:2457-2474) — now iterate the
+  full `Coins` map rather than a single flat float, so they return false for
+  pure-SKA addresses as expected.
+- `ChartsData.Tickets`/`Votes`/`RevokeTx` from `selectAddressTxTypesByAddress`
+  (`tx_type` 1/2/3) — with coin-filtered SQL these remain zero for `coinType > 0`.
+- Summary-card stake rows (`address.tmpl:129-154`) are gated by `HasStakeOutputs()`
+  /`HasStakeInputs()`; they now range over `ActiveCoins` and print per-coin
+  percentages, but the gate means they only render when VAR `FromStake > 0`.
 
 **Constraints:**
-- Don't surface stake metrics for non-VAR coins without first defining what they would mean — SKA does not participate in the stake mechanism.
-- When `?coin=N` with `N != 0`, stake rows should hide (UX decision tracked in [impact.md](impact.md) open questions).
+- The multi-coin code path is guarded by the `HasStakeOutputs/HasStakeInputs` gate
+  on the template side — it is safe but currently dead for non-VAR coins.
+- Don't surface stake metrics for SKA without first checking whether the
+  gate semantics still hold (SKA does not participate in the stake mechanism).
+- When `?coin=N` with `N != 0`, stake rows should hide (UX decision tracked in
+  [impact.md](impact.md) open questions).
 
 ---
 
@@ -155,6 +166,33 @@ Keys declared today: `chart`, `zoom`, `bin`, `flow`, `n`, `start`, `txntype`, **
 - Undeclared URL keys are silently dropped on `query.replace`.
 - A new persisted key requires updating the `nullTemplate` call **and** every URL builder that should emit it (`makeTableUrl`, the chart fetch path, `setTablePaginationLinks`) **and** the Go `linkTemplate` (which now appends `&coin=` when `coinType != CoinTypeAll`).
 - Callers of `query.replace` emit the full settings object — a new key must be set on `settings` (or remain `null`) before every `replace`.
+
+---
+
+## Atomic chart series visibility (`flowVisibility`)
+
+**Appears in:** [flow.full.md](flow.full.md) §3.6.
+
+**Description:**
+The amount-flow chart has three toggleable series (Sent / Received / Net). Each
+checkbox maps to a Dygraph series index. The naive pattern — calling
+`graph.setVisibility(index, bool)` per index in a loop — triggers Dygraph's
+`predraw_` hook on every call. When all series are transiently invisible (e.g.,
+unchecking Received when only Received was checked), `computeCombinedSeriesAndLimits_`
+dereferences `d[0].length` on an empty combined array and throws.
+
+`flowVisibility(bitmap)` (address_controller.js:209-224) is an exported pure
+function: it takes a 3-bit integer (bit 0 = Sent, bit 1 = Received, bit 2 = Net)
+and returns `{0: bool, 1: bool, 2: bool}`. `updateFlow` calls
+`this.graph.setVisibility(flowVisibility(bitmap))` (`:795`) in a single call,
+so Dygraph sees the final visibility map atomically. The function is unit-tested
+in `address_controller.test.js` (mapping table + the regression case).
+
+**Constraints:**
+- Always update all three series in one `setVisibility(object)` call; never loop
+  `setVisibility(index, bool)` — the transient-empty state can crash.
+- If the series count changes (e.g., a fourth flow series), update the bitmap
+  width in `flowVisibility` and the test mapping table together.
 
 ---
 

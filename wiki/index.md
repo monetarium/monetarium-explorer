@@ -56,12 +56,12 @@ _End-to-end pipeline for transaction processing, decoding, and rendering inputs/
 
 ### Address
 
-_Address page rendering: paginated transaction table, chart endpoints, CSV download, **multi-coin end-to-end** (`?coin=` via `CoinCtx` middleware; filter-before-paginate; confirmed-only balance), per-coin summary card + Coin column, and TurboQuery-driven URL state (chart kind, zoom, group-by, pagination, `coin`). Revised at `HEAD=1b670255` (PR #265/#266 + db coin-filter series)._
+_Address page rendering: paginated transaction table, chart endpoints, CSV download, **multi-coin end-to-end** (`?coin=` via `CoinCtx` middleware; filter-before-paginate; confirmed-only balance), per-coin summary card + Coin column, TurboQuery-driven URL state, and per-coin stake metrics. `utxoStore.set()` now carries `SKAValue` (fixes SKA amount-flow sent=0). `flowVisibility(bitmap)` atomic chart-series toggle. Paginator stable 20/40/80/160. Revised at `HEAD=a48ea0e1`._
 
-- flow (compact): code-analysis/address/flow.compact.md — current data path, `?coin=` contract, filter-before-paginate + confirmed-only-balance invariants, and a stale-claim delta table vs. the prior revision
-- flow (full): code-analysis/address/flow.full.md — current function trace: coin-filtered `AddressHistory`, rewritten mempool overlay, merged-view LIMIT-0 fix, per-coin templates, coin-aware controller, chart serialization
-- patterns: code-analysis/address/patterns.md — `CoinCtx` URL contract (backend + frontend), coin-aware aggregation (3 pipelines), per-coin caching, SKA decimal-string pipeline, dual VAR/SKA SUM, VAR-only stake metrics, legacy flat-field shim (residual), TurboQuery URL ownership
-- impact: code-analysis/address/impact.md — consolidated current-reality blast radius: coin-filter signature fan-out (+4 mocks), `CoinTypeAll=255` dual semantics, SKA-through-VAR precision (PR #263 class), coin-keyed cache staleness, `?coin=` server/client desync, legacy flat-field shim removal, CSV `value`→`amount` schema break (folds the former summary/transactions/charts sub-area notes)
+- flow (compact): code-analysis/address/flow.compact.md — current data path, `?coin=` contract, filter-before-paginate + confirmed-only-balance invariants, `utxoStore` SKA fix, and delta tables vs. both prior revisions
+- flow (full): code-analysis/address/flow.full.md — current function trace: coin-filtered `AddressHistory`, `utxoStore.set()` SKA fix, per-coin `retrieveAddressBalance` stake ratios, rewritten mempool overlay, merged-view LIMIT-0 fix, per-coin templates, coin-aware controller (chartTitle DOM, flowVisibility, paginator cleanup), chart serialization
+- patterns: code-analysis/address/patterns.md — `CoinCtx` URL contract (backend + frontend), coin-aware aggregation (3 pipelines), per-coin caching, SKA decimal-string pipeline, dual VAR/SKA SUM, stake metrics (multi-coin code; VAR-only in practice), legacy flat-field shim (residual), TurboQuery URL ownership, `flowVisibility` atomic chart-series visibility
+- impact: code-analysis/address/impact.md — blast radius: `utxoStore.set()` SKA pass-through, coin-filter signature fan-out (+4 mocks), `CoinTypeAll=255` dual semantics, SKA-through-VAR precision (PR #263 class), coin-keyed cache staleness, `?coin=` server/client desync, legacy flat-field shim removal, CSV `value`→`amount` schema break
 
 ### Windows
 

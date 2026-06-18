@@ -1,5 +1,5 @@
 domain: address
-anchor: 1b670255
+anchor: a48ea0e1
 files:
   - cmd/dcrdata/internal/api/apiroutes.go
   - cmd/dcrdata/internal/explorer/explorer.go
