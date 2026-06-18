@@ -1770,7 +1770,10 @@ type StatsInfo struct {
 func UnspentOutputIndices(vouts []Vout) (unspents []int) {
 	for idx := range vouts {
 		vout := vouts[idx]
-		if vout.Amount == 0.0 || vout.Spent {
+		if vout.Spent {
+			continue
+		}
+		if vout.SKAValue == "" && vout.Amount == 0.0 {
 			continue
 		}
 		unspents = append(unspents, idx)
