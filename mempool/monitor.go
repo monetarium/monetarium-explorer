@@ -386,7 +386,14 @@ func (p *MempoolMonitor) TxHandler(rawTx *chainjson.TxRawResult) error {
 	p.mtx.RUnlock()
 	for _, s := range savers {
 		if s != nil {
-			go s.StoreMPData(nil, nil, invCopy)
+			go func(s MempoolDataSaver, inv *exptypes.MempoolInfo) {
+				defer func() {
+					if r := recover(); r != nil {
+						log.Errorf("StoreMPData panicked: %v", r)
+					}
+				}()
+				s.StoreMPData(nil, nil, inv)
+			}(s, invCopy)
 		}
 	}
 
