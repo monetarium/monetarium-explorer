@@ -1,5 +1,5 @@
 domain: sidechain
-anchor: dff1cd16
+anchor: 4e634b17
 files:
   - cmd/dcrdata/internal/explorer/explorer.go
   - cmd/dcrdata/internal/explorer/explorerroutes.go
