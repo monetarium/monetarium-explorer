@@ -285,6 +285,12 @@ export default class extends Controller {
       Revocation: this.revocationTransactionsTarget,
       Regular: this.regularTransactionsTarget
     }
+    this.countTargetMap = {
+      Vote: this.voteCountTarget,
+      Ticket: this.ticketCountTarget,
+      Revocation: this.revCountTarget,
+      Regular: this.regCountTarget,
+    }
     ws.registerEvtHandler('newtxs', (evt) => {
       const m = JSON.parse(evt)
       const txs = Array.isArray(m) ? m : m.txs || []
@@ -327,6 +333,7 @@ export default class extends Controller {
     ws.deregisterEvtHandlers('newtxs')
     ws.deregisterEvtHandlers('mempool')
     ws.deregisterEvtHandlers('getmempooltxsResp')
+    this.countTargetMap = null
   }
 
   updateBlock(m) {
