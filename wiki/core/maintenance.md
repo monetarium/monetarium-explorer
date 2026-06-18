@@ -184,9 +184,11 @@ not proof the trace is wrong. Because manifests track whole files, a high-churn 
 (e.g. `db/dcrpg/pgblockchain.go`, listed by several domains) marks all of them STALE on any
 change to it, even one unrelated to a given trace's concern.
 
-Refreshing a STALE trace is a **Synthesize** pass: rewrite the flow/impact/patterns files,
-then bump the `anchor` field in `meta.yml` to the current `HEAD` and update `files`. Detection
-and refresh move together — the anchor is the "as-of" contract.
+Refreshing a STALE trace runs the `mutation-analyzer` skill's **`Refresh: <domain>`** trigger:
+it reads the anchor, re-traces only what changed since it, updates the trace files in place, and
+bumps `meta.yml` (`anchor` → current `HEAD`, refresh `files`). Detection and refresh move
+together — the anchor is the "as-of" contract. (If the trace still holds and only the anchor
+lagged, the refresh just bumps the anchor — no prose churn.)
 
 Seed a missing manifest with `./dev/wiki-staleness.sh --bootstrap`, then review the generated
 `files` list against the trace (the regex seeds candidates; it is not authoritative).

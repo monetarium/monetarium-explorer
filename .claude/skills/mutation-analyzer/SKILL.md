@@ -7,6 +7,8 @@ description: >
   layers, tracing data flow, or asking what breaks if they change something. Trigger explicitly
   for phrases like "Trace how X flows", "I want to modify X, what do I check?", "Where is X
   used?", "What breaks if I change X?", or "How does data move from backend to frontend for X?".
+  Also triggers on "Refresh: <domain>" to update a stale code-analysis trace flagged by
+  dev/wiki-staleness.sh.
   DO NOT trigger for general learning questions or high-level architecture overviews — for those,
   redirect to Interview Mode to scope first. Strictly for mutation-oriented analysis anchored in
   actual code paths. Produces/updates files under wiki/code-analysis/<domain>/.
@@ -70,7 +72,7 @@ Synthesize/Consolidate/Lint session that touches existing wiki files.
 
 ## Operating Modes
 
-You operate in **five** explicit modes. Default mode: **Interview**.
+You operate in **six** explicit modes. Default mode: **Interview**.
 
 The core pipeline is **auto-chaining**: Interview → Explore → **Synthesize (automatic)**.
 Synthesize is NOT a mode the user must remember to trigger. As soon as an Explore pass
@@ -247,6 +249,35 @@ not yet normalized by Consolidate.
 - **Critical Observations** — systemic risks across domains.
 
 All findings grounded in actual files. Mark assumptions as **INFERRED**.
+
+---
+
+### Mode 6 — Refresh
+
+**Trigger:** `Refresh: <domain>` (e.g. `Refresh: windows`). The one-keyword response to a
+`STALE` domain flagged by `dev/wiki-staleness.sh`. Refresh is a **scoped entry** into
+Explore → Synthesize, not a new pipeline step — all Mode 2 and Mode 3 rules apply.
+
+**Procedure:**
+
+1. Read `wiki/code-analysis/<domain>/meta.yml` for its `anchor` and `files`. If there is no
+   `meta.yml`, this is not a Refresh — tell the user to seed one with
+   `./dev/wiki-staleness.sh --bootstrap`, or treat it as a fresh Explore on the domain.
+2. Compute the drift since the anchor — `git log --name-only <anchor>..HEAD -- <files>` — to get
+   the commits and covered files that changed. This is the **focus set** for the re-trace.
+3. Run **Mode 2 — Explore** over that focus set against current `HEAD`: re-verify every
+   `file:line` reference in the existing trace, and capture flows, invariants, and risks that
+   changed. Watch for newly-added files that now belong to this domain (add them to coverage).
+4. Auto-chain into **Mode 3 — Synthesize**, but **UPDATE in place**: extend/merge the existing
+   `flow.*` / `patterns.md` / `impact.md` (never create parallel files), refresh the
+   `wiki/index.md` entry if the domain's scope description changed, and **bump `meta.yml`**
+   (`anchor` = current `git rev-parse --short HEAD`, `files` = the trace's current coverage).
+5. Report the before→after anchor and the files updated, and tell the user to re-run
+   `./dev/wiki-staleness.sh` to confirm `<domain>` is now `FRESH`.
+
+If the re-trace shows the existing trace is still accurate (a covered file moved but the
+documented flow is unaffected — only the anchor lagged), it is enough to bump `meta.yml.anchor`
+to current `HEAD`. Say so explicitly rather than churning unchanged prose.
 
 ---
 
