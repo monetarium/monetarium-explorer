@@ -441,9 +441,6 @@ export default class extends Controller {
       } else if (voteValidationHash !== bestBlockHash) {
         tr.classList.add('disabled-row')
         tr.classList.remove('blue-row')
-        if (tr.classList.contains('last_block')) {
-          tr.textContent = 'False'
-        }
       } else {
         tr.classList.remove('disabled-row')
         tr.classList.remove('blue-row')
