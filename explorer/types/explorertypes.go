@@ -1003,6 +1003,9 @@ func (mpi *MempoolInfo) DeepCopy() *MempoolInfo {
 	mps := mpi.MempoolShort.DeepCopy()
 	out.MempoolShort = *mps
 
+	out.Ident = mpi.Ident
+	out.CoinFills = mpi.CoinFills
+
 	return out
 }
 
