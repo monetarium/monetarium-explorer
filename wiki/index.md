@@ -47,12 +47,12 @@ _Data flow for block rendering, including headers, metrics, and block content pa
 
 ### Transaction
 
-_End-to-end pipeline for transaction processing, decoding, and rendering inputs/outputs._
+_End-to-end pipeline for transaction processing, decoding, and rendering inputs/outputs. SSFee (Stake Fee) txs have their own rendering path: `FeeRaw` is semantically overloaded (net reward for SSFee, fee for regular txs); coinbase/vote use `FeeReward()` float; SSFee use `coinDecimalParts .FeeRaw .CoinType` (VAR or SKA). Mempool ticket purchases carry `TicketStage` ("Ready"/"Staging"). Revised at `HEAD=2d4b64ac`._
 
-- flow (compact): code-analysis/transaction/flow.compact.md — high-level summary of how transaction inputs and outputs are processed
-- flow (full): code-analysis/transaction/flow.full.md — detailed, step-by-step function trace for deep debugging of tx logic
-- patterns: code-analysis/transaction/patterns.md — recurring architectural concepts and invariants to follow when modifying transactions
-- impact: code-analysis/transaction/impact.md — downstream components and templates that break if tx data structures change
+- flow (compact): code-analysis/transaction/flow.compact.md — high-level summary of how transaction inputs/outputs and SSFee/coinbase/vote fee-reward paths are processed
+- flow (full): code-analysis/transaction/flow.full.md — detailed step-by-step trace including SSFee net-reward overload, TicketStage, FeeRateRaw unification, and MiningFee scope
+- patterns: code-analysis/transaction/patterns.md — recurring architectural concepts: FeeRaw overload, dual ssFeeNetReward, ticket staging, stringified precision, perimeter flattening
+- impact: code-analysis/transaction/impact.md — downstream components and templates that break if tx data structures change; includes new SSFee blast-radius and MiningFee SQL parity risks
 
 ### Address
 
