@@ -15,7 +15,6 @@ import (
 type MempoolInfo struct {
 	CurrentHeight               uint32
 	NumTicketPurchasesInMempool uint32
-	NumTicketsSinceStatsReport  int32
 	LastCollectTime             time.Time
 }
 
@@ -82,7 +81,6 @@ type StakeData struct {
 	Time              time.Time
 	NumTickets        uint32
 	NumVotes          uint32
-	NewTickets        uint32
 	Ticketfees        *chainjson.TicketFeeInfoResult
 	MinableFees       *MinableFeeInfo
 	AllTicketsDetails TicketsDetails

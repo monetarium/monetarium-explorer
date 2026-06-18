@@ -375,7 +375,6 @@ func (t *DataCollector) Collect() (*StakeData, []exptypes.MempoolTx, txhelpers.M
 		Time:       now,
 		NumTickets: feeInfo.FeeInfoMempool.Number,
 		NumVotes:   uint32(numVotes),
-		// NewTickets set by CollectAndStore
 		Ticketfees:        feeInfo,
 		MinableFees:       mineables,
 		AllTicketsDetails: allTicketsDetails,
