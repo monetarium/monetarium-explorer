@@ -162,12 +162,12 @@ _The `/decodetx` page: a static HTML form whose handler carries no data; all int
 
 ### WebSocket Transport
 
-_The explorer `/ws` real-time pipe shared by all live pages: `RootWebsocket` + `WebsocketHub` (server, migrated to `coder/websocket`) and the `partysocket`-based `MessageSocket` client wrapper. Owns the connection lifecycle, hub fan-out, `{event,message}` framing, RPC-over-WS (`<event>Resp`), synthetic `open`/`reconnect`/`close`/`error` events, two-layer outbound buffering, and 60 s keepalive — distinct from per-feature payload domains (mempool/visualblocks/decodetx/ticketpool) and from the separate pubsub `/ps` server._
+_The explorer `/ws` real-time pipe shared by all live pages: `RootWebsocket` + `WebsocketHub` (server) and `partysocket`-based `MessageSocket` client. Owns connection lifecycle, hub fan-out, `{event,message}` framing, RPC-over-WS (`<event>Resp`), synthetic `open`/`reconnect`/`close`/`error` events, two-layer buffering, 60 s keepalive, and the pull-refresh `getlatestblocks` loop (reconnect/gap → cap at 400 → `rebuildBlockTable`). `CBlockSubsidy` added to `newblock` Extra for vote-scaled subsidy. Distinct from pubsub `/ps` server. Revised at `HEAD=f1f2bc89`._
 
-- flow (compact): code-analysis/websocket/flow.compact.md — one-line push/request flow, 7 transport patterns, constraints, mutation checklist
-- flow (full): code-analysis/websocket/flow.full.md — end-to-end trace: hub → 3-goroutine connection handler → wire envelope → partysocket client → consumers; event-id triple coupling; keepalive
-- patterns: code-analysis/websocket/patterns.md — envelope-and-dispatch + synthetic events, 3-goroutine/`connCtx` model, fan-out unregister-on-backpressure, RPC-over-WS, reconnect-driven re-request, two-layer buffering, new-tx batching
-- impact: code-analysis/websocket/impact.md — R1 event-name drift, R2 unwired push signal, R3 `/ws`↔`/ps`↔HTTP drift, R4 SKA-through-float, R5 backpressure change, R6 connCtx teardown, R7 keepalive removal, R8 size limits, R9 reconnect-recovery omissions, R10 queue overflow / malformed frame
+- flow (compact): code-analysis/websocket/flow.compact.md — push/pull-refresh/request flows, 9 transport patterns, constraints, mutation checklist
+- flow (full): code-analysis/websocket/flow.full.md — end-to-end trace: hub → 3-goroutine connection handler → wire envelope → partysocket client → consumers; `getlatestblocks` pull-refresh with clamp; `CBlockSubsidy` in newblock Extra; `time_controller` piggybacking; `isLatestValue` gate
+- patterns: code-analysis/websocket/patterns.md — P1–P9: envelope-and-dispatch, 3-goroutine/`connCtx`, fan-out, RPC-over-WS, reconnect re-request, buffering, tx batching, client watchdog, pull-refresh
+- impact: code-analysis/websocket/impact.md — R1–R12: event-name drift, unwired signal, `/ws`↔`/ps`↔HTTP drift, SKA-through-float, backpressure, connCtx teardown, keepalive, size limits, reconnect omissions, queue overflow, uncapped span DoS, isLatestValue gate
 
 ### Ticketpool
 

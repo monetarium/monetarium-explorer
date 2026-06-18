@@ -1,9 +1,14 @@
 domain: websocket
-anchor: 98c7876a
+anchor: f1f2bc89
 files:
   - cmd/dcrdata/internal/explorer/websocket.go
   - cmd/dcrdata/internal/explorer/websockethandlers.go
+  - cmd/dcrdata/internal/explorer/explorerroutes.go
   - cmd/dcrdata/public/js/controllers/connection_controller.js
   - cmd/dcrdata/public/js/services/messagesocket_service.js
+  - cmd/dcrdata/public/js/controllers/home_latest_blocks_controller.js
+  - cmd/dcrdata/public/js/controllers/blocks_controller.js
+  - cmd/dcrdata/public/js/controllers/time_controller.js
+  - cmd/dcrdata/public/js/controllers/mining_controller.js
   - pubsub/pubsubhub.go
   - pubsub/types/pubsub_types.go

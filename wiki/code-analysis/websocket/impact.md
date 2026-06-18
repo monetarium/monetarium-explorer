@@ -85,10 +85,33 @@ Manual coverage: test plan WS-F4/I1/I2.
 `console.warn` and the message loop keeps processing subsequent frames (asserted by
 test plan WS-J1).
 
+## R11 — Uncapped WS span → DoS DB scan (silent latency / resource exhaustion)
+**Trigger:** a new WS reader case passes a client-supplied numeric argument
+directly to a DB range query (e.g. `GetExplorerBlocks(tip, tip-N)`) without a
+cap. Any unauthenticated browser console can drive `N` to chain length,
+triggering two DB round-trips per block (getBlockVerbose + GetSummaryByHash),
+stalling the connection and exhausting DB connections.
+**Fixed in `getlatestblocks`** by `clampLatestBlocksSpan` (cap `maxExplorerRows=400`
+— same as the `/blocks` HTTP route). **Pattern to follow for all future RPC
+commands** that take a user-supplied count argument. See
+[explorerroutes.go:161-173](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L161-L173).
+
+## R12 — `isLatestValue` gate / historical page live-push (loud or silent)
+**Trigger:** template sets `IsLatest=true` for a historical `/blocks` page (or
+the Go page-data builder sets `IsLatest` incorrectly).
+**Failure:** `blocks_controller.js` wires `reconnect` + `getlatestblocksResp`
+handlers only when `isLatestValue=true`. If a historical page receives this flag,
+live blocks are pushed onto it and `_refreshList` replaces the historical window
+with the latest `rowsValue` blocks — correct rows, wrong page (silent to the
+user, loud in a test if you look for specific heights).
+**Must verify:** the Go page-data builder sets `IsLatest = (blockHeight == bestBlock)`.
+See [explorerroutes.go](../../../cmd/dcrdata/internal/explorer/explorerroutes.go) Blocks handler.
+
 See also:
-- /wiki/code-analysis/websocket/patterns.md (derived-from: these risks follow from P1–P7)
+- /wiki/code-analysis/websocket/patterns.md (derived-from: these risks follow from P1–P9)
 - /wiki/code-analysis/decodetx/impact.md (shares-pattern-with: R1 event-name drift, oversize silent drop, `/ws`↔`/ps` duality)
 - /wiki/code-analysis/mempool/impact.md (shares-pattern-with: WS schema drift, Go↔JS drift)
 - /wiki/code-analysis/visualblocks/impact.md (depends-on: `newblock` WS shape + client normalisers)
+- /wiki/code-analysis/block/impact.md (shares-pattern-with: getlatestblocks range divergence risk; CBlockSubsidy parity)
 - /wiki/core/constraints.md (depends-on: C1 precision; C2 dual pipeline; C3/C8 parity & shape asymmetry)
 - /docs/manual-test-plan-websocket.md (verified-by: manual transport test plan)
