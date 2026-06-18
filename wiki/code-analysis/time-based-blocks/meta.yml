@@ -1,6 +1,7 @@
 domain: time-based-blocks
-anchor: dff1cd16
+anchor: b9d2b324
 files:
+  - cmd/dcrdata/internal/explorer/explorer.go
   - cmd/dcrdata/internal/explorer/explorerroutes.go
   - cmd/dcrdata/views/timelisting.tmpl
   - db/dbtypes/types.go

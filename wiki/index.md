@@ -76,9 +76,9 @@ _Ticket price window intervals: server-rendered `/ticketpricewindows` page; SQL-
 
 _Aggregation and grouping of blocks over specific time intervals (days, weeks, months, years)._
 
-- flow (compact): code-analysis/time-based-blocks/flow.compact.md — high-level summary of how blocks are grouped by time periods
-- flow (full): code-analysis/time-based-blocks/flow.full.md — detailed, step-by-step function trace for deep debugging of time aggregations
-- patterns: code-analysis/time-based-blocks/patterns.md — SQL date_trunc UTC aggregation, shared BlocksGroupedInfo struct (windows coupling), controller-level YTD mutation, genesis-anchored pagination, handler-level year fallback
+- flow (compact): code-analysis/time-based-blocks/flow.compact.md — high-level summary of how blocks are grouped by time periods; includes normalizeExplorerRows default=100/cap=400 and mutation checklist. Revised at `HEAD=b9d2b324`.
+- flow (full): code-analysis/time-based-blocks/flow.full.md — detailed, step-by-step function trace for all layers; includes normalizeExplorerRows pattern shared with windows and blocks list handlers
+- patterns: code-analysis/time-based-blocks/patterns.md — SQL date_trunc UTC aggregation, shared BlocksGroupedInfo struct (windows coupling), controller-level YTD mutation, row-count-driven pagination, handler-level year fallback, centralised normalizeExplorerRows page-size normalization (default=100, cap=400, shared across 3 handlers)
 - impact: code-analysis/time-based-blocks/impact.md — UTC cast divergence, positional rows.Scan desync, cross-domain struct breakage, YTD mislabel, fallback removal, hard DB-timeout blanking
 
 ### Mempool
