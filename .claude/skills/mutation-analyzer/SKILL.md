@@ -263,11 +263,17 @@ Explore → Synthesize, not a new pipeline step — all Mode 2 and Mode 3 rules 
 1. Read `wiki/code-analysis/<domain>/meta.yml` for its `anchor` and `files`. If there is no
    `meta.yml`, this is not a Refresh — tell the user to seed one with
    `./dev/wiki-staleness.sh --bootstrap`, or treat it as a fresh Explore on the domain.
-2. Compute the drift since the anchor — `git log --name-only <anchor>..HEAD -- <files>` — to get
-   the commits and covered files that changed. This is the **focus set** for the re-trace.
-3. Run **Mode 2 — Explore** over that focus set against current `HEAD`: re-verify every
-   `file:line` reference in the existing trace, and capture flows, invariants, and risks that
-   changed. Watch for newly-added files that now belong to this domain (add them to coverage).
+2. Compute likely drift since the anchor — `git log --name-only <anchor>..HEAD -- <files>` — to
+   see which already-tracked files changed, and in which commits. Treat this as a **priority
+   hint** for where to look first, **not** the boundary of the re-trace: it is scoped to the
+   existing `files`, so by construction it cannot surface a newly-added file that now belongs to
+   the domain.
+3. Run a **full Mode 2 — Explore** pass against current `HEAD` — the complete checklist
+   (definition → ≥3 usage points → ≥2 transformations → serialization boundary), tracing the
+   domain's actual current flow **end to end**, not just the files from step 2. This is what
+   keeps coverage correct: re-verify every `file:line` reference in the existing trace; **add any
+   newly-introduced file the flow now passes through** to the domain's coverage, and drop files
+   the flow no longer touches. Capture the flows, invariants, and risks that changed.
 4. Auto-chain into **Mode 3 — Synthesize**, but **UPDATE in place**: extend/merge the existing
    `flow.*` / `patterns.md` / `impact.md` (never create parallel files), refresh the
    `wiki/index.md` entry if the domain's scope description changed, and **bump `meta.yml`**

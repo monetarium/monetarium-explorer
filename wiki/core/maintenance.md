@@ -185,8 +185,9 @@ not proof the trace is wrong. Because manifests track whole files, a high-churn 
 change to it, even one unrelated to a given trace's concern.
 
 Refreshing a STALE trace runs the `mutation-analyzer` skill's **`Refresh: <domain>`** trigger:
-it reads the anchor, re-traces only what changed since it, updates the trace files in place, and
-bumps `meta.yml` (`anchor` → current `HEAD`, refresh `files`). Detection and refresh move
+it reads the anchor, re-traces the domain's flow end to end (prioritizing what changed since the
+anchor, and picking up newly-covered files), updates the trace files in place, and bumps
+`meta.yml` (`anchor` → current `HEAD`, refresh `files`). Detection and refresh move
 together — the anchor is the "as-of" contract. (If the trace still holds and only the anchor
 lagged, the refresh just bumps the anchor — no prose churn.)
 
