@@ -1,6 +1,6 @@
 # VisualBlocks Domain — Mutation Impact
 
-Revision: `HEAD=38636d52` (post visualblocks UI rewrite for #270 on top of PR #284 contract).
+Revision: `HEAD=717be5a6` (post visualblocks UI rewrite for #270 on top of PR #284 contract; selector-based mempool-tile lookup + reconnect handler added by `793610c8`/`2218b9c`/`fe58506`/`aa356db6`).
 
 ## When modifying: the `/visualblocks` page or its backing data
 
@@ -38,13 +38,15 @@ You MUST verify all of the following layers, because the page has **two transpor
 
 ### JS Controller
 
-- File: [cmd/dcrdata/public/js/controllers/visualBlocks_controller.js](../../../cmd/dcrdata/public/js/controllers/visualBlocks_controller.js) (fully rewritten in `38636d52`).
+- File: [cmd/dcrdata/public/js/controllers/visualBlocks_controller.js](../../../cmd/dcrdata/public/js/controllers/visualBlocks_controller.js) (fully rewritten in `38636d52`; selector fixes + reconnect in `793610c8`/`2218b9c`/`fe58506`/`aa356db6`).
 - Reads (WS `newblock`): the WS frame carries the full `BlockInfo`. The controller's `normaliseWsBlock` reads:
   - From `BlockBasic` (lowercase JSON tags): `block.height`, `block.time`, `block.size`, `block.formatted_bytes`.
   - From `BlockInfo` non-tagged: `block.Votes`, `block.Tickets`, `block.Revs`.
   - From `BlockInfo` snake-case-tagged (contract fields): `block.coin_fills`, `block.regular_coin_counts`, `block.total_fill_ratio`, `block.max_block_size`, `block.active_ska_count`.
   - From nested `TrimmedTxInfo` records: `vote.voted`, `vote.vote_valid`, `vote.vin_count`, `vote.vout_count` (snake-case); `vote.TxID`, `vote.Total` (PascalCase from TxBasic, no tags).
 - Reads (WS `getmempooltrimmedResp`): `mempool.Time`, `mempool.total_size`, `mempool.coin_fills`, `mempool.coin_stats`, `mempool.total_fill_ratio`, `mempool.max_block_size`, `mempool.Votes`, `mempool.Tickets`, `mempool.Revocations`.
+- **Mempool tile lookup (`793610c8`)**: `_handleVisualBlocksUpdate` locates the mempool tile via `box.querySelector('[data-role="mempool-tile"]')`; if `null`, returns early (null guard `2218b9c`). `handleMempoolUpdate` uses the same selector + `replaceWith`. Both emitters (template and `makeMempoolBlock`) must carry `data-role="mempool-tile"` or both handlers silently no-op.
+- **Reconnect handler (`aa356db6`)**: `connect()` registers a `reconnect` handler that re-sends `getmempooltrimmed`; the unsub is stored as `this.reconnectUnsub` and called in `disconnect()`. Failing to call the unsub on disconnect leaks the handler.
 - Risk: any new contract field added to the WS shape but not added to `normaliseWsBlock` is silently `undefined` in the tile builder. The vitest regression test guards the existing fields, not future additions.
 
 ### Contract test (extended in `38636d52`)
@@ -53,11 +55,11 @@ You MUST verify all of the following layers, because the page has **two transpor
 - Asserts: **5 fields** identical across HTTP/WS — `regular_coin_counts`, `coin_fills`, `active_ska_count`, `max_block_size`, `total_fill_ratio`; `total_fill_ratio == Size / MaxBlockSize` in the HTTP wire; coinbase excluded from `transactions`; `voted=true` for vote-bearing tx; `max_block_size`/`total_size` on `TrimmedMempoolInfo`.
 - Risk: rename one contract field and the test will fail (good); add a sixth without an assertion and nothing catches drift (bad).
 
-### Vitest pin (new in `38636d52`)
+### Vitest pin (new in `38636d52`; extended in `aa356db6`, `793610c8`, `e72ee50c`)
 
 - File: [cmd/dcrdata/public/js/controllers/visualBlocks_controller.test.js](../../../cmd/dcrdata/public/js/controllers/visualBlocks_controller.test.js).
-- 15 tests across `makeMempoolBlock` (6), `newBlockHtmlElement` (5), `normaliseWsBlock` (2), and `visualBlocks reconnect resync` (2, added after `38636d52`).
-- Asserts: no DCR; no legacy rewards/transactions/fund classes; vote-state classes by `(Voted, VoteValid)`; indicator-fill structure (1 TOTAL + N fill-bar); FillBar `txCount` from `RegularCoinCounts` (block) or `CoinStats.regular_count` (mempool); ticket title carries `coin:"VAR"`; `block-rows > *` order = votes/tickets/indicator-fill; WS-shape regression for BlockBasic lowercase JSON tags.
+- 19 tests across five suites: `makeMempoolBlock` (6), `newBlockHtmlElement` (5), `normaliseWsBlock` (2), `visualBlocks reconnect resync` (2), `controller mempool-tile lifecycle` (4).
+- Asserts: no DCR; no legacy rewards/transactions/fund classes; vote-state classes by `(Voted, VoteValid)`; indicator-fill structure (1 TOTAL + N fill-bar); FillBar `txCount` from `RegularCoinCounts` (block) or `CoinStats.regular_count` (mempool); ticket title carries `coin:"VAR"`; `block-rows > *` order = votes/tickets/indicator-fill; WS-shape regression for BlockBasic lowercase JSON tags; reconnect re-sends `getmempooltrimmed`; lifecycle: insert-after-mempool-tile, replace-mempool-tile, empty-box null guard.
 - Risk: a tile-shape change that breaks any of these assertions surfaces in `npm test` (vitest), not at `go build`.
 
 ### SCSS
@@ -169,6 +171,12 @@ Risk: mutating the returned `*BlockInfo` in any handler corrupts all downstream 
 
 ## 7. Silent Failures (High Risk)
 
+### `data-role="mempool-tile"` contract break (new in `793610c8`)
+
+- Removing or omitting `data-role="mempool-tile"` from the template (`visualblocks.tmpl`) or from `makeMempoolBlock` → `querySelector('[data-role="mempool-tile"]')` returns `null`; **both** `_handleVisualBlocksUpdate` and `handleMempoolUpdate` silently no-op. The page renders correctly on load but goes stale — no new-block tiles are inserted and the mempool tile is never refreshed.
+- The `controller mempool-tile lifecycle` vitest suite catches this as a mismatch between expected and actual child count.
+- Also triggered by adding HTML comments inside the blocks-holder (`data-visualBlocks-target="box"`) which create `Text` nodes between DOM elements.
+
 ### WS wire-shape regression (the bug `38636d52` shipped and fixed)
 
 - Reading `block.Height` (PascalCase) instead of `block.height` (lowercase JSON tag) → tile renders `/block/undefined` and `NaNs ago`. Locked by `normaliseWsBlock` test in `visualBlocks_controller.test.js`.
@@ -243,8 +251,9 @@ Risk: mutating the returned `*BlockInfo` in any handler corrupts all downstream 
 
 Before committing changes that touch the visualblocks data path:
 
-- [ ] HTTP handler updated AND `visualblocks.tmpl` renders the change correctly.
-- [ ] JS controller (`visualBlocks_controller.js`) renders the change identically on the next WS push.
+- [ ] HTTP handler updated AND `visualblocks.tmpl` renders the change correctly. Verify `data-role="mempool-tile"` is still present on the server-rendered mempool tile.
+- [ ] JS controller (`visualBlocks_controller.js`) renders the change identically on the next WS push. Verify `makeMempoolBlock` still emits `data-role="mempool-tile"` on the outer div.
+- [ ] If adding new WS event handlers in `connect()`: store the unsub token and call it in `disconnect()`. Pattern: `this.xyzUnsub = ws.registerEvtHandler('xyz', fn); disconnect() { this.xyzUnsub(); ... }`.
 - [ ] If adding a new contract field: populated in `(*BlockInfo).Trim`, copied onto `blockCopy` in `websockethandlers.go:sigNewBlock`, **and added to `normaliseWsBlock`**, AND new assertion in `visualblocks_contract_test.go`, AND new vitest assertion if it affects the tile DOM.
 - [ ] If touching a template helper (`formatBytes`, `regularCountForSymbol`, …): mirror in the JS equivalent in `visualBlocks_controller.js`.
 - [ ] If touching `coinTypeFromSymbol`: mirror on both Go and JS sides.

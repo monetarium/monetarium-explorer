@@ -119,6 +119,76 @@ header tip. On `GetTip` failure it logs and **returns `nil`**.
 
 ---
 
+## List-Page Row Normalization (`normalizeExplorerRows[T]`)
+
+**Appears in:**
+
+- /wiki/code-analysis/page-rendering/flow.full.md (Blocks, StakeDiffWindows, timeBasedBlocksListing)
+
+**Description:**
+The three block-list page handlers (`Blocks`, `StakeDiffWindows`,
+`timeBasedBlocksListing`) share identical "rows defaulting + capping" logic. It is
+centralized in a single generic function
+([explorerroutes.go:645](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L645)):
+
+```go
+func normalizeExplorerRows[T int64 | uint64](rows T) T {
+    switch {
+    case rows == 0:       return defaultExplorerRows  // 100
+    case rows > maxExplorerRows: return maxExplorerRows // 400
+    }
+    return rows
+}
+```
+
+The generic type parameter prevents the silent overflow that would occur if a large
+`uint64` query value were converted to `int64` before the cap comparison. `rows==0`
+is the canonical signal for "no `?rows=` in the request" — do not validate/reject
+it before passing to the function.
+
+**Constraints:**
+
+- `defaultExplorerRows = 100`, `maxExplorerRows = 400` (`explorer.go:50-51`). Changing
+  either constant affects all three list pages simultaneously — verify the template
+  page-size dropdowns include the new default value.
+- Do not add per-handler row defaults that bypass this function; doing so reverts to
+  the pre-refactor triplicated logic and diverges from the shared constant.
+
+---
+
+## Two-Handler Split: Shell Page + Data Endpoint
+
+**Appears in:**
+
+- /wiki/code-analysis/page-rendering/flow.full.md (HashrateShares + HashrateSharesData)
+- /wiki/code-analysis/charts/flow.full.md (chart shell under withCache; data endpoint at `/api/...`)
+
+**Description:**
+Pages that load data client-side via a Stimulus controller use a two-handler split:
+
+1. **Shell handler** — registered under `withCache`; renders a near-static HTML
+   skeleton with bootstrap data (e.g. `ActiveSKATypes`). The template drives initial
+   controller state. Refreshed on each block tick via ETag reset.
+2. **Data endpoint** — registered outside `withCache`; returns JSON, varying by query
+   params (e.g. `?interval=`). Must **not** be placed under `withCache` — the ETag
+   does not encode query params, so all interval variants would share one cached
+   response.
+
+`HashrateShares` (shell) and `HashrateSharesData` (data) at
+`hashrate_shares.go:142` and `hashrate_shares.go:95` are the canonical in-explorer
+example. The explicit comment at `main.go:774` documents the exclusion:
+`// Data endpoint is NOT under withCache: it varies by ?interval=`.
+
+**Constraints:**
+
+- Any new page that fetches data client-side must follow this split. Route the shell
+  under `withCache`; route the data endpoint at the same path prefix + `/data` (or
+  equivalent) outside `withCache`.
+- The shell handler may still read `pageData` under `pageData.RLock` for bootstrap
+  data (e.g. `SKACoinSupply` coin types).
+
+---
+
 ## Block-Scoped ETag / Last-Modified Page Cache
 
 **Appears in:**

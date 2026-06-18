@@ -1,5 +1,5 @@
 domain: visualblocks
-anchor: 38636d52
+anchor: 717be5a6
 files:
   - cmd/dcrdata/internal/explorer/explorer.go
   - cmd/dcrdata/internal/explorer/explorerroutes.go

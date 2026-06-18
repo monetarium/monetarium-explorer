@@ -1,5 +1,5 @@
 domain: attack-cost
-anchor: dff1cd16
+anchor: 27dbd411
 files:
   - blockdata/blockdata.go
   - cmd/dcrdata/internal/explorer/explorerroutes.go

@@ -1,17 +1,22 @@
 - **One-line Flow:**
-  Mempool txs are decoded in Go (`txhelpers`) directly into a single total for their specific coin (`MempoolTx.SKATotals`), while Confirmed txs proxy Node RPC (`GetRawTransactionVerbose`) verbatim into array slices (`TxShort.Vout[]`).
+  Mempool txs are decoded in Go (`txhelpers`) into a single coin total (`MempoolTx.SKATotals`); confirmed txs proxy Node RPC (`GetRawTransactionVerbose`) verbatim into array slices (`TxShort.Vout[]`); SSFee txs additionally trigger `ssFeeNetReward()` to populate `FeeRaw` with a net reward (Σout − Σin, ≥ 0).
 - **Key Architectural Patterns:**
-  1. **Structural Bifurcation:** Mempool relies on struct maps at the root level; Confirmed APIs rely on property injection on array slices.
-  2. **Multi-Source of Truth:** Mempool calculates coins internally; Confirmed logic trusts the Node.
-  3. **Rendering Divergence:** Mempool relies on JS HTML `<template>` cloning; Confirmed relies on Go server-templates.
+  1. **Structural Bifurcation:** Mempool = struct maps at root level; Confirmed APIs = property-injected array slices.
+  2. **`FeeRaw` semantic overload:** For SSFee txs `FeeRaw` = net reward (outputs − inputs, ≥ 0); for regular txs `FeeRaw` = fee (inputs − outputs, ≥ 0). Same field, opposite sign convention. Template MUST branch on `IsSSFee()` before rendering.
+  3. **Dual ssFeeNetReward implementations:** `pgblockchain.go:ssFeeNetReward` mirrors `txhelpers/ssfee.go:blockSSFeeTotalsInternal` — two independent implementations, must stay in sync manually.
+  4. **TicketStage classification:** Mempool ticket purchases are "Ready"/"Staging" based on whether vin parents are confirmed; both `collector.go` and `monitor.go` set it via `ticketStage()`.
 - **Critical Constraints:**
-  - SKA `CoinType` and exact coin amounts (`SKAValue`) MUST pass through the system as `string` or `*big.Int`. Never use legacy `float64` `Amount`.
-  - `tx.tmpl` branches on `$.Data.CoinType` (`:573` et al.): VAR via `float64AsDecimalParts .Amount` (8-dec safe), SKA via `skaDecimalParts .ValueRaw` (string). A new coin-dependent field must extend **both** branches; the confirmed page is server-rendered (no WS live-update).
+  - `FeeReward()` on `TxInfo` is VAR-only float64 (coinbase/vote). SSFee uses `coinDecimalParts .FeeRaw .CoinType` (VAR or SKA big.Int). Never call `FeeReward()` for SKA txs.
+  - SKA amounts must stay `*big.Int`/string end-to-end. `tx.tmpl` amount cells branch on `$.Data.CoinType 0` — VAR via `float64AsDecimalParts .Amount` (8-dec, float64-safe per C1), SKA via `skaDecimalParts .ValueRaw` (string). A new coin-dependent field must extend **both** branches.
+  - `MiningFee` in block header = `Tx + Tickets` only (no votes/revocations/treasury). The SQL chart query `internal.SelectFeesPerBlockAboveHeight` must mirror this definition.
 - **Mutation Checklist:**
+  - [ ] Does your change affect `FeeRaw`? — verify SSFee vs regular tx distinction is preserved
   - [ ] Did you update `apitypes.Vout` / `apitypes.TxShort` (Confirmed)?
   - [ ] Did you update `explorertypes.MempoolTx` (Unconfirmed)?
+  - [ ] SSFee path: did you update BOTH `GetExplorerBlock` AND `GetExplorerTx`?
+  - [ ] `ssFeeNetReward` change: did you mirror it in `txhelpers/ssfee.go:blockSSFeeTotalsInternal`?
   - [ ] Are changes reflected in `homepage_controller.js` extraction?
-  - [ ] Are changes reflected in `cmd/dcrdata/views/tx.tmpl` Go templates?
+  - [ ] Are changes reflected in `cmd/dcrdata/views/tx.tmpl` (all four fee/reward branches)?
 
 See also:
-- /wiki/code-analysis/address/flow.compact.md — the address page shares the same multi-coin `tx.tmpl` render idiom (address links upstream with `depends-on`).
+- /wiki/code-analysis/address/flow.compact.md — the address page shares the same multi-coin `tx.tmpl` render idiom

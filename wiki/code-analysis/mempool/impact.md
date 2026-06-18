@@ -118,6 +118,21 @@ JS reads `entry.symbol`, `entry.gq_fill_ratio`, `entry.pct_of_tc`, etc. directly
 
 ---
 
+## Risk: `TicketStage` staleness from concurrent tx arrival
+
+**Trigger:**
+A ticket purchase tx and its parent tx both arrive in the same block window; the parent's `TxHandler` goroutine inserts the parent into `txnsStore` **after** the ticket's `TxHandler` already called `ticketStage()`.
+
+**Affected flows:**
+- [/wiki/code-analysis/mempool/flow.full.md](flow.full.md)
+
+**Failure mode:** silent; self-correcting.
+
+**Description:**
+`ticketStage(vin, txnsStore)` checks `txnsStore` at call time under the monitor's `RLock`. If the parent tx arrived first but is processed by a concurrent `TxHandler` that hasn't yet stored it, the ticket sees `"Staging"` temporarily. The absent-parent fallback (`!ok` in `txnsStore` → `"Staging"`) is the intentional pessimistic default. Corrects at the next `CollectAndStore` batch pass. Advisory-only — `TicketStage` is a UI hint, not a consensus constraint.
+
+---
+
 ## Risk: Lock-order inversion on inventory
 
 **Trigger:**

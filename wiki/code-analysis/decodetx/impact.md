@@ -10,7 +10,7 @@ Blast radius for changes to the `/decodetx` page, the `decodetx`/`sendtx` WS eve
 
 - HTML form `data-event-id` attributes: textarea, Decode button, Broadcast button in [cmd/dcrdata/views/rawtx.tmpl:15,22,29](../../../cmd/dcrdata/views/rawtx.tmpl#L15).
 - Explorer WS `switch` arms: [cmd/dcrdata/internal/explorer/websockethandlers.go:134](../../../cmd/dcrdata/internal/explorer/websockethandlers.go#L134), [:150](../../../cmd/dcrdata/internal/explorer/websockethandlers.go#L150).
-- Pubsub WS `switch` arms: [pubsub/pubsubhub.go:290](../../../pubsub/pubsubhub.go#L290), [:308](../../../pubsub/pubsubhub.go#L308).
+- Pubsub WS `switch` arms: [pubsub/pubsubhub.go:292](../../../pubsub/pubsubhub.go#L292), [:310](../../../pubsub/pubsubhub.go#L310).
 - `pstypes.eventIDs` map: [pubsub/types/pubsub_types.go:134-136](../../../pubsub/types/pubsub_types.go#L134-L136) (`SigDecodeTx`, `SigSendTx`).
 - JS handler registration / deregistration: [cmd/dcrdata/public/js/controllers/rawtx_controller.js:11,16,24-25](../../../cmd/dcrdata/public/js/controllers/rawtx_controller.js#L11-L25).
 
@@ -45,7 +45,7 @@ Because `webData.EventId` is only set in the trailing block (after the `switch`)
 **Affected flows:**
 
 - [/wiki/code-analysis/decodetx/flow.full.md](flow.full.md) §3.3 (explorer), §3.6 (pubsub).
-- Implementations: [cmd/dcrdata/internal/explorer/websockethandlers.go:134-157](../../../cmd/dcrdata/internal/explorer/websockethandlers.go#L134-L157) vs [pubsub/pubsubhub.go:290-316](../../../pubsub/pubsubhub.go#L290-L316).
+- Implementations: [cmd/dcrdata/internal/explorer/websockethandlers.go:134-157](../../../cmd/dcrdata/internal/explorer/websockethandlers.go#L134-L157) vs [pubsub/pubsubhub.go:292-319](../../../pubsub/pubsubhub.go#L292-L319).
 
 **Failure mode:** silent for third-party pubsub clients (the browser-facing flow is unaffected; the divergence shows up only against `/ps` consumers). C2-class.
 
@@ -67,10 +67,10 @@ A refactor that only touches one side leaves the other speaking a stale dialect.
 
 **Affected sites:**
 
-- Interface decl (explorer): [cmd/dcrdata/internal/explorer/explorer.go:107-108](../../../cmd/dcrdata/internal/explorer/explorer.go#L107-L108).
+- Interface decl (explorer): [cmd/dcrdata/internal/explorer/explorer.go:109-110](../../../cmd/dcrdata/internal/explorer/explorer.go#L109-L110).
 - Interface decl (pubsub): [pubsub/pubsubhub.go:53-54](../../../pubsub/pubsubhub.go#L53-L54).
 - Interface decl (insight, send only): [cmd/dcrdata/internal/api/insight/apiroutes.go:51](../../../cmd/dcrdata/internal/api/insight/apiroutes.go#L51).
-- Implementation (decode): [db/dcrpg/pgblockchain.go:7345](../../../db/dcrpg/pgblockchain.go#L7345).
+- Implementation (decode): [db/dcrpg/pgblockchain.go:7468](../../../db/dcrpg/pgblockchain.go#L7468).
 - Implementation (send): [db/dcrpg/insightapi.go:49](../../../db/dcrpg/insightapi.go#L49).
 - Caller (insight REST send): [cmd/dcrdata/internal/api/insight/apiroutes.go:349](../../../cmd/dcrdata/internal/api/insight/apiroutes.go#L349).
 - Mock: [cmd/dcrdata/internal/explorer/explorer_test.go:140-145](../../../cmd/dcrdata/internal/explorer/explorer_test.go#L140-L145).
@@ -113,7 +113,7 @@ A refactor that only touches one side leaves the other speaking a stale dialect.
 
 **Trigger:** renaming or removing the `/decodetx` route.
 
-**Affected sites:** [cmd/dcrdata/main.go:750](../../../cmd/dcrdata/main.go#L750) (canonical) and [cmd/dcrdata/internal/explorer/explorer.go:958](../../../cmd/dcrdata/internal/explorer/explorer.go#L958) (`exp.Mux.Get("/decodetx", redirect("decodetx"))` — serves `/explorer/decodetx` → `/decodetx`).
+**Affected sites:** [cmd/dcrdata/main.go:750](../../../cmd/dcrdata/main.go#L750) (canonical) and [cmd/dcrdata/internal/explorer/explorer.go:985](../../../cmd/dcrdata/internal/explorer/explorer.go#L985) (`exp.Mux.Get("/decodetx", redirect("decodetx"))` — serves `/explorer/decodetx` → `/decodetx`).
 
 **Failure mode:** loud (the redirect 308s to a 404).
 
@@ -129,7 +129,7 @@ When modifying `/decodetx`:
 4. [ ] If the change introduces structured frontend rendering of the response, did it switch from `<pre>.textContent = evt` to C6 template cloning + parsed JSON?
 5. [ ] If the change touches the receive loop in `RootWebsocket`, did you verify the live-update side (`loop:`) and every other page that uses `/ws` (homepage, mempool, visualblocks, ticketpool)?
 6. [ ] If the change touches the 1 MB limit, did you adjust the pubsub `psh.wsHub.requestLimit` and Insight `iapi.params.MaxTxSize` to match (or document the divergence)?
-7. [ ] If the route name or path changed, did you update the `/explorer/decodetx` redirect in `explorer.go:958`?
+7. [ ] If the route name or path changed, did you update the `/explorer/decodetx` redirect in `explorer.go:985`?
 8. [ ] If the change affects the pubsub or Insight twin, did you preserve their distinct envelopes (`{ID, RequestID, Data, Success}` vs JSON `{txid}`)?
 
 See also:

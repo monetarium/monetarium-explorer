@@ -8,7 +8,9 @@
 - **String precision through the SKA pipeline.** SQL `::text`, Go `[]string` + `*big.Int.Add`, JSON `"supply": []string`, JS `BigInt`-safe legend formatter. The Dygraphs Y is float (acceptable per spec §5); the legend is exact (spec §4).
 - **`h` field is contractual** for time-axis SKA responses. Day-bin aggregator (`aggregateSKASupply`) carries heights through alongside timestamps.
 - **Cache-write asymmetry.** `chartMakers` results go through `cacheChart`; `skaSupplyChart` does not — every SKA request re-marshals JSON.
-- **TurboQuery + `Zoom.validate` / `Zoom.project`** drive all URL state, same as the address controller, but charts additionally projects zoom across data-range changes (line 825).
+- **Cross-page navigation from the chart selector.** `hashrate-shares` is the only `<select>` option that triggers `Turbolinks.visit('/hashrate-shares')` in `selectChart()` (controller line 855–857) and returns without loading data. The charts controller tears down cleanly (`disconnect()` destroys the Dygraphs instance); no state leaks across the page swap.
+- **`chart-hashrate` CSS class gate for y2label color.** `selectChart()` adds `chart-hashrate` to `chartsViewTarget` when `hashrate` is selected (removes otherwise). The SCSS rule `.chartview.chart-hashrate .dygraph-y2label { color: #c60 }` (charts.scss:260) then colors the Active Miners y2 label to match the series line in light mode. Dark mode inherits the generic `.chartview .dygraph-y2label { color: #2970ff }` rule.
+- **TurboQuery + `Zoom.validate` / `Zoom.project`** drive all URL state, same as the address controller, but charts additionally projects zoom across data-range changes.
 
 ### Critical Constraints
 - **Never apply `accumulate()` to `SKASupply.Values`** — already cumulative.
@@ -25,6 +27,8 @@ When extending coin-supply charts:
 - [ ] If changing JSON shape: mirror the VAR (`uint64`) vs SKA (`string`) split; keep `h` on every SKA response that has timestamps.
 - [ ] If adding a chart ID: register in `chartMakers` (cached path) or extend the `IsSKASupplyChart` family. Don't overload `coin-supply` with new bare variants — use the prefixed namespace.
 - [ ] In `charts_controller.js`: route through `isCoinSupplyChart(name)` switch normalization; use `renderCoinType(coinType)` for labels (no inline `'SKA'+n`); keep raw atom strings reachable for the legend.
+- [ ] If adding a new cross-page option to the `<select>`: add the early-return guard in `selectChart()` (pattern: `if (selection === '<value>') { Turbolinks.visit('/<path>'); return }`) and add the corresponding `<option>` to `charts.tmpl`.
+- [ ] If renaming the `chart-hashrate` CSS class (charts.scss:260): also update the `selectChart()` toggle in `charts_controller.js:880–883`. Mismatch reverts the y2label to the generic color (silent cosmetic regression).
 - [ ] If the loader signature changes: update `cmd/dcrdata/internal/api/noop_ds_test.go:127` mock and any other `DataSource` implementers.
 - [ ] If `ActiveSKATypes` projection in `explorerroutes.go:Charts` changes: verify `charts.tmpl` dropdown still renders coin-typed options correctly.
 

@@ -60,7 +60,7 @@ The DB layer formats `FormattedStartTime` uniformly as `startTime.Format("2006-0
 - [/wiki/code-analysis/time-based-blocks/flow.full.md](flow.full.md)
 
 **Description:**
-Pagination is **row-count driven**. `timeBasedBlocksListing` calls `dataSource.TimeBasedIntervalsCount(ctx, grouping)` which returns the exact number of distinct time-truncated groupings that contain at least one block: `SELECT COUNT(DISTINCT DATE_TRUNC($1, time at time zone 'utc')) FROM blocks` ([db/dcrpg/internal/blockstmts.go `SelectBlocksTimeListingCount`](../../../db/dcrpg/internal/blockstmts.go); [db/dcrpg/queries.go `retrieveTimeBasedBlockListingCount`](../../../db/dcrpg/queries.go); [db/dcrpg/pgblockchain.go `TimeBasedIntervalsCount`](../../../db/dcrpg/pgblockchain.go)). The handler then derives `maxOffset = totalGroupings - 1` (0 on an empty chain) and uses that as the semantic "largest valid offset" for the existing downstream math: the offset clamp, `lastOffset` derivation ([explorerroutes.go `lastOffsetRows := uint64(maxOffset) % rows`](../../../cmd/dcrdata/internal/explorer/explorerroutes.go)), `calcPages(int(maxOffset), …)`, and the template's `{{$lastGrouping = (add .BestGrouping 1)}}` ([cmd/dcrdata/views/timelisting.tmpl:15,74](../../../cmd/dcrdata/views/timelisting.tmpl)).
+Pagination is **row-count driven**. `timeBasedBlocksListing` calls `dataSource.TimeBasedIntervalsCount(ctx, grouping)` which returns the exact number of distinct time-truncated groupings that contain at least one block: `SELECT COUNT(DISTINCT DATE_TRUNC($1, time at time zone 'utc')) FROM blocks` ([db/dcrpg/internal/blockstmts.go `SelectBlocksTimeListingCount`](../../../db/dcrpg/internal/blockstmts.go); [db/dcrpg/queries.go `retrieveTimeBasedBlockListingCount`](../../../db/dcrpg/queries.go); [db/dcrpg/pgblockchain.go `TimeBasedIntervalsCount`](../../../db/dcrpg/pgblockchain.go)). The handler then derives `maxOffset = totalGroupings - 1` (0 on an empty chain) and uses that as the semantic "largest valid offset" for the existing downstream math: the offset clamp, `lastOffset` derivation ([explorerroutes.go `lastOffsetRows := uint64(maxOffset) % rows`](../../../cmd/dcrdata/internal/explorer/explorerroutes.go)), `calcPages(int(maxOffset), …)`, and the template's `{{$lastGrouping = (add .BestGrouping 1)}}` ([cmd/dcrdata/views/timelisting.tmpl:15](../../../cmd/dcrdata/views/timelisting.tmpl)).
 
 This replaced an earlier genesis-anchored, time-driven formula (`maxOffset = (now - genesis) / interval_seconds` plus a partial-interval `+1` buffer for unaligned year/month boundaries). That earlier formula overestimated the page count whenever some intervals had no blocks (sparse chain, testnet, gaps), making the page-number switcher render pages past the last grouping that actually had data — see issue #302.
 
@@ -86,7 +86,44 @@ This replaced an earlier genesis-anchored, time-driven formula (`maxOffset = (no
 - All four real entry points pass hard-coded valid strings ([explorerroutes.go:464-482](../../../cmd/dcrdata/internal/explorer/explorerroutes.go)); the `UnknownGrouping` path is only reachable if a new route or caller passes an unrecognised string. New callers must not rely on `TimeGroupingFromStr` returning a usable default — it returns `UnknownGrouping`.
 - The handler's fallback resolves `UnknownGrouping` -> `YearGrouping` *before* calling `dataSource.TimeBasedIntervals`, which itself hard-rejects out-of-range groupings. Removing the handler-level fallback would turn a graceful year fallback into a DB-layer error page.
 
+---
+
+## Centralized page-size normalization via `normalizeExplorerRows`
+
+**Appears in:**
+- [/wiki/code-analysis/time-based-blocks/flow.full.md](flow.full.md)
+- [/wiki/code-analysis/windows/flow.full.md](../windows/flow.full.md)
+- [/wiki/code-analysis/block/flow.full.md](../block/flow.full.md)
+
+**Description:**
+The default page size and hard cap for all explorer list pages are defined once in
+`cmd/dcrdata/internal/explorer/explorer.go:50–51`:
+```go
+maxExplorerRows     = 400
+defaultExplorerRows = 100
+```
+and applied via a single generic helper `normalizeExplorerRows[T int64 | uint64](rows T) T`
+([cmd/dcrdata/internal/explorer/explorerroutes.go:645–653](../../../cmd/dcrdata/internal/explorer/explorerroutes.go)):
+```go
+case rows == 0:   return defaultExplorerRows  // no ?rows= → 100
+case rows > max:  return maxExplorerRows       // oversized → 400
+```
+Three handlers call it: `StakeDiffWindows` (line 451), `timeBasedBlocksListing` (line 578),
+and `Blocks` (line 692). The generic type parameter avoids the `uint64` overflow that a
+naive `int64` cast of a large URL value (`?rows=99999999999`) would introduce when comparing
+against the cap.
+
+**Constraints:**
+- `defaultExplorerRows = 100` is the initial value rendered when no `?rows=` is supplied.
+  The template's per-page dropdown (`timelisting.tmpl:34–38`) hardcodes options
+  10/20/30/50/100; a new default outside these options causes no runtime error but renders
+  with no option pre-selected in the dropdown.
+- Changing `maxExplorerRows` affects the maximum page size across all three callers simultaneously.
+- The constants live in `explorer.go`, **not** in `explorerroutes.go` — update the correct file.
+
+---
+
 See also:
-- /wiki/code-analysis/windows/flow.full.md (shares-pattern-with: `dbtypes.BlocksGroupedInfo` shared struct; same `retrieveWindowBlocks`/`retrieveTimeBasedBlockListing` producers in db/dcrpg/queries.go)
+- /wiki/code-analysis/windows/flow.full.md (shares-pattern-with: `dbtypes.BlocksGroupedInfo` shared struct; same `retrieveWindowBlocks`/`retrieveTimeBasedBlockListing` producers in db/dcrpg/queries.go; shares `normalizeExplorerRows`)
 - /wiki/code-analysis/time-based-blocks/impact.md (derived-from: this domain's flow; risk surface for the patterns above)
 - /wiki/core/constraints.md (depends-on: multi-coin `coin_tx_stats` JSON aggregation feeds the regular-tx total via parseCoinTxStats)

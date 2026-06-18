@@ -35,12 +35,14 @@ monetarium-node RPC ──► blockdata collector ──► explorer.Store() ─
 
 ### Layer A — Chain → in-memory snapshot
 
-- **Location:** `blockdata/blockdata.go:207` (`GetCoinSupply`); `cmd/dcrdata/internal/explorer/explorer.go:504-904` (`(*explorerUI).Store`).
+- **Location:** `blockdata/blockdata.go:208` (`GetCoinSupply`); `cmd/dcrdata/internal/explorer/explorer.go:508-931` (`(*explorerUI).Store`).
 - **Data structures:** `blockData.ExtraInfo.CoinSupply`, `blockData.CurrentStakeDiff`,
-  `blockData.PoolInfo` → copied into `explorer/types/explorertypes.go:877` `HomeInfo`
-  (`CoinSupply int64`, `StakeDiff float64`, `HashRate float64`) and `:1444` `TicketPoolInfo`
-  (`Size uint32`, `Value float64`).
-- **Transformations:** `explorer.go:529-531` computes `stakePerc` using VAR `CoinSupply` via
+  `blockData.PoolInfo` → copied into `explorer/types/explorertypes.go:911` `HomeInfo`
+  (`CoinSupply int64`, `StakeDiff float64`, `HashRate float64`) and `:1480` `TicketPoolInfo`
+  (`Size uint32`, `Value float64`). Note: `HomeInfo` also carries `CBlockSubsidy BlockSubsidy`
+  (`:922`) and `ActiveMiners int64` (`:939`), added since the original trace — neither is read
+  by the `AttackCost` handler.
+- **Transformations:** `explorer.go:533-535` computes `stakePerc` using VAR `CoinSupply` via
   `dcrutil.Amount(...).ToCoin()` (8-decimal float). `HomeInfo` is written under `p.Lock()`;
   attack-cost reads under `RLock` — a snapshot, not request- or block-scoped.
 
@@ -175,8 +177,8 @@ When modifying this page, check:
 - `cmd/dcrdata/internal/explorer/explorerroutes.go` `AttackCost` — handler; reads under
   `RLock`, renders, no math.
 - `cmd/dcrdata/internal/explorer/explorer.go:529-531, 504-904` — `Store()` → `HomeInfo`.
-- `explorer/types/explorertypes.go:877-903` (`HomeInfo`), `:1444-1451` (`TicketPoolInfo`).
-- `blockdata/blockdata.go:207` — `GetCoinSupply`.
+- `explorer/types/explorertypes.go:911-940` (`HomeInfo`), `:1480-1487` (`TicketPoolInfo`).
+- `blockdata/blockdata.go:208` — `GetCoinSupply`.
 - `cmd/dcrdata/views/attackcost.tmpl` — `data-*` contract at the top of the controller
   container; manual `Exchange Rate`, `Device Hashrate`, `Device Power`, `Device Price`
   inputs in the "Adjustable Parameters" / "PoW Attack" blocks.

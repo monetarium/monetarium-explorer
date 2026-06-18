@@ -93,8 +93,35 @@ stay above the server's 60 s ping cadence (with margin) or healthy connections
 false-positive; the timeout handler must **not** re-arm (that would reset
 partysocket's backoff every cycle) — a successful `onopen` re-arms it instead.
 
+## P9 — Pull-refresh via `getlatestblocks`
+
+On reconnect or on detection of a height gap (a `newblock` push with
+`block.height > lastHeight + 1`), block-table controllers issue a
+`getlatestblocks` WS request with their page size. The server runs
+`clampLatestBlocksSpan` → `latestExplorerBlocks` and replies on
+`getlatestblocksResp` with `[]*BlockBasic` (newest first). The client rebuilds
+the entire table from this authoritative list, filling any blocks missed during
+disconnection. Because `forward()` delivers every `getlatestblocksResp` to
+*all* registered handlers, `time_controller.js` piggybacks on the block-table
+controllers' request on pages that have a live block table, reading `blocks[0]`
+to resync the footer Age stamp. On pages without such a controller it self-issues
+the request on `reconnect`.
+
+Three invariants enforce correctness:
+1. **Span cap (`maxExplorerRows=400`)** — `clampLatestBlocksSpan` enforces this;
+   without it any unauthenticated socket could trigger a tip-to-genesis DB scan.
+2. **`homeBlocksSpan` single source** — `Home()` and `latestExplorerBlocks()` both
+   reference the same `const homeBlocksSpan = 8`; server-render and WS-refresh
+   always return the same window.
+3. **`isLatestValue` gate** — `blocks_controller` wires reconnect/refresh handlers
+   only when `isLatestValue=true`; historical pages stay static.
+
+**Shared with:** [/wiki/code-analysis/block/patterns.md](../block/patterns.md)
+(pull-on-gap pattern for the home and /blocks tables).
+
 See also:
 - /wiki/code-analysis/websocket/impact.md (depends-on: these patterns define the mutation risks)
 - /wiki/code-analysis/decodetx/patterns.md (shares-pattern-with: RPC-over-WS)
 - /wiki/code-analysis/mempool/patterns.md (shares-pattern-with: dual-transport WS, rAF indicator batching downstream of P1)
+- /wiki/code-analysis/block/patterns.md (shares-pattern-with: pull-on-gap getlatestblocks)
 - /wiki/core/constraints.md (depends-on: C2 dual pipeline; C3/C8 parity & shape asymmetry)

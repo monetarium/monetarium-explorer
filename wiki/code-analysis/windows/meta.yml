@@ -1,5 +1,5 @@
 domain: windows
-anchor: 3cdba1e7
+anchor: 607299f2
 files:
   - cmd/dcrdata/internal/explorer/explorer.go
   - cmd/dcrdata/internal/explorer/explorerroutes.go

@@ -89,6 +89,55 @@ structure.
 
 ---
 
+## Risk: Data Endpoint Misplaced Under `withCache`
+
+**Trigger:**
+A handler whose response varies by query params (e.g. `?interval=day`) is
+registered under the `withCache` group in `main.go`.
+
+**Affected flows:**
+
+- /wiki/code-analysis/page-rendering/flow.full.md (`HashrateSharesData` excluded from `withCache`)
+- /wiki/code-analysis/charts/flow.full.md (chart data API endpoints also outside `withCache`)
+
+**Failure mode:** silent.
+
+**Description:**
+The `ETagAndLastModifiedIntercept` middleware generates a single ETag per block/mempool
+tick, shared across all routes in the `withCache` group. It does not incorporate query
+params into the key. If a data endpoint with `?interval=day|week|month|year|all` is
+placed under `withCache`, every interval variant will cache under the same ETag. A
+client requesting `?interval=day` after `?interval=week` receives a 304 Not Modified
+and sees the wrong interval's data until the next block resets the ETag. The
+`/hashrate-shares/data` route is explicitly excluded from `withCache` with a comment
+at `main.go:774` to prevent this.
+
+---
+
+## Risk: `CBlockSubsidy` / `NBlockSubsidy` Confusion
+
+**Trigger:**
+Using `NBlockSubsidy` (next-block projected maximum) where `CBlockSubsidy` (actual
+vote-scaled current-block subsidy) is correct — or vice versa.
+
+**Affected flows:**
+
+- /wiki/code-analysis/page-rendering/flow.full.md (`LBlockTotal` uses `CBlockSubsidy.PoW`)
+
+**Failure mode:** silent (wrong value displayed).
+
+**Description:**
+`CBlockSubsidy` is populated from `blockData.ExtraInfo.CurrentBlockSubsidy` (the
+node's actual vote-scaled subsidy for the block just processed) with a fallback to
+`NBlockSubsidy` when the node does not provide it (pre-DCP0012 or unavailable).
+`LBlockTotal` (total miner reward on the home page) must use `CBlockSubsidy.PoW`; a
+block with fewer than 5 votes receives a reduced PoW subsidy that `NBlockSubsidy`
+(which assumes all 5 votes) would overstate. The same distinction applies in
+`pubsub/pubsubhub.go` — both savers were updated together in commit `009e8a69`.
+Adding a new miner-reward display must use `CBlockSubsidy`, not `NBlockSubsidy`.
+
+---
+
 ## Cross-Domain Observation
 
 These three risks share one root: **page handlers are pure readers of

@@ -1,10 +1,9 @@
 # Address Page — Full Flow
 
-> **Code-grounded as of `HEAD` = `1b670255`** (PR #265 + PR #266 + the `db/dcrpg`
-> coin-filter series, merged 2026-05-14/15). This supersedes the prior revision
-> written at `a8f641f2` (2026-05-13), whose central thesis — "backend multi-coin,
-> frontend renders VAR only, `?coin=` not wired in the controller" — is now false.
-> See §9 (`flow.compact.md`) for the stale-claim delta table.
+> **Code-grounded as of `HEAD` = `a48ea0e1`** (PR #265/#266 multi-coin frontend +
+> post-launch fixes through 2026-06-18). Prior anchor `1b670255`; see §9
+> (`flow.compact.md`) for the stale-claim delta tables (both historical and the
+> `1b670255→a48ea0e1` delta added in this Refresh pass).
 
 ---
 
@@ -74,10 +73,10 @@ and the transaction table; charts are per-coin. Mempool/unconfirmed activity is
 - Guarded by **`db/dbtypes/coinfilter_test.go::TestCoinTypeAllSentinel`** (new):
   `CoinTypeAll` must stay `255` and collide with no real coin index.
 
-### 3.2 DB layer — the major behavioral change (`db/dcrpg/pgblockchain.go`)
+### 3.2 DB layer (`db/dcrpg/pgblockchain.go`, `db/dcrpg/queries.go`)
 
-**`AddressHistory` signature** now `(... txnView dbtypes.AddrTxnViewType, coinType uint8)`
-(`:2405-2406`). New filter-before-paginate branch (`:~2417-2487`):
+**`AddressHistory` signature** `(... txnView dbtypes.AddrTxnViewType, coinType uint8)`
+(`pgblockchain.go:2436`). New filter-before-paginate branch (`:~2448-2520`):
 
 - When `coinType != CoinTypeAll`: get the **full per-coin row set** from
   `pgb.AddressCache.Rows(address, coinType)` (uncompacted) or, on cache miss,
@@ -102,10 +101,31 @@ Unconfirmed activity surfaces only via `NumUnconfirmed` /
 `NumUnconfirmedByCoin` (code comment after the spending loop states this is by
 design — commit `6e92df4c`).
 
+**`utxoStore.set()` now stores `SKAValue`** (`pgblockchain.go:176-196`): prior to
+commit `b13091c8` the `utxo.set()` and `Set()` methods dropped the `SKAValue`
+field from `UTXOData`, defaulting it to `""`. When `insertSpendingAddressRow`
+later wrote the spending address row it used the empty `SKAValue` from cache,
+so `addresses.ska_value=''` for all SKA spending rows. `selectAddressAmountFlowByAddress`
+treated `''` as NULL → `sent_ska` was always 0 → the chart balance line equalled
+the received line for every SKA address. **Fixed:** `utxoStore.set()` now takes
+`skaValue string` as its eighth parameter and stores it directly. The callers
+`pgblockchain.go:4707` and `:4325` pass `vout.SKAValue`/`utxo.SKAValue`.
+
+**`retrieveAddressBalance` now computes per-coin stake ratios** (`queries.go:1440-1632`):
+The stake-ratio logic was generalised from the prior VAR-only path in
+`ReduceAddressHistory` to a full SQL-backed per-coin implementation. For VAR
+(coinType==0) `FromStake`/`ToStake` are computed from `fromStakeVAR`/`toStakeVAR`
+int64 accumulators; for SKA (coinType>0) per-coin `skaFromStake[coinType] *big.Int`
+accumulators collect PoS/SSFee atoms and divide by `skaReceivedExclIssuance`
+(queries.go:1600-1619). `HasStakeOutputs()` and `HasStakeInputs()` on
+`AddressBalance` (types.go:2457-2474) now iterate the full `Coins` map rather
+than a flat VAR-only value. **Practical invariant unchanged:** SKA staking is
+not planned (see project memory), so SKA `FromStake` is always 0.0 in production.
+
 `AddressHistoryAll`, `addressInfo`, retry recursion, and `AddressTransactionsAll`
 now pass `dbtypes.CoinTypeAll` explicitly.
 
-**`retrieveAddressMergedTxns` rewritten** (`db/dcrpg/queries.go:~1897`): now
+**`retrieveAddressMergedTxns` rewritten** (`db/dcrpg/queries.go:1897`): now
 `db.QueryContext(ctx, internal.SelectAddressMergedView, address, N, offset)` +
 `scanAddressMergedRows`. Previously routed through `retrieveAddressTxnsStmt(... 0)`,
 which bound `coinType=0` as `$2` = **LIMIT 0** on the merged statement (which has
@@ -128,13 +148,18 @@ no `coin_type` predicate and uses `$2` for LIMIT) → silently zero rows
 - `CoinBalance` (`:2391-2403`): `CoinType`, `NumSpent/NumUnspent`,
   `TotalSpent/TotalUnspent int64` (VAR atoms),
   `TotalSpentSKA/TotalUnspentSKA string` (SKA atoms),
-  **`TotalReceived int64` / `TotalReceivedSKA string`** (precomputed).
+  **`TotalReceived int64` / `TotalReceivedSKA string`** (precomputed),
+  **`FromStake/ToStake float64`** (per-coin stake ratio — populated by
+  `retrieveAddressBalance`; VAR: int64 accumulators; SKA: `*big.Int` — in
+  practice 0.0 for SKA since staking is VAR-only).
 - `AddressBalance` (`:2407-2412`): `Coins map[uint8]*CoinBalance`,
-  `TotalOutputs/TotalInputs`, `FromStake/ToStake`, plus legacy flat
-  `TotalUnspent/TotalSpent/NumSpent/NumUnspent` (synced from `Coins[0]`,
-  back-compat only).
-- `ActiveCoins` populated at `pgblockchain.go:2592` (no confirmed txns) and
-  `:2648` (confirmed txns); `NumUnconfirmedByCoin` at `:2719`.
+  `TotalOutputs/TotalInputs`. Legacy flat fields (`TotalUnspent/TotalSpent/
+  NumSpent/NumUnspent`) still present for JSON back-compat, synced from
+  `Coins[0]` only; template no longer reads them.
+- `HasStakeOutputs()`/`HasStakeInputs()` (`:2457-2474`): iterate the full
+  `Coins` map (multi-coin aware); return true if any coin has `FromStake > 0`.
+- `ActiveCoins` populated at `pgblockchain.go:2665` (no confirmed txns) and
+  earlier branch; `NumUnconfirmedByCoin` at `:2750`.
 
 ### 3.5 Transformation 1 — templates
 
@@ -173,11 +198,11 @@ preserve the filter.
 
 - `coin` **added to the TurboQuery null-template** (`:282-291`) and to targets
   (`coinFilter`, `coin`).
-- New `coinUrlSegment()` (`&coin=` or empty), `normalizeCoinSetting()`
+- New `coinUrlSegment()` (`:400-403`, `&coin=` or empty), `normalizeCoinSetting()`
   (validates against `activeCoins`, syncs both selectors, canonicalizes string
-  form), `effectiveCoin()` (returns the integer coin used for chart fetches —
+  form), `effectiveCoin()` (`:~436`; returns the integer coin used for chart fetches —
   **mirrors backend `CoinTypeAll→0` collapse**: explicit coin, else first
-  `activeCoins`, else 0), `changeCoin(e)` (sets `settings.coin`, resets
+  `activeCoins`, else 0), `changeCoin(e)` (`:456`; sets `settings.coin`, resets
   pagination, forces chart refetch via `state.coin='__force_refetch__'`).
 - `activeCoins` parsed from `data-active-coins` (try/catch → `[]` on bad JSON).
 - Chart cache keys now `${chart}-${bin}-${coin}` (`fetchGraphData :623`,
@@ -185,14 +210,28 @@ preserve the filter.
   `settings.coin === state.coin`. Chart URL: `?coin=${coin}` appended.
 - `amountFlowProcessor(d, binSize, coinType, atomsByTime)`: VAR reads the
   **server-precomputed `d.balance[i]`** (old JS `balance += v` accumulator
-  removed — was lossy at high balances); SKA reads `d.received_atoms /
-  sent_atoms / net_atoms / balance_atoms` strings, sign-splits on the string,
-  stores originals in `skaAtomsByTime` Map keyed by `time.getTime()`, uses
-  `Number()` only for pixel positioning.
+  removed); SKA reads `d.received_atoms / sent_atoms / net_atoms / balance_atoms`
+  strings, sign-splits on the string, stores originals in `skaAtomsByTime` Map
+  keyed by `time.getTime()`, uses `Number()` only for pixel positioning.
 - `makeAmountFormatter(coinType, atomsByTime)` builds the legend per-fetch;
-  SKA values rendered from the atom strings via `formatSkaAtoms` →
-  `splitSkaAtomsNoTrailing`; label via `renderCoinType`. `ylabel`/
-  `legendFormatter` are now per-fetch in `popChartCache`, not static.
+  SKA values rendered via `formatSkaAtoms` → `splitSkaAtomsNoTrailing`; label via
+  `renderCoinType`. `legendFormatter` is per-fetch in `popChartCache`, not static.
+- **Chart title is a DOM element, not a Dygraph `ylabel`** (commit `ae0812a8`):
+  Dygraph's rotated `ylabel` option was removed. The title string is written to
+  `ctrl.chartTitleTarget.textContent` (`:713`), where `data-address-target="chartTitle"`
+  points to `address.tmpl:271`: `<div class="text-start fs14 fw-bold text-secondary
+  mt-n1 mb-1" data-address-target="chartTitle"></div>`. This avoids the overlap
+  between the rotated label and large SKA atom tick values.
+- **`flowVisibility(bitmap)` export** (`:209-224`): replaces per-index
+  `setVisibility` loops in `updateFlow`. Dygraph triggers `predraw_` on each
+  `setVisibility` call; toggling per-index could leave a transient all-invisible
+  state where `computeCombinedSeriesAndLimits_` dereferences `d[0].length` on
+  an empty array and throws. The export takes a bitmap, returns the full
+  `{0: bool, 1: bool, 2: bool}` map, and `updateFlow` applies it in a single
+  call (`:795`). Unit-tested in `address_controller.test.js`.
+- **`maxAddrRows` and `pageSizeOptions` removed** (commit `4d5f63ee`): the
+  disabled-after-AJAX logic and per-option disable were deleted. The template
+  now carries a stable always-enabled 20/40/80/160 `<select>` (`address.tmpl:418-421`).
 - Confirmed-tx handler decrements **only the `numUnconfirmed` target whose
   `data-coin-type` matches** the row's `data-coin-type`.
 
@@ -221,8 +260,8 @@ balanceSKA` → `items.BalanceAtoms`.
   (6 sites). Any further param change re-touches all six across modules.
 - **`ChartsData` JSON tags ↔ `amountFlowProcessor` string keys** — `omitempty`
   means a renamed tag silently disappears; SKA chart goes blank, no error.
-- **`effectiveCoin()` (JS) ↔ backend `CoinTypeAll→0` collapse** — the same rule
-  implemented twice; divergence shows the wrong coin's chart silently.
+- **`effectiveCoin()` (JS) ↔ backend `CoinTypeAll→0` collapse** (`:3316-3317`) — the
+  same rule implemented twice; divergence shows the wrong coin's chart silently.
 - **`data-coin-type` SSR attr (`extras.tmpl`) ↔ unconfirmed-decrement compare**
   — string equality; format/type drift silently stops decrementing.
 - **`jsonMarshal` ↔ `data-active-coins` ↔ controller `activeCoins`** — if the
@@ -329,13 +368,31 @@ When modifying *the address coin-filter / multi-coin path*, check:
 ## Section 8 — Evidence
 
 All file:line references verified against working tree at `HEAD`
-(`1b670255`). Diff base for the delta: `a8f641f2` (prior wiki revision,
-2026-05-13). Relevant commits:
+(`a48ea0e1`). Original anchor `1b670255` (PR #265/#266 multi-coin frontend).
+
+**Original evidence (PR #265/#266):**
 - PR #265: `8cf06854`, `8b5c3a1b`, `9f5d5a7e`, `f3e2d687`, `a4457a7a`,
   `a9b24127`, `2297e522`.
 - PR #266 / db series: `6e92df4c`, `0c389276`, `d4bf6cff`, `f3231a78`,
   `61661722`, `be28442e`, `1b670255`.
 - Charts SKA SQL precision (`#263`, still valid): `49953185`, `6837673f`.
+
+**Refresh delta (`1b670255→a48ea0e1`) — address-domain commits:**
+- `b13091c8` — `utxoStore.set()` stores `SKAValue` (fixes SKA amount-flow sent=0).
+- `e15efe10` — fix SKA spent regression from empty `ska_value`.
+- `031c9bc4`, `72a2645a`, `a61fe0f6`, `1367121b` — multi-coin stake metrics
+  in `retrieveAddressBalance`; burned-coin exclusion; `valid_mainchain` on
+  `SelectAddressCoinTypes`.
+- `151a272c` — `AddressRowMerged` carries `CoinType` + `SKAAtomsCredit/Debit`.
+- `9a8361e0` — `CoinTypeAll` short-circuit in `AddressCache.Rows`/`AddressRowsCompact`;
+  `FormatSKACoins` bare-decimal CSV format; empty-CSV bug fix.
+- `738735c9` — `flowVisibility(bitmap)` export; atomic `setVisibility`.
+- `4d5f63ee` — paginator cleanup (`maxAddrRows`/`pageSizeOptions` removed;
+  always-enabled 20/40/80/160 dropdown).
+- `ae0812a8`, `b67b3068`, `89f89186`, `92a4bebc` — template/CSS: `chartTitle`
+  DOM target replaces Dygraph `ylabel`; header card alignment; `.btn-set-label`;
+  `boldNumPlaces=2` for balance stats.
+- `460f5ecd` — release cleanup: `ConvertedBalance`/fiat cells deleted; market removed.
 
 Primary files: `db/dcrpg/pgblockchain.go`, `db/dcrpg/queries.go`,
 `db/dcrpg/internal/addrstmts.go`, `db/dbtypes/types.go`,
