@@ -109,7 +109,9 @@ func (p *MempoolMonitor) LastBlockTime() int64 {
 func (p *MempoolMonitor) BlockHandler(height uint32, _ string) error {
 	// Signal a new block
 	log.Debugf("New block at height %d - starting CollectAndStore...", height)
-	_ = p.CollectAndStore()
+	if err := p.CollectAndStore(); err != nil {
+		return err
+	}
 	log.Debugf("New Block at height %d - sending SigMempoolUpdate to hub relay...", height)
 	// p.signalOuts <- pstypes.SigMempoolUpdate
 	p.hubSend(pstypes.SigMempoolUpdate, nil, time.Second*10)
