@@ -37,12 +37,12 @@ _Code-grounded analysis of data flows, cross-layer dependencies, and hidden cons
 
 ### Block
 
-_Data flow for block rendering, including headers, metrics, and block content parsing._
+_Data flow for block rendering, including headers, metrics, and block content parsing. Covers: BlockDataSaver fan-out, value-conservation MiningFee, CBlockSubsidy (vote-scaled), ActiveMiners live count, getlatestblocks pull pattern. Revised at `HEAD=ad1ab357`._
 
-- flow (compact): code-analysis/block/flow.compact.md — high-level summary of the data path from node/DB to the block UI
-- flow (full): code-analysis/block/flow.full.md — detailed, step-by-step function trace for deep debugging of block logic
-- patterns: code-analysis/block/patterns.md — recurring architectural concepts and invariants to follow when modifying blocks
-- impact: code-analysis/block/impact.md — downstream components and templates that break if block data structures change
+- flow (compact): code-analysis/block/flow.compact.md — high-level summary of the push + pull data paths, key constraints, and mutation checklist
+- flow (full): code-analysis/block/flow.full.md — detailed, step-by-step function trace covering push path (ingestion→fan-out), pull path (getlatestblocks WS), CBlockSubsidy/ActiveMiners sub-flows, and mutation impact
+- patterns: code-analysis/block/patterns.md — recurring architectural concepts: dual pipeline, map→slice, string precision, Template+WS parity, fan-out, value-conservation MiningFee, pull-on-gap (getlatestblocks)
+- impact: code-analysis/block/impact.md — downstream components and templates that break if block data structures change; CBlockSubsidy/ActiveMiners parity requirement; getlatestblocks range divergence risk
 - defect (ska-stake-fee): code-analysis/block/ska-stake-fee.md — fixed-incident postmortem: SKA SSFee rows showed `0` in the block "Stake Fees" table; net-reward `FeeRaw` math, coin-type-from-first-SKA-output, "Fee"→"Rewards" header (#301). Same defect later fixed on the tx-detail page (#485/#486). Note: SKA SSFee is dormant (SKA staking not planned) — VAR SSFee is the only real case.
 
 ### Transaction
