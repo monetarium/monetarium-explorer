@@ -140,7 +140,7 @@ function cloneVoteRow(template, tx) {
   ticketLink.textContent = v.mempool_ticket_index
   tr.querySelector('[data-slot="voteVersion"]').textContent = v.vote_version
   setVarAmountHTML(tr.querySelector('[data-slot="amount"]'), tx.total)
-  tr.querySelector('[data-slot="size"]').textContent = humanize.bytes(tx.size)
+  tr.querySelector('[data-slot="size"]').textContent = `${tx.size} B`
   setAgeCell(tr.querySelector('[data-slot="age"]'), tx.time)
   return tr
 }
