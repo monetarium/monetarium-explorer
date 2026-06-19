@@ -290,6 +290,14 @@ describe('ChartsController URL persistence', () => {
     )
   })
 
+  it('selectChart populates rawDataURLTarget with the chart API URL', async () => {
+    const c = makeController()
+    await c.connect()
+
+    expect(c.rawDataURLTarget.textContent).toContain('/api/chart/')
+    expect(c.rawDataURLTarget.textContent).toContain(c.chartSelectTarget.value)
+  })
+
   it('connect restores bookmarked bin/axis active state from URL params', async () => {
     restoreSettings = { chart: 'ticket-pool-size', bin: 'block', axis: 'height' }
     const c = makeController()

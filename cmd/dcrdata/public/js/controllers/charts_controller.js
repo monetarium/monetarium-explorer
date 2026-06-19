@@ -139,6 +139,8 @@ export default class extends Controller {
       this.selectedChartName = selection
     }
     await this.renderChart(def)
+    const base = `${this.query.url.protocol}//${this.query.url.host}`
+    this.rawDataURLTarget.textContent = `${base}/api/chart/${selection}?axis=${this.settings.axis}&bin=${this.settings.bin}&interval=${this.settings.interval}`
     this.query.replace(this.settings)
     this.chartWrapperTarget.classList.remove('loading')
   }
