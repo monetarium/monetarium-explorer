@@ -25,7 +25,7 @@ export function withBigUnits(v, units) {
 
 // Exact SKA display string (18 decimals) — BigInt path, never Number().
 export function formatSkaAtomsExact(atomStr) {
-  const p = splitSkaAtomsNoTrailing(atomStr, false, 0)
+  const p = splitSkaAtomsNoTrailing(atomStr, true, 0)
   return p.rest ? `${p.intPart}.${p.rest}` : p.intPart
 }
 

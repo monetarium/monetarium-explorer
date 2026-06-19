@@ -41,7 +41,7 @@ describe('withBigUnits', () => {
 
 describe('formatSkaAtomsExact — precision firewall', () => {
   it('round-trips an 18-decimal atom string with no float coercion', () => {
-    expect(formatSkaAtomsExact('12345678901234567890123')).toBe('12345.678901234567890123')
+    expect(formatSkaAtomsExact('12345678901234567890123')).toBe('12,345.678901234567890123')
   })
   it('drops a pure-integer atom value to just the integer part', () => {
     expect(formatSkaAtomsExact('5000000000000000000')).toBe('5')
