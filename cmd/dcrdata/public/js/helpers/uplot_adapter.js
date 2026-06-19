@@ -159,7 +159,15 @@ export async function createChart(el, def, opts = {}) {
   function rebuild() {
     const data = uplot.data
     uplot.destroy()
-    uplot = new UPlot(buildOpts(UPlot, currentDef, state), data, el)
+    // The old instance is already destroyed here, so it cannot be restored if
+    // construction fails. Mark the handle inert (the destroyed-guard makes later
+    // calls no-op) and rethrow, rather than leave it pointing at a dead instance.
+    try {
+      uplot = new UPlot(buildOpts(UPlot, currentDef, state), data, el)
+    } catch (e) {
+      destroyed = true
+      throw e
+    }
     applyVisibility()
   }
 
@@ -173,11 +181,18 @@ export async function createChart(el, def, opts = {}) {
     },
     setScaleType(type) {
       if (destroyed) return
+      if ((state.scaleType || 'linear') === type) return // already there — skip the rebuild
       state = { ...state, scaleType: type }
       rebuild()
     },
     setMode(mode) {
       if (destroyed) return
+      // Skip the rebuild when no line/stepped series would change kind — the
+      // requested mode is already in effect, so a rebuild would be pure churn.
+      const unchanged = currentDef.series.every(
+        (s) => (s.kind !== 'line' && s.kind !== 'stepped') || s.kind === mode
+      )
+      if (unchanged) return
       currentDef = {
         ...currentDef,
         series: currentDef.series.map((s) =>
