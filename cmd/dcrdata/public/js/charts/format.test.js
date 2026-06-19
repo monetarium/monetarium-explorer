@@ -56,16 +56,17 @@ describe('xColumn', () => {
     const raw = { axis: 'time', t: [1000, 2000, 3000] }
     expect(xColumn(raw, 3)).toEqual([1000, 2000, 3000])
   })
-  it('height axis + block bin → offset + index (offset defaults to 1)', () => {
+  it('height axis + block bin → 1-based index, ignoring offset (matches zip2D/zipIvY)', () => {
     const raw = { axis: 'height', bin: 'block' }
     expect(xColumn(raw, 3)).toEqual([1, 2, 3])
+    expect(xColumn(raw, 3, 100)).toEqual([1, 2, 3]) // block ignores offset
   })
-  it('height axis + day bin → offset + height value', () => {
+  it('height axis + day bin → offset + height value (offset defaults to 1)', () => {
     const raw = { axis: 'height', bin: 'day', h: [10, 20, 30] }
     expect(xColumn(raw, 3)).toEqual([11, 21, 31])
   })
-  it('honors an explicit offset', () => {
-    const raw = { axis: 'height', bin: 'block' }
-    expect(xColumn(raw, 2, 0)).toEqual([0, 1])
+  it('honors an explicit offset on the height (non-block) branch', () => {
+    const raw = { axis: 'height', bin: 'day', h: [10, 20] }
+    expect(xColumn(raw, 2, 100)).toEqual([110, 120])
   })
 })
