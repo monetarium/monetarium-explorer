@@ -1,11 +1,16 @@
 import { describe, it, expect, vi } from 'vitest'
 import { buildOpts, createChart, createSyncKey } from './uplot_adapter'
+import { getDefault } from './module_helper'
 
 // Mock the dynamic-import helper so createChart gets a fake uPlot class. The fake
 // records constructor args and exposes vi.fn() instance methods for delegation checks.
 vi.mock('./module_helper', () => {
   class FakeUPlot {
     constructor(opts, data, el) {
+      if (FakeUPlot.failNext) {
+        FakeUPlot.failNext = false
+        throw new Error('uPlot construction failed')
+      }
       this.opts = opts
       this.data = data
       this.el = el
@@ -18,6 +23,7 @@ vi.mock('./module_helper', () => {
     }
   }
   FakeUPlot.paths = { bars: () => 'BARS', stepped: () => 'STEP', linear: () => 'LINE' }
+  FakeUPlot.failNext = false
   return { getDefault: vi.fn().mockResolvedValue(FakeUPlot) }
 })
 
@@ -153,6 +159,33 @@ describe('createChart / ChartHandle', () => {
     const handle = await createChart(el, handleDef, {})
     handle.setMode('stepped')
     expect(handle.uplot.opts.series[1].paths).toBe('STEP')
+  })
+
+  it('setMode is a no-op when the requested mode is already in effect', async () => {
+    const handle = await createChart(el, handleDef, {}) // all-line
+    const first = handle.uplot
+    handle.setMode('line')
+    expect(handle.uplot).toBe(first) // no rebuild
+    expect(first.destroy).not.toHaveBeenCalled()
+  })
+
+  it('setScaleType is a no-op when already at the requested scale', async () => {
+    const handle = await createChart(el, handleDef, {}) // defaults to linear
+    const first = handle.uplot
+    handle.setScaleType('linear')
+    expect(handle.uplot).toBe(first) // no rebuild
+    expect(first.destroy).not.toHaveBeenCalled()
+  })
+
+  it('marks the handle inert if a rebuild construction throws (no dead-instance reuse)', async () => {
+    const handle = await createChart(el, handleDef, {})
+    const FakeUPlot = await getDefault()
+    FakeUPlot.failNext = true // make the next construction (the rebuild) throw
+    expect(() => handle.setScaleType('log')).toThrow()
+    // The old instance was destroyed before the throw; the handle is now inert,
+    // so further calls no-op instead of touching the torn-down instance.
+    expect(() => handle.setData([[1], [2]])).not.toThrow()
+    expect(handle.uplot.setData).not.toHaveBeenCalled()
   })
 
   it('setVisibility toggles a series by label (1-based uPlot index)', async () => {
