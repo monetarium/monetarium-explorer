@@ -10,7 +10,7 @@ export const PIE = { cx: 180, cy: 180, r: 165, labelR: 110 }
 
 // Number of individually-drawn pie slices / individually-listed table rows.
 // Miners ranked beyond this are folded into a single "Others" slice and a single
-// "Others" table row. Matches PALETTE.length so every drawn slice has its own color.
+// "Others" table row. Matches the shared PALETTE length (in chart_theme) so every drawn slice has its own color.
 export const PIE_SLICES = 25
 
 // Minimum slice sweep (radians) for a rank number to fit inside the slice.
