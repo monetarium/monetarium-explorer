@@ -505,6 +505,9 @@ func (t *TxInfo) IsImmature() bool {
 // zero, matching the table. Coinbase and votes are VAR-only (SKA stake rewards
 // flow through separate SSFee txs), so float64 is exact.
 func (t *TxInfo) FeeReward() float64 {
+	if t.TxBasic != nil && t.CoinType != 0 {
+		return 0 // SKA amounts exceed float64 precision; must use SKAValue instead
+	}
 	var out, in float64
 	for i := range t.Vout {
 		out += t.Vout[i].Amount // deprecated field, safe: VAR-only coinbase/vote sets .Amount (CoinType == 0)
