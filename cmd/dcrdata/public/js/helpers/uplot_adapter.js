@@ -3,6 +3,7 @@
 // under test; createChart (Task 5) wires it to a real uPlot.
 
 import { chartColors, seriesStroke, seriesFill } from './chart_theme'
+import { getDefault } from './module_helper'
 
 const LINEAR_DISTR = 1
 const LOG_DISTR = 3 // uPlot scale.distr: 1 = linear, 3 = log
@@ -101,4 +102,88 @@ export function buildOpts(UPlot, def, opts = {}) {
     cursor: cursor,
     legend: { show: false }
   }
+}
+
+let uPlotCtor // memoized after first dynamic import
+
+async function loadUPlot() {
+  if (!uPlotCtor) {
+    uPlotCtor = await getDefault(import(/* webpackChunkName: "uplot" */ 'uplot'))
+  }
+  return uPlotCtor
+}
+
+/**
+ * @typedef {Object} ChartHandle
+ * @property {object} uplot              live uPlot instance (escape hatch)
+ * @property {(columns:number[][])=>void} setData
+ * @property {(type:('linear'|'log'))=>void} setScaleType
+ * @property {(mode:('line'|'stepped'))=>void} setMode
+ * @property {(map:Object<string,boolean>)=>void} setVisibility
+ * @property {(width:number, height:number)=>void} resize
+ * @property {()=>void} destroy        MUST be called on Stimulus disconnect
+ */
+
+/**
+ * Build a live chart for `def` inside `el`.
+ * @param {HTMLElement} el
+ * @param {ChartDefinition} def
+ * @param {{dark?:boolean, width?:number, height?:number,
+ *          scaleType?:('linear'|'log'), syncKey?:string}} [opts]
+ * @returns {Promise<ChartHandle>}
+ */
+export async function createChart(el, def, opts = {}) {
+  const UPlot = await loadUPlot()
+  let currentDef = def
+  let state = { ...opts }
+  let uplot = new UPlot(buildOpts(UPlot, currentDef, state), [[]], el)
+
+  // uPlot fixes a series' paths and a scale's distribution at construction, so a
+  // mode (line<->stepped) or scale (linear<->log) change rebuilds, preserving data.
+  function rebuild() {
+    const data = uplot.data
+    uplot.destroy()
+    uplot = new UPlot(buildOpts(UPlot, currentDef, state), data, el)
+  }
+
+  return {
+    get uplot() {
+      return uplot
+    },
+    setData(columns) {
+      uplot.setData(columns)
+    },
+    setScaleType(type) {
+      state = { ...state, scaleType: type }
+      rebuild()
+    },
+    setMode(mode) {
+      currentDef = {
+        ...currentDef,
+        series: currentDef.series.map((s) =>
+          s.kind === 'line' || s.kind === 'stepped' ? { ...s, kind: mode } : s
+        )
+      }
+      rebuild()
+    },
+    setVisibility(map) {
+      currentDef.series.forEach((s, i) => {
+        if (Object.prototype.hasOwnProperty.call(map, s.label)) {
+          uplot.setSeries(i + 1, { show: !!map[s.label] })
+        }
+      })
+    },
+    resize(width, height) {
+      uplot.setSize({ width, height })
+    },
+    destroy() {
+      uplot.destroy()
+    }
+  }
+}
+
+// Shared key for uPlot cursor.sync — pass into createChart({ syncKey }) so a group
+// of charts mirror cursor/zoom (consumed by PR 3, the proposal page).
+export function createSyncKey(name) {
+  return `mon-chart-sync:${name}`
 }
