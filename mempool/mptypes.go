@@ -11,8 +11,8 @@ import (
 	chainjson "github.com/monetarium/monetarium-node/rpc/jsonrpc/types"
 )
 
-// MempoolInfo models basic data about the node's mempool
-type MempoolInfo struct {
+// CollectState tracks collection state between mempool data refreshes.
+type CollectState struct {
 	CurrentHeight               uint32
 	NumTicketPurchasesInMempool uint32
 	NumTicketsSinceStatsReport  int32
