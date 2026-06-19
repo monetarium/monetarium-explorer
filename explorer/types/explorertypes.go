@@ -351,9 +351,9 @@ type TxBasic struct {
 	Type          string
 	Version       int32
 	FormattedSize string
-	Total         float64        // Deprecated: use TotalRaw
+	Total         float64
 	TotalRaw      string         // Atom string
-	Fee           dcrutil.Amount // Deprecated: use FeeRaw
+	Fee           dcrutil.Amount
 	FeeRaw        string         // Atom string
 	FeeRate       dcrutil.Amount
 	FeeRateRaw    string
@@ -364,7 +364,7 @@ type TxBasic struct {
 	MixCount     uint32
 	MixDenom     int64
 	CoinType     uint8
-	SKASent      map[uint8]string // Deprecated: use TotalRaw + CoinType
+	SKASent      map[uint8]string
 }
 
 // TrimmedTxInfo for use with /visualblocks
@@ -674,7 +674,7 @@ type Vin struct {
 // Vout models basic data about a tx output for display
 type Vout struct {
 	Addresses       []string
-	Amount          float64 // Deprecated: use SKAValue or ValueRaw
+	Amount          float64
 	ValueRaw        string  // Atom string
 	FormattedAmount string
 	Type            string
