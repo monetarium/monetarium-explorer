@@ -154,6 +154,8 @@ type BlockBasic struct {
 // VARTxCount, VARSize, SKAAmount, SKASubRows, SKAActiveSubRows) from CoinRows.
 // Call this after setting CoinRows. Safe to call more than once on the same
 // BlockBasic — accumulators are reset on entry.
+// Similar flattening exists in home_viewmodel.go:buildHomeBlockRows —
+// keep both in sync when changing coin-row logic.
 func (b *BlockBasic) FlattenCoinRows() {
 	b.VARAmount = ""
 	b.VARTxCount = 0
