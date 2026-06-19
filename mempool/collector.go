@@ -23,6 +23,7 @@ import (
 	apitypes "github.com/monetarium/monetarium-explorer/api/types"
 	exptypes "github.com/monetarium/monetarium-explorer/explorer/types"
 	"github.com/monetarium/monetarium-explorer/txhelpers"
+	humanize "github.com/dustin/go-humanize"
 )
 
 // NodeClient is similar to a rpcclient.Client, except for the addition of
@@ -539,7 +540,7 @@ func ParseTxns(txs []exptypes.MempoolTx, params *chaincfg.Params, lastBlock *Blo
 	}
 
 	sort.Sort(exptypes.MPTxsByHeight(votes))
-	formattedSize := exptypes.BytesString(uint64(totalSize))
+	formattedSize := humanize.Bytes(uint64(totalSize))
 
 	// Build per-coin stats: accumulate counts/sizes and amounts natively,
 	// then convert amounts to strings once at the end.
@@ -690,7 +691,7 @@ func ParseTxns(txs []exptypes.MempoolTx, params *chaincfg.Params, lastBlock *Blo
 			LikelyMineable: exptypes.LikelyMineable{
 				Total:         likelyTotal.ToCoin(),
 				Size:          likelySize,
-				FormattedSize: exptypes.BytesString(uint64(likelySize)),
+				FormattedSize: humanize.Bytes(uint64(likelySize)),
 				RegularTotal:  regularTotal.ToCoin(),
 				TicketTotal:   ticketTotal.ToCoin(),
 				VoteTotal:     voteTotal.ToCoin(),

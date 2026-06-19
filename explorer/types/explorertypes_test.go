@@ -473,53 +473,6 @@ func TestFlattenCoinRows_Idempotent(t *testing.T) {
 	}
 }
 
-func TestBytesString(t *testing.T) {
-	tests := []struct {
-		s    uint64
-		want string
-	}{
-		{
-			0,
-			"0 B",
-		},
-		{
-			1,
-			"1 B",
-		},
-		{
-			999,
-			"999 B",
-		},
-		{
-			1000,
-			"1.0 kB",
-		},
-		{
-			999_999,
-			"1000 kB",
-		},
-		{
-			1_000_000,
-			"1.0 MB",
-		},
-		{
-			1_200_000,
-			"1.2 MB",
-		},
-		{
-			1_000_000_000_000,
-			"1000 GB",
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.want, func(t *testing.T) {
-			if got := BytesString(tt.s); got != tt.want {
-				t.Errorf("bytesString() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
 func TestAddressPrefixes(t *testing.T) {
 	cases := []struct {
 		name   string
