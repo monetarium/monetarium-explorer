@@ -290,7 +290,7 @@ export default class extends Controller {
       Vote: this.voteCountTarget,
       Ticket: this.ticketCountTarget,
       Revocation: this.revCountTarget,
-      Regular: this.regCountTarget,
+      Regular: this.regCountTarget
     }
     ws.registerEvtHandler('newtxs', (evt) => {
       const m = JSON.parse(evt)
