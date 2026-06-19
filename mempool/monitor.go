@@ -674,7 +674,7 @@ func addAtomStrings(a, b string, isBig bool) string {
 	bi, err := strconv.ParseInt(b, 10, 64)
 	if err != nil {
 		log.Warnf("Failed to parse VAR atom string %q: %v", b, err)
-		return "0"
+		return strconv.FormatInt(ai, 10)
 	}
 	return strconv.FormatInt(ai+bi, 10)
 }
