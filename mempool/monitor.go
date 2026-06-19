@@ -266,7 +266,6 @@ func (p *MempoolMonitor) TxHandler(rawTx *chainjson.TxRawResult) error {
 		VoutCount: len(msgTx.TxOut),
 		Vin:       p.collector.populateMempoolInputs(p.ctx, msgTx, txType, p.txnsStore),
 		// Coinbase is not in mempool
-		Hash:        hash,
 		Time:        rawTx.Time,
 		Size:        int32(len(rawTx.Hex) / 2),
 		TotalOut:    txhelpers.TotalOutFromMsgTx(msgTx).ToCoin(),
@@ -285,14 +284,14 @@ func (p *MempoolMonitor) TxHandler(rawTx *chainjson.TxRawResult) error {
 	// the count for the transaction type.
 	switch txType {
 	case stake.TxTypeRegular:
-		p.inventory.InvRegular[tx.Hash] = struct{}{}
+		p.inventory.InvRegular[tx.TxID] = struct{}{}
 		p.inventory.Transactions = append([]exptypes.MempoolTx{tx}, p.inventory.Transactions...)
 		p.inventory.NumRegular++
 		p.inventory.LikelyMineable.RegularTotal += tx.TotalOut
 
 	case stake.TxTypeSStx:
 		tx.TicketStage = ticketStage(tx.Vin, p.txnsStore)
-		p.inventory.InvStake[tx.Hash] = struct{}{}
+		p.inventory.InvStake[tx.TxID] = struct{}{}
 		p.inventory.Tickets = append([]exptypes.MempoolTx{tx}, p.inventory.Tickets...)
 		p.inventory.NumTickets++
 		p.inventory.LikelyMineable.TicketTotal += tx.TotalOut
@@ -306,11 +305,11 @@ func (p *MempoolMonitor) TxHandler(rawTx *chainjson.TxRawResult) error {
 			p.inventory.Unlock()
 			p.mtx.RUnlock()
 			log.Trace("Got a vote for a future block. Waiting to pull it "+
-				"out of mempool with new block signal. Vote: ", tx.Hash)
+				"out of mempool with new block signal. Vote: ", tx.TxID)
 			return nil
 		}
 
-		p.inventory.InvStake[tx.Hash] = struct{}{}
+		p.inventory.InvStake[tx.TxID] = struct{}{}
 		p.inventory.Votes = append([]exptypes.MempoolTx{tx}, p.inventory.Votes...)
 		//sort.Sort(byHeight(p.inventory.Votes))
 		p.inventory.NumVotes++
@@ -329,19 +328,19 @@ func (p *MempoolMonitor) TxHandler(rawTx *chainjson.TxRawResult) error {
 		}
 
 	case stake.TxTypeSSRtx:
-		p.inventory.InvStake[tx.Hash] = struct{}{}
+		p.inventory.InvStake[tx.TxID] = struct{}{}
 		p.inventory.Revocations = append([]exptypes.MempoolTx{tx}, p.inventory.Revocations...)
 		p.inventory.NumRevokes++
 		p.inventory.LikelyMineable.RevokeTotal += tx.TotalOut
 
 	case stake.TxTypeTSpend:
-		p.inventory.InvStake[tx.Hash] = struct{}{}
+		p.inventory.InvStake[tx.TxID] = struct{}{}
 		p.inventory.TSpends = append([]exptypes.MempoolTx{tx}, p.inventory.TSpends...)
 		likelyMineable = false // really depends on vote choices and TreasuryVoteInterval
 		// p.inventory.LikelyMineable.TSpendTotal += tx.TotalOut
 
 	case stake.TxTypeTAdd:
-		p.inventory.InvStake[tx.Hash] = struct{}{}
+		p.inventory.InvStake[tx.TxID] = struct{}{}
 		p.inventory.TAdds = append([]exptypes.MempoolTx{tx}, p.inventory.TAdds...)
 		p.inventory.LikelyMineable.TAddTotal += tx.TotalOut
 

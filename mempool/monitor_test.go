@@ -17,10 +17,10 @@ import (
 func TestAddTxToCoinStats_IncrementalVAR(t *testing.T) {
 	stats := map[uint8]exptypes.MempoolCoinStats{}
 	txs := []exptypes.MempoolTx{
-		{Hash: "r1", Size: 100, TotalOut: 1.0, Type: "Regular"},
-		{Hash: "t1", Size: 100, TotalOut: 2.0, Type: "Ticket"},
-		{Hash: "v1", Size: 100, TotalOut: 3.0, Type: "Vote"},
-		{Hash: "x1", Size: 100, TotalOut: 4.0, Type: "Revocation"},
+		{TxID: "r1", Size: 100, TotalOut: 1.0, Type: "Regular"},
+		{TxID: "t1", Size: 100, TotalOut: 2.0, Type: "Ticket"},
+		{TxID: "v1", Size: 100, TotalOut: 3.0, Type: "Vote"},
+		{TxID: "x1", Size: 100, TotalOut: 4.0, Type: "Revocation"},
 	}
 	for _, tx := range txs {
 		addTxToCoinStats(stats, tx)
@@ -57,7 +57,7 @@ func TestAddTxToCoinStats_IncrementalSKA_Precision(t *testing.T) {
 	const bigAtoms = "123456789012345678901"
 	stats := map[uint8]exptypes.MempoolCoinStats{}
 	tx := exptypes.MempoolTx{
-		Hash:      "s1",
+		TxID:      "s1",
 		Size:      200,
 		Type:      "Regular",
 		SKATotals: map[uint8]string{2: bigAtoms},
@@ -90,7 +90,7 @@ func TestAddTxToCoinStats_IncrementalAccumulates(t *testing.T) {
 	// Three VAR Regular txs.
 	for range 3 {
 		addTxToCoinStats(stats, exptypes.MempoolTx{
-			Hash: "r", Size: 100, TotalOut: 1.5, Type: "Regular",
+			TxID: "r", Size: 100, TotalOut: 1.5, Type: "Regular",
 		})
 	}
 	s := stats[0]

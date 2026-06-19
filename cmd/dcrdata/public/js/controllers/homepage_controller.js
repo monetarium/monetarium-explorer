@@ -23,7 +23,7 @@ function incrementValue(element) {
 }
 
 function mempoolTableRow(tx) {
-  const link = `/tx/${tx.hash}`
+  const link = `/tx/${tx.txid}`
 
   // Determine coin label and formatted amount
   let coin, amount
@@ -42,7 +42,7 @@ function mempoolTableRow(tx) {
   const clone = document.importNode(tmpl.content, true)
   const hashTd = clone.querySelector('.tx-hash')
   if (hashTd) {
-    hashTd.innerHTML = humanize.hashElide(tx.hash, link)
+    hashTd.innerHTML = humanize.hashElide(tx.txid, link)
   }
   const typeTd = clone.querySelector('.tx-type')
   if (typeTd) {

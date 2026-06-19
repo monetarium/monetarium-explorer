@@ -95,7 +95,7 @@ function txCoinSymbolText(tx) {
 
 function cloneTxRow(template, tx) {
   const tr = template.content.firstElementChild.cloneNode(true)
-  setHashLink(tr.querySelector('[data-slot="hashLink"]'), tx.hash)
+  setHashLink(tr.querySelector('[data-slot="hashLink"]'), tx.txid)
   tr.querySelector('[data-slot="coinSymbol"]').textContent = txCoinSymbolText(tx)
   fillTxAmountCell(tr.querySelector('[data-slot="amount"]'), tx)
   tr.querySelector('[data-slot="size"]').textContent = `${tx.size} B`
@@ -106,7 +106,7 @@ function cloneTxRow(template, tx) {
 
 function cloneTicketRow(template, tx) {
   const tr = template.content.firstElementChild.cloneNode(true)
-  setHashLink(tr.querySelector('[data-slot="hashLink"]'), tx.hash)
+  setHashLink(tr.querySelector('[data-slot="hashLink"]'), tx.txid)
   setVarAmountHTML(tr.querySelector('[data-slot="amount"]'), tx.total)
   tr.querySelector('[data-slot="size"]').textContent = `${tx.size} B`
   tr.querySelector('[data-slot="feeRate"]').textContent = `${tx.fee_rate} VAR/kB`
@@ -118,7 +118,7 @@ function cloneTicketRow(template, tx) {
 
 function cloneRevocationRow(template, tx) {
   const tr = template.content.firstElementChild.cloneNode(true)
-  setHashLink(tr.querySelector('[data-slot="hashLink"]'), tx.hash)
+  setHashLink(tr.querySelector('[data-slot="hashLink"]'), tx.txid)
   setVarAmountHTML(tr.querySelector('[data-slot="amount"]'), tx.total)
   tr.querySelector('[data-slot="size"]').textContent = `${tx.size} B`
   setAgeCell(tr.querySelector('[data-slot="age"]'), tx.time)
@@ -130,7 +130,7 @@ function cloneVoteRow(template, tx) {
   const v = tx.vote_info
   tr.dataset.height = v.block_validation.height
   tr.dataset.blockhash = v.block_validation.hash
-  setHashLink(tr.querySelector('[data-slot="hashLink"]'), tx.hash, false)
+  setHashLink(tr.querySelector('[data-slot="hashLink"]'), tx.txid, false)
   const blockLink = tr.querySelector('[data-slot="blockLink"]')
   blockLink.href = `/block/${v.block_validation.hash}`
   tr.querySelector('[data-slot="blockHeight"]').textContent = v.block_validation.height
