@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"math/big"
 	"sort"
+	"strconv"
 	"sync"
 	"time"
 
@@ -653,15 +654,27 @@ func addAtomStrings(a, b string, isBig bool) string {
 		return b
 	}
 	if isBig {
-		av, _ := new(big.Int).SetString(a, 10)
-		bv, _ := new(big.Int).SetString(b, 10)
-		if av == nil || bv == nil {
+		av, ok := new(big.Int).SetString(a, 10)
+		if !ok {
+			log.Warnf("Failed to parse SKA atom string %q", a)
+			return a
+		}
+		bv, ok := new(big.Int).SetString(b, 10)
+		if !ok {
+			log.Warnf("Failed to parse SKA atom string %q", b)
 			return a
 		}
 		return new(big.Int).Add(av, bv).String()
 	}
-	var ai, bi int64
-	fmt.Sscan(a, &ai)
-	fmt.Sscan(b, &bi)
-	return fmt.Sprintf("%d", ai+bi)
+	ai, err := strconv.ParseInt(a, 10, 64)
+	if err != nil {
+		log.Warnf("Failed to parse VAR atom string %q: %v", a, err)
+		return "0"
+	}
+	bi, err := strconv.ParseInt(b, 10, 64)
+	if err != nil {
+		log.Warnf("Failed to parse VAR atom string %q: %v", b, err)
+		return "0"
+	}
+	return strconv.FormatInt(ai+bi, 10)
 }
