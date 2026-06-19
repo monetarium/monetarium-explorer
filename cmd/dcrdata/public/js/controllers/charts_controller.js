@@ -1,7 +1,7 @@
 /* global Turbolinks */
 import { Controller } from '@hotwired/stimulus'
 import { requestJSON } from '../helpers/http'
-import humanize from '../helpers/humanize_helper' // eslint-disable-line no-unused-vars
+import humanize from '../helpers/humanize_helper'
 import TurboQuery from '../helpers/turbolinks_helper'
 import Zoom from '../helpers/zoom_helper' // eslint-disable-line no-unused-vars
 import { animationFrame } from '../helpers/animation_helper' // eslint-disable-line no-unused-vars
@@ -65,6 +65,25 @@ export default class extends Controller {
     this.payload = null
     this.selectedChartName = null
     this.zoomGuard = false
+
+    // Legend element generators (cloned from the template nodes).
+    this.legendElement = this.labelsTarget
+    const lm = this.legendMarkerTarget
+    lm.remove()
+    lm.removeAttribute('data-charts-target')
+    this.legendMarker = () => {
+      const node = document.createElement('div')
+      node.appendChild(lm.cloneNode())
+      return node.innerHTML
+    }
+    const le = this.legendEntryTarget
+    le.remove()
+    le.removeAttribute('data-charts-target')
+    this.legendEntry = (s) => {
+      const node = le.cloneNode()
+      node.innerHTML = s
+      return node
+    }
 
     this.processNightMode = () => this.redrawTheme()
     globalEventBus.on('NIGHT_MODE', this.processNightMode)
@@ -181,11 +200,49 @@ export default class extends Controller {
     return { tps: this.tps, windowSize: this.windowSize }
   }
 
+  buildHooks() {
+    return { setCursor: [(u) => this.renderLegend(u)] }
+  }
+
+  renderLegend(u) {
+    const idx = u.cursor.idx
+    if (idx == null) {
+      this.legendElement.classList.add('d-hide')
+      return
+    }
+    this.legendElement.classList.remove('d-hide')
+    this.legendElement.replaceChildren()
+
+    // X label.
+    const x = u.data[0][idx]
+    const xLabel = this.settings.axis === 'time' ? 'Date' : 'Block Height'
+    const xText =
+      this.settings.axis === 'time'
+        ? humanize.date(x * 1000, false, this.settings.chart !== 'ticket-price')
+        : String(x)
+    this.legendElement.appendChild(this.legendEntry(`${xLabel}: ${xText}`))
+
+    // One entry per series at the cursor index.
+    const def = this.currentDef
+    const settings = this.settingsForDef()
+    def.series.forEach((s, i) => {
+      if (u.series && u.series[i + 1] && u.series[i + 1].show === false) return
+      const value = u.data[i + 1][idx]
+      const datum = { idx: idx, payload: this.payload, value: value }
+      const text = def.formatValue(i, datum, settings)
+      this.legendElement.appendChild(this.legendEntry(`${this.legendMarker()} ${s.label}: ${text}`))
+    })
+
+    // Optional extra non-series lines (e.g. stake-participation).
+    if (typeof def.legendExtra === 'function') {
+      def.legendExtra({ idx: idx, payload: this.payload }, settings).forEach((line) => {
+        this.legendElement.appendChild(this.legendEntry(`${this.legendMarker()} ${line}`))
+      })
+    }
+  }
+
   // Stubs filled by later tasks:
   applyControlVisibility() {}
-  buildHooks() {
-    return undefined
-  }
   applyZoom() {}
   redrawTheme() {}
 

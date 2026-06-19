@@ -142,9 +142,29 @@ function makeController() {
   c.zoomOptionTargets = []
   c.scaleTypeTargets = []
   c.modeOptionTargets = []
-  c.labelsTarget = { appendChild: vi.fn() }
-  c.legendMarkerTarget = { remove: vi.fn(), removeAttribute: vi.fn() }
-  c.legendEntryTarget = { remove: vi.fn(), removeAttribute: vi.fn() }
+  c.labelsTarget = {
+    classList: { add: vi.fn(), remove: vi.fn() },
+    replaceChildren: vi.fn(),
+    appendChild: vi.fn()
+  }
+  c.legendMarkerTarget = {
+    remove: vi.fn(),
+    removeAttribute: vi.fn(),
+    cloneNode: vi.fn().mockImplementation(() => document.createElement('span'))
+  }
+  c.legendEntryTarget = {
+    remove: vi.fn(),
+    removeAttribute: vi.fn(),
+    cloneNode: vi.fn().mockImplementation(() => {
+      const node = {
+        innerHTML: '',
+        get textContent() {
+          return this.innerHTML
+        }
+      }
+      return node
+    })
+  }
   c.rawDataURLTarget = { textContent: '' }
   c.chartsViewTarget = {
     classList: { add: vi.fn(), remove: vi.fn() },
@@ -248,6 +268,55 @@ describe('ChartsController URL persistence', () => {
         axis: 'height'
       })
     )
+  })
+})
+
+describe('ChartsController legend', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('renderLegend writes one entry per series plus the x label', async () => {
+    const c = makeController()
+    // legend element collects appended children's text
+    const appended = []
+    c.labelsTarget = {
+      classList: { add: vi.fn(), remove: vi.fn() },
+      innerHTML: '',
+      appendChild: (node) => appended.push(node.textContent),
+      replaceChildren: () => (appended.length = 0)
+    }
+    await c.connect()
+    c.currentDef = {
+      name: 'demo',
+      series: [{ label: 'Price' }],
+      formatValue: (i, d) => `${d.value} VAR`
+    }
+    c.payload = { t: [1000, 2000], axis: 'time' }
+    c.settings.axis = 'time'
+
+    const u = {
+      cursor: { idx: 1 },
+      data: [
+        [1000, 2000],
+        [10, 20]
+      ]
+    }
+    c.renderLegend(u)
+
+    expect(appended.some((t) => t.includes('Price: 20 VAR'))).toBe(true)
+  })
+
+  it('renderLegend hides the legend when the cursor is off the plot', async () => {
+    const c = makeController()
+    c.labelsTarget = {
+      classList: { add: vi.fn(), remove: vi.fn() },
+      replaceChildren: vi.fn(),
+      appendChild: vi.fn()
+    }
+    await c.connect()
+    c.currentDef = { series: [], formatValue: () => '' }
+    const u = { cursor: { idx: null }, data: [[1000]] }
+    c.renderLegend(u)
+    expect(c.labelsTarget.classList.add).toHaveBeenCalledWith('d-hide')
   })
 })
 
