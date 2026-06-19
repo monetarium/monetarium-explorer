@@ -18,6 +18,7 @@ vi.mock('./module_helper', () => {
         this.data = d
       })
       this.setSeries = vi.fn()
+      this.setScale = vi.fn()
       this.setSize = vi.fn()
       this.destroy = vi.fn()
     }
@@ -224,5 +225,55 @@ describe('createChart / ChartHandle', () => {
     const inst = handle.uplot
     handle.destroy()
     expect(inst.destroy).toHaveBeenCalled()
+  })
+})
+
+describe('buildOpts — xTime / hooks (PR 1 extensions)', () => {
+  it('defaults the x scale to time', () => {
+    const opts = buildOpts(fakeUPlot, lineDef, {})
+    expect(opts.scales.x.time).toBe(true)
+  })
+
+  it('sets a non-time x scale when xTime is false', () => {
+    const opts = buildOpts(fakeUPlot, lineDef, { xTime: false })
+    expect(opts.scales.x.time).toBe(false)
+  })
+
+  it('passes hooks straight through to the uPlot options', () => {
+    const setCursor = () => {}
+    const opts = buildOpts(fakeUPlot, lineDef, { hooks: { setCursor: [setCursor] } })
+    expect(opts.hooks.setCursor[0]).toBe(setCursor)
+  })
+
+  it('omits hooks when none are supplied', () => {
+    const opts = buildOpts(fakeUPlot, lineDef, {})
+    expect(opts.hooks).toBeUndefined()
+  })
+})
+
+describe('ChartHandle.setXRange (PR 1 extension)', () => {
+  const el = {}
+
+  it('delegates to uplot.setScale on the x scale', async () => {
+    const handle = await createChart(el, handleDef, {})
+    handle.uplot.setScale = vi.fn()
+    handle.setXRange(10, 20)
+    expect(handle.uplot.setScale).toHaveBeenCalledWith('x', { min: 10, max: 20 })
+  })
+
+  it('re-applies the last x-range after a rebuild', async () => {
+    const handle = await createChart(el, handleDef, {})
+    handle.setXRange(10, 20)
+    handle.setScaleType('log') // forces a rebuild
+    expect(handle.uplot.setScale).toHaveBeenCalledWith('x', { min: 10, max: 20 })
+  })
+
+  it('no-ops after destroy', async () => {
+    const handle = await createChart(el, handleDef, {})
+    const inst = handle.uplot
+    inst.setScale = vi.fn()
+    handle.destroy()
+    handle.setXRange(1, 2)
+    expect(inst.setScale).not.toHaveBeenCalled()
   })
 })

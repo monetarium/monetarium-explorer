@@ -51,18 +51,34 @@ function pathsFor(UPlot, kind) {
  * @returns {object} uPlot opts
  */
 export function buildOpts(UPlot, def, opts = {}) {
-  const { dark = false, width = 800, height = 400, scaleType = 'linear', syncKey } = opts
+  const {
+    dark = false,
+    width = 800,
+    height = 400,
+    scaleType = 'linear',
+    syncKey,
+    xTime = true,
+    hooks
+  } = opts
   const c = chartColors(dark)
 
-  const scales = { x: { time: true } }
+  const scales = { x: { time: xTime } }
   scales.y = { distr: scaleType === 'log' ? LOG_DISTR : LINEAR_DISTR }
   // y2 stays linear even when y is log — it is typically a secondary count axis; revisit if a log y2 is ever needed.
   if (def.axes.some((a) => (a.scale || 'y') === 'y2')) {
     scales.y2 = { distr: LINEAR_DISTR }
   }
 
+  const xAxis = { stroke: c.axis, grid: { stroke: c.grid }, ticks: { stroke: c.grid } }
+  if (!xTime) {
+    // Height axis: render plain integer block heights (uPlot's default numeric
+    // formatter would otherwise apply SI suffixes like "1.2k").
+    xAxis.values = (u, splits) =>
+      splits.map((v) => (v == null ? '' : Math.round(v).toLocaleString('en-US')))
+  }
+
   const axes = [
-    { stroke: c.axis, grid: { stroke: c.grid }, ticks: { stroke: c.grid } },
+    xAxis,
     ...def.axes.map((a) => {
       const scale = a.scale || 'y'
       return {
@@ -94,7 +110,7 @@ export function buildOpts(UPlot, def, opts = {}) {
   const cursor = {}
   if (syncKey) cursor.sync = { key: syncKey, setSeries: true }
 
-  return {
+  const out = {
     width: width,
     height: height,
     scales: scales,
@@ -103,6 +119,8 @@ export function buildOpts(UPlot, def, opts = {}) {
     cursor: cursor,
     legend: { show: false }
   }
+  if (hooks) out.hooks = hooks
+  return out
 }
 
 let uPlotCtor // memoized after first dynamic import
@@ -143,6 +161,7 @@ export async function createChart(el, def, opts = {}) {
   // every series to shown, so this is re-applied after each rebuild to keep a hidden
   // series hidden across mode/scale changes.
   const visibility = {}
+  let xRange = null // { min, max } remembered to survive rebuilds
 
   function applyVisibility() {
     currentDef.series.forEach((s, i) => {
@@ -169,6 +188,7 @@ export async function createChart(el, def, opts = {}) {
       throw e
     }
     applyVisibility()
+    if (xRange) uplot.setScale('x', { min: xRange.min, max: xRange.max })
   }
 
   return {
@@ -214,6 +234,11 @@ export async function createChart(el, def, opts = {}) {
       if (destroyed) return
       state = { ...state, width: width, height: height }
       uplot.setSize({ width, height })
+    },
+    setXRange(min, max) {
+      if (destroyed) return
+      xRange = { min: min, max: max }
+      uplot.setScale('x', { min: min, max: max })
     },
     destroy() {
       if (destroyed) return
