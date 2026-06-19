@@ -1498,9 +1498,8 @@ type MempoolTx struct {
 	VinCount  int            `json:"vin_count"`
 	VoutCount int            `json:"vout_count"`
 	Vin       []MempoolInput `json:"vin,omitempty"`
-	Coinbase  bool           `json:"coinbase"` // to signal the coinbase tx on new block despite not being in mempool
-	Hash      string         `json:"hash"`     // dup of TxID?
-	Time      int64          `json:"time"`
+	Coinbase  bool   `json:"coinbase"` // to signal the coinbase tx on new block despite not being in mempool
+	Time      int64  `json:"time"`
 	Size      int32          `json:"size"`
 	TotalOut  float64        `json:"total"`
 	// Consider atom representation:

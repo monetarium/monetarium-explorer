@@ -152,7 +152,6 @@ func (t *DataCollector) mempoolTxns() ([]exptypes.MempoolTx, txhelpers.MempoolAd
 			Vin:       t.populateMempoolInputs(context.TODO(), msgTx, txType, txnsStore),
 			// Coinbase:  txhelpers.IsCoinBaseTx(msgTx), // commented because coinbase is not in mempool
 
-			Hash:        hashStr, // dup of TxID!
 			Time:        tx.Time,
 			Size:        tx.Size,
 			TotalOut:    dcrutil.Amount(totalOut).ToCoin(),
@@ -447,18 +446,18 @@ func ParseTxns(txs []exptypes.MempoolTx, params *chaincfg.Params, lastBlock *Blo
 		out, _ := dcrutil.NewAmount(tx.TotalOut) // 0 for invalid amounts
 		switch stake.TxType(tx.TypeID) {
 		case stake.TxTypeSStx:
-			if _, found := invStake[tx.Hash]; found {
+			if _, found := invStake[tx.TxID]; found {
 				continue
 			}
 			ticketTotal += out
-			invStake[tx.Hash] = struct{}{}
+			invStake[tx.TxID] = struct{}{}
 			tickets = append(tickets, tx)
 
 		case stake.TxTypeSSGen:
-			if _, found := invStake[tx.Hash]; found {
+			if _, found := invStake[tx.TxID]; found {
 				continue
 			}
-			invStake[tx.Hash] = struct{}{}
+			invStake[tx.TxID] = struct{}{}
 			votes = append(votes, tx)
 
 			if tx.VoteInfo == nil {
@@ -482,45 +481,45 @@ func ParseTxns(txs []exptypes.MempoolTx, params *chaincfg.Params, lastBlock *Blo
 			}
 
 		case stake.TxTypeSSRtx:
-			if _, found := invStake[tx.Hash]; found {
+			if _, found := invStake[tx.TxID]; found {
 				continue
 			}
 			revTotal += out
-			invStake[tx.Hash] = struct{}{}
+			invStake[tx.TxID] = struct{}{}
 			revs = append(revs, tx)
 
 		case stake.TxTypeTSpend:
-			if _, found := invStake[tx.Hash]; found {
+			if _, found := invStake[tx.TxID]; found {
 				continue
 			}
-			invStake[tx.Hash] = struct{}{}
+			invStake[tx.TxID] = struct{}{}
 			tspendTotal += out
 			tspends = append(tspends, tx)
 			// mineable depends on vote choices and TreasuryVoteInterval
 
 		case stake.TxTypeTAdd:
-			if _, found := invStake[tx.Hash]; found {
+			if _, found := invStake[tx.TxID]; found {
 				continue
 			}
-			invStake[tx.Hash] = struct{}{}
+			invStake[tx.TxID] = struct{}{}
 			taddTotal += out
 			tadds = append(tadds, tx)
 
 		case stake.TxTypeTreasuryBase:
 			// treasurybase won't be in mempool, but it certainly should not
 			// default to the regular tree txn map.
-			if _, found := invStake[tx.Hash]; found {
+			if _, found := invStake[tx.TxID]; found {
 				continue
 			}
-			invStake[tx.Hash] = struct{}{}
+			invStake[tx.TxID] = struct{}{}
 			log.Warnf("Processed a treasurybase in mempool, which should not happen! %v", tx.TxID)
 
 		default:
-			if _, found := invRegular[tx.Hash]; found {
+			if _, found := invRegular[tx.TxID]; found {
 				continue
 			}
 			regularTotal += out
-			invRegular[tx.Hash] = struct{}{}
+			invRegular[tx.TxID] = struct{}{}
 			regular = append(regular, tx)
 		}
 

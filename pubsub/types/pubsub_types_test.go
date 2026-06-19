@@ -48,22 +48,22 @@ func TestHubMessage_String(t *testing.T) {
 		},
 		{
 			"ok newtx",
-			HubMessage{Signal: SigNewTx, Msg: &exptypes.MempoolTx{Hash: "4811246cb13f6e74c8c661242064664aba79e0baaae273c320b884cf461b28d7"}},
+			HubMessage{Signal: SigNewTx, Msg: &exptypes.MempoolTx{TxID: "4811246cb13f6e74c8c661242064664aba79e0baaae273c320b884cf461b28d7"}},
 			"newtx:4811246cb13f6e74c8c661242064664aba79e0baaae273c320b884cf461b28d7",
 		},
 		{
 			"ok newtxs",
-			HubMessage{Signal: SigNewTxs, Msg: []*exptypes.MempoolTx{{Hash: "4811246cb13f6e74c8c661242064664aba79e0baaae273c320b884cf461b28d7"}}},
+			HubMessage{Signal: SigNewTxs, Msg: []*exptypes.MempoolTx{{TxID: "4811246cb13f6e74c8c661242064664aba79e0baaae273c320b884cf461b28d7"}}},
 			"newtxs:len=1",
 		},
 		{
 			"wrong Msg type newtx",
-			HubMessage{Signal: SigNewTx, Msg: exptypes.MempoolTx{Hash: "4811246cb13f6e74c8c661242064664aba79e0baaae273c320b884cf461b28d7"}},
+			HubMessage{Signal: SigNewTx, Msg: exptypes.MempoolTx{TxID: "4811246cb13f6e74c8c661242064664aba79e0baaae273c320b884cf461b28d7"}},
 			"invalid",
 		},
 		{
 			"wrong Msg type newtxs",
-			HubMessage{Signal: SigNewTxs, Msg: &exptypes.MempoolTx{Hash: "4811246cb13f6e74c8c661242064664aba79e0baaae273c320b884cf461b28d7"}},
+			HubMessage{Signal: SigNewTxs, Msg: &exptypes.MempoolTx{TxID: "4811246cb13f6e74c8c661242064664aba79e0baaae273c320b884cf461b28d7"}},
 			"invalid",
 		},
 	}
