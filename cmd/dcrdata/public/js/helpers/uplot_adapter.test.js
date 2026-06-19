@@ -161,6 +161,31 @@ describe('createChart / ChartHandle', () => {
     expect(handle.uplot.setSeries).toHaveBeenCalledWith(1, { show: false })
   })
 
+  it('re-applies a hidden series after a rebuild (a fresh uPlot starts all-shown)', async () => {
+    const handle = await createChart(el, handleDef, {})
+    handle.setVisibility({ Hashrate: false })
+    const before = handle.uplot
+    handle.setScaleType('log')
+    expect(handle.uplot).not.toBe(before)
+    expect(handle.uplot.setSeries).toHaveBeenCalledWith(1, { show: false })
+  })
+
+  it('rebuilds at the last resized dimensions', async () => {
+    const handle = await createChart(el, handleDef, { width: 800, height: 400 })
+    handle.resize(1000, 500)
+    handle.setScaleType('log')
+    expect(handle.uplot.opts.width).toBe(1000)
+    expect(handle.uplot.opts.height).toBe(500)
+  })
+
+  it('ignores calls after destroy', async () => {
+    const handle = await createChart(el, handleDef, {})
+    const inst = handle.uplot
+    handle.destroy()
+    handle.setData([[1], [2]])
+    expect(inst.setData).not.toHaveBeenCalled()
+  })
+
   it('destroy delegates to uplot.destroy', async () => {
     const handle = await createChart(el, handleDef, {})
     const inst = handle.uplot
