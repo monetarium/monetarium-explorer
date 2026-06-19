@@ -607,7 +607,7 @@ func ParseTxns(txs []exptypes.MempoolTx, params *chaincfg.Params, lastBlock *Blo
 				v, ok := new(big.Int).SetString(amtStr, 10)
 				if !ok {
 					log.Errorf("Failed to parse SKA amount string: %q", amtStr)
-					continue
+					continue // skip this ct entirely — don't count or accumulate it
 				}
 				a.txCount++
 				a.size += tx.Size
