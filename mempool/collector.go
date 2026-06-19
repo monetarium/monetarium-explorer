@@ -601,18 +601,20 @@ func ParseTxns(txs []exptypes.MempoolTx, params *chaincfg.Params, lastBlock *Blo
 		} else {
 			for ct, amtStr := range tx.SKATotals {
 				a := getAccum(ct)
+				v, ok := new(big.Int).SetString(amtStr, 10)
+				if !ok {
+					log.Errorf("Failed to parse SKA amount string: %q", amtStr)
+					continue
+				}
 				a.txCount++
 				a.size += tx.Size
 				if a.skaAmt == nil {
 					a.skaAmt = make(map[uint8]*big.Int)
 				}
-				v, _ := new(big.Int).SetString(amtStr, 10)
-				if v != nil {
-					if a.skaAmt[ct] == nil {
-						a.skaAmt[ct] = new(big.Int)
-					}
-					a.skaAmt[ct].Add(a.skaAmt[ct], v)
+				if a.skaAmt[ct] == nil {
+					a.skaAmt[ct] = new(big.Int)
 				}
+				a.skaAmt[ct].Add(a.skaAmt[ct], v)
 				switch tx.Type {
 				case "Regular":
 					a.regCount++
