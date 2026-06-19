@@ -996,7 +996,7 @@ func (mpi *MempoolInfo) DeepCopy() *MempoolInfo {
 	out.MempoolShort = *mps
 
 	out.Ident = mpi.Ident
-	out.CoinFills = mpi.CoinFills
+	out.CoinFills = CopyCoinFillSlice(mpi.CoinFills)
 
 	return out
 }
