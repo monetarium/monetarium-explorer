@@ -4,6 +4,7 @@
 
 import { chartColors, seriesStroke, seriesColorByKey, fillForStroke } from './chart_theme'
 import { getDefault } from './module_helper'
+import humanize from './humanize_helper'
 
 const LINEAR_DISTR = 1
 const LOG_DISTR = 3 // uPlot scale.distr: 1 = linear, 3 = log
@@ -82,10 +83,7 @@ export function buildOpts(UPlot, def, opts = {}) {
 
   const xAxis = { stroke: c.axis, grid: { stroke: c.grid }, ticks: { stroke: c.grid } }
   if (!xTime) {
-    // Height axis: render plain integer block heights (uPlot's default numeric
-    // formatter would otherwise apply SI suffixes like "1.2k").
-    xAxis.values = (u, splits) =>
-      splits.map((v) => (v == null ? '' : Math.round(v).toLocaleString('en-US')))
+    xAxis.values = (u, splits) => splits.map((v) => (v == null ? '' : humanize.threeSigFigs(v)))
   }
 
   const axes = [
@@ -99,7 +97,8 @@ export function buildOpts(UPlot, def, opts = {}) {
         label: a.label,
         stroke: axisColor,
         grid: { stroke: scale === 'y' ? c.grid : 'transparent' },
-        side: scale === 'y2' ? 1 : 3 // 3 = left, 1 = right
+        side: scale === 'y2' ? 1 : 3, // 3 = left, 1 = right
+        values: (u, splits) => splits.map((v) => (v == null ? '' : humanize.threeSigFigs(v)))
       }
     })
   ]

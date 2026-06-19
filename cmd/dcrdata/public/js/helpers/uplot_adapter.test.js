@@ -311,6 +311,27 @@ describe('buildOpts — colorKey and axis color matching', () => {
   })
 })
 
+describe('buildOpts — threeSigFigs axis tick formatter', () => {
+  it('y-axis values fn formats using threeSigFigs', () => {
+    const opts = buildOpts(fakeUPlot, lineDef, {})
+    const yAxis = opts.axes.find((a) => a.scale === 'y')
+    expect(yAxis.values(null, [1000, 12000, 1500000])).toEqual(['1.00k', '12.0k', '1.50M'])
+  })
+  it('height x-axis values fn formats using threeSigFigs', () => {
+    const opts = buildOpts(fakeUPlot, lineDef, { xTime: false })
+    expect(opts.axes[0].values(null, [1000, 12000, 1500000])).toEqual(['1.00k', '12.0k', '1.50M'])
+  })
+  it('time x-axis has no values override (uPlot handles date formatting)', () => {
+    const opts = buildOpts(fakeUPlot, lineDef, { xTime: true })
+    expect(opts.axes[0].values).toBeUndefined()
+  })
+  it('y-axis handles null splits gracefully', () => {
+    const opts = buildOpts(fakeUPlot, lineDef, {})
+    const yAxis = opts.axes.find((a) => a.scale === 'y')
+    expect(yAxis.values(null, [null, 1000])).toEqual(['', '1.00k'])
+  })
+})
+
 describe('buildOpts — explicit color, dash, spanGaps', () => {
   const explicitDef = {
     name: 'ref',
