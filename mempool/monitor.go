@@ -20,6 +20,7 @@ import (
 	exptypes "github.com/monetarium/monetarium-explorer/explorer/types"
 	pstypes "github.com/monetarium/monetarium-explorer/pubsub/types"
 	"github.com/monetarium/monetarium-explorer/txhelpers"
+	humanize "github.com/dustin/go-humanize"
 )
 
 // MempoolDataSaver is an interface for storing mempool data.
@@ -366,11 +367,11 @@ func (p *MempoolMonitor) TxHandler(rawTx *chainjson.TxRawResult) error {
 	p.inventory.TotalSize += tx.Size
 	if likelyMineable {
 		p.inventory.LikelyMineable.Size += tx.Size
-		p.inventory.LikelyMineable.FormattedSize = exptypes.BytesString(uint64(p.inventory.LikelyMineable.Size))
+		p.inventory.LikelyMineable.FormattedSize = humanize.Bytes(uint64(p.inventory.LikelyMineable.Size))
 		p.inventory.LikelyMineable.Total += tx.TotalOut
 		p.inventory.LikelyMineable.Count++
 	}
-	p.inventory.FormattedTotalSize = exptypes.BytesString(uint64(p.inventory.TotalSize))
+	p.inventory.FormattedTotalSize = humanize.Bytes(uint64(p.inventory.TotalSize))
 
 	// Update per-coin stats incrementally.
 	if p.inventory.CoinStats == nil {

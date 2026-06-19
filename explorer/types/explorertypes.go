@@ -1130,21 +1130,6 @@ func FilterRegularTx(txs []*TrimmedTxInfo) (transactions []*TrimmedTxInfo) {
 	return transactions
 }
 
-func BytesString(s uint64) string {
-	if s < 1000 {
-		return fmt.Sprintf("%d B", s)
-	}
-	e := math.Min(3, math.Floor(math.Log(float64(s))/math.Log(1000)))
-	suffix := []string{"B", "kB", "MB", "GB"}[int(e)]
-	val := math.Round(float64(s)/math.Pow(1000, e)*10) / 10
-	f := "%.0f %s"
-	if val < 10 {
-		f = "%.1f %s"
-	}
-
-	return fmt.Sprintf(f, val, suffix)
-}
-
 // TrimMempoolTxs converts the input []MempoolTx to a []*TrimmedTxInfo.
 func TrimMempoolTxs(txs []MempoolTx) []*TrimmedTxInfo {
 	trimmedTxs := make([]*TrimmedTxInfo, 0, len(txs))
@@ -1177,7 +1162,7 @@ func TrimMempoolTx(tx *MempoolTx) (trimmedTx *TrimmedTxInfo) {
 		TxID:          tx.TxID,
 		Type:          tx.Type,
 		Version:       tx.Version,
-		FormattedSize: BytesString(uint64(tx.Size)),
+		FormattedSize: humanize.Bytes(uint64(tx.Size)),
 		Total:         tx.TotalOut,
 		Fee:           fee,
 		FeeRate:       feeRate,
