@@ -5,7 +5,8 @@
   "private": true,
   "sideEffects": [
     "*.scss",
-    "*.css"
+    "*.css",
+    "**/charts/definitions/*.js"
   ],
   "engines": {
     "node": ">=20.20"
