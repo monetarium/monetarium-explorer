@@ -150,7 +150,7 @@ export default class extends Controller {
     if (def.controls.windowUnits && !def.controls.hybrid) {
       this.settings.bin = 'window'
     } else {
-      this.settings.bin = this.selectedBin() || 'day'
+      this.settings.bin = this.selectedBin() || 'block'
     }
     this.settings.axis = this.selectedAxis() || 'time'
     if (!this.settings.interval) this.settings.interval = 'week'
