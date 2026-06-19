@@ -275,6 +275,7 @@ export default class extends Controller {
     ws.send('getmempooltxs', mempoolData.id)
     this.mempool = new Mempool(mempoolData, this.voteTallyTargets)
     this.lastCoinStats = null
+    this._prevCoinStats = null
     this.txTableRow = (tx) => cloneTxRow(this.txRowTemplateTarget, tx)
     this.ticketTableRow = (tx) => cloneTicketRow(this.ticketRowTemplateTarget, tx)
     this.revocationTableRow = (tx) => cloneRevocationRow(this.revocationRowTemplateTarget, tx)
@@ -344,7 +345,12 @@ export default class extends Controller {
   }
 
   setMempoolFigures() {
-    this.applyCoinStats(this.lastCoinStats)
+    // Only apply coin stats when the reference actually changed,
+    // otherwise every WS event churns the DOM unnecessarily.
+    if (this.lastCoinStats !== this._prevCoinStats) {
+      this._prevCoinStats = this.lastCoinStats
+      this.applyCoinStats(this.lastCoinStats)
+    }
     // Vote tally HTML is driven by the local Mempool helper; vote totals are
     // already covered by applyCoinStats (CoinStats[0].vote_amount).
     const counts = this.mempool.counts()
