@@ -47,7 +47,7 @@ type MempoolAddressStore struct {
 type MempoolMonitor struct {
 	mtx        sync.RWMutex
 	ctx        context.Context
-	mpoolInfo  MempoolInfo
+	mpoolInfo  CollectState
 	inventory  *exptypes.MempoolInfo
 	addrMap    MempoolAddressStore
 	txnsStore  txhelpers.TxnsStore
