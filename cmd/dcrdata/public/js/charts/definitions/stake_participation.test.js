@@ -35,5 +35,5 @@ describe('stakeParticipation.legendExtra', () => {
 })
 
 describe('stakeParticipation.controls', () => {
-  it('disables SCALE', () => expect(stakeParticipation.controls.scale).toBe(false))
+  it('enables SCALE', () => expect(stakeParticipation.controls.scale).toBe(true))
 })

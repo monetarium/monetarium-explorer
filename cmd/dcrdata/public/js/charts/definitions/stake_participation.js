@@ -6,7 +6,7 @@ export const stakeParticipation = {
   label: 'Stake Participation',
   controls: {
     bin: true,
-    scale: false,
+    scale: true,
     mode: false,
     zoom: true,
     visibility: null,
