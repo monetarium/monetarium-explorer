@@ -83,6 +83,7 @@
     "partysocket": "^1.1.19",
     "qrcode": "^1.5.1",
     "regenerator-runtime": "^0.14.1",
+    "uplot": "^1.6.32",
     "url-parse": "^1.5.10"
   }
 }
