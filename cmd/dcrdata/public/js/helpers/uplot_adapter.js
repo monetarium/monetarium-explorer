@@ -2,7 +2,7 @@
 // of the raw uPlot API. `buildOpts` is pure (no DOM, no instance) and is the unit
 // under test; createChart (Task 5) wires it to a real uPlot.
 
-import { chartColors, seriesStroke, seriesFill } from './chart_theme'
+import { chartColors, seriesStroke, seriesColorByKey, fillForStroke } from './chart_theme'
 import { getDefault } from './module_helper'
 
 const LINEAR_DISTR = 1
@@ -42,6 +42,12 @@ function pathsFor(UPlot, kind) {
   }
 }
 
+function resolveSeriesColor(s, i, dark) {
+  if (s.color) return s.color
+  if (s.colorKey) return seriesColorByKey(s.colorKey, dark) || seriesStroke(s.colorIndex ?? i)
+  return seriesStroke(s.colorIndex ?? i)
+}
+
 /**
  * Translate a ChartDefinition into a uPlot options object. Pure.
  * @param {Function|{paths:object}} UPlot  uPlot constructor (for static `.paths`)
@@ -61,6 +67,7 @@ export function buildOpts(UPlot, def, opts = {}) {
     hooks
   } = opts
   const c = chartColors(dark)
+  const seriesColors = def.series.map((s, i) => resolveSeriesColor(s, i, dark))
 
   const scales = { x: { time: xTime } }
   scales.y = { distr: scaleType === 'log' ? LOG_DISTR : LINEAR_DISTR }
@@ -85,10 +92,12 @@ export function buildOpts(UPlot, def, opts = {}) {
     xAxis,
     ...def.axes.map((a) => {
       const scale = a.scale || 'y'
+      const si = def.series.findIndex((s) => (s.scale || 'y') === scale && !s.color)
+      const axisColor = si >= 0 ? seriesColors[si] : c.axis
       return {
         scale: scale,
         label: a.label,
-        stroke: c.axis,
+        stroke: axisColor,
         grid: { stroke: scale === 'y' ? c.grid : 'transparent' },
         side: scale === 'y2' ? 1 : 3 // 3 = left, 1 = right
       }
@@ -98,16 +107,18 @@ export function buildOpts(UPlot, def, opts = {}) {
   const series = [
     {},
     ...def.series.map((s, i) => {
-      const idx = s.colorIndex ?? i
       const filled = s.kind === 'area' || s.kind === 'bars'
-      return {
+      const entry = {
         label: s.label,
         scale: s.scale || 'y',
-        stroke: seriesStroke(idx),
-        fill: filled ? seriesFill(idx, dark) : null,
+        stroke: seriesColors[i],
+        fill: filled ? fillForStroke(seriesColors[i], dark) : null,
         paths: pathsFor(UPlot, s.kind),
-        points: { show: false }
+        points: { show: false },
+        spanGaps: !!s.spanGaps
       }
+      if (s.dash) entry.dash = s.dash
+      return entry
     })
   ]
 

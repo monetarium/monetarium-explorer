@@ -74,3 +74,18 @@ function hexToRgba(hex, alpha) {
   const b = n & 255
   return `rgba(${r}, ${g}, ${b}, ${alpha})`
 }
+
+// Named series colors — MUST match the VISIBILITY checkmark colors in charts.scss.
+const SERIES_COLORS = {
+  'tickets-price': { light: '#2970ff', dark: '#2dd8a3' },
+  'tickets-bought': { light: '#006666', dark: '#2970ff' },
+  'hashrate-rate': { light: '#2970ff', dark: '#2dd8a3' },
+  'hashrate-miners': { light: '#cc6600', dark: '#2970ff' }
+}
+export function seriesColorByKey(key, dark) {
+  const c = SERIES_COLORS[key]
+  return c ? (dark ? c.dark : c.light) : null
+}
+export function fillForStroke(stroke, dark) {
+  return hexToRgba(stroke, dark ? 0.18 : 0.12)
+}

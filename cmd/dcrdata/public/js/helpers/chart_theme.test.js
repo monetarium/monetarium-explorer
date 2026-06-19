@@ -5,7 +5,8 @@ import {
   colorForIndex,
   seriesStroke,
   seriesFill,
-  chartColors
+  chartColors,
+  seriesColorByKey
 } from './chart_theme'
 
 describe('colorForIndex', () => {
@@ -45,5 +46,20 @@ describe('chartColors', () => {
   it('returns the dark token set', () => {
     expect(chartColors(true).tooltipBg).toBe('#292929')
     expect(chartColors(true).axis).toBe('#b6b6b6')
+  })
+})
+
+describe('seriesColorByKey', () => {
+  it('returns the light color for a known key', () => {
+    expect(seriesColorByKey('tickets-price', false)).toBe('#2970ff')
+  })
+  it('returns the dark color for a known key', () => {
+    expect(seriesColorByKey('tickets-price', true)).toBe('#2dd8a3')
+  })
+  it('returns the light color for tickets-bought', () => {
+    expect(seriesColorByKey('tickets-bought', false)).toBe('#006666')
+  })
+  it('returns null for an unknown key', () => {
+    expect(seriesColorByKey('unknown', false)).toBeNull()
   })
 })

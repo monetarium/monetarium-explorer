@@ -283,3 +283,59 @@ describe('ChartHandle.setXRange (PR 1 extension)', () => {
     expect(inst.setScale).not.toHaveBeenCalled()
   })
 })
+
+describe('buildOpts — colorKey and axis color matching', () => {
+  const colorKeyDef = {
+    name: 'ticket-price',
+    label: 'Ticket Price',
+    axes: [{ label: 'Price', scale: 'y' }],
+    series: [{ label: 'Price', scale: 'y', kind: 'line', colorKey: 'tickets-price' }]
+  }
+  it('resolves colorKey to the light series color', () => {
+    const opts = buildOpts(fakeUPlot, colorKeyDef, { dark: false })
+    expect(opts.series[1].stroke).toBe('#2970ff')
+  })
+  it('resolves colorKey to the dark series color', () => {
+    const opts = buildOpts(fakeUPlot, colorKeyDef, { dark: true })
+    expect(opts.series[1].stroke).toBe('#2dd8a3')
+  })
+  it('y-axis stroke matches the series color (light)', () => {
+    const opts = buildOpts(fakeUPlot, colorKeyDef, { dark: false })
+    const yAxis = opts.axes.find((a) => a.scale === 'y')
+    expect(yAxis.stroke).toBe('#2970ff')
+  })
+  it('y-axis stroke matches the series color (dark)', () => {
+    const opts = buildOpts(fakeUPlot, colorKeyDef, { dark: true })
+    const yAxis = opts.axes.find((a) => a.scale === 'y')
+    expect(yAxis.stroke).toBe('#2dd8a3')
+  })
+})
+
+describe('buildOpts — explicit color, dash, spanGaps', () => {
+  const explicitDef = {
+    name: 'ref',
+    label: 'Ref',
+    axes: [{ label: 'Size', scale: 'y' }],
+    series: [
+      { label: 'Target', scale: 'y', kind: 'line', color: '#888', dash: [5, 3], spanGaps: true }
+    ]
+  }
+  it('uses the explicit color directly', () => {
+    const opts = buildOpts(fakeUPlot, explicitDef, { dark: false })
+    expect(opts.series[1].stroke).toBe('#888')
+  })
+  it('sets dash on the series', () => {
+    const opts = buildOpts(fakeUPlot, explicitDef, {})
+    expect(opts.series[1].dash).toEqual([5, 3])
+  })
+  it('sets spanGaps true on the series', () => {
+    const opts = buildOpts(fakeUPlot, explicitDef, {})
+    expect(opts.series[1].spanGaps).toBe(true)
+  })
+  it('explicit-color series does NOT capture y-axis color (falls back to c.axis)', () => {
+    const opts = buildOpts(fakeUPlot, explicitDef, { dark: false })
+    const yAxis = opts.axes.find((a) => a.scale === 'y')
+    // All series on y have explicit color → fall back to c.axis for light mode
+    expect(yAxis.stroke).toBe('#2d2d2d')
+  })
+})
