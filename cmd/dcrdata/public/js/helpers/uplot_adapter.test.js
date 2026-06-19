@@ -113,6 +113,12 @@ describe('buildOpts — options', () => {
     const opts = buildOpts(fakeUPlot, lineDef, {})
     expect(opts.cursor.sync).toBeUndefined()
   })
+
+  it('floors the y scale at def.yMin when present', () => {
+    const opts = buildOpts(fakeUPlot, { ...lineDef, yMin: 0 }, {})
+    expect(typeof opts.scales.y.range).toBe('function')
+    expect(opts.scales.y.range(null, -5, 100)).toEqual([0, 100])
+  })
 })
 
 const handleDef = {

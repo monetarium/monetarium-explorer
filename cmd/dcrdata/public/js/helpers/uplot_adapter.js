@@ -64,6 +64,10 @@ export function buildOpts(UPlot, def, opts = {}) {
 
   const scales = { x: { time: xTime } }
   scales.y = { distr: scaleType === 'log' ? LOG_DISTR : LINEAR_DISTR }
+  if (def.yMin != null) {
+    const yMin = def.yMin
+    scales.y.range = (u, dataMin, dataMax) => [yMin, dataMax]
+  }
   // y2 stays linear even when y is log — it is typically a secondary count axis; revisit if a log y2 is ever needed.
   if (def.axes.some((a) => (a.scale || 'y') === 'y2')) {
     scales.y2 = { distr: LINEAR_DISTR }
