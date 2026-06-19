@@ -243,6 +243,7 @@
   width: 96%;
   min-height: 73vh;
   margin: 0 2%;
+  position: relative; /* required for uPlot overlay positioning (PR 1) */
 }
 
 .chartview .dygraph-ylabel {
@@ -628,4 +629,20 @@ body.darkBG {
 
 .tp-outputs-align {
   width: inherit;
+}
+
+/* uPlot chart surface (PR 1). Dygraphs sizing/margin rules above are removed in PR 7. */
+.chartview .uplot,
+.chartview .u-wrap {
+  width: 100% !important;
+}
+
+/* uPlot axis/label legibility in dark mode (structural colors come from
+   chart_theme via canvas strokes; these cover the DOM-rendered axis labels). */
+.u-legend {
+  display: none; /* the shell renders its own fixed legend below the chart */
+}
+
+body.darkBG .chartview .u-axis {
+  color: #c8c8c8;
 }
