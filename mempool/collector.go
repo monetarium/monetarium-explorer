@@ -223,6 +223,9 @@ func (t *DataCollector) populateMempoolInputs(ctx context.Context, msgTx *wire.M
 								input.SKAValue = txOut.SKAValue.String()
 							}
 						}
+					} else {
+						log.Warnf("Failed to fetch prev tx %s for mempool input: %v",
+							&txIn.PreviousOutPoint.Hash, err)
 					}
 				}
 			}
