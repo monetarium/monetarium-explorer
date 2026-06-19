@@ -1,6 +1,6 @@
 import { register } from '../registry'
-import { xColumn, intComma, ATOMS_TO_VAR } from '../format'
-import { renderCoinType, splitSkaAtomsNoTrailing } from '../../helpers/ska_helper'
+import { xColumn, intComma, ATOMS_TO_VAR, formatSkaAtomsExact } from '../format'
+import { renderCoinType } from '../../helpers/ska_helper'
 
 const SKA_ATOMS_TO_COIN = 1e-18
 
@@ -31,10 +31,7 @@ export function coinSupplyDef(coinType) {
     formatValue: (seriesIdx, datum) => {
       if (isSKA) {
         // Exact string from the untouched atom payload — never the plot number.
-        const atomStr = datum.payload.supply[datum.idx]
-        const p = splitSkaAtomsNoTrailing(atomStr, false, 0)
-        const exact = p.rest ? `${p.intPart}.${p.rest}` : p.intPart
-        return `${exact} ${coinLabel}`
+        return `${formatSkaAtomsExact(datum.payload.supply[datum.idx])} ${coinLabel}`
       }
       return `${intComma(datum.value)} VAR`
     }

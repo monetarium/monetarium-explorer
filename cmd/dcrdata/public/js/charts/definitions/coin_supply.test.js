@@ -30,6 +30,6 @@ describe('coin-supply SKA (coinType 2) — precision firewall', () => {
   })
   it('formatValue returns the EXACT 18-decimal string from the raw payload (no Number())', () => {
     const datum = { idx: 0, payload: raw, value: 12345.678 } // value is the lossy plot number
-    expect(def.formatValue(0, datum, {})).toBe('12345.678901234567890123 SKA2')
+    expect(def.formatValue(0, datum, {})).toBe('12,345.678901234567890123 SKA2')
   })
 })
