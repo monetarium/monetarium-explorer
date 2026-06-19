@@ -19,7 +19,14 @@ export const ticketPoolSize = {
   axes: [{ label: 'Ticket Pool Size', scale: 'y' }],
   series: [
     { label: 'Ticket Pool Size', scale: 'y', kind: 'line', colorIndex: 0 },
-    { label: 'Network Target', scale: 'y', kind: 'line', colorIndex: 9 }
+    {
+      label: 'Network Target',
+      scale: 'y',
+      kind: 'line',
+      color: '#888',
+      dash: [5, 3],
+      spanGaps: true
+    }
   ],
   toColumns: (raw, settings) => {
     const n = raw.count.length
