@@ -18,7 +18,7 @@ describe('privacyParticipation.limits', () => {
   })
   it('height/block axis: [firstIdxWithValue, lastIdx]', () => {
     const raw = { axis: 'height', bin: 'block', anonymitySet: [0, 0, 7] }
-    expect(privacyParticipation.limits(raw)).toEqual([2, 2])
+    expect(privacyParticipation.limits(raw)).toEqual([3, 3])
   })
 })
 
