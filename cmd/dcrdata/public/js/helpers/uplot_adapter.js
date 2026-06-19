@@ -56,6 +56,7 @@ export function buildOpts(UPlot, def, opts = {}) {
 
   const scales = { x: { time: true } }
   scales.y = { distr: scaleType === 'log' ? LOG_DISTR : LINEAR_DISTR }
+  // y2 stays linear even when y is log — it is typically a secondary count axis; revisit if a log y2 is ever needed.
   if (def.axes.some((a) => (a.scale || 'y') === 'y2')) {
     scales.y2 = { distr: LINEAR_DISTR }
   }
@@ -140,6 +141,7 @@ export async function createChart(el, def, opts = {}) {
 
   // uPlot fixes a series' paths and a scale's distribution at construction, so a
   // mode (line<->stepped) or scale (linear<->log) change rebuilds, preserving data.
+  // Note: the rebuilt chart reuses the last data set via setData (the initial [[]] seed persists if rebuilt before the first setData).
   function rebuild() {
     const data = uplot.data
     uplot.destroy()

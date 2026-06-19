@@ -31,7 +31,7 @@ describe('seriesStroke', () => {
 })
 
 describe('seriesFill', () => {
-  it('returns a translucent rgba of the palette color, lighter in dark mode', () => {
+  it('returns a translucent rgba of the palette color, stronger (more opaque) in dark mode', () => {
     expect(seriesFill(0, false)).toBe('rgba(41, 112, 255, 0.12)')
     expect(seriesFill(0, true)).toBe('rgba(41, 112, 255, 0.18)')
   })
