@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const mockReplace = vi.fn()
+let restoreSettings = null
 
 vi.mock('@hotwired/stimulus', () => ({
   Controller: class {
@@ -20,7 +21,9 @@ vi.mock('../helpers/turbolinks_helper', () => {
           set: vi.fn(),
           query: {}
         }
-        this.update = vi.fn()
+      }
+      update(target) {
+        if (restoreSettings) Object.assign(target, restoreSettings)
       }
       replace(query) {
         mockReplace(query)
@@ -127,6 +130,22 @@ vi.mock('../helpers/animation_helper', () => ({
 
 const { default: ChartsController } = await import('./charts_controller.js')
 
+function optBtn(option, active = false) {
+  let on = active
+  return {
+    dataset: { option },
+    classList: {
+      add: (c) => {
+        if (c === 'active') on = true
+      },
+      remove: (c) => {
+        if (c === 'active') on = false
+      },
+      contains: (c) => c === 'active' && on
+    }
+  }
+}
+
 function makeController() {
   const c = new ChartsController()
   c.data = { get: vi.fn().mockReturnValue('100') }
@@ -183,6 +202,7 @@ function makeController() {
 describe('ChartsController URL persistence', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    restoreSettings = null
   })
 
   it('selectChart persists chart/bin/axis to URL via query.replace', async () => {
@@ -267,6 +287,19 @@ describe('ChartsController URL persistence', () => {
       expect.objectContaining({
         axis: 'height'
       })
+    )
+  })
+
+  it('connect restores bookmarked bin/axis active state from URL params', async () => {
+    restoreSettings = { chart: 'ticket-pool-size', bin: 'block', axis: 'height' }
+    const c = makeController()
+    c.binSizeTargets = [optBtn('day', true), optBtn('block')]
+    c.axisOptionTargets = [optBtn('time', true), optBtn('height')]
+
+    await c.connect()
+
+    expect(mockReplace).toHaveBeenCalledWith(
+      expect.objectContaining({ bin: 'block', axis: 'height' })
     )
   })
 })

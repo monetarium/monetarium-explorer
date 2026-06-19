@@ -89,6 +89,18 @@ export default class extends Controller {
     globalEventBus.on('NIGHT_MODE', this.processNightMode)
 
     this.chartSelectTarget.value = this.settings.chart
+
+    // Restore the control bar's active state from the persisted URL so a bookmark
+    // (e.g. ?bin=block&axis=height&scale=log&zoom=month&mode=stepped&interval=day)
+    // drives the same controls the legacy controller restored on load.
+    if (this.settings.zoom) this.setActiveOptionBtn(this.settings.zoom, this.zoomOptionTargets)
+    if (this.settings.scale) this.setActiveOptionBtn(this.settings.scale, this.scaleTypeTargets)
+    if (this.settings.bin) this.setActiveOptionBtn(this.settings.bin, this.binSizeTargets)
+    if (this.settings.axis) this.setActiveOptionBtn(this.settings.axis, this.axisOptionTargets)
+    if (this.settings.mode) this.setActiveOptionBtn(this.settings.mode, this.modeOptionTargets)
+    if (this.settings.interval) {
+      this.setActiveOptionBtn(this.settings.interval, this.intervalOptionTargets)
+    }
     await this.selectChart()
   }
 
@@ -175,7 +187,9 @@ export default class extends Controller {
         this.renderedXTime = xTime
         this.renderedSeriesCount = renderDef.series.length
         h.setData(cols)
+        if (this.settings.mode === 'stepped') h.setMode('stepped')
         this.applyZoom()
+        this.setVisibilityFromSettings()
         return h
       })
       return this.pendingCreate
