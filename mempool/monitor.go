@@ -425,12 +425,8 @@ func (p *MempoolMonitor) Refresh() (*StakeData, []exptypes.MempoolTx, *exptypes.
 	sort.Sort(exptypes.MPTxsByTime(txs))
 	inventory := ParseTxns(txs, p.params, &stakeData.LatestBlock)
 
-	// Reset the counter for tickets since last report.
-	p.mtx.Lock()
-	newTickets := p.mpoolInfo.NumTicketsSinceStatsReport
-	p.mpoolInfo.NumTicketsSinceStatsReport = 0
-
 	// Reset the timer and ticket counter.
+	p.mtx.Lock()
 	p.mpoolInfo.CurrentHeight = uint32(stakeData.LatestBlock.Height)
 	p.mpoolInfo.LastCollectTime = stakeData.Time
 	p.mpoolInfo.NumTicketPurchasesInMempool = stakeData.Ticketfees.FeeInfoMempool.Number
@@ -447,9 +443,6 @@ func (p *MempoolMonitor) Refresh() (*StakeData, []exptypes.MempoolTx, *exptypes.
 	p.addrMap.mtx.Lock()
 	p.addrMap.store = addrOuts
 	p.addrMap.mtx.Unlock()
-
-	// Insert new ticket counter into stakeData structure.
-	stakeData.NewTickets = uint32(newTickets)
 
 	return stakeData, txs, inventory, err
 }
