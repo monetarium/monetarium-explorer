@@ -138,14 +138,29 @@ export async function createChart(el, def, opts = {}) {
   let currentDef = def
   let state = { ...opts }
   let uplot = new UPlot(buildOpts(UPlot, currentDef, state), [[]], el)
+  let destroyed = false
+  // Last-known per-series visibility (series label -> show). A fresh uPlot defaults
+  // every series to shown, so this is re-applied after each rebuild to keep a hidden
+  // series hidden across mode/scale changes.
+  const visibility = {}
+
+  function applyVisibility() {
+    currentDef.series.forEach((s, i) => {
+      if (Object.prototype.hasOwnProperty.call(visibility, s.label)) {
+        uplot.setSeries(i + 1, { show: visibility[s.label] })
+      }
+    })
+  }
 
   // uPlot fixes a series' paths and a scale's distribution at construction, so a
-  // mode (line<->stepped) or scale (linear<->log) change rebuilds, preserving data.
-  // Note: the rebuilt chart reuses the last data set via setData (the initial [[]] seed persists if rebuilt before the first setData).
+  // mode (line<->stepped) or scale (linear<->log) change rebuilds. Data carries over
+  // via uplot.data (the initial [[]] seed persists if rebuilt before the first
+  // setData), and visibility is re-applied since the fresh instance starts all-shown.
   function rebuild() {
     const data = uplot.data
     uplot.destroy()
     uplot = new UPlot(buildOpts(UPlot, currentDef, state), data, el)
+    applyVisibility()
   }
 
   return {
@@ -153,13 +168,16 @@ export async function createChart(el, def, opts = {}) {
       return uplot
     },
     setData(columns) {
+      if (destroyed) return
       uplot.setData(columns)
     },
     setScaleType(type) {
+      if (destroyed) return
       state = { ...state, scaleType: type }
       rebuild()
     },
     setMode(mode) {
+      if (destroyed) return
       currentDef = {
         ...currentDef,
         series: currentDef.series.map((s) =>
@@ -169,16 +187,22 @@ export async function createChart(el, def, opts = {}) {
       rebuild()
     },
     setVisibility(map) {
+      if (destroyed) return
       currentDef.series.forEach((s, i) => {
         if (Object.prototype.hasOwnProperty.call(map, s.label)) {
-          uplot.setSeries(i + 1, { show: !!map[s.label] })
+          visibility[s.label] = !!map[s.label]
+          uplot.setSeries(i + 1, { show: visibility[s.label] })
         }
       })
     },
     resize(width, height) {
+      if (destroyed) return
+      state = { ...state, width: width, height: height }
       uplot.setSize({ width, height })
     },
     destroy() {
+      if (destroyed) return
+      destroyed = true
       uplot.destroy()
     }
   }
