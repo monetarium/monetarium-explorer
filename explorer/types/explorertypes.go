@@ -400,81 +400,68 @@ type TxInfo struct {
 	TicketInfo
 }
 
-// These are the text representations of the various special transaction types.
-// These strings should match the strings returned by txhelpers.TxTypeToString.
-const (
-	TicketTypeStr   = "Ticket"
-	VoteTypeStr     = "Vote"
-	RevTypeStr      = "Revocation"
-	CoinbaseTypeStr = "Coinbase"
-	// What actually happens is treasuryadd burns coins and credits the treasury
-	// account. treasuryspend creates coins and debits the treasury account.
-	// treasurybase is analogous to a coinbase in that it credits the treasury
-	// without spending/burning any coins (aka creates them out of thin air,
-	// just like coinbases do).
-	TreasurybaseTypeStr  = "Treasurybase"
-	TreasuryAddTypeStr   = "Treasury Add"
-	TreasurySpendTypeStr = "Treasury Spend"
-	SSFeeTypeStr         = "Stake Fee"
-)
+// CoinbaseTypeStr is the text representation of a coinbase transaction.
+// This type has no counterpart in txhelpers since coinbase is not a distinct
+// transaction type in the protocol.
+const CoinbaseTypeStr = "Coinbase"
 
 // IsTicket checks whether this transaction is a ticket.
 func (t *TxInfo) IsTicket() bool {
-	return t.Type == TicketTypeStr
+	return t.Type == txhelpers.TxTypeTicket
 }
 
 // IsVote checks whether this transaction is a vote.
 func (t *TxInfo) IsVote() bool {
-	return t.Type == VoteTypeStr
+	return t.Type == txhelpers.TxTypeVote
 }
 
 // IsTreasurySpend checks whether this transaction is a tspend.
 func (t *TxInfo) IsTreasurySpend() bool {
-	return t.Type == TreasurySpendTypeStr
+	return t.Type == txhelpers.TxTypeTreasurySpend
 }
 
 // IsTreasurybase checks whether this transaction is a treasurybase.
 func (t *TxInfo) IsTreasurybase() bool {
-	return t.Type == TreasurybaseTypeStr
+	return t.Type == txhelpers.TxTypeTreasurybase
 }
 
 // IsTreasuryAdd checks whether this transaction is a tadd.
 func (t *TxInfo) IsTreasuryAdd() bool {
-	return t.Type == TreasuryAddTypeStr
+	return t.Type == txhelpers.TxTypeTreasuryAdd
 }
 
 // IsSSFee checks whether this transaction is an SSFee (Stake Fee) tx.
 func (t *TxInfo) IsSSFee() bool {
-	return t.Type == SSFeeTypeStr
+	return t.Type == txhelpers.TxTypeSSFee
 }
 
 // IsRevocation checks whether this transaction is a revocation.
 func (t *TxInfo) IsRevocation() bool {
-	return t.Type == RevTypeStr
+	return t.Type == txhelpers.TxTypeRevocation
 }
 
 // IsLiveTicket verifies the conditions: 1. is a ticket, 2. is mature,
 // 3. hasn't voted, 4. isn't  expired.
 func (t *TxInfo) IsLiveTicket() bool {
-	return t.Type == TicketTypeStr && t.Mature == "True" && t.SpendStatus != "Voted" &&
+	return t.Type == txhelpers.TxTypeTicket && t.Mature == "True" && t.SpendStatus != "Voted" &&
 		t.PoolStatus == "live" && t.TicketLiveBlocks < t.TicketExpiry
 }
 
 // IsExpiredTicket verifies the conditions: 1. is a ticket, 2. is mature,
 // 3. hasn't voted, 4. is past expiration.
 func (t *TxInfo) IsExpiredTicket() bool {
-	return t.Type == TicketTypeStr && t.Mature == "True" && t.SpendStatus != "Voted" &&
+	return t.Type == txhelpers.TxTypeTicket && t.Mature == "True" && t.SpendStatus != "Voted" &&
 		t.PoolStatus == "live" && t.TicketLiveBlocks >= t.TicketExpiry
 }
 
 // IsImmatureTicket verifies the conditions: 1. is a ticket, 2. is not mature.
 func (t *TxInfo) IsImmatureTicket() bool {
-	return t.Type == TicketTypeStr && t.Mature == "False"
+	return t.Type == txhelpers.TxTypeTicket && t.Mature == "False"
 }
 
 // IsImmatureVote verifies the conditions: 1. is a vote, 2. is not mature.
 func (t *TxInfo) IsImmatureVote() bool {
-	return t.Type == VoteTypeStr && t.Mature == "False"
+	return t.Type == txhelpers.TxTypeVote && t.Mature == "False"
 }
 
 // IsImmatureCoinbase verifies the conditions: 1. is coinbase, 2. is not mature.
@@ -485,7 +472,7 @@ func (t *TxInfo) IsImmatureCoinbase() bool {
 // IsImmatureRevocation verifies the conditions: 1. is a revocation, 2. is not
 // mature.
 func (t *TxInfo) IsImmatureRevocation() bool {
-	return t.Type == RevTypeStr && t.Mature == "False"
+	return t.Type == txhelpers.TxTypeRevocation && t.Mature == "False"
 }
 
 // IsImmature indicates if the transaction is immature
@@ -527,7 +514,7 @@ func (t *TxInfo) FeeReward() float64 {
 
 // BlocksToTicketMaturity will return 0 if this isn't an immature ticket.
 func (t *TxInfo) BlocksToTicketMaturity() (blocks int64) {
-	if t.Type != TicketTypeStr {
+	if t.Type != txhelpers.TxTypeTicket {
 		return
 	}
 	if t.Mature == "True" {
