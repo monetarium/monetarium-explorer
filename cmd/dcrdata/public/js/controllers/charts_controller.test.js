@@ -325,8 +325,7 @@ describe('ChartsController hashrate chart', () => {
     vi.clearAllMocks()
   })
 
-  // TODO Task 18: unskip once applyControlVisibility adds chart-hashrate
-  it.skip('selecting hashrate adds chart-hashrate class to chartview', async () => {
+  it('selecting hashrate adds chart-hashrate class to chartview', async () => {
     const c = makeController()
     await c.connect()
 
@@ -336,8 +335,7 @@ describe('ChartsController hashrate chart', () => {
     expect(c.chartsViewTarget.classList.add).toHaveBeenCalledWith('chart-hashrate')
   })
 
-  // TODO Task 18: unskip once applyControlVisibility adds chart-hashrate
-  it.skip('switching away from hashrate removes chart-hashrate class', async () => {
+  it('switching away from hashrate removes chart-hashrate class', async () => {
     const c = makeController()
     await c.connect()
 
@@ -349,5 +347,79 @@ describe('ChartsController hashrate chart', () => {
 
     expect(c.chartsViewTarget.classList.add).toHaveBeenCalledWith('chart-hashrate')
     expect(c.chartsViewTarget.classList.remove).toHaveBeenCalledWith('chart-hashrate')
+  })
+})
+
+describe('ChartsController control handlers', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('setScale toggles the handle scale type and persists scale', async () => {
+    const c = makeController()
+    await c.connect()
+    const scaleOpt = {
+      classList: { contains: () => false, add: vi.fn(), remove: vi.fn() },
+      dataset: { option: 'log' }
+    }
+    c.scaleTypeTargets = [scaleOpt]
+    await c.setScale({ target: scaleOpt })
+    expect(fakeHandle.setScaleType).toHaveBeenCalledWith('log')
+    expect(mockReplace).toHaveBeenCalledWith(expect.objectContaining({ scale: 'log' }))
+  })
+
+  it('setMode maps smooth to line on the handle and persists mode', async () => {
+    const c = makeController()
+    await c.connect()
+    const modeOpt = {
+      classList: { contains: () => false, add: vi.fn(), remove: vi.fn() },
+      dataset: { option: 'smooth' }
+    }
+    c.modeOptionTargets = [modeOpt]
+    c.setMode({ target: modeOpt })
+    expect(fakeHandle.setMode).toHaveBeenCalledWith('line')
+    expect(mockReplace).toHaveBeenCalledWith(expect.objectContaining({ mode: 'smooth' }))
+  })
+
+  it('renderChart rebuilds when series count changes', async () => {
+    const { createChart } = await import('../helpers/uplot_adapter')
+    const c = makeController()
+    await c.connect()
+
+    // First render: 1 series (already happened in connect)
+    const callsAfterConnect = createChart.mock.calls.length
+
+    // Simulate hashrate payload with active_miners (2 series) — override resolveRenderDef result
+    // by giving the def 2 series so the guard fires.
+    const twoPart = {
+      name: 'hashrate',
+      label: 'hashrate',
+      controls: {
+        bin: true,
+        scale: true,
+        mode: true,
+        zoom: true,
+        visibility: null,
+        interval: false,
+        windowUnits: false,
+        hybrid: false
+      },
+      axes: [{ label: 'hashrate', scale: 'y' }],
+      series: [
+        { label: 'Hashrate', scale: 'y', kind: 'line', colorIndex: 0 },
+        { label: 'Active Miners', scale: 'y2', kind: 'line', colorIndex: 1 }
+      ],
+      toColumns: () => [
+        [1, 2],
+        [10, 20],
+        [5, 8]
+      ],
+      formatValue: (_i, d) => String(d.value)
+    }
+    c.payload = {}
+    await c.renderChart(twoPart)
+
+    // createChart must have been called again because series count went from 1 to 2
+    expect(createChart.mock.calls.length).toBeGreaterThan(callsAfterConnect)
   })
 })

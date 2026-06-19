@@ -3,7 +3,7 @@ import { Controller } from '@hotwired/stimulus'
 import { requestJSON } from '../helpers/http'
 import humanize from '../helpers/humanize_helper'
 import TurboQuery from '../helpers/turbolinks_helper'
-import Zoom from '../helpers/zoom_helper' // eslint-disable-line no-unused-vars
+import Zoom from '../helpers/zoom_helper'
 import { animationFrame } from '../helpers/animation_helper' // eslint-disable-line no-unused-vars
 import globalEventBus from '../services/event_bus_service'
 import { darkEnabled } from '../services/theme_service'
@@ -114,7 +114,7 @@ export default class extends Controller {
     }
 
     this.chartWrapperTarget.classList.add('loading')
-    this.applyControlVisibility(def, selection) // Task 18 (stub returns early for now)
+    this.applyControlVisibility(def, selection)
 
     const axisChanged = this.settings.axis !== this.selectedAxis()
     const binChanged = this.settings.bin !== this.selectedBin()
@@ -154,7 +154,12 @@ export default class extends Controller {
     const cols = renderDef.toColumns(this.payload, this.settingsForDef())
     const xTime = this.settings.axis === 'time'
 
-    if (!this.handle || this.renderedName !== renderDef.name || this.renderedXTime !== xTime) {
+    if (
+      !this.handle ||
+      this.renderedName !== renderDef.name ||
+      this.renderedXTime !== xTime ||
+      this.renderedSeriesCount !== renderDef.series.length
+    ) {
       if (this.handle) this.handle.destroy()
       // create synchronously-awaited handle
       this.pendingCreate = createChart(this.chartsViewTarget, renderDef, {
@@ -168,6 +173,7 @@ export default class extends Controller {
         this.handle = h
         this.renderedName = renderDef.name
         this.renderedXTime = xTime
+        this.renderedSeriesCount = renderDef.series.length
         h.setData(cols)
         this.applyZoom()
         return h
@@ -241,18 +247,86 @@ export default class extends Controller {
     }
   }
 
-  // Stubs filled by later tasks:
-  applyControlVisibility() {}
-  applyZoom() {}
-  redrawTheme() {}
+  applyControlVisibility(def, selection) {
+    const c = def.controls
+    this.toggle(this.scaleSelectorTarget, c.scale)
+    this.toggle(this.modeSelectorTarget, c.mode)
+    this.toggle(this.intervalSelectorTarget, c.interval)
+    // BIN hidden for window-unit charts (unless hybrid).
+    this.toggle(this.binSelectorTarget, !(c.windowUnits && !c.hybrid))
+    if (c.visibility) {
+      this.vSelectorTarget.classList.remove('d-hide')
+      this.updateVSelector(selection)
+    } else {
+      this.vSelectorTarget.classList.add('d-hide')
+    }
+    if (selection === 'hashrate') {
+      this.chartsViewTarget.classList.add('chart-hashrate')
+    } else {
+      this.chartsViewTarget.classList.remove('chart-hashrate')
+    }
+  }
+
+  toggle(el, show) {
+    if (show) el.classList.remove('d-hide')
+    else el.classList.add('d-hide')
+  }
+
+  applyZoom() {
+    if (!this.handle || !this.payload) return
+    const xs = this.handle.uplot.data[0]
+    if (!xs || !xs.length) return
+    const dataMin = xs[0]
+    const dataMax = xs[xs.length - 1]
+
+    // privacy-participation defaults to the start of the record.
+    if (
+      this.settings.chart === 'privacy-participation' &&
+      this.currentDef.limits &&
+      !this.settings.zoom
+    ) {
+      const [start] = this.currentDef.limits(this.payload)
+      const startX = this.settings.axis === 'time' ? start / 1000 : start
+      this.zoomGuard = true
+      this.handle.setXRange(startX, dataMax)
+      this.zoomGuard = false
+      return
+    }
+
+    const preset = this.settings.zoom
+    let min = dataMin
+    const max = dataMax
+    const span = this.zoomSpan(preset)
+    if (span != null) min = Math.max(dataMin, dataMax - span)
+    this.zoomGuard = true
+    this.handle.setXRange(min, max)
+    this.zoomGuard = false
+  }
+
+  // Span (in plot x-units) for a preset key, or null for 'all'/unknown.
+  zoomSpan(preset) {
+    // Zoom.mapValue returns the span in milliseconds (0 for 'all', undefined for unknown).
+    const ms = Zoom.mapValue(preset)
+    if (!ms) return null // 'all' (0) or unknown preset
+    const seconds = ms / 1000
+    if (this.settings.axis === 'time') return seconds
+    // height axis: convert seconds → blocks via the average block time.
+    const blockSeconds = this.avgBlockTime / 1000
+    return blockSeconds > 0 ? seconds / blockSeconds : null
+  }
+
+  redrawTheme() {
+    if (this.handle) this.handle.setData(this.handle.uplot.data) // cheap redraw; colors flow via chart_theme on next rebuild
+  }
 
   async setBin(e) {
     const target = e.srcElement || e.target
     const option = target ? target.dataset.option : e
     if (!option) return
     this.setActiveOptionBtn(option, this.binSizeTargets)
-    if (!target) return // Exit if running for the first time.
-    this.selectedChartName = null // Force fetch
+    this.updateVSelector()
+    if (!target) return
+    this.selectedChartName = null // force fetch
     await this.selectChart()
   }
 
@@ -261,10 +335,8 @@ export default class extends Controller {
     const option = target ? target.dataset.option : e
     if (!option) return
     this.setActiveOptionBtn(option, this.scaleTypeTargets)
-    if (!target) return // Exit if running for the first time.
-    if (this.handle) {
-      this.handle.setScaleType(option === 'log' ? 'log' : 'linear')
-    }
+    if (!target) return
+    if (this.handle) this.handle.setScaleType(option === 'log' ? 'log' : 'linear')
     this.settings.scale = option
     this.query.replace(this.settings)
   }
@@ -274,10 +346,8 @@ export default class extends Controller {
     const option = target ? target.dataset.option : e
     if (!option) return
     this.setActiveOptionBtn(option, this.modeOptionTargets)
-    if (!target) return // Exit if running for the first time.
-    if (this.handle) {
-      this.handle.setMode(option)
-    }
+    if (!target) return
+    if (this.handle) this.handle.setMode(option === 'stepped' ? 'stepped' : 'line')
     this.settings.mode = option
     this.query.replace(this.settings)
   }
@@ -287,9 +357,9 @@ export default class extends Controller {
     const option = target ? target.dataset.option : e
     if (!option) return
     this.setActiveOptionBtn(option, this.intervalOptionTargets)
-    if (!target) return // Exit if running for the first time.
+    if (!target) return
     this.settings.interval = option
-    this.selectedChartName = null // Force re-fetch
+    this.selectedChartName = null // force re-fetch
     await this.selectChart()
   }
 
@@ -298,9 +368,112 @@ export default class extends Controller {
     const option = target ? target.dataset.option : e
     if (!option) return
     this.setActiveOptionBtn(option, this.axisOptionTargets)
-    if (!target) return // Exit if running for the first time.
+    if (!target) return
     this.settings.axis = null
+    this.selectedChartName = null // force fetch (x-units change)
     await this.selectChart()
+  }
+
+  setZoom(e) {
+    const target = e.srcElement || e.target
+    const option = target ? target.dataset.option : e
+    if (!option) return
+    this.setActiveOptionBtn(option, this.zoomOptionTargets)
+    if (!target) return
+    this.settings.zoom = option
+    this.applyZoom()
+    this.query.replace(this.settings)
+  }
+
+  updateVSelector(chart) {
+    if (!chart) chart = this.chartSelectTarget.value
+    let showWrapper = false
+    this.vSelectorItemTargets.forEach((el) => {
+      let show = el.dataset.charts.indexOf(chart) > -1
+      if (el.dataset.bin && el.dataset.bin.indexOf(this.selectedBin()) === -1) show = false
+      if (show) {
+        el.classList.remove('d-hide')
+        showWrapper = true
+      } else {
+        el.classList.add('d-hide')
+      }
+    })
+    this.toggle(this.vSelectorTarget, showWrapper)
+    this.setVisibilityFromSettings()
+  }
+
+  setVisibilityFromSettings() {
+    const vis = this.parsedVisibility()
+    switch (this.chartSelectTarget.value) {
+      case 'ticket-price':
+        this.ticketsPriceTarget.checked = vis[0] ?? true
+        this.ticketsPurchaseTarget.checked = vis[1] ?? this.ticketsPurchaseTarget.checked
+        this.applyVisibilityToHandle(
+          ['Price', 'Tickets Bought'],
+          [this.ticketsPriceTarget.checked, this.ticketsPurchaseTarget.checked]
+        )
+        break
+      case 'hashrate':
+        this.hashrateRateTarget.checked = vis[0] ?? true
+        this.hashrateMinersTarget.checked = vis[1] ?? this.hashrateMinersTarget.checked
+        this.applyVisibilityToHandle(
+          ['Hashrate', 'Active Miners'],
+          [this.hashrateRateTarget.checked, this.hashrateMinersTarget.checked]
+        )
+        break
+      default:
+        return
+    }
+    this.persistVisibility()
+  }
+
+  setVisibility(e) {
+    switch (this.chartSelectTarget.value) {
+      case 'ticket-price':
+        if (!this.ticketsPriceTarget.checked && !this.ticketsPurchaseTarget.checked) {
+          e.currentTarget.checked = true
+          return
+        }
+        this.applyVisibilityToHandle(
+          ['Price', 'Tickets Bought'],
+          [this.ticketsPriceTarget.checked, this.ticketsPurchaseTarget.checked]
+        )
+        break
+      case 'hashrate':
+        if (!this.hashrateRateTarget.checked && !this.hashrateMinersTarget.checked) {
+          e.currentTarget.checked = true
+          return
+        }
+        this.applyVisibilityToHandle(
+          ['Hashrate', 'Active Miners'],
+          [this.hashrateRateTarget.checked, this.hashrateMinersTarget.checked]
+        )
+        break
+      default:
+        return
+    }
+    this.persistVisibility()
+  }
+
+  applyVisibilityToHandle(labels, states) {
+    if (!this.handle) return
+    const map = {}
+    labels.forEach((label, i) => (map[label] = states[i]))
+    this.handle.setVisibility(map)
+  }
+
+  parsedVisibility() {
+    if (!this.settings.visibility) return []
+    return this.settings.visibility.split('-').map((s) => s === 'true')
+  }
+
+  persistVisibility() {
+    const states =
+      this.chartSelectTarget.value === 'hashrate'
+        ? [this.hashrateRateTarget.checked, this.hashrateMinersTarget.checked]
+        : [this.ticketsPriceTarget.checked, this.ticketsPurchaseTarget.checked]
+    this.settings.visibility = states.join('-')
+    this.query.replace(this.settings)
   }
 
   setActiveOptionBtn(opt, optTargets) {
