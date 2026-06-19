@@ -354,9 +354,9 @@ type TxBasic struct {
 	Version       int32
 	FormattedSize string
 	Total         float64
-	TotalRaw      string         // Atom string
+	TotalRaw      string // Atom string
 	Fee           dcrutil.Amount
-	FeeRaw        string         // Atom string
+	FeeRaw        string // Atom string
 	FeeRate       dcrutil.Amount
 	FeeRateRaw    string
 	Size          int32
@@ -664,7 +664,7 @@ type Vin struct {
 type Vout struct {
 	Addresses       []string
 	Amount          float64
-	ValueRaw        string  // Atom string
+	ValueRaw        string // Atom string
 	FormattedAmount string
 	Type            string
 	Spent           bool
@@ -1478,8 +1478,8 @@ type MempoolTx struct {
 	VinCount  int            `json:"vin_count"`
 	VoutCount int            `json:"vout_count"`
 	Vin       []MempoolInput `json:"vin,omitempty"`
-	Coinbase  bool   `json:"coinbase"` // to signal the coinbase tx on new block despite not being in mempool
-	Time      int64  `json:"time"`
+	Coinbase  bool           `json:"coinbase"` // to signal the coinbase tx on new block despite not being in mempool
+	Time      int64          `json:"time"`
 	Size      int32          `json:"size"`
 	TotalOut  float64        `json:"total"`
 	// Consider atom representation:

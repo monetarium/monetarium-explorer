@@ -17,10 +17,10 @@ import (
 	"github.com/monetarium/monetarium-node/chaincfg/chainhash"
 	chainjson "github.com/monetarium/monetarium-node/rpc/jsonrpc/types"
 
+	humanize "github.com/dustin/go-humanize"
 	exptypes "github.com/monetarium/monetarium-explorer/explorer/types"
 	pstypes "github.com/monetarium/monetarium-explorer/pubsub/types"
 	"github.com/monetarium/monetarium-explorer/txhelpers"
-	humanize "github.com/dustin/go-humanize"
 )
 
 // MempoolDataSaver is an interface for storing mempool data.

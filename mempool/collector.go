@@ -20,10 +20,10 @@ import (
 	chainjson "github.com/monetarium/monetarium-node/rpc/jsonrpc/types"
 	"github.com/monetarium/monetarium-node/wire"
 
+	humanize "github.com/dustin/go-humanize"
 	apitypes "github.com/monetarium/monetarium-explorer/api/types"
 	exptypes "github.com/monetarium/monetarium-explorer/explorer/types"
 	"github.com/monetarium/monetarium-explorer/txhelpers"
-	humanize "github.com/dustin/go-humanize"
 )
 
 // NodeClient is similar to a rpcclient.Client, except for the addition of
@@ -375,9 +375,9 @@ func (t *DataCollector) Collect() (*StakeData, []exptypes.MempoolTx, txhelpers.M
 			Height: height,
 			Time:   blockTime,
 		},
-		Time:       now,
-		NumTickets: feeInfo.FeeInfoMempool.Number,
-		NumVotes:   uint32(numVotes),
+		Time:              now,
+		NumTickets:        feeInfo.FeeInfoMempool.Number,
+		NumVotes:          uint32(numVotes),
 		Ticketfees:        feeInfo,
 		MinableFees:       mineables,
 		AllTicketsDetails: allTicketsDetails,
