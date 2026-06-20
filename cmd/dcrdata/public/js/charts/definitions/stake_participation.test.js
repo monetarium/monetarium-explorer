@@ -17,10 +17,31 @@ describe('stakeParticipation.toColumns', () => {
   })
 })
 
+describe('stakeParticipation.toColumns', () => {
+  it('nulls out points where supply is zero (avoids Infinity poisoning the y-range)', () => {
+    const withGenesis = {
+      axis: 'time',
+      t: [0, 1000],
+      poolval: [0, 60_00000000],
+      circulation: [0, 200_00000000] // genesis supply is 0
+    }
+    const cols = stakeParticipation.toColumns(withGenesis, {})
+    expect(cols[1][0]).toBeNull()
+    expect(cols[1][1]).toBeCloseTo(30, 6)
+  })
+})
+
 describe('stakeParticipation.formatValue', () => {
   it('renders 4-decimal percent', () => {
     expect(stakeParticipation.formatValue(0, { idx: 0, payload: raw, value: 25 }, {})).toBe(
       '25.0000%'
+    )
+  })
+
+  it('renders n/a for a null or non-finite value (gap point)', () => {
+    expect(stakeParticipation.formatValue(0, { idx: 0, payload: raw, value: null }, {})).toBe('n/a')
+    expect(stakeParticipation.formatValue(0, { idx: 0, payload: raw, value: Infinity }, {})).toBe(
+      'n/a'
     )
   })
 })

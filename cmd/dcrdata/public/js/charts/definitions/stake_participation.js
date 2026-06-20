@@ -19,10 +19,14 @@ export const stakeParticipation = {
   toColumns: (raw) => {
     const supply = raw.circulation.map((v) => v * ATOMS_TO_VAR)
     const pool = raw.poolval.map((v) => v * ATOMS_TO_VAR)
-    const ys = pool.map((v, i) => (v / supply[i]) * 100)
+    // Early blocks (genesis) can have 0 supply; that division yields Infinity, which
+    // poisons uPlot's auto-range and blanks the whole chart at wide zoom levels. Null
+    // out non-positive-supply points so they render as gaps instead.
+    const ys = pool.map((v, i) => (supply[i] > 0 ? (v / supply[i]) * 100 : null))
     return [xColumn(raw, ys.length), ys]
   },
   formatValue: (seriesIdx, datum) => {
+    if (datum.value == null || !isFinite(datum.value)) return 'n/a'
     return `${datum.value.toFixed(4)}%`
   },
   legendExtra: (datum) => {
