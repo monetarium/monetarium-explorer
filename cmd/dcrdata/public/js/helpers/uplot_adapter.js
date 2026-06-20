@@ -61,7 +61,7 @@ function pathsFor(UPlot, kind) {
   }
 }
 
-function resolveSeriesColor(s, i, dark) {
+export function resolveSeriesColor(s, i, dark) {
   if (s.color) return s.color
   if (s.colorKey) return seriesColorByKey(s.colorKey, dark) || seriesStroke(s.colorIndex ?? i)
   return seriesStroke(s.colorIndex ?? i)
@@ -264,7 +264,7 @@ export function buildOpts(UPlot, def, opts = {}) {
 
 let uPlotCtor // memoized after first dynamic import
 
-async function loadUPlot() {
+export async function loadUPlot() {
   if (!uPlotCtor) {
     uPlotCtor = await getDefault(import(/* webpackChunkName: "uplot" */ 'uplot'))
   }
