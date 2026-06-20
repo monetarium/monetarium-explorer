@@ -76,6 +76,7 @@ describe('pieSlices', () => {
     expect(others.count).toBe(6)
     // total = sum 1..28 = 406; others share = 6/406*100 = 1.477.. -> "1.5"
     expect(others.percent).toBe('1.5')
+    expect(others.addressCount).toBe(3)
   })
 })
 
@@ -134,13 +135,15 @@ describe('buildRows', () => {
   })
 
   it('renders the "Others" aggregate as plain text with no rank, link or copy icon', () => {
-    const tr = buildRows(rowTemplate(), [{ isOthers: true, percent: '5.0', count: 1 }])[0]
+    const tr = buildRows(rowTemplate(), [
+      { isOthers: true, percent: '5.0', count: 1, addressCount: 3 }
+    ])[0]
     expect(tr.querySelector('[data-type="rank"]').textContent).toBe('')
     expect(tr.querySelector('[data-type="percent"]').textContent).toBe('5.0%')
     expect(tr.querySelector('a')).toBeNull()
     expect(tr.querySelector('.monicon-copy')).toBeNull()
     expect(tr.querySelector('[data-type="swatch"]').style.background).not.toBe('')
-    expect(tr.querySelector('[data-type="addr"]').textContent).toBe('Others')
+    expect(tr.querySelector('[data-type="addr"]').textContent).toBe('Other 3 addresses')
   })
 
   it('never interprets an address as HTML (XSS-safe, no sanitizer needed)', () => {

@@ -82,7 +82,11 @@ export function pieSlices(miners, maxSlices = PIE_SLICES) {
   let othersCount = 0
   for (let i = maxSlices; i < miners.length; i++) othersCount += Number(miners[i].count)
   const othersPercent = total > 0 ? ((othersCount / total) * 100).toFixed(1) : '0.0'
-  return [...top, { isOthers: true, count: othersCount, percent: othersPercent }]
+  const othersAddrCount = miners.length - maxSlices
+  return [
+    ...top,
+    { isOthers: true, count: othersCount, percent: othersPercent, addressCount: othersAddrCount }
+  ]
 }
 
 // copyIconNode builds the clipboard control appended to each address cell. It
@@ -126,7 +130,7 @@ export function buildRows(rowTemplate, miners) {
       // The aggregate of every miner ranked beyond the pie — no address, no link.
       const span = document.createElement('span')
       span.className = 'text-secondary'
-      span.textContent = 'Others'
+      span.textContent = `Other ${m.addressCount} addresses`
       addr.appendChild(span)
     } else {
       // Responsive, copyable address: hashElide renders the full address (shown in
