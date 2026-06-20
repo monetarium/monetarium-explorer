@@ -14,13 +14,29 @@ vi.mock('./module_helper', () => {
       this.opts = opts
       this.data = data
       this.el = el
+      this.scales = { x: { min: null, max: null }, y: {} }
       this.setData = vi.fn((d) => {
         this.data = d
+        // Real uPlot autoscales on setData and fires the setScale hook; model that
+        // so the adapter's load-time event suppression can be exercised.
+        if (d && d[0] && d[0].length) {
+          this.scales.x = { min: d[0][0], max: d[0][d[0].length - 1] }
+          this._fire('setScale', 'x')
+        }
       })
       this.setSeries = vi.fn()
-      this.setScale = vi.fn()
+      this.setScale = vi.fn((key, range) => {
+        this.scales[key] = { ...(this.scales[key] || {}), ...range }
+        this._fire('setScale', key)
+      })
       this.setSize = vi.fn()
       this.destroy = vi.fn()
+    }
+
+    // Invoke the registered hooks of a given type, mirroring uPlot's synchronous firing.
+    _fire(type, ...args) {
+      const arr = (this.opts && this.opts.hooks && this.opts.hooks[type]) || []
+      arr.forEach((fn) => fn(this, ...args))
     }
   }
   FakeUPlot.paths = { bars: () => 'BARS', stepped: () => 'STEP', linear: () => 'LINE' }
@@ -391,6 +407,52 @@ describe('ChartHandle.setXRange (PR 1 extension)', () => {
     handle.destroy()
     handle.setXRange(1, 2)
     expect(inst.setScale).not.toHaveBeenCalled()
+  })
+})
+
+describe('ChartHandle x-range ownership + onRangeChange (Approach A foundation)', () => {
+  const el = {}
+
+  it('emits onRangeChange when uPlot changes the x-scale (user drag/double-click)', async () => {
+    const onRangeChange = vi.fn()
+    const handle = await createChart(el, handleDef, { onRangeChange })
+    // uPlot performs the scale change internally on a drag-zoom or double-click;
+    // simulate that by changing the x-scale outside the adapter's own methods.
+    handle.uplot.setScale('x', { min: 5, max: 15 })
+    expect(onRangeChange).toHaveBeenCalledWith(5, 15)
+  })
+
+  it('does not emit onRangeChange for a programmatic setXRange', async () => {
+    const onRangeChange = vi.fn()
+    const handle = await createChart(el, handleDef, { onRangeChange })
+    handle.setXRange(10, 20)
+    expect(onRangeChange).not.toHaveBeenCalled()
+  })
+
+  it('does not emit onRangeChange when setData autoscales (load-time false positive)', async () => {
+    const onRangeChange = vi.fn()
+    const handle = await createChart(el, handleDef, { onRangeChange })
+    handle.setData([
+      [1, 2, 3],
+      [10, 20, 30]
+    ])
+    expect(onRangeChange).not.toHaveBeenCalled()
+  })
+
+  it('remembers a user zoom and restores it across a rebuild', async () => {
+    const handle = await createChart(el, handleDef, {})
+    handle.uplot.setScale('x', { min: 5, max: 15 }) // user drag-zoom
+    handle.setScaleType('log') // forces a rebuild
+    expect(handle.uplot.setScale).toHaveBeenCalledWith('x', { min: 5, max: 15 })
+  })
+
+  it('stays quiet while the rebuild restores the remembered range', async () => {
+    const onRangeChange = vi.fn()
+    const handle = await createChart(el, handleDef, { onRangeChange })
+    handle.uplot.setScale('x', { min: 5, max: 15 }) // user zoom -> 1 emit
+    onRangeChange.mockClear()
+    handle.setScaleType('log') // rebuild re-applies the range — must not re-emit
+    expect(onRangeChange).not.toHaveBeenCalled()
   })
 })
 

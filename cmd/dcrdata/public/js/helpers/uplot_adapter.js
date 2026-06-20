@@ -279,6 +279,7 @@ async function loadUPlot() {
  * @property {(mode:('line'|'stepped'))=>void} setMode
  * @property {(map:Object<string,boolean>)=>void} setVisibility
  * @property {(width:number, height:number)=>void} resize
+ * @property {(min:number, max:number)=>void} setXRange  set the visible x-range
  * @property {()=>void} destroy        MUST be called on Stimulus disconnect
  */
 
@@ -287,20 +288,44 @@ async function loadUPlot() {
  * @param {HTMLElement} el
  * @param {ChartDefinition} def
  * @param {{dark?:boolean, width?:number, height?:number,
- *          scaleType?:('linear'|'log'), syncKey?:string}} [opts]
+ *          scaleType?:('linear'|'log'), syncKey?:string,
+ *          onRangeChange?:(min:number, max:number)=>void}} [opts]
+ *   onRangeChange fires only on user-driven x-range changes (drag-zoom, double-click
+ *   reset) — never for programmatic setData/setXRange/rebuild.
  * @returns {Promise<ChartHandle>}
  */
 export async function createChart(el, def, opts = {}) {
   const UPlot = await loadUPlot()
   let currentDef = def
-  let state = { ...opts }
+  let xRange = null // { min, max } remembered to survive rebuilds
+  let suppressRangeEvent = false // true while WE drive the x-scale (setData/setXRange/rebuild)
+  const onRangeChange = typeof opts.onRangeChange === 'function' ? opts.onRangeChange : null
+
+  // The adapter is the single owner of the x-range. This setScale hook records every
+  // x-scale change — user drag-zoom, double-click reset, or our own programmatic
+  // setScale — so the remembered range always reflects what's on screen and survives
+  // rebuilds. Genuine user gestures also notify onRangeChange; our own scale changes
+  // (setData autoscale, setXRange, the rebuild restore) raise suppressRangeEvent to stay
+  // quiet, sparing the controller the load-time false positives a raw hook would emit.
+  const trackXRange = (u, key) => {
+    if (key !== 'x') return
+    const sx = u.scales && u.scales.x
+    if (!sx || sx.min == null || sx.max == null || !isFinite(sx.min) || !isFinite(sx.max)) return
+    xRange = { min: sx.min, max: sx.max }
+    if (!suppressRangeEvent && onRangeChange) onRangeChange(sx.min, sx.max)
+  }
+  const userHooks = opts.hooks || {}
+  let state = {
+    ...opts,
+    hooks: { ...userHooks, setScale: [...(userHooks.setScale || []), trackXRange] }
+  }
+
   let uplot = new UPlot(buildOpts(UPlot, currentDef, state), [[]], el)
   let destroyed = false
   // Last-known per-series visibility (series label -> show). A fresh uPlot defaults
   // every series to shown, so this is re-applied after each rebuild to keep a hidden
   // series hidden across mode/scale changes.
   const visibility = {}
-  let xRange = null // { min, max } remembered to survive rebuilds
 
   function applyVisibility() {
     currentDef.series.forEach((s, i) => {
@@ -327,7 +352,11 @@ export async function createChart(el, def, opts = {}) {
       throw e
     }
     applyVisibility()
-    if (xRange) uplot.setScale('x', { min: xRange.min, max: xRange.max })
+    if (xRange) {
+      suppressRangeEvent = true
+      uplot.setScale('x', { min: xRange.min, max: xRange.max })
+      suppressRangeEvent = false
+    }
   }
 
   return {
@@ -336,7 +365,11 @@ export async function createChart(el, def, opts = {}) {
     },
     setData(columns) {
       if (destroyed) return
+      // setData autoscales and fires setScale; suppress so the load isn't mistaken
+      // for a user zoom.
+      suppressRangeEvent = true
       uplot.setData(columns)
+      suppressRangeEvent = false
     },
     setScaleType(type) {
       if (destroyed) return
@@ -377,7 +410,9 @@ export async function createChart(el, def, opts = {}) {
     setXRange(min, max) {
       if (destroyed) return
       xRange = { min: min, max: max }
+      suppressRangeEvent = true
       uplot.setScale('x', { min: min, max: max })
+      suppressRangeEvent = false
     },
     destroy() {
       if (destroyed) return
