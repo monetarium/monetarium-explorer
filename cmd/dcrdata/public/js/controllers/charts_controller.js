@@ -46,6 +46,34 @@ function isModeEnabled(chart) {
   return modeScales.includes(chart)
 }
 
+// sanitizeLogValueRange collapses a non-positive lower bound to null when the
+// chart is rendered in log scale. Dygraphs computes a log axis with log10(min);
+// a floor of 0 (or negative) yields -Infinity and breaks the whole axis.
+// Returning null lets Dygraphs auto-range from the positive data instead.
+// Apply to the primary y-axis only — the global `logscale` option never
+// log-scales y2, so a y2 floor of 0 is valid and must be left alone.
+export function sanitizeLogValueRange(valueRange, isLog) {
+  if (!isLog || !Array.isArray(valueRange)) return valueRange
+  const [lo, hi] = valueRange
+  if (lo != null && lo <= 0) return [null, hi]
+  return valueRange
+}
+
+// clampLogFloor raises a plotted line value up to `floor` when in log scale. A
+// cumulative-supply series is 0 until a single mint then a near-constant
+// plateau; on a log axis the 0s cannot plot and Dygraphs auto-ranges onto the
+// clustered plateau, collapsing the axis. Flooring the 0/sub-floor points at 1
+// whole coin makes the plotted minimum 1, so the axis spans orders of magnitude
+// and the pre-mint period draws as a baseline. Render-only: the exact
+// big.Int-derived value still drives the legend/tooltip; only the (already
+// lossy) float line position is floored. Applied to the SKA supply line only —
+// the VAR supply legend reads the plotted value, so flooring it would misreport
+// pre-genesis 0s, and VAR supply spans decades and never collapses anyway.
+export function clampLogFloor(value, isLog, floor = 1) {
+  if (!isLog) return value
+  return value < floor ? floor : value
+}
+
 function hasMultipleVisibility(chart) {
   return multiYAxisChart.indexOf(chart) > -1
 }
@@ -488,11 +516,19 @@ export default class extends Controller {
   }
 
   plotGraph(chartName, data) {
+    // Cache the render inputs so setScale() can re-plot on a SCALE toggle
+    // without re-fetching. `data` is held by reference and is treated as
+    // read-only — nothing downstream mutates the response or its arrays, and a
+    // scale toggle re-reads it as-is. Keep it that way: an in-place mutation
+    // here would corrupt the next toggle's re-plot.
+    this.rawChartName = chartName
+    this.rawChartData = data
     let d = []
+    const isLog = this.settings.scale === 'log'
     const gOptions = {
       zoomCallback: null,
       drawCallback: null,
-      logscale: this.settings.scale === 'log',
+      logscale: isLog,
       valueRange: [null, null],
       visibility: null,
       y2label: null,
@@ -658,7 +694,11 @@ export default class extends Controller {
       case 'coin-supply':
         if (isSKA) {
           this._skaSupplyRaw = data.supply
-          const ys = data.supply.map((s) => Number(s) * 1e-18)
+          // Floor is applied after the atoms->coins conversion, so it is 1
+          // whole coin (not 1 atom). A genuine sub-1-coin supply (1..1e18 atoms)
+          // would also clamp to 1 on the log line — never a real state for a
+          // cumulative SKA supply, and the exact value still shows in the legend.
+          const ys = data.supply.map((s) => clampLogFloor(Number(s) * 1e-18, isLog))
           d = zip2D(data, ys)
           assign(
             gOptions,
@@ -844,6 +884,16 @@ export default class extends Controller {
     const baseURL = `${this.query.url.protocol}//${this.query.url.host}`
     this.rawDataURLTarget.textContent = `${baseURL}/api/chart/${chartName}?axis=${this.settings.axis}&bin=${this.settings.bin}&interval=${this.settings.interval}`
 
+    // Log axes cannot place values <= 0: Dygraphs computes the axis with
+    // log10(min), so a valueRange floor of 0 (or negative) yields -Infinity and
+    // breaks the plot. Collapse any non-positive primary-y floor to null so the
+    // axis auto-ranges from the positive data. Only y1 is log-scaled by the
+    // global `logscale` option, so never touch y2 (it stays linear).
+    gOptions.valueRange = sanitizeLogValueRange(gOptions.valueRange, isLog)
+    if (gOptions.axes && gOptions.axes.y) {
+      gOptions.axes.y.valueRange = sanitizeLogValueRange(gOptions.axes.y.valueRange, isLog)
+    }
+
     this.chartsView.plotter_.clear()
     this.chartsView.updateOptions(gOptions, false)
     if (yValueRanges[chartName]) this.supportedYRange = this.chartsView.yAxisRanges()
@@ -1022,10 +1072,16 @@ export default class extends Controller {
     if (!option) return
     this.setActiveOptionBtn(option, this.scaleTypeTargets)
     if (!target) return // Exit if running for the first time.
-    if (this.chartsView) {
+    this.settings.scale = option
+    if (this.chartsView && this.rawChartData) {
+      // Re-plot from the cached response so axis options (incl. the log-safety
+      // guard in plotGraph) are recomputed for the new scale. Flipping only
+      // `logscale` would leave a stale valueRange floor that breaks the log
+      // axis (e.g. duration-btw-blocks' [0, null]). No network request.
+      this.plotGraph(this.rawChartName, this.rawChartData)
+    } else if (this.chartsView) {
       this.chartsView.updateOptions({ logscale: option === 'log' })
     }
-    this.settings.scale = option
     this.query.replace(this.settings)
   }
 
