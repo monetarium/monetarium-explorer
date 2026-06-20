@@ -275,3 +275,64 @@ describe('sanitizeLogValueRange', () => {
     expect(sanitizeLogValueRange(undefined, true)).toBe(undefined)
   })
 })
+
+describe('ChartsController plotGraph log-axis guard', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('collapses the duration y-axis floor to null in log scale', async () => {
+    const c = makeController()
+    await c.connect()
+    c.settings.scale = 'log'
+    c.settings.axis = 'time'
+    c.settings.bin = 'block'
+    c.settings.interval = 'week'
+    c.chartsView.updateOptions.mockClear()
+
+    c.plotGraph('duration-btw-blocks', { t: [1000, 2000], duration: [10, 20] })
+
+    const call = c.chartsView.updateOptions.mock.calls.find((args) => args[1] === false)
+    expect(call).toBeTruthy()
+    const gOptions = call[0]
+    expect(gOptions.logscale).toBe(true)
+    expect(gOptions.axes.y.valueRange).toEqual([null, null])
+  })
+
+  it('preserves the hashrate y2 floor in log scale (y2 stays linear)', async () => {
+    const c = makeController()
+    await c.connect()
+    c.settings.scale = 'log'
+    c.settings.axis = 'time'
+    c.settings.bin = 'block'
+    c.settings.interval = 'week'
+    c.chartsView.updateOptions.mockClear()
+
+    c.plotGraph('hashrate', {
+      t: [1000, 2000],
+      rate: [100, 200],
+      active_miners: [3, 4],
+      offset: 0
+    })
+
+    const call = c.chartsView.updateOptions.mock.calls.find((args) => args[1] === false)
+    const gOptions = call[0]
+    expect(gOptions.axes.y.valueRange).toEqual([null, null]) // primary y unbounded
+    expect(gOptions.axes.y2.valueRange).toEqual([0, null]) // y2 floor untouched
+  })
+
+  it('caches the chart name and data for re-plotting', async () => {
+    const c = makeController()
+    await c.connect()
+    c.settings.scale = 'linear'
+    c.settings.axis = 'time'
+    c.settings.bin = 'block'
+    c.settings.interval = 'week'
+    const data = { t: [1000, 2000], duration: [10, 20] }
+
+    c.plotGraph('duration-btw-blocks', data)
+
+    expect(c.rawChartName).toBe('duration-btw-blocks')
+    expect(c.rawChartData).toBe(data)
+  })
+})

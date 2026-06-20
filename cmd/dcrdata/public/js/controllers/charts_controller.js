@@ -501,11 +501,14 @@ export default class extends Controller {
   }
 
   plotGraph(chartName, data) {
+    this.rawChartName = chartName
+    this.rawChartData = data
     let d = []
+    const isLog = this.settings.scale === 'log'
     const gOptions = {
       zoomCallback: null,
       drawCallback: null,
-      logscale: this.settings.scale === 'log',
+      logscale: isLog,
       valueRange: [null, null],
       visibility: null,
       y2label: null,
@@ -856,6 +859,16 @@ export default class extends Controller {
 
     const baseURL = `${this.query.url.protocol}//${this.query.url.host}`
     this.rawDataURLTarget.textContent = `${baseURL}/api/chart/${chartName}?axis=${this.settings.axis}&bin=${this.settings.bin}&interval=${this.settings.interval}`
+
+    // Log axes cannot place values <= 0: Dygraphs computes the axis with
+    // log10(min), so a valueRange floor of 0 (or negative) yields -Infinity and
+    // breaks the plot. Collapse any non-positive primary-y floor to null so the
+    // axis auto-ranges from the positive data. Only y1 is log-scaled by the
+    // global `logscale` option, so never touch y2 (it stays linear).
+    gOptions.valueRange = sanitizeLogValueRange(gOptions.valueRange, isLog)
+    if (gOptions.axes && gOptions.axes.y) {
+      gOptions.axes.y.valueRange = sanitizeLogValueRange(gOptions.axes.y.valueRange, isLog)
+    }
 
     this.chartsView.plotter_.clear()
     this.chartsView.updateOptions(gOptions, false)
