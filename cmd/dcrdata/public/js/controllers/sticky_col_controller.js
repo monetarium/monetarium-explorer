@@ -5,6 +5,7 @@ export default class extends Controller {
     this.ticking = false
     this._onScroll = () => {
       if (!this.ticking) {
+        /* global requestAnimationFrame */
         requestAnimationFrame(() => {
           this.element.classList.toggle('is-scrolled', this.element.scrollLeft > 0)
           this.ticking = false

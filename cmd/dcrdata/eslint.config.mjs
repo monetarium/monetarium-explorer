@@ -37,9 +37,7 @@ export default [
         navigator: 'readonly',
         Notification: 'readonly',
         localStorage: 'readonly',
-        sessionStorage: 'readonly',
-        requestAnimationFrame: 'readonly',
-        cancelAnimationFrame: 'readonly'
+        sessionStorage: 'readonly'
       }
     },
 
@@ -97,17 +95,9 @@ export default [
     }
   },
 
-  // test files — relax some rules and expose jsdom globals
+  // test files — relax some rules
   {
     files: ['**/*.test.js'],
-    languageOptions: {
-      globals: {
-        MouseEvent: 'readonly',
-        KeyboardEvent: 'readonly',
-        Event: 'readonly',
-        CustomEvent: 'readonly'
-      }
-    },
     rules: {
       'no-unused-vars': 'warn',
       'import/no-unused-modules': 'off',

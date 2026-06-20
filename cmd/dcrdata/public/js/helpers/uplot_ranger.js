@@ -7,6 +7,8 @@ import { chartColors, fillForStroke } from './chart_theme'
 import { resolveSeriesColor, loadUPlot } from './uplot_adapter'
 import humanize from './humanize_helper'
 
+/* global requestAnimationFrame */
+
 export const BOUNDARY_LEFT = 0
 export const BOUNDARY_RIGHT = 1
 export const BOUNDARY_BOTH = 2
