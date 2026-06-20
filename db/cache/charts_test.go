@@ -540,3 +540,170 @@ func TestNormalizeGenesisBlockTime_Idempotent(t *testing.T) {
 		t.Errorf("second call mutated data: got %v, want %v", times, first)
 	}
 }
+
+// chartWithWindows returns a ChartData seeded with 2 completed windows.
+func chartWithWindows(ctx context.Context) *ChartData {
+	charts := NewChartData(ctx, 0, chaincfg.MainNetParams())
+	charts.Windows.Time = ChartUints{1000, 2000}
+	charts.Windows.TicketPrice = ChartUints{10, 20}
+	charts.Windows.PowDiff = ChartFloats{1.0, 2.0}
+	charts.Windows.StakeCount = ChartUints{5, 6}
+	charts.Windows.MissedVotes = ChartUints{0, 0}
+	return charts
+}
+
+// decodeChart decodes a chart JSON byte slice into a map for assertion.
+func decodeChart(t *testing.T, data []byte) map[string]interface{} {
+	t.Helper()
+	var m map[string]interface{}
+	if err := json.Unmarshal(data, &m); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+	return m
+}
+
+// lastFloat extracts the last element from a JSON array decoded as []interface{}.
+func lastFloat(arr interface{}) float64 {
+	items := arr.([]interface{})
+	return items[len(items)-1].(float64)
+}
+
+func TestChartTipOverride(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	t.Run("partial_window_applies_tip_override", func(t *testing.T) {
+		charts := chartWithWindows(ctx)
+		charts.PartialWindow = PartialWindow{
+			Height:     220,
+			Time:       2500,
+			Price:      999,
+			Diff:       999.0,
+			StakeCount: 3,
+		}
+		charts.SetTip(ChartTip{
+			Height:      220,
+			Time:        2500,
+			TicketPrice: 25,
+			Difficulty:  3.5,
+		})
+
+		// Ticket Price — time axis
+		data, err := charts.Chart(TicketPrice, string(WindowBin), string(TimeAxis), string(DefaultInterval))
+		if err != nil {
+			t.Fatalf("ticketPriceChart: %v", err)
+		}
+		resp := decodeChart(t, data)
+		prices := resp[priceKey].([]interface{})
+		if len(prices) != 3 {
+			t.Fatalf("prices: expected 3 (2 windows + 1 partial), got %d", len(prices))
+		}
+		if got := uint64(lastFloat(prices)); got != 25 {
+			t.Errorf("last price: got %d, want 25 (tip override)", got)
+		}
+		counts := resp[countKey].([]interface{})
+		if len(counts) != 3 {
+			t.Fatalf("counts: expected 3, got %d", len(counts))
+		}
+		if got := uint64(lastFloat(counts)); got != 3 {
+			t.Errorf("last count: got %d, want 3 (partial window)", got)
+		}
+
+		// POW Difficulty — time axis
+		data, err = charts.Chart(POWDifficulty, string(WindowBin), string(TimeAxis), string(DefaultInterval))
+		if err != nil {
+			t.Fatalf("powDifficultyChart: %v", err)
+		}
+		resp = decodeChart(t, data)
+		diffs := resp[diffKey].([]interface{})
+		if len(diffs) != 3 {
+			t.Fatalf("diff: expected 3, got %d", len(diffs))
+		}
+		if got := lastFloat(diffs); got != 3.5 {
+			t.Errorf("last diff: got %f, want 3.5 (tip override)", got)
+		}
+	})
+
+	t.Run("no_partial_window_no_override", func(t *testing.T) {
+		for _, axis := range []string{string(TimeAxis), string(HeightAxis)} {
+			t.Run(axis, func(t *testing.T) {
+				charts := chartWithWindows(ctx)
+				charts.SetTip(ChartTip{
+					Height:      200,
+					Time:        2000,
+					TicketPrice: 99,
+					Difficulty:  9.9,
+				})
+
+				// Ticket Price
+				data, err := charts.Chart(TicketPrice, string(WindowBin), axis, string(DefaultInterval))
+				if err != nil {
+					t.Fatalf("ticketPriceChart: %v", err)
+				}
+				resp := decodeChart(t, data)
+				prices := resp[priceKey].([]interface{})
+				if len(prices) != 2 {
+					t.Fatalf("prices: expected 2, got %d", len(prices))
+				}
+				if got := uint64(lastFloat(prices)); got != 20 {
+					t.Errorf("last price: got %d, want 20 (no override)", got)
+				}
+
+				// POW Difficulty
+				data, err = charts.Chart(POWDifficulty, string(WindowBin), axis, string(DefaultInterval))
+				if err != nil {
+					t.Fatalf("powDifficultyChart: %v", err)
+				}
+				resp = decodeChart(t, data)
+				diffs := resp[diffKey].([]interface{})
+				if len(diffs) != 2 {
+					t.Fatalf("diff: expected 2, got %d", len(diffs))
+				}
+				if got := lastFloat(diffs); got != 2.0 {
+					t.Errorf("last diff: got %f, want 2.0 (no override)", got)
+				}
+			})
+		}
+	})
+
+	t.Run("height_axis_ignores_tip_even_with_partial", func(t *testing.T) {
+		charts := chartWithWindows(ctx)
+		charts.PartialWindow = PartialWindow{
+			Height: 220, Time: 2500, Price: 999, Diff: 999.0, StakeCount: 3,
+		}
+		charts.SetTip(ChartTip{
+			Height: 220, Time: 2500, TicketPrice: 25, Difficulty: 3.5,
+		})
+
+		// Ticket Price — height axis should NOT extend or override
+		data, err := charts.Chart(TicketPrice, string(WindowBin), string(HeightAxis), string(DefaultInterval))
+		if err != nil {
+			t.Fatalf("ticketPriceChart: %v", err)
+		}
+		resp := decodeChart(t, data)
+		prices := resp[priceKey].([]interface{})
+		if len(prices) != 2 {
+			t.Fatalf("prices: expected 2 (no partial on height axis), got %d", len(prices))
+		}
+		if got := uint64(lastFloat(prices)); got != 20 {
+			t.Errorf("last price: got %d, want 20", got)
+		}
+		if len(resp[countKey].([]interface{})) != 2 {
+			t.Fatal("counts length should be 2 on height axis")
+		}
+
+		// POW Difficulty — height axis
+		data, err = charts.Chart(POWDifficulty, string(WindowBin), string(HeightAxis), string(DefaultInterval))
+		if err != nil {
+			t.Fatalf("powDifficultyChart: %v", err)
+		}
+		resp = decodeChart(t, data)
+		diffs := resp[diffKey].([]interface{})
+		if len(diffs) != 2 {
+			t.Fatalf("diff: expected 2, got %d", len(diffs))
+		}
+		if got := lastFloat(diffs); got != 2.0 {
+			t.Errorf("last diff: got %f, want 2.0", got)
+		}
+	})
+}

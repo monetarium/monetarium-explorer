@@ -3523,12 +3523,14 @@ func appendWindowStats(charts *cache.ChartData, rows *sql.Rows) error {
 	var price, ticketsCount uint64
 	var timestamp time.Time
 	var difficulty float64
+	var lastHeight int
 	for rows.Next() {
 		var height int
 		var count uint64
 		if err := rows.Scan(&price, &timestamp, &difficulty, &height, &count); err != nil {
 			return err
 		}
+		lastHeight = height
 		ticketsCount += count
 
 		// If that was the last block in the current sdiff window, append the
@@ -3549,7 +3551,30 @@ func appendWindowStats(charts *cache.ChartData, rows *sql.Rows) error {
 		} // else height < nextWindowHeight-1
 	}
 
-	return rows.Err()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	// Save partial window data so chart makers can append it as the last
+	// point, matching the home page's current value.
+	// Only update when rows were actually processed; otherwise keep the
+	// existing partial window (no new data since last refresh).
+	if lastHeight > 0 {
+		if lastHeight == nextWindowHeight-1 {
+			// The last row completed a window — no partial remains.
+			charts.PartialWindow = cache.PartialWindow{}
+		} else {
+			charts.PartialWindow = cache.PartialWindow{
+				Height:     uint64(lastHeight),
+				Time:       uint64(timestamp.Unix()),
+				Price:      price,
+				Diff:       difficulty,
+				StakeCount: ticketsCount,
+			}
+		}
+	}
+
+	return nil
 }
 
 // retrieveCoinSupply fetches the coin supply data from the vins table.
