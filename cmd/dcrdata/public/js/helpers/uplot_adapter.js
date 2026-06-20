@@ -314,6 +314,19 @@ export async function createChart(el, def, opts = {}) {
     xRange = { min: sx.min, max: sx.max }
     if (!suppressRangeEvent && onRangeChange) onRangeChange(sx.min, sx.max)
   }
+
+  // uPlot fires the setScale hook on a microtask (commit -> queueMicrotask), so the
+  // suppress flag can't be cleared synchronously — it would be down before the hook
+  // runs. Run our scale change with the flag up, then clear it on a microtask queued
+  // AFTER uPlot's commit one; FIFO ordering means the hook still sees it set. A genuine
+  // user gesture is never wrapped this way, so its hook fires with the flag clear.
+  const withProgrammaticScale = (fn) => {
+    suppressRangeEvent = true
+    fn()
+    queueMicrotask(() => {
+      suppressRangeEvent = false
+    })
+  }
   const userHooks = opts.hooks || {}
   let state = {
     ...opts,
@@ -353,9 +366,7 @@ export async function createChart(el, def, opts = {}) {
     }
     applyVisibility()
     if (xRange) {
-      suppressRangeEvent = true
-      uplot.setScale('x', { min: xRange.min, max: xRange.max })
-      suppressRangeEvent = false
+      withProgrammaticScale(() => uplot.setScale('x', { min: xRange.min, max: xRange.max }))
     }
   }
 
@@ -367,9 +378,7 @@ export async function createChart(el, def, opts = {}) {
       if (destroyed) return
       // setData autoscales and fires setScale; suppress so the load isn't mistaken
       // for a user zoom.
-      suppressRangeEvent = true
-      uplot.setData(columns)
-      suppressRangeEvent = false
+      withProgrammaticScale(() => uplot.setData(columns))
     },
     setScaleType(type) {
       if (destroyed) return
@@ -410,9 +419,7 @@ export async function createChart(el, def, opts = {}) {
     setXRange(min, max) {
       if (destroyed) return
       xRange = { min: min, max: max }
-      suppressRangeEvent = true
-      uplot.setScale('x', { min: min, max: max })
-      suppressRangeEvent = false
+      withProgrammaticScale(() => uplot.setScale('x', { min: min, max: max }))
     },
     destroy() {
       if (destroyed) return
