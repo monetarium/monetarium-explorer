@@ -455,7 +455,14 @@ export default class extends Controller {
 
   redrawTheme() {
     if (this.handle) this.handle.setData(this.handle.uplot.data) // cheap redraw; colors flow via chart_theme on next rebuild
-    if (this.ranger) this.ranger.setDark(darkEnabled())
+    if (this.ranger) {
+      this.ranger.setDark(darkEnabled())
+      // setDark rebuilds the strip's uPlot fresh (no selection); re-apply the selection to
+      // the full extent so the rectangle doesn't vanish on a night-mode toggle (matches the
+      // main chart, which setData autoscales back to full extent on the same redraw).
+      const xs = this.ranger.uplot.data[0]
+      if (xs && xs.length) this.ranger.setSelection(xs[0], xs[xs.length - 1])
+    }
   }
 
   async setBin(e) {

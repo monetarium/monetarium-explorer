@@ -667,11 +667,19 @@ describe('ChartsController ranger strip', () => {
     expect(fakeRanger.setSelection).toHaveBeenCalled()
   })
 
-  it('forwards a dark-mode flip to the ranger', async () => {
+  it('forwards a dark-mode flip to the ranger and re-applies the full-extent selection', async () => {
     const c = makeController()
     await c.connect()
     fakeRanger.setDark.mockClear()
+    fakeRanger.setSelection.mockClear()
+    fakeRanger.uplot = {
+      data: [
+        [1000, 2000, 3000],
+        [10, 20, 30]
+      ]
+    }
     c.redrawTheme()
     expect(fakeRanger.setDark).toHaveBeenCalled()
+    expect(fakeRanger.setSelection).toHaveBeenCalledWith(1000, 3000)
   })
 })
