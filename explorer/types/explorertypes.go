@@ -908,6 +908,7 @@ type HomeInfo struct {
 	NextExpectedBoundsMin float64              `json:"next_expected_min"`
 	NextExpectedBoundsMax float64              `json:"next_expected_max"`
 	IdxBlockInWindow      int                  `json:"window_idx"`
+	WindowRemaining       string               `json:"window_remaining"`
 	IdxInRewardWindow     int                  `json:"reward_idx"`
 	Difficulty            float64              `json:"difficulty"`
 	RewardPeriod          string               `json:"reward_period"`

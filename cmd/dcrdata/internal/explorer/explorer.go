@@ -565,6 +565,7 @@ func (exp *explorerUI) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgB
 	p.HomeInfo.NextExpectedBoundsMin = blockData.EstStakeDiff.Min
 	p.HomeInfo.NextExpectedBoundsMax = blockData.EstStakeDiff.Max
 	p.HomeInfo.IdxBlockInWindow = blockData.IdxBlockInWindow
+	p.HomeInfo.WindowRemaining = types.RemainingWindowText(p.HomeInfo.IdxBlockInWindow, p.HomeInfo.Params.WindowSize, p.HomeInfo.Params.BlockTime)
 	p.HomeInfo.IdxInRewardWindow = int(newBlockData.Height%exp.ChainParams.SubsidyReductionInterval) + 1
 	p.HomeInfo.Difficulty = difficulty
 	p.HomeInfo.NBlockSubsidy.Dev = blockData.ExtraInfo.NextBlockSubsidy.Developer

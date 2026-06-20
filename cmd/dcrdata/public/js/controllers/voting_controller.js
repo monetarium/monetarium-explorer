@@ -10,6 +10,7 @@ export default class extends Controller {
       'nextExpectedMin',
       'nextExpectedMax',
       'windowIndex',
+      'windowRemaining',
       'posBar',
       'poolSize',
       'poolValue',
@@ -31,6 +32,7 @@ export default class extends Controller {
     this.nextExpectedMinTarget.innerHTML = humanize.decimalParts(ex.next_expected_min, false, 2)
     this.nextExpectedMaxTarget.innerHTML = humanize.decimalParts(ex.next_expected_max, false, 2)
     this.windowIndexTarget.textContent = ex.window_idx
+    this.windowRemainingTarget.textContent = ex.window_remaining
     this.posBarTarget.style.width = `${(ex.window_idx / ex.params.window_size) * 100}%`
     this.poolSizeTarget.innerHTML = humanize.decimalParts(ex.pool_info.size, true, 0)
     this.targetPctTarget.textContent = parseFloat(ex.pool_info.percent_target - 100).toFixed(2)
