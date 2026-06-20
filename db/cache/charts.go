@@ -2065,7 +2065,7 @@ func stakedCoinsChart(charts *ChartData, bin binLevel, axis axisType, _ interval
 	case BlockBin:
 		circulation := accumulate(charts.Blocks.NewAtoms)
 		poolVal := charts.Blocks.PoolValue
-		if override && len(circulation) > 0 {
+		if override && len(circulation) > 0 && len(poolVal) > 0 {
 			circulation[len(circulation)-1] = tip.CoinSupply
 			poolVal = append(ChartUints(nil), poolVal...)
 			poolVal[len(poolVal)-1] = tip.PoolValue
@@ -2086,7 +2086,7 @@ func stakedCoinsChart(charts *ChartData, bin binLevel, axis axisType, _ interval
 	case DayBin:
 		circulation := accumulate(charts.Days.NewAtoms)
 		poolVal := charts.Days.PoolValue
-		if override && len(circulation) > 0 {
+		if override && len(circulation) > 0 && len(poolVal) > 0 {
 			circulation[len(circulation)-1] = tip.CoinSupply
 			poolVal = append(ChartUints(nil), poolVal...)
 			poolVal[len(poolVal)-1] = tip.PoolValue
