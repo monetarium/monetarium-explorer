@@ -19,8 +19,8 @@ export const hashrate = {
     { label: 'Active Miners', scale: 'y2' }
   ],
   series: [
-    { label: 'Hashrate', scale: 'y', kind: 'line', colorIndex: 0 },
-    { label: 'Active Miners', scale: 'y2', kind: 'line', colorIndex: 2 }
+    { label: 'Hashrate', scale: 'y', kind: 'line', colorKey: 'hashrate-rate' },
+    { label: 'Active Miners', scale: 'y2', kind: 'line', colorKey: 'hashrate-miners' }
   ],
   toColumns: (raw) => {
     const offset = raw.offset

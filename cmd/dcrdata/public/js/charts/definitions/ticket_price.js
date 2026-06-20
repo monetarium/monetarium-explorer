@@ -19,8 +19,8 @@ export const ticketPrice = {
     { label: 'Tickets Bought', scale: 'y2' }
   ],
   series: [
-    { label: 'Price', scale: 'y', kind: 'line', colorIndex: 0 },
-    { label: 'Tickets Bought', scale: 'y2', kind: 'bars', colorIndex: 1 }
+    { label: 'Price', scale: 'y', kind: 'line', colorKey: 'tickets-price' },
+    { label: 'Tickets Bought', scale: 'y2', kind: 'bars', colorKey: 'tickets-bought' }
   ],
   toColumns: (raw) => {
     if (raw.t) {
