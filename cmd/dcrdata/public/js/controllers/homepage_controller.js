@@ -1,4 +1,3 @@
-/* global requestAnimationFrame */
 import { Controller } from '@hotwired/stimulus'
 import { each } from 'lodash-es'
 import { fadeIn } from '../helpers/animation_helper'
