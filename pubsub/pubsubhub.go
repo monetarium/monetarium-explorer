@@ -733,6 +733,7 @@ func (psh *PubSubHub) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgBl
 	p.GeneralInfo.IdxBlockInWindow = blockData.IdxBlockInWindow
 	p.GeneralInfo.WindowRemaining = exptypes.RemainingWindowText(p.GeneralInfo.IdxBlockInWindow, p.GeneralInfo.Params.WindowSize, p.GeneralInfo.Params.BlockTime)
 	p.GeneralInfo.IdxInRewardWindow = int(newBlockData.Height%psh.params.SubsidyReductionInterval) + 1
+	p.GeneralInfo.RewardRemaining = exptypes.RemainingWindowText(p.GeneralInfo.IdxInRewardWindow, p.GeneralInfo.Params.RewardWindowSize, p.GeneralInfo.Params.BlockTime)
 	p.GeneralInfo.Difficulty = difficulty
 	p.GeneralInfo.NBlockSubsidy.Dev = blockData.ExtraInfo.NextBlockSubsidy.Developer
 	p.GeneralInfo.NBlockSubsidy.PoS = blockData.ExtraInfo.NextBlockSubsidy.PoS
