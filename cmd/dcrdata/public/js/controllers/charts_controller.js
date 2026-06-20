@@ -88,11 +88,6 @@ export default class extends Controller {
     this.processNightMode = () => this.redrawTheme()
     globalEventBus.on('NIGHT_MODE', this.processNightMode)
 
-    // uPlot resets the x-scale to the full data extent on a chart double-click;
-    // mirror that into the ZOOM control so the highlighted preset doesn't go stale.
-    this.onChartReset = () => this.resetZoomControl()
-    this.chartsViewTarget.addEventListener('dblclick', this.onChartReset)
-
     this.chartSelectTarget.value = this.settings.chart
 
     // Restore the control bar's active state from the persisted URL so a bookmark
@@ -111,28 +106,64 @@ export default class extends Controller {
 
   disconnect() {
     globalEventBus.off('NIGHT_MODE', this.processNightMode)
-    this.chartsViewTarget.removeEventListener('dblclick', this.onChartReset)
     if (this.handle) {
       this.handle.destroy()
       this.handle = null
     }
   }
 
-  // Sync the ZOOM control after uPlot's double-click reset. uPlot returns the chart
-  // to its full data extent, which corresponds to the 'all' preset, so highlight that
-  // button and persist it. No-op when 'all' is already in effect (avoids redundant
-  // URL writes) or before the first chart exists.
-  resetZoomControl() {
-    if (!this.handle) return
-    if (this.settings.zoom === 'all') return
-    this.settings.zoom = 'all'
-    this.setActiveOptionBtn('all', this.zoomOptionTargets)
-    // uPlot's native double-click sets the visible x-scale directly, bypassing the
-    // adapter's remembered range. Re-apply 'all' through applyZoom so that range is
-    // updated too — otherwise the next rebuild (a MODE or SCALE switch) would restore
-    // the stale pre-reset window. Mirrors what the real 'all' button (setZoom) does.
-    this.applyZoom()
+  // Called by the adapter on a user-driven x-range change (drag-zoom or double-click
+  // reset) — never for our own programmatic zooms. Translate the new range into the
+  // ZOOM control + URL: snap it to a preset when it lines up with one (so a drag that
+  // happens to match a week, or a double-click reset to 'all', re-highlights the right
+  // button), otherwise persist the exact window as an encoded range and clear presets.
+  onChartRangeChange(min, max) {
+    if (!this.handle || !this.payload) return
+    const xs = this.handle.uplot.data[0]
+    if (!xs || !xs.length) return
+    const preset = this.presetForRange(min, max, xs[0], xs[xs.length - 1])
+    if (preset) {
+      this.settings.zoom = preset
+      this.setActiveOptionBtn(preset, this.zoomOptionTargets)
+    } else {
+      this.settings.zoom = this.encodeRange(min, max)
+      this.setActiveOptionBtn(null, this.zoomOptionTargets) // custom range: no preset active
+    }
     this.query.replace(this.settings)
+  }
+
+  // Map a visible [min,max] window back to a ZOOM preset key, or null for a custom
+  // range. Presets are trailing windows ending at the latest datum, so a match needs
+  // both the right span and an end at dataMax. Full extent maps to 'all'. Reuses
+  // zoomSpan so the comparison works in plot units for both time and height axes.
+  presetForRange(min, max, dataMin, dataMax) {
+    const fullSpan = dataMax - dataMin
+    if (!(fullSpan > 0)) return 'all'
+    const tol = fullSpan * 0.005 // 0.5% slack for pixel-rounded drag edges
+    if (Math.abs(min - dataMin) <= tol && Math.abs(max - dataMax) <= tol) return 'all'
+    if (Math.abs(max - dataMax) <= tol) {
+      for (const key of ['day', 'week', 'month', 'year']) {
+        const span = this.zoomSpan(key)
+        if (span != null && Math.abs(max - min - span) <= tol) return key
+      }
+    }
+    return null
+  }
+
+  // Encode a visible x-range into the persisted zoom string. Base-36, and in ms for
+  // time charts (plot x is seconds) so the format matches legacy ?zoom=<start>-<end>
+  // bookmarks. min/max are in plot x-units.
+  encodeRange(min, max) {
+    const toMs = this.settings.axis === 'time' ? 1000 : 1
+    return Zoom.encode(Math.round(min * toMs), Math.round(max * toMs))
+  }
+
+  // Decode a persisted zoom string back into plot x-units, or null if it isn't a range.
+  decodeRange(encoded) {
+    const z = Zoom.decode(encoded)
+    if (!z || typeof z !== 'object' || z.start == null || z.end == null) return null
+    const fromMs = this.settings.axis === 'time' ? 1000 : 1
+    return { min: z.start / fromMs, max: z.end / fromMs }
   }
 
   async selectChart() {
@@ -205,7 +236,8 @@ export default class extends Controller {
         height: this.chartsViewTarget.clientHeight || 400,
         scaleType: this.settings.scale === 'log' ? 'log' : 'linear',
         xTime: xTime,
-        hooks: this.buildHooks()
+        hooks: this.buildHooks(),
+        onRangeChange: (min, max) => this.onChartRangeChange(min, max)
       }).then((h) => {
         this.handle = h
         this.renderedName = renderDef.name
@@ -330,6 +362,23 @@ export default class extends Controller {
       this.handle.setXRange(startX, dataMax)
       this.zoomGuard = false
       return
+    }
+
+    // Arbitrary persisted range (e.g. "mq4z4efo-mq7k6k1g") — restore it directly,
+    // clamped to the available data. Falls through to the preset logic if invalid.
+    const zoom = this.settings.zoom
+    if (zoom && zoom.indexOf('-') !== -1) {
+      const r = this.decodeRange(zoom)
+      if (r) {
+        const lo = Math.max(dataMin, r.min)
+        const hi = Math.min(dataMax, r.max)
+        if (hi > lo) {
+          this.zoomGuard = true
+          this.handle.setXRange(lo, hi)
+          this.zoomGuard = false
+          return
+        }
+      }
     }
 
     const preset = this.settings.zoom

@@ -114,17 +114,28 @@ vi.mock('../charts/registry', () => ({
   isSKAFeeName: () => false
 }))
 
-vi.mock('../helpers/zoom_helper', () => ({
-  default: {
-    validate: vi.fn().mockReturnValue({ start: 0, end: 100 }),
-    project: vi.fn().mockReturnValue({ start: 0, end: 100 }),
-    object: vi.fn().mockReturnValue({ start: 0, end: 100 }),
-    encode: vi.fn().mockReturnValue('zoom-string'),
-    mapKey: vi.fn().mockReturnValue('zoom-option'),
-    // 'all' maps to 0 (full extent → null span); any other preset gets a finite span.
-    mapValue: vi.fn((key) => (key === 'all' ? 0 : 7 * 24 * 60 * 60 * 1000))
+vi.mock('../helpers/zoom_helper', () => {
+  // Real preset spans (ms) so presetForRange/zoomSpan match, plus faithful base-36
+  // encode/decode so the encoded-range round-trip is exercised for real.
+  const zoomMap = { all: 0, year: 3.154e10, month: 2.628e9, week: 6.048e8, day: 8.64e7 }
+  return {
+    default: {
+      validate: vi.fn().mockReturnValue({ start: 0, end: 100 }),
+      project: vi.fn().mockReturnValue({ start: 0, end: 100 }),
+      object: vi.fn().mockReturnValue({ start: 0, end: 100 }),
+      encode: vi.fn((s, e) => `${parseInt(s).toString(36)}-${parseInt(e).toString(36)}`),
+      decode: vi.fn((enc) => {
+        if (typeof enc === 'string' && enc.indexOf('-') !== -1) {
+          const [a, b] = enc.split('-')
+          return { start: parseInt(a, 36), end: parseInt(b, 36) }
+        }
+        return enc
+      }),
+      mapKey: vi.fn().mockReturnValue('zoom-option'),
+      mapValue: vi.fn((key) => zoomMap[key])
+    }
   }
-}))
+})
 
 vi.mock('../helpers/animation_helper', () => ({
   animationFrame: vi.fn().mockResolvedValue()
@@ -431,73 +442,90 @@ describe('ChartsController control handlers', () => {
     expect(mockReplace).toHaveBeenCalledWith(expect.objectContaining({ mode: 'smooth' }))
   })
 
-  it('double-click resets the ZOOM control to "all" and persists it', async () => {
-    restoreSettings = { chart: 'ticket-pool-size', zoom: 'week' }
-    const c = makeController()
-    const allBtn = optBtn('all')
-    const weekBtn = optBtn('week', true)
-    c.zoomOptionTargets = [allBtn, weekBtn]
+  // The adapter calls onChartRangeChange on user drag-zoom / double-click reset.
+  // These tests drive it directly with a known data extent on the fake handle.
+  describe('onChartRangeChange (user drag-zoom / double-click)', () => {
+    const withExtent = (c, min, max) => {
+      fakeHandle.uplot.data = [
+        [min, max],
+        [10, 20]
+      ]
+    }
 
-    await c.connect()
-    expect(c.settings.zoom).toBe('week')
-    mockReplace.mockClear()
+    it('maps a full-extent range (double-click reset) back to the "all" preset', async () => {
+      restoreSettings = { chart: 'ticket-pool-size', zoom: 'week' }
+      const c = makeController()
+      const allBtn = optBtn('all')
+      const weekBtn = optBtn('week', true)
+      c.zoomOptionTargets = [allBtn, weekBtn]
+      await c.connect()
+      withExtent(c, 1000, 1000000)
+      mockReplace.mockClear()
 
-    // Fire the dblclick the controller wired onto the chart container.
-    c.chartsViewTarget.listeners.dblclick()
+      c.onChartRangeChange(1000, 1000000)
 
-    expect(c.settings.zoom).toBe('all')
-    expect(allBtn.classList.contains('active')).toBe(true)
-    expect(weekBtn.classList.contains('active')).toBe(false)
-    expect(mockReplace).toHaveBeenCalledWith(expect.objectContaining({ zoom: 'all' }))
+      expect(c.settings.zoom).toBe('all')
+      expect(allBtn.classList.contains('active')).toBe(true)
+      expect(weekBtn.classList.contains('active')).toBe(false)
+      expect(mockReplace).toHaveBeenCalledWith(expect.objectContaining({ zoom: 'all' }))
+      fakeHandle.uplot.data = [[]]
+    })
+
+    it('snaps a trailing week-wide window back to the "week" preset', async () => {
+      const c = makeController()
+      const allBtn = optBtn('all', true)
+      const weekBtn = optBtn('week')
+      c.zoomOptionTargets = [allBtn, weekBtn]
+      await c.connect()
+      const dataMax = 1000000
+      withExtent(c, 1000, dataMax)
+      mockReplace.mockClear()
+
+      // week = 6.048e8 ms -> 604800 plot-seconds; a window of that span ending at dataMax.
+      c.onChartRangeChange(dataMax - 604800, dataMax)
+
+      expect(c.settings.zoom).toBe('week')
+      expect(weekBtn.classList.contains('active')).toBe(true)
+      fakeHandle.uplot.data = [[]]
+    })
+
+    it('persists a custom window as an encoded range and clears the presets', async () => {
+      const c = makeController()
+      const allBtn = optBtn('all', true)
+      const weekBtn = optBtn('week')
+      c.zoomOptionTargets = [allBtn, weekBtn]
+      await c.connect()
+      withExtent(c, 1000, 1000000)
+      mockReplace.mockClear()
+
+      c.onChartRangeChange(500000, 600000)
+
+      // time axis: plot-seconds -> ms (x1000), base-36 encoded as start-end.
+      const expected = `${(500000000).toString(36)}-${(600000000).toString(36)}`
+      expect(c.settings.zoom).toBe(expected)
+      expect(allBtn.classList.contains('active')).toBe(false)
+      expect(weekBtn.classList.contains('active')).toBe(false)
+      expect(mockReplace).toHaveBeenCalledWith(expect.objectContaining({ zoom: expected }))
+      fakeHandle.uplot.data = [[]]
+    })
   })
 
-  it('double-click is a no-op when "all" is already active', async () => {
-    restoreSettings = { chart: 'ticket-pool-size', zoom: 'all' }
+  it('applyZoom restores an encoded range from the URL (clamped to the data)', async () => {
+    const encoded = `${(500000000).toString(36)}-${(600000000).toString(36)}`
+    restoreSettings = { chart: 'ticket-pool-size', zoom: encoded }
     const c = makeController()
-    c.zoomOptionTargets = [optBtn('all', true), optBtn('week')]
-
     await c.connect()
-    mockReplace.mockClear()
-
-    c.chartsViewTarget.listeners.dblclick()
-
-    expect(mockReplace).not.toHaveBeenCalled()
-  })
-
-  it('double-click resyncs the chart range to the full extent so a later rebuild keeps it', async () => {
-    restoreSettings = { chart: 'ticket-pool-size', zoom: 'week' }
-    const c = makeController()
-    c.zoomOptionTargets = [optBtn('all'), optBtn('week', true)]
-
-    await c.connect()
-    // applyZoom reads the live x-axis off the handle; give it a real extent so the
-    // reset can push it back into the adapter (otherwise applyZoom early-returns).
     fakeHandle.uplot.data = [
-      [1000, 2000],
+      [1000, 1000000],
       [10, 20]
     ]
     fakeHandle.setXRange.mockClear()
 
-    try {
-      c.chartsViewTarget.listeners.dblclick()
+    c.applyZoom()
 
-      // The reset must hand the adapter the full data extent, replacing the stale
-      // 'week' window it still remembers — otherwise the next MODE/SCALE rebuild
-      // restores the old zoom even though the control now reads 'all'.
-      expect(fakeHandle.setXRange).toHaveBeenCalledWith(1000, 2000)
-    } finally {
-      fakeHandle.uplot.data = [[]] // restore the shared fake for later tests
-    }
-  })
-
-  it('disconnect removes the dblclick reset listener', async () => {
-    const c = makeController()
-    await c.connect()
-    c.disconnect()
-    expect(c.chartsViewTarget.removeEventListener).toHaveBeenCalledWith(
-      'dblclick',
-      expect.any(Function)
-    )
+    // ms -> plot-seconds (/1000), within [1000, 1000000] so applied verbatim.
+    expect(fakeHandle.setXRange).toHaveBeenCalledWith(500000, 600000)
+    fakeHandle.uplot.data = [[]]
   })
 
   it('renderChart rebuilds when series count changes', async () => {
