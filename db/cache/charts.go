@@ -583,8 +583,8 @@ type ChartData struct {
 	SKASupplyMtx sync.RWMutex
 	SKAFees      SKAFeesData
 	// SKAFeesMtx must be held when reading or mutating SKAFees.
-	SKAFeesMtx  sync.RWMutex
-	MinerRanges  []MinerRange
+	SKAFeesMtx    sync.RWMutex
+	MinerRanges   []MinerRange
 	PartialWindow PartialWindow
 	Tip           ChartTip
 	tipMtx        sync.RWMutex
