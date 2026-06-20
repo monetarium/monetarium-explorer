@@ -70,7 +70,7 @@ func TestMempoolTemplate(t *testing.T) {
 				},
 			},
 			Transactions: []types.MempoolTx{
-				{Hash: "varhash1", Time: 1, Size: 250, TotalOut: 1.5, FeeRate: 0.0001, Type: "Regular"},
+				{TxID: "varhash1", Time: 1, Size: 250, TotalOut: 1.5, FeeRate: 0.0001, Type: "Regular"},
 			},
 		}
 		out := renderMempool(t, tmpl, inv)
@@ -131,8 +131,8 @@ func TestMempoolTemplate(t *testing.T) {
 				},
 			},
 			Transactions: []types.MempoolTx{
-				{Hash: "varhash", Time: 1, Size: 250, TotalOut: 1.5, FeeRate: 0.0001, Type: "Regular"},
-				{Hash: "skahash", Time: 2, Size: 250, Type: "Regular",
+				{TxID: "varhash", Time: 1, Size: 250, TotalOut: 1.5, FeeRate: 0.0001, Type: "Regular"},
+				{TxID: "skahash", Time: 2, Size: 250, Type: "Regular",
 					SKATotals:   map[uint8]string{1: "1230000000000000000"},
 					SKAFeeRates: map[uint8]string{1: "4920000000000000"}},
 			},

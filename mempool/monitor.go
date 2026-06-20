@@ -17,6 +17,7 @@ import (
 	"github.com/monetarium/monetarium-node/chaincfg/chainhash"
 	chainjson "github.com/monetarium/monetarium-node/rpc/jsonrpc/types"
 
+	humanize "github.com/dustin/go-humanize"
 	exptypes "github.com/monetarium/monetarium-explorer/explorer/types"
 	pstypes "github.com/monetarium/monetarium-explorer/pubsub/types"
 	"github.com/monetarium/monetarium-explorer/txhelpers"
@@ -46,7 +47,7 @@ type MempoolAddressStore struct {
 type MempoolMonitor struct {
 	mtx        sync.RWMutex
 	ctx        context.Context
-	mpoolInfo  MempoolInfo
+	mpoolInfo  CollectState
 	inventory  *exptypes.MempoolInfo
 	addrMap    MempoolAddressStore
 	txnsStore  txhelpers.TxnsStore
@@ -109,7 +110,9 @@ func (p *MempoolMonitor) LastBlockTime() int64 {
 func (p *MempoolMonitor) BlockHandler(height uint32, _ string) error {
 	// Signal a new block
 	log.Debugf("New block at height %d - starting CollectAndStore...", height)
-	_ = p.CollectAndStore()
+	if err := p.CollectAndStore(); err != nil {
+		return err
+	}
 	log.Debugf("New Block at height %d - sending SigMempoolUpdate to hub relay...", height)
 	// p.signalOuts <- pstypes.SigMempoolUpdate
 	p.hubSend(pstypes.SigMempoolUpdate, nil, time.Second*10)
@@ -263,7 +266,6 @@ func (p *MempoolMonitor) TxHandler(rawTx *chainjson.TxRawResult) error {
 		VoutCount: len(msgTx.TxOut),
 		Vin:       p.collector.populateMempoolInputs(p.ctx, msgTx, txType, p.txnsStore),
 		// Coinbase is not in mempool
-		Hash:        hash,
 		Time:        rawTx.Time,
 		Size:        int32(len(rawTx.Hex) / 2),
 		TotalOut:    txhelpers.TotalOutFromMsgTx(msgTx).ToCoin(),
@@ -282,14 +284,14 @@ func (p *MempoolMonitor) TxHandler(rawTx *chainjson.TxRawResult) error {
 	// the count for the transaction type.
 	switch txType {
 	case stake.TxTypeRegular:
-		p.inventory.InvRegular[tx.Hash] = struct{}{}
+		p.inventory.InvRegular[tx.TxID] = struct{}{}
 		p.inventory.Transactions = append([]exptypes.MempoolTx{tx}, p.inventory.Transactions...)
 		p.inventory.NumRegular++
 		p.inventory.LikelyMineable.RegularTotal += tx.TotalOut
 
 	case stake.TxTypeSStx:
 		tx.TicketStage = ticketStage(tx.Vin, p.txnsStore)
-		p.inventory.InvStake[tx.Hash] = struct{}{}
+		p.inventory.InvStake[tx.TxID] = struct{}{}
 		p.inventory.Tickets = append([]exptypes.MempoolTx{tx}, p.inventory.Tickets...)
 		p.inventory.NumTickets++
 		p.inventory.LikelyMineable.TicketTotal += tx.TotalOut
@@ -303,11 +305,11 @@ func (p *MempoolMonitor) TxHandler(rawTx *chainjson.TxRawResult) error {
 			p.inventory.Unlock()
 			p.mtx.RUnlock()
 			log.Trace("Got a vote for a future block. Waiting to pull it "+
-				"out of mempool with new block signal. Vote: ", tx.Hash)
+				"out of mempool with new block signal. Vote: ", tx.TxID)
 			return nil
 		}
 
-		p.inventory.InvStake[tx.Hash] = struct{}{}
+		p.inventory.InvStake[tx.TxID] = struct{}{}
 		p.inventory.Votes = append([]exptypes.MempoolTx{tx}, p.inventory.Votes...)
 		//sort.Sort(byHeight(p.inventory.Votes))
 		p.inventory.NumVotes++
@@ -326,19 +328,19 @@ func (p *MempoolMonitor) TxHandler(rawTx *chainjson.TxRawResult) error {
 		}
 
 	case stake.TxTypeSSRtx:
-		p.inventory.InvStake[tx.Hash] = struct{}{}
+		p.inventory.InvStake[tx.TxID] = struct{}{}
 		p.inventory.Revocations = append([]exptypes.MempoolTx{tx}, p.inventory.Revocations...)
 		p.inventory.NumRevokes++
 		p.inventory.LikelyMineable.RevokeTotal += tx.TotalOut
 
 	case stake.TxTypeTSpend:
-		p.inventory.InvStake[tx.Hash] = struct{}{}
+		p.inventory.InvStake[tx.TxID] = struct{}{}
 		p.inventory.TSpends = append([]exptypes.MempoolTx{tx}, p.inventory.TSpends...)
 		likelyMineable = false // really depends on vote choices and TreasuryVoteInterval
 		// p.inventory.LikelyMineable.TSpendTotal += tx.TotalOut
 
 	case stake.TxTypeTAdd:
-		p.inventory.InvStake[tx.Hash] = struct{}{}
+		p.inventory.InvStake[tx.TxID] = struct{}{}
 		p.inventory.TAdds = append([]exptypes.MempoolTx{tx}, p.inventory.TAdds...)
 		p.inventory.LikelyMineable.TAddTotal += tx.TotalOut
 
@@ -364,11 +366,11 @@ func (p *MempoolMonitor) TxHandler(rawTx *chainjson.TxRawResult) error {
 	p.inventory.TotalSize += tx.Size
 	if likelyMineable {
 		p.inventory.LikelyMineable.Size += tx.Size
-		p.inventory.LikelyMineable.FormattedSize = exptypes.BytesString(uint64(p.inventory.LikelyMineable.Size))
+		p.inventory.LikelyMineable.FormattedSize = humanize.Bytes(uint64(p.inventory.LikelyMineable.Size))
 		p.inventory.LikelyMineable.Total += tx.TotalOut
 		p.inventory.LikelyMineable.Count++
 	}
-	p.inventory.FormattedTotalSize = exptypes.BytesString(uint64(p.inventory.TotalSize))
+	p.inventory.FormattedTotalSize = humanize.Bytes(uint64(p.inventory.TotalSize))
 
 	// Update per-coin stats incrementally.
 	if p.inventory.CoinStats == nil {
@@ -386,7 +388,14 @@ func (p *MempoolMonitor) TxHandler(rawTx *chainjson.TxRawResult) error {
 	p.mtx.RUnlock()
 	for _, s := range savers {
 		if s != nil {
-			go s.StoreMPData(nil, nil, invCopy)
+			go func(s MempoolDataSaver, inv *exptypes.MempoolInfo) {
+				defer func() {
+					if r := recover(); r != nil {
+						log.Errorf("StoreMPData panicked: %v", r)
+					}
+				}()
+				s.StoreMPData(nil, nil, inv)
+			}(s, invCopy)
 		}
 	}
 
@@ -425,12 +434,8 @@ func (p *MempoolMonitor) Refresh() (*StakeData, []exptypes.MempoolTx, *exptypes.
 	sort.Sort(exptypes.MPTxsByTime(txs))
 	inventory := ParseTxns(txs, p.params, &stakeData.LatestBlock)
 
-	// Reset the counter for tickets since last report.
-	p.mtx.Lock()
-	newTickets := p.mpoolInfo.NumTicketsSinceStatsReport
-	p.mpoolInfo.NumTicketsSinceStatsReport = 0
-
 	// Reset the timer and ticket counter.
+	p.mtx.Lock()
 	p.mpoolInfo.CurrentHeight = uint32(stakeData.LatestBlock.Height)
 	p.mpoolInfo.LastCollectTime = stakeData.Time
 	p.mpoolInfo.NumTicketPurchasesInMempool = stakeData.Ticketfees.FeeInfoMempool.Number
@@ -447,9 +452,6 @@ func (p *MempoolMonitor) Refresh() (*StakeData, []exptypes.MempoolTx, *exptypes.
 	p.addrMap.mtx.Lock()
 	p.addrMap.store = addrOuts
 	p.addrMap.mtx.Unlock()
-
-	// Insert new ticket counter into stakeData structure.
-	stakeData.NewTickets = uint32(newTickets)
 
 	return stakeData, txs, inventory, err
 }

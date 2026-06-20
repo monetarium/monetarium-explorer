@@ -230,7 +230,7 @@ func (m HubMessage) String() string {
 		sigStr += ":" + am.String()
 	case SigNewTx:
 		tx := m.Msg.(*exptypes.MempoolTx)
-		sigStr += ":" + tx.Hash
+		sigStr += ":" + tx.TxID
 	case SigNewTxs:
 		txs := m.Msg.([]*exptypes.MempoolTx)
 		sigStr += ":len=" + strconv.Itoa(len(txs))

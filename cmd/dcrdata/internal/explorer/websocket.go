@@ -238,7 +238,7 @@ func (wsh *WebsocketHub) run() {
 				if !ok || newtx == nil {
 					continue
 				}
-				log.Tracef("Received new tx %s", newtx.Hash)
+				log.Tracef("Received new tx %s", newtx.TxID)
 				wsh.maybeSendTxns(newtx)
 			case sigAddressTx, sigSubscribe, sigUnsubscribe:
 				// explorer's WebsocketHub does not have address subscriptions,

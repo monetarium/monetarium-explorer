@@ -154,6 +154,8 @@ type BlockBasic struct {
 // VARTxCount, VARSize, SKAAmount, SKASubRows, SKAActiveSubRows) from CoinRows.
 // Call this after setting CoinRows. Safe to call more than once on the same
 // BlockBasic — accumulators are reset on entry.
+// Similar flattening exists in home_viewmodel.go:buildHomeBlockRows —
+// keep both in sync when changing coin-row logic.
 func (b *BlockBasic) FlattenCoinRows() {
 	b.VARAmount = ""
 	b.VARTxCount = 0
@@ -351,10 +353,10 @@ type TxBasic struct {
 	Type          string
 	Version       int32
 	FormattedSize string
-	Total         float64        // Deprecated: use TotalRaw
-	TotalRaw      string         // Atom string
-	Fee           dcrutil.Amount // Deprecated: use FeeRaw
-	FeeRaw        string         // Atom string
+	Total         float64
+	TotalRaw      string // Atom string
+	Fee           dcrutil.Amount
+	FeeRaw        string // Atom string
 	FeeRate       dcrutil.Amount
 	FeeRateRaw    string
 	Size          int32
@@ -364,7 +366,7 @@ type TxBasic struct {
 	MixCount     uint32
 	MixDenom     int64
 	CoinType     uint8
-	SKASent      map[uint8]string // Deprecated: use TotalRaw + CoinType
+	SKASent      map[uint8]string
 }
 
 // TrimmedTxInfo for use with /visualblocks
@@ -400,81 +402,68 @@ type TxInfo struct {
 	TicketInfo
 }
 
-// These are the text representations of the various special transaction types.
-// These strings should match the strings returned by txhelpers.TxTypeToString.
-const (
-	TicketTypeStr   = "Ticket"
-	VoteTypeStr     = "Vote"
-	RevTypeStr      = "Revocation"
-	CoinbaseTypeStr = "Coinbase"
-	// What actually happens is treasuryadd burns coins and credits the treasury
-	// account. treasuryspend creates coins and debits the treasury account.
-	// treasurybase is analogous to a coinbase in that it credits the treasury
-	// without spending/burning any coins (aka creates them out of thin air,
-	// just like coinbases do).
-	TreasurybaseTypeStr  = "Treasurybase"
-	TreasuryAddTypeStr   = "Treasury Add"
-	TreasurySpendTypeStr = "Treasury Spend"
-	SSFeeTypeStr         = "Stake Fee"
-)
+// CoinbaseTypeStr is the text representation of a coinbase transaction.
+// This type has no counterpart in txhelpers since coinbase is not a distinct
+// transaction type in the protocol.
+const CoinbaseTypeStr = "Coinbase"
 
 // IsTicket checks whether this transaction is a ticket.
 func (t *TxInfo) IsTicket() bool {
-	return t.Type == TicketTypeStr
+	return t.Type == txhelpers.TxTypeTicket
 }
 
 // IsVote checks whether this transaction is a vote.
 func (t *TxInfo) IsVote() bool {
-	return t.Type == VoteTypeStr
+	return t.Type == txhelpers.TxTypeVote
 }
 
 // IsTreasurySpend checks whether this transaction is a tspend.
 func (t *TxInfo) IsTreasurySpend() bool {
-	return t.Type == TreasurySpendTypeStr
+	return t.Type == txhelpers.TxTypeTreasurySpend
 }
 
 // IsTreasurybase checks whether this transaction is a treasurybase.
 func (t *TxInfo) IsTreasurybase() bool {
-	return t.Type == TreasurybaseTypeStr
+	return t.Type == txhelpers.TxTypeTreasurybase
 }
 
 // IsTreasuryAdd checks whether this transaction is a tadd.
 func (t *TxInfo) IsTreasuryAdd() bool {
-	return t.Type == TreasuryAddTypeStr
+	return t.Type == txhelpers.TxTypeTreasuryAdd
 }
 
 // IsSSFee checks whether this transaction is an SSFee (Stake Fee) tx.
 func (t *TxInfo) IsSSFee() bool {
-	return t.Type == SSFeeTypeStr
+	return t.Type == txhelpers.TxTypeSSFee
 }
 
 // IsRevocation checks whether this transaction is a revocation.
 func (t *TxInfo) IsRevocation() bool {
-	return t.Type == RevTypeStr
+	return t.Type == txhelpers.TxTypeRevocation
 }
 
 // IsLiveTicket verifies the conditions: 1. is a ticket, 2. is mature,
 // 3. hasn't voted, 4. isn't  expired.
 func (t *TxInfo) IsLiveTicket() bool {
-	return t.Type == TicketTypeStr && t.Mature == "True" && t.SpendStatus != "Voted" &&
+	return t.Type == txhelpers.TxTypeTicket && t.Mature == "True" && t.SpendStatus != "Voted" &&
 		t.PoolStatus == "live" && t.TicketLiveBlocks < t.TicketExpiry
 }
 
 // IsExpiredTicket verifies the conditions: 1. is a ticket, 2. is mature,
 // 3. hasn't voted, 4. is past expiration.
 func (t *TxInfo) IsExpiredTicket() bool {
-	return t.Type == TicketTypeStr && t.Mature == "True" && t.SpendStatus != "Voted" &&
+	return t.Type == txhelpers.TxTypeTicket && t.Mature == "True" && t.SpendStatus != "Voted" &&
 		t.PoolStatus == "live" && t.TicketLiveBlocks >= t.TicketExpiry
 }
 
 // IsImmatureTicket verifies the conditions: 1. is a ticket, 2. is not mature.
 func (t *TxInfo) IsImmatureTicket() bool {
-	return t.Type == TicketTypeStr && t.Mature == "False"
+	return t.Type == txhelpers.TxTypeTicket && t.Mature == "False"
 }
 
 // IsImmatureVote verifies the conditions: 1. is a vote, 2. is not mature.
 func (t *TxInfo) IsImmatureVote() bool {
-	return t.Type == VoteTypeStr && t.Mature == "False"
+	return t.Type == txhelpers.TxTypeVote && t.Mature == "False"
 }
 
 // IsImmatureCoinbase verifies the conditions: 1. is coinbase, 2. is not mature.
@@ -485,7 +474,7 @@ func (t *TxInfo) IsImmatureCoinbase() bool {
 // IsImmatureRevocation verifies the conditions: 1. is a revocation, 2. is not
 // mature.
 func (t *TxInfo) IsImmatureRevocation() bool {
-	return t.Type == RevTypeStr && t.Mature == "False"
+	return t.Type == txhelpers.TxTypeRevocation && t.Mature == "False"
 }
 
 // IsImmature indicates if the transaction is immature
@@ -505,6 +494,9 @@ func (t *TxInfo) IsImmature() bool {
 // zero, matching the table. Coinbase and votes are VAR-only (SKA stake rewards
 // flow through separate SSFee txs), so float64 is exact.
 func (t *TxInfo) FeeReward() float64 {
+	if t.TxBasic != nil && t.CoinType != 0 {
+		return 0 // SKA amounts exceed float64 precision; must use SKAValue instead
+	}
 	var out, in float64
 	for i := range t.Vout {
 		out += t.Vout[i].Amount // deprecated field, safe: VAR-only coinbase/vote sets .Amount (CoinType == 0)
@@ -524,7 +516,7 @@ func (t *TxInfo) FeeReward() float64 {
 
 // BlocksToTicketMaturity will return 0 if this isn't an immature ticket.
 func (t *TxInfo) BlocksToTicketMaturity() (blocks int64) {
-	if t.Type != TicketTypeStr {
+	if t.Type != txhelpers.TxTypeTicket {
 		return
 	}
 	if t.Mature == "True" {
@@ -671,8 +663,8 @@ type Vin struct {
 // Vout models basic data about a tx output for display
 type Vout struct {
 	Addresses       []string
-	Amount          float64 // Deprecated: use SKAValue or ValueRaw
-	ValueRaw        string  // Atom string
+	Amount          float64
+	ValueRaw        string // Atom string
 	FormattedAmount string
 	Type            string
 	Spent           bool
@@ -1003,6 +995,9 @@ func (mpi *MempoolInfo) DeepCopy() *MempoolInfo {
 	mps := mpi.MempoolShort.DeepCopy()
 	out.MempoolShort = *mps
 
+	out.Ident = mpi.Ident
+	out.CoinFills = CopyCoinFillSlice(mpi.CoinFills)
+
 	return out
 }
 
@@ -1135,21 +1130,6 @@ func FilterRegularTx(txs []*TrimmedTxInfo) (transactions []*TrimmedTxInfo) {
 	return transactions
 }
 
-func BytesString(s uint64) string {
-	if s < 1000 {
-		return fmt.Sprintf("%d B", s)
-	}
-	e := math.Min(3, math.Floor(math.Log(float64(s))/math.Log(1000)))
-	suffix := []string{"B", "kB", "MB", "GB"}[int(e)]
-	val := math.Round(float64(s)/math.Pow(1000, e)*10) / 10
-	f := "%.0f %s"
-	if val < 10 {
-		f = "%.1f %s"
-	}
-
-	return fmt.Sprintf(f, val, suffix)
-}
-
 // TrimMempoolTxs converts the input []MempoolTx to a []*TrimmedTxInfo.
 func TrimMempoolTxs(txs []MempoolTx) []*TrimmedTxInfo {
 	trimmedTxs := make([]*TrimmedTxInfo, 0, len(txs))
@@ -1182,7 +1162,7 @@ func TrimMempoolTx(tx *MempoolTx) (trimmedTx *TrimmedTxInfo) {
 		TxID:          tx.TxID,
 		Type:          tx.Type,
 		Version:       tx.Version,
-		FormattedSize: BytesString(uint64(tx.Size)),
+		FormattedSize: humanize.Bytes(uint64(tx.Size)),
 		Total:         tx.TotalOut,
 		Fee:           fee,
 		FeeRate:       feeRate,
@@ -1499,7 +1479,6 @@ type MempoolTx struct {
 	VoutCount int            `json:"vout_count"`
 	Vin       []MempoolInput `json:"vin,omitempty"`
 	Coinbase  bool           `json:"coinbase"` // to signal the coinbase tx on new block despite not being in mempool
-	Hash      string         `json:"hash"`     // dup of TxID?
 	Time      int64          `json:"time"`
 	Size      int32          `json:"size"`
 	TotalOut  float64        `json:"total"`
@@ -1770,7 +1749,10 @@ type StatsInfo struct {
 func UnspentOutputIndices(vouts []Vout) (unspents []int) {
 	for idx := range vouts {
 		vout := vouts[idx]
-		if vout.Amount == 0.0 || vout.Spent {
+		if vout.Spent {
+			continue
+		}
+		if vout.SKAValue == "" && vout.Amount == 0.0 {
 			continue
 		}
 		unspents = append(unspents, idx)

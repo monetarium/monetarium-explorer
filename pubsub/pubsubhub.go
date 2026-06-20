@@ -1039,7 +1039,6 @@ func (psh *PubSubHub) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgBl
 		VoutCount: len(coinbaseTx.TxOut),
 		Vin:       exptypes.MsgTxMempoolInputs(coinbaseTx),
 		Coinbase:  true,
-		Hash:      coinbaseHash,
 		Time:      blockData.Header.Time,
 		Size:      int32(coinbaseTx.SerializeSize()),
 		TotalOut:  txhelpers.TotalOutFromMsgTx(coinbaseTx).ToCoin(),

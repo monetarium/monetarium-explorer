@@ -14,14 +14,12 @@ func TestParseTxns_CoinStats(t *testing.T) {
 	lastBlock := &BlockID{Hash: chainhash.Hash{}, Height: 1, Time: 0}
 
 	varTx := exptypes.MempoolTx{
-		Hash:     "aaaa",
 		TxID:     "aaaa",
 		Size:     250,
 		TotalOut: 1.0,
 		TypeID:   0, // regular
 	}
 	skaTx := exptypes.MempoolTx{
-		Hash:      "bbbb",
 		TxID:      "bbbb",
 		Size:      300,
 		TotalOut:  0,
@@ -57,10 +55,10 @@ func TestParseTxns_PerTypeAmounts_VAR(t *testing.T) {
 	lastBlock := &BlockID{Hash: chainhash.Hash{}, Height: 1, Time: 0}
 
 	txs := []exptypes.MempoolTx{
-		{Hash: "r1", TxID: "r1", Size: 100, TotalOut: 1.0, Type: "Regular"},
-		{Hash: "t1", TxID: "t1", Size: 100, TotalOut: 2.0, Type: "Ticket"},
-		{Hash: "v1", TxID: "v1", Size: 100, TotalOut: 3.0, Type: "Vote"},
-		{Hash: "x1", TxID: "x1", Size: 100, TotalOut: 4.0, Type: "Revocation"},
+		{TxID: "r1", Size: 100, TotalOut: 1.0, Type: "Regular"},
+		{TxID: "t1", Size: 100, TotalOut: 2.0, Type: "Ticket"},
+		{TxID: "v1", Size: 100, TotalOut: 3.0, Type: "Vote"},
+		{TxID: "x1", Size: 100, TotalOut: 4.0, Type: "Revocation"},
 	}
 
 	inv := ParseTxns(txs, params, lastBlock)
@@ -95,7 +93,6 @@ func TestParseTxns_PerTypeAmounts_SKA_Precision(t *testing.T) {
 	const bigAtoms = "123456789012345678901"
 	txs := []exptypes.MempoolTx{
 		{
-			Hash:      "s1",
 			TxID:      "s1",
 			Size:      200,
 			TotalOut:  0,
