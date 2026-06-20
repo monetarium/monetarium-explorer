@@ -1048,10 +1048,16 @@ export default class extends Controller {
     if (!option) return
     this.setActiveOptionBtn(option, this.scaleTypeTargets)
     if (!target) return // Exit if running for the first time.
-    if (this.chartsView) {
+    this.settings.scale = option
+    if (this.chartsView && this.rawChartData) {
+      // Re-plot from the cached response so axis options (incl. the log-safety
+      // guard in plotGraph) are recomputed for the new scale. Flipping only
+      // `logscale` would leave a stale valueRange floor that breaks the log
+      // axis (e.g. duration-btw-blocks' [0, null]). No network request.
+      this.plotGraph(this.rawChartName, this.rawChartData)
+    } else if (this.chartsView) {
       this.chartsView.updateOptions({ logscale: option === 'log' })
     }
-    this.settings.scale = option
     this.query.replace(this.settings)
   }
 

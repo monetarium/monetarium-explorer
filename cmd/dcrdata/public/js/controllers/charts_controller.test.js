@@ -336,3 +336,52 @@ describe('ChartsController plotGraph log-axis guard', () => {
     expect(c.rawChartData).toBe(data)
   })
 })
+
+describe('ChartsController setScale', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('re-plots from cached data with the new scale applied before plotting', async () => {
+    const c = makeController()
+    await c.connect()
+    c.rawChartName = 'duration-btw-blocks'
+    c.rawChartData = { t: [1000, 2000], duration: [10, 20] }
+    let scaleAtPlot
+    const plotSpy = vi.spyOn(c, 'plotGraph').mockImplementation(() => {
+      scaleAtPlot = c.settings.scale
+    })
+    plotSpy.mockClear()
+
+    c.setScale({ target: { dataset: { option: 'log' } } })
+
+    expect(c.settings.scale).toBe('log')
+    expect(plotSpy).toHaveBeenCalledTimes(1)
+    expect(plotSpy).toHaveBeenCalledWith('duration-btw-blocks', c.rawChartData)
+    expect(scaleAtPlot).toBe('log') // scale set BEFORE plotGraph runs
+  })
+
+  it('does not trigger a network re-fetch on a scale toggle', async () => {
+    const c = makeController()
+    await c.connect()
+    c.rawChartName = 'missed-votes'
+    c.rawChartData = { t: [1000, 2000], missed: [0, 2] }
+    vi.spyOn(c, 'plotGraph').mockImplementation(() => {})
+    vi.mocked(requestJSON).mockClear()
+
+    c.setScale({ target: { dataset: { option: 'log' } } })
+
+    expect(requestJSON).not.toHaveBeenCalled()
+  })
+
+  it('falls back to updateOptions when no chart data is cached', async () => {
+    const c = makeController()
+    await c.connect()
+    c.rawChartData = null
+    c.chartsView.updateOptions.mockClear()
+
+    c.setScale({ target: { dataset: { option: 'log' } } })
+
+    expect(c.chartsView.updateOptions).toHaveBeenCalledWith({ logscale: true })
+  })
+})
