@@ -88,6 +88,11 @@ export default class extends Controller {
     this.processNightMode = () => this.redrawTheme()
     globalEventBus.on('NIGHT_MODE', this.processNightMode)
 
+    // uPlot resets the x-scale to the full data extent on a chart double-click;
+    // mirror that into the ZOOM control so the highlighted preset doesn't go stale.
+    this.onChartReset = () => this.resetZoomControl()
+    this.chartsViewTarget.addEventListener('dblclick', this.onChartReset)
+
     this.chartSelectTarget.value = this.settings.chart
 
     // Restore the control bar's active state from the persisted URL so a bookmark
@@ -106,10 +111,23 @@ export default class extends Controller {
 
   disconnect() {
     globalEventBus.off('NIGHT_MODE', this.processNightMode)
+    this.chartsViewTarget.removeEventListener('dblclick', this.onChartReset)
     if (this.handle) {
       this.handle.destroy()
       this.handle = null
     }
+  }
+
+  // Sync the ZOOM control after uPlot's double-click reset. uPlot returns the chart
+  // to its full data extent, which corresponds to the 'all' preset, so highlight that
+  // button and persist it. No-op when 'all' is already in effect (avoids redundant
+  // URL writes) or before the first chart exists.
+  resetZoomControl() {
+    if (!this.handle) return
+    if (this.settings.zoom === 'all') return
+    this.settings.zoom = 'all'
+    this.setActiveOptionBtn('all', this.zoomOptionTargets)
+    this.query.replace(this.settings)
   }
 
   async selectChart() {

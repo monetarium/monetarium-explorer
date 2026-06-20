@@ -188,7 +188,14 @@ function makeController() {
   c.chartsViewTarget = {
     classList: { add: vi.fn(), remove: vi.fn() },
     clientWidth: 800,
-    clientHeight: 400
+    clientHeight: 400,
+    listeners: {},
+    addEventListener: vi.fn(function (type, fn) {
+      this.listeners[type] = fn
+    }),
+    removeEventListener: vi.fn(function (type) {
+      delete this.listeners[type]
+    })
   }
   c.ticketsPriceTarget = { checked: true }
   c.ticketsPurchaseTarget = { checked: true }
@@ -420,6 +427,49 @@ describe('ChartsController control handlers', () => {
     c.setMode({ target: modeOpt })
     expect(fakeHandle.setMode).toHaveBeenCalledWith('line')
     expect(mockReplace).toHaveBeenCalledWith(expect.objectContaining({ mode: 'smooth' }))
+  })
+
+  it('double-click resets the ZOOM control to "all" and persists it', async () => {
+    restoreSettings = { chart: 'ticket-pool-size', zoom: 'week' }
+    const c = makeController()
+    const allBtn = optBtn('all')
+    const weekBtn = optBtn('week', true)
+    c.zoomOptionTargets = [allBtn, weekBtn]
+
+    await c.connect()
+    expect(c.settings.zoom).toBe('week')
+    mockReplace.mockClear()
+
+    // Fire the dblclick the controller wired onto the chart container.
+    c.chartsViewTarget.listeners.dblclick()
+
+    expect(c.settings.zoom).toBe('all')
+    expect(allBtn.classList.contains('active')).toBe(true)
+    expect(weekBtn.classList.contains('active')).toBe(false)
+    expect(mockReplace).toHaveBeenCalledWith(expect.objectContaining({ zoom: 'all' }))
+  })
+
+  it('double-click is a no-op when "all" is already active', async () => {
+    restoreSettings = { chart: 'ticket-pool-size', zoom: 'all' }
+    const c = makeController()
+    c.zoomOptionTargets = [optBtn('all', true), optBtn('week')]
+
+    await c.connect()
+    mockReplace.mockClear()
+
+    c.chartsViewTarget.listeners.dblclick()
+
+    expect(mockReplace).not.toHaveBeenCalled()
+  })
+
+  it('disconnect removes the dblclick reset listener', async () => {
+    const c = makeController()
+    await c.connect()
+    c.disconnect()
+    expect(c.chartsViewTarget.removeEventListener).toHaveBeenCalledWith(
+      'dblclick',
+      expect.any(Function)
+    )
   })
 
   it('renderChart rebuilds when series count changes', async () => {
