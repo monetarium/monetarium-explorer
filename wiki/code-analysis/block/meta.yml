@@ -1,0 +1,19 @@
+domain: block
+anchor: ad1ab357
+files:
+  - blockdata/blockdata.go
+  - blockdata/chainmonitor.go
+  - cmd/dcrdata/internal/explorer/explorer.go
+  - cmd/dcrdata/internal/explorer/explorerroutes.go
+  - cmd/dcrdata/internal/explorer/websockethandlers.go
+  - cmd/dcrdata/internal/notification/notifier.go
+  - cmd/dcrdata/public/js/controllers/blocks_controller.js
+  - cmd/dcrdata/public/js/controllers/home_latest_blocks_controller.js
+  - cmd/dcrdata/public/js/controllers/mining_controller.js
+  - cmd/dcrdata/public/js/controllers/supply_controller.js
+  - cmd/dcrdata/views/block.tmpl
+  - db/dbtypes/conversion.go
+  - db/dcrpg/pgblockchain.go
+  - explorer/types/explorertypes.go
+  - pubsub/pubsubhub.go
+  - txhelpers/ssfee.go

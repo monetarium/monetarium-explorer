@@ -20,6 +20,7 @@ import (
 	chainjson "github.com/monetarium/monetarium-node/rpc/jsonrpc/types"
 	"github.com/monetarium/monetarium-node/wire"
 
+	humanize "github.com/dustin/go-humanize"
 	apitypes "github.com/monetarium/monetarium-explorer/api/types"
 	exptypes "github.com/monetarium/monetarium-explorer/explorer/types"
 	"github.com/monetarium/monetarium-explorer/txhelpers"
@@ -152,7 +153,6 @@ func (t *DataCollector) mempoolTxns() ([]exptypes.MempoolTx, txhelpers.MempoolAd
 			Vin:       t.populateMempoolInputs(context.TODO(), msgTx, txType, txnsStore),
 			// Coinbase:  txhelpers.IsCoinBaseTx(msgTx), // commented because coinbase is not in mempool
 
-			Hash:        hashStr, // dup of TxID!
 			Time:        tx.Time,
 			Size:        tx.Size,
 			TotalOut:    dcrutil.Amount(totalOut).ToCoin(),
@@ -223,6 +223,9 @@ func (t *DataCollector) populateMempoolInputs(ctx context.Context, msgTx *wire.M
 								input.SKAValue = txOut.SKAValue.String()
 							}
 						}
+					} else {
+						log.Warnf("Failed to fetch prev tx %s for mempool input: %v",
+							&txIn.PreviousOutPoint.Hash, err)
 					}
 				}
 			}
@@ -372,10 +375,9 @@ func (t *DataCollector) Collect() (*StakeData, []exptypes.MempoolTx, txhelpers.M
 			Height: height,
 			Time:   blockTime,
 		},
-		Time:       now,
-		NumTickets: feeInfo.FeeInfoMempool.Number,
-		NumVotes:   uint32(numVotes),
-		// NewTickets set by CollectAndStore
+		Time:              now,
+		NumTickets:        feeInfo.FeeInfoMempool.Number,
+		NumVotes:          uint32(numVotes),
 		Ticketfees:        feeInfo,
 		MinableFees:       mineables,
 		AllTicketsDetails: allTicketsDetails,
@@ -447,18 +449,18 @@ func ParseTxns(txs []exptypes.MempoolTx, params *chaincfg.Params, lastBlock *Blo
 		out, _ := dcrutil.NewAmount(tx.TotalOut) // 0 for invalid amounts
 		switch stake.TxType(tx.TypeID) {
 		case stake.TxTypeSStx:
-			if _, found := invStake[tx.Hash]; found {
+			if _, found := invStake[tx.TxID]; found {
 				continue
 			}
 			ticketTotal += out
-			invStake[tx.Hash] = struct{}{}
+			invStake[tx.TxID] = struct{}{}
 			tickets = append(tickets, tx)
 
 		case stake.TxTypeSSGen:
-			if _, found := invStake[tx.Hash]; found {
+			if _, found := invStake[tx.TxID]; found {
 				continue
 			}
-			invStake[tx.Hash] = struct{}{}
+			invStake[tx.TxID] = struct{}{}
 			votes = append(votes, tx)
 
 			if tx.VoteInfo == nil {
@@ -482,45 +484,45 @@ func ParseTxns(txs []exptypes.MempoolTx, params *chaincfg.Params, lastBlock *Blo
 			}
 
 		case stake.TxTypeSSRtx:
-			if _, found := invStake[tx.Hash]; found {
+			if _, found := invStake[tx.TxID]; found {
 				continue
 			}
 			revTotal += out
-			invStake[tx.Hash] = struct{}{}
+			invStake[tx.TxID] = struct{}{}
 			revs = append(revs, tx)
 
 		case stake.TxTypeTSpend:
-			if _, found := invStake[tx.Hash]; found {
+			if _, found := invStake[tx.TxID]; found {
 				continue
 			}
-			invStake[tx.Hash] = struct{}{}
+			invStake[tx.TxID] = struct{}{}
 			tspendTotal += out
 			tspends = append(tspends, tx)
 			// mineable depends on vote choices and TreasuryVoteInterval
 
 		case stake.TxTypeTAdd:
-			if _, found := invStake[tx.Hash]; found {
+			if _, found := invStake[tx.TxID]; found {
 				continue
 			}
-			invStake[tx.Hash] = struct{}{}
+			invStake[tx.TxID] = struct{}{}
 			taddTotal += out
 			tadds = append(tadds, tx)
 
 		case stake.TxTypeTreasuryBase:
 			// treasurybase won't be in mempool, but it certainly should not
 			// default to the regular tree txn map.
-			if _, found := invStake[tx.Hash]; found {
+			if _, found := invStake[tx.TxID]; found {
 				continue
 			}
-			invStake[tx.Hash] = struct{}{}
+			invStake[tx.TxID] = struct{}{}
 			log.Warnf("Processed a treasurybase in mempool, which should not happen! %v", tx.TxID)
 
 		default:
-			if _, found := invRegular[tx.Hash]; found {
+			if _, found := invRegular[tx.TxID]; found {
 				continue
 			}
 			regularTotal += out
-			invRegular[tx.Hash] = struct{}{}
+			invRegular[tx.TxID] = struct{}{}
 			regular = append(regular, tx)
 		}
 
@@ -539,7 +541,7 @@ func ParseTxns(txs []exptypes.MempoolTx, params *chaincfg.Params, lastBlock *Blo
 	}
 
 	sort.Sort(exptypes.MPTxsByHeight(votes))
-	formattedSize := exptypes.BytesString(uint64(totalSize))
+	formattedSize := humanize.Bytes(uint64(totalSize))
 
 	// Build per-coin stats: accumulate counts/sizes and amounts natively,
 	// then convert amounts to strings once at the end.
@@ -602,18 +604,20 @@ func ParseTxns(txs []exptypes.MempoolTx, params *chaincfg.Params, lastBlock *Blo
 		} else {
 			for ct, amtStr := range tx.SKATotals {
 				a := getAccum(ct)
+				v, ok := new(big.Int).SetString(amtStr, 10)
+				if !ok {
+					log.Errorf("Failed to parse SKA amount string: %q", amtStr)
+					continue // skip this ct entirely — don't count or accumulate it
+				}
 				a.txCount++
 				a.size += tx.Size
 				if a.skaAmt == nil {
 					a.skaAmt = make(map[uint8]*big.Int)
 				}
-				v, _ := new(big.Int).SetString(amtStr, 10)
-				if v != nil {
-					if a.skaAmt[ct] == nil {
-						a.skaAmt[ct] = new(big.Int)
-					}
-					a.skaAmt[ct].Add(a.skaAmt[ct], v)
+				if a.skaAmt[ct] == nil {
+					a.skaAmt[ct] = new(big.Int)
 				}
+				a.skaAmt[ct].Add(a.skaAmt[ct], v)
 				switch tx.Type {
 				case "Regular":
 					a.regCount++
@@ -690,7 +694,7 @@ func ParseTxns(txs []exptypes.MempoolTx, params *chaincfg.Params, lastBlock *Blo
 			LikelyMineable: exptypes.LikelyMineable{
 				Total:         likelyTotal.ToCoin(),
 				Size:          likelySize,
-				FormattedSize: exptypes.BytesString(uint64(likelySize)),
+				FormattedSize: humanize.Bytes(uint64(likelySize)),
 				RegularTotal:  regularTotal.ToCoin(),
 				TicketTotal:   ticketTotal.ToCoin(),
 				VoteTotal:     voteTotal.ToCoin(),

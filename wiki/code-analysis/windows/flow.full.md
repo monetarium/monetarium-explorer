@@ -7,19 +7,19 @@ default 144). For each window the table shows the index, end block, per-window
 sums of regular txs / votes / fresh tickets / revocations, total size, and the
 window's difficulty and `MAX(sbits)` ticket price. The page is fully
 server-rendered Go HTML (`windows.tmpl`); no REST or WebSocket consumes this
-flow. Refreshed at `HEAD=3cdba1e7`.
+flow. Refreshed at `HEAD=607299f2`.
 
 ### Section 2 — End-to-End Data Flow
 
 ```text
 monetarium-node JSON-RPC (block ingest, separate flow)
     → PostgreSQL  blocks  table          (num_rtx, voters, fresh_stake, revocations, size, sbits, difficulty, coin_tx_stats, is_mainchain)
-        → SelectWindowsByLimit            (db/dcrpg/internal/blockstmts.go:131)
+        → SelectWindowsByLimit            (db/dcrpg/internal/blockstmts.go:134)
         → retrieveWindowBlocks            (db/dcrpg/queries.go:856) — Scan → parseCoinTxStats → BlocksGroupedInfo build
-            → (*ChainDB).PosIntervals     (db/dcrpg/pgblockchain.go:1815) — adds queryTimeout + replaceCancelError
-                → dataSource interface    (cmd/dcrdata/internal/explorer/explorer.go:95)
-                    → (*explorerUI).StakeDiffWindows handler (cmd/dcrdata/internal/explorer/explorerroutes.go:364)
-                        → exp.templates.exec("windows", ...) (explorerroutes.go:411)
+            → (*ChainDB).PosIntervals     (db/dcrpg/pgblockchain.go:1846) — adds queryTimeout + replaceCancelError
+                → dataSource interface    (cmd/dcrdata/internal/explorer/explorer.go:96)
+                    → (*explorerUI).StakeDiffWindows handler (cmd/dcrdata/internal/explorer/explorerroutes.go:423)
+                        → exp.templates.exec("windows", ...) (explorerroutes.go:467)
                             → views/windows.tmpl rendering   → HTTP HTML response
 ```
 
@@ -32,7 +32,7 @@ only client-side behavior is the `data-controller="pagenavigation"` pager and a
 
 **3.1 PostgreSQL `blocks` table (source of truth)**
 
-- **Location:** `db/dcrpg/internal/blockstmts.go:131` (`SelectWindowsByLimit`).
+- **Location:** `db/dcrpg/internal/blockstmts.go:134` (`SelectWindowsByLimit`).
 - **Data structures (DB columns read):** `height`, `num_rtx`, `fresh_stake`,
   `voters`, `revocations`, `size`, `sbits` (ticket price atoms), `difficulty`,
   `time`, `is_mainchain`, and the JSONB column `coin_tx_stats`
@@ -52,7 +52,7 @@ only client-side behavior is the `data-controller="pagenavigation"` pager and a
 
 - **Location:** `db/dcrpg/queries.go:856` (`retrieveWindowBlocks`),
   `db/dcrpg/queries.go:828` (`parseCoinTxStats`),
-  `db/dcrpg/pgblockchain.go:1815` (`(*ChainDB).PosIntervals`).
+  `db/dcrpg/pgblockchain.go:1846` (`(*ChainDB).PosIntervals`).
 - **Data structures:** `dbtypes.BlocksGroupedInfo` (`db/dbtypes/types.go:816`),
   `dbtypes.CoinTxStats` (`db/dbtypes/types.go:2222`).
 - **Transformations:**
@@ -87,19 +87,19 @@ only client-side behavior is the `data-controller="pagenavigation"` pager and a
 
 **3.3 Explorer handler (HTTP boundary)**
 
-- **Location:** `cmd/dcrdata/internal/explorer/explorerroutes.go:364`
+- **Location:** `cmd/dcrdata/internal/explorer/explorerroutes.go:423`
   (`(*explorerUI).StakeDiffWindows`), interface at
-  `cmd/dcrdata/internal/explorer/explorer.go:95`
+  `cmd/dcrdata/internal/explorer/explorer.go:96`
   (`dataSource.PosIntervals`), mock at
-  `cmd/dcrdata/internal/explorer/explorer_test.go:103`.
+  `cmd/dcrdata/internal/explorer/explorer_test.go:109`.
 - **Route:** `r.Get("/ticketpricewindows", explore.StakeDiffWindows)`
   (`cmd/dcrdata/main.go:734`).
 - **Transformations:**
   - Parses `?offset=<uint>&rows=<uint>`, returns `400` on parse error.
-  - Computes `bestWindow = Height() / StakeDiffWindowSize`; clamps
+  - Computes `bestWindow = Height() / StakeDiffWindowSize` (`explorerroutes.go:447`); clamps
     `offsetWindow ≤ bestWindow`; clamps `rows` to
     `[minExplorerRows, maxExplorerRows]` (default `minExplorerRows`).
-  - Calls `exp.dataSource.PosIntervals(ctx, rows, offsetWindow)` on the
+  - Calls `exp.dataSource.PosIntervals(ctx, rows, offsetWindow)` (`explorerroutes.go:453`) on the
     `dataSource` interface (production: `*dcrpg.ChainDB`). Timeout errors are
     handled separately from "not found" via `exp.timeoutErrorPage`; any other
     error renders `ExpStatusNotFound` (the message literally references "ticket
@@ -109,7 +109,7 @@ only client-side behavior is the `data-controller="pagenavigation"` pager and a
     `Pages: calcPages(int(bestWindow), int(rows), int(offsetWindow),
     linkTemplate)` where
     `linkTemplate = "/ticketpricewindows?offset=%d&rows=" + rows`.
-  - Calls `exp.templates.exec("windows", ...)` and writes the rendered HTML.
+  - Calls `exp.templates.exec("windows", ...)` (`explorerroutes.go:467`) and writes the rendered HTML.
 
 **3.4 Template (presentation)**
 
@@ -148,9 +148,9 @@ only client-side behavior is the `data-controller="pagenavigation"` pager and a
 - **SQL `$1` ↔ `pgb.chainParams.StakeDiffWindowSize` ↔ handler
   `exp.ChainParams.StakeDiffWindowSize`** must all be the same value. There is
   no DB-level check; they're wired by convention. Three callsites:
-  `SelectWindowsByLimit` (`blockstmts.go:131`), `PosIntervals`
-  (`pgblockchain.go:1819`), and handler (`explorerroutes.go:387` /
-  `:423`).
+  `SelectWindowsByLimit` (`blockstmts.go:134`), `PosIntervals`
+  (`pgblockchain.go:1849`), and handler (`explorerroutes.go:447` /
+  `:479`).
 - **Positional `rows.Scan` ↔ SQL SELECT list ordering.** 11 columns; reorder
   on either side silently swaps values into the wrong destination — see
   `queries.go:875` against `blockstmts.go:131`. A column count change is a
@@ -166,8 +166,8 @@ only client-side behavior is the `data-controller="pagenavigation"` pager and a
   aggregate as `[]map[string]CoinTxStats` (the `[]` from `JSONB_AGG`, the
   string key because JSON object keys are strings).
 - **Interface boundary at `dataSource.PosIntervals`** —
-  `cmd/dcrdata/internal/explorer/explorer.go:95` and mock at
-  `explorer_test.go:103` must move in lockstep with the prod
+  `cmd/dcrdata/internal/explorer/explorer.go:96` and mock at
+  `explorer_test.go:109` must move in lockstep with the prod
   `*ChainDB.PosIntervals` signature.
 
 ### Section 5 — Critical Constraints
@@ -276,20 +276,20 @@ Summary of what to check before editing this flow:
 
 Routing / handler:
 - `cmd/dcrdata/main.go:734` — `r.Get("/ticketpricewindows", explore.StakeDiffWindows)`.
-- `cmd/dcrdata/internal/explorer/explorerroutes.go:364` — `StakeDiffWindows`.
-- `cmd/dcrdata/internal/explorer/explorerroutes.go:387` — `bestWindow := uint64(exp.Height() / exp.ChainParams.StakeDiffWindowSize)`.
-- `cmd/dcrdata/internal/explorer/explorerroutes.go:397` — `exp.dataSource.PosIntervals(ctx, rows, offsetWindow)`.
-- `cmd/dcrdata/internal/explorer/explorerroutes.go:411` — `exp.templates.exec("windows", ...)`.
+- `cmd/dcrdata/internal/explorer/explorerroutes.go:423` — `StakeDiffWindows`.
+- `cmd/dcrdata/internal/explorer/explorerroutes.go:447` — `bestWindow := uint64(exp.Height() / exp.ChainParams.StakeDiffWindowSize)`.
+- `cmd/dcrdata/internal/explorer/explorerroutes.go:453` — `exp.dataSource.PosIntervals(ctx, rows, offsetWindow)`.
+- `cmd/dcrdata/internal/explorer/explorerroutes.go:467` — `exp.templates.exec("windows", ...)`.
 
 Interface / mock:
-- `cmd/dcrdata/internal/explorer/explorer.go:95` — `dataSource.PosIntervals` interface method.
-- `cmd/dcrdata/internal/explorer/explorer_test.go:103` — `mockDataSource.PosIntervals`.
+- `cmd/dcrdata/internal/explorer/explorer.go:96` — `dataSource.PosIntervals` interface method.
+- `cmd/dcrdata/internal/explorer/explorer_test.go:109` — `mockDataSource.PosIntervals`.
 
 DB / queries:
-- `db/dcrpg/pgblockchain.go:1815` — `(*ChainDB).PosIntervals` (queryTimeout + replaceCancelError).
+- `db/dcrpg/pgblockchain.go:1846` — `(*ChainDB).PosIntervals` (queryTimeout + replaceCancelError).
 - `db/dcrpg/queries.go:856` — `retrieveWindowBlocks` (height-range math + 11-col Scan + builder).
 - `db/dcrpg/queries.go:828` — `parseCoinTxStats` (JSONB aggregate, lenient fallback).
-- `db/dcrpg/internal/blockstmts.go:131` — `SelectWindowsByLimit` SQL.
+- `db/dcrpg/internal/blockstmts.go:134` — `SelectWindowsByLimit` SQL.
 
 Types / helpers:
 - `db/dbtypes/types.go:816` — `BlocksGroupedInfo` struct.

@@ -1,0 +1,8 @@
+domain: page-rendering
+anchor: a8a64e4b
+files:
+  - cmd/dcrdata/internal/explorer/explorer.go
+  - cmd/dcrdata/internal/explorer/explorermiddleware.go
+  - cmd/dcrdata/internal/explorer/explorerroutes.go
+  - cmd/dcrdata/internal/explorer/hashrate_shares.go
+  - cmd/dcrdata/main.go

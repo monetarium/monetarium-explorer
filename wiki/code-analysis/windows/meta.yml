@@ -1,0 +1,10 @@
+domain: windows
+anchor: 607299f2
+files:
+  - cmd/dcrdata/internal/explorer/explorer.go
+  - cmd/dcrdata/internal/explorer/explorerroutes.go
+  - cmd/dcrdata/views/windows.tmpl
+  - db/dbtypes/types.go
+  - db/dcrpg/internal/blockstmts.go
+  - db/dcrpg/pgblockchain.go
+  - db/dcrpg/queries.go

@@ -51,17 +51,19 @@ PostgreSQL `vins.value_in` deltas → `pgb.coinSupply` fetcher (registered as a 
   - **Data Structures:** `pageData.HomeInfo.SKACoinSupply []SKACoinSupplyEntry`, page payload `{*CommonPageData, Premine, TargetPoolSize, ActiveSKATypes []uint8}`.
   - **Transformations:** Reads home-info SKA supply under the existing `RLock`, projects active coin types into `ActiveSKATypes`, hands to template. Chart options for SKA exist only for coins with non-zero supply.
 
-- **Location:** `cmd/dcrdata/views/charts.tmpl:40-41`
-  - **Transformations:** `<option value="coin-supply/0">Circulation (VAR)</option>` followed by a `range $t := .ActiveSKATypes` loop emitting `<option value="coin-supply/{{$t}}">Circulation (SKA{{$t}})</option>`. The legacy bare `coin-supply` value is **deprecated** in favor of `coin-supply/0`.
+- **Location:** `cmd/dcrdata/views/charts.tmpl:33-41`
+  - **Transformations:** `<option value="coin-supply/0">Circulation (VAR)</option>` (line 33) followed by a `range $t := .ActiveSKATypes` loop emitting `<option value="coin-supply/{{$t}}">Circulation (SKA{{$t}})</option>` (line 34). A separate fees loop at line 36. Line 41 adds `<option value="hashrate-shares">Hashrate Shares</option>` — the only option that triggers cross-page navigation via `Turbolinks.visit` instead of a data fetch. The legacy bare `coin-supply` value is **deprecated** in favor of `coin-supply/0`. Lines 197–205 contain the hashrate `intervalSelector` (hidden unless `hashrate` is selected), now including a Month button (line 203) that was previously absent.
 
 - **Location:** `cmd/dcrdata/public/js/controllers/charts_controller.js`
   - **Data Structures:** Dygraph `[x, y, …]` rows. SKA: `this._skaSupplyRaw: string[]` retains the original 18-decimal atom strings; `coinLabel` from `renderCoinType(coinType)` (`'VAR'` / `'SKA{n}'`).
   - **Transformations:**
-    - `skaCoinTypeFromChart(name)` (line 60) — parses `coin-supply/{N}` → 0 if not 1..255.
-    - `isCoinSupplyChart(name)` (line 70) — collapses both legacy `coin-supply` and `coin-supply/{N}` for the switch dispatch (`switchKey` at line 528).
-    - VAR branch (line 688) — `circulationFunc(data)` (line 300) does `supplies[i] * atomsToVAR` (i.e. `*1e-8`), tracks `inflation` via `blockReward(h)` per block, projects 6 months into the future. Legend uses `intComma(y)` + 'VAR'.
-    - SKA branch (line 661-687) — multiplies the supply string by `1e-18` via `Number(s) * 1e-18` for the plotted line (precision-lossy, accepted by spec §5), but for the **legend** it pulls `this._skaSupplyRaw[i]` and renders via `formatSkaAtomsExact(raw)` (which calls `splitSkaAtomsNoTrailing` from `ska_helper.js`). The legend therefore preserves all 18 decimals (spec §4); the plotted Y value does not.
-    - `legendFormatter` (line 136) — now logs `console.warn` for unknown chart types (added by `ddf17358`'s `default:` case at line 806).
+    - `skaCoinTypeFromChart(name)` (line 58) — parses `coin-supply/{N}` → 0 if not 1..255.
+    - `isCoinSupplyChart(name)` (line 68) — collapses both legacy `coin-supply` and `coin-supply/{N}` for the switch dispatch (`switchKey`).
+    - `selectChart()` (line 853) — **`hashrate-shares` short-circuit**: when the `<select>` resolves to `'hashrate-shares'`, the handler calls `Turbolinks.visit('/hashrate-shares')` (line 856) and returns immediately without loading any chart data. Every other selection proceeds to fetch `/api/chart/{type}`. This is the only `<select>` option that navigates cross-page rather than loading data in the current page.
+    - `selectChart()` (lines 878–883) — **`chart-hashrate` CSS class toggle**: adds the class `chart-hashrate` to `chartsViewTarget` when the `hashrate` chart is selected; removes it for every other chart. This class-gates the SCSS rule `.chartview.chart-hashrate .dygraph-y2label { color: #c60 }` ([cmd/dcrdata/public/scss/charts.scss:260](../../../cmd/dcrdata/public/scss/charts.scss)) so the Active Miners y2-axis label inherits the series line color in light mode. Dark mode inherits the generic `.chartview .dygraph-y2label { color: #2970ff }` rule ([:264](../../../cmd/dcrdata/public/scss/charts.scss)), so no second hashrate-specific dark rule is needed.
+    - VAR branch (line 685) — `circulationFunc(data)` (line 308) does `supplies[i] * atomsToVAR` (i.e. `*1e-8`), tracks `inflation` via `blockReward(h)` per block, projects 6 months into the future. Legend uses `intComma(y)` + 'VAR'.
+    - SKA branch (lines 659–683) — multiplies the supply string by `1e-18` via `Number(s) * 1e-18` for the plotted line (precision-lossy, accepted by spec §5), but for the **legend** it pulls `this._skaSupplyRaw[i]` (line 660) and renders via `formatSkaAtomsExact(raw)` (line 675–676, which calls `splitSkaAtomsNoTrailing` from `ska_helper.js`). The legend therefore preserves all 18 decimals (spec §4); the plotted Y value does not.
+    - `legendFormatter` — logs `console.warn` for unknown chart types (added by `ddf17358`'s `default:` case).
 
 ### 4. Cross-Layer Dependencies
 
@@ -131,10 +133,11 @@ When modifying chart data structures or pipelines, check ALL of:
 - **SQL:** `db/dcrpg/internal/vinoutstmts.go:130-138` (`SelectCoinSupply`), `:251-259` (`SelectSKACoinSupplyPerBlock`), `:261-269` (`SelectVARCoinSupplyPerBlock`).
 - **API handler & routing:** `cmd/dcrdata/internal/api/apiroutes.go:1942-1975` (`ChartTypeData`); `cmd/dcrdata/internal/api/apirouter.go:240-243`; `cmd/dcrdata/internal/middleware/apimiddleware.go:796-815`.
 - **Page handler & template:** `cmd/dcrdata/internal/explorer/explorerroutes.go:1911-1943` (`Charts`); `cmd/dcrdata/views/charts.tmpl:40-41` (dropdown).
-- **Frontend controller:** `cmd/dcrdata/public/js/controllers/charts_controller.js:60-77` (`skaCoinTypeFromChart`, `isCoinSupplyChart`, `formatSkaAtomsExact`); `:285-293` (`percentStakedFunc`); `:300-350` (`circulationFunc`); `:506-720` (`plotGraph`, with the `coin-supply` switch arm at `:661-720`); `:806-808` (default branch).
+- **Frontend controller:** `cmd/dcrdata/public/js/controllers/charts_controller.js:58-79` (`skaCoinTypeFromChart`, `isCoinSupplyChart`, `isSKAFeeChart`, `formatSkaAtomsExact`); `:308` (`circulationFunc`); `:509-513` (`isSKA`/`coinType`/`coinLabel`/`switchKey`); `:659-693` (`plotGraph` `coin-supply` switch arm — SKA branch `:659-683`, VAR branch `:685-693`); `:853-858` (`selectChart` — `hashrate-shares` Turbolinks short-circuit); `:878-883` (`selectChart` — `chart-hashrate` CSS class toggle).
+- **Charts SCSS:** `cmd/dcrdata/public/scss/charts.scss:256-266` (`.chartview .dygraph-y2label` light/dark defaults; `.chartview.chart-hashrate .dygraph-y2label { color: #c60 }` hashrate override at `:260`).
 - **JS helpers:** `cmd/dcrdata/public/js/helpers/ska_helper.js:16` (`renderCoinType`), `:38` (`splitSkaAtoms`), `:78` (`splitSkaAtomsNoTrailing`).
 - **Spec source:** `wiki/specs/chart-ska-coin-supply/spec.md`.
-- **Key commits:** `538d5cd1` initial SKA chart support; `3e6d14cf` per-SKA endpoints; `19a114c1` cumulative + height alignment; `a9db4b3b` `h` field on time-axis; `ddf17358` frontend integration & default-case logging; `4af1009f` test/mock additions.
+- **Key commits:** `538d5cd1` initial SKA chart support; `3e6d14cf` per-SKA endpoints; `19a114c1` cumulative + height alignment; `a9db4b3b` `h` field on time-axis; `ddf17358` frontend integration & default-case logging; `4af1009f` test/mock additions; `9f8bad1a`/`10e47bed` hashrate-shares cross-page navigation + Turbolinks; `8e9449e4` `chart-hashrate` y2label color; `d5eb8cef` Month interval button.
 
 See also:
 

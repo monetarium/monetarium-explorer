@@ -72,14 +72,14 @@ views/sidechains.tmpl  →  HTML response
 
 ### Handler
 
-- **Location:** [cmd/dcrdata/internal/explorer/explorerroutes.go:214-243](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L214-L243)
+- **Location:** [cmd/dcrdata/internal/explorer/explorerroutes.go:273-296](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L273-L296)
 - **Logic:** call `dataSource.SideChainBlocks(ctx)`; on context-deadline error, render the timeout error page via `exp.timeoutErrorPage`; on any other error, render `StatusPage(defaultErrorCode, "failed to retrieve side chain blocks", ...)`; otherwise execute the `"sidechains"` template with `{ *CommonPageData, Data []*dbtypes.BlockStatus }`.
 - **No mutation, no derived fields, no per-coin handling.** The handler is a thin pass-through.
 
 ### DataSource interface
 
-- **Location:** [cmd/dcrdata/internal/explorer/explorer.go:84](../../../cmd/dcrdata/internal/explorer/explorer.go#L84) — `SideChainBlocks(context.Context) ([]*dbtypes.BlockStatus, error)`
-- **Test mock:** [cmd/dcrdata/internal/explorer/explorer_test.go:70](../../../cmd/dcrdata/internal/explorer/explorer_test.go#L70) — fan-out point if the signature ever changes (see [address/impact.md](../address/impact.md) for the analogous coin-filter signature fan-out lesson).
+- **Location:** [cmd/dcrdata/internal/explorer/explorer.go:85](../../../cmd/dcrdata/internal/explorer/explorer.go#L85) — `SideChainBlocks(context.Context) ([]*dbtypes.BlockStatus, error)`
+- **Test mock:** [cmd/dcrdata/internal/explorer/explorer_test.go:76](../../../cmd/dcrdata/internal/explorer/explorer_test.go#L76) — fan-out point if the signature ever changes (see [address/impact.md](../address/impact.md) for the analogous coin-filter signature fan-out lesson).
 
 ### ChainDB read method
 
@@ -88,7 +88,7 @@ views/sidechains.tmpl  →  HTML response
 
 ### SQL query + Scan
 
-- **SQL:** [db/dcrpg/internal/blockstmts.go:177-181](../../../db/dcrpg/internal/blockstmts.go#L177-L181)
+- **SQL:** [db/dcrpg/internal/blockstmts.go:180-184](../../../db/dcrpg/internal/blockstmts.go#L180-L184)
   ```sql
   SelectSideChainBlocks = `SELECT is_valid, height, previous_hash, hash, block_chain.next_hash
       FROM blocks
@@ -96,7 +96,7 @@ views/sidechains.tmpl  →  HTML response
       WHERE is_mainchain = FALSE
       ORDER BY height DESC;`
   ```
-- **Scan:** [db/dcrpg/queries.go:3974-3994](../../../db/dcrpg/queries.go#L3974-L3994)
+- **Scan:** [db/dcrpg/queries.go:4085-4097](../../../db/dcrpg/queries.go#L4085-L4097)
   ```go
   err = rows.Scan(&bs.IsValid, &bs.Height, &bs.PrevHash, &bs.Hash, &bs.NextHash)
   ```
@@ -104,7 +104,7 @@ views/sidechains.tmpl  →  HTML response
 
 ### `BlockStatus` shared struct
 
-- **Location:** [db/dbtypes/types.go:2275-2282](../../../db/dbtypes/types.go#L2275-L2282)
+- **Location:** [db/dbtypes/types.go:2274-2282](../../../db/dbtypes/types.go#L2274-L2282)
   ```go
   type BlockStatus struct {
       IsValid     bool
@@ -116,10 +116,10 @@ views/sidechains.tmpl  →  HTML response
   }
   ```
 - **Reused by 4 SQL queries with different column subsets:**
-  - `SelectSideChainBlocks` (this flow) — 5 cols, skips `is_mainchain`. See [db/dcrpg/internal/blockstmts.go:170-174](../../../db/dcrpg/internal/blockstmts.go#L170-L174).
-  - `SelectBlockStatus` — 6 cols, all fields. See [db/dcrpg/internal/blockstmts.go:176-179](../../../db/dcrpg/internal/blockstmts.go#L176-L179) and [db/dcrpg/queries.go:4040-4051](../../../db/dcrpg/queries.go#L4040-L4051).
-  - `SelectBlockStatuses` — 3 cols (height-keyed status lookup). See [db/dcrpg/internal/blockstmts.go:181-183](../../../db/dcrpg/internal/blockstmts.go#L181-L183) and the Scan around [db/dcrpg/queries.go:4060-4070](../../../db/dcrpg/queries.go#L4060-L4070).
-  - `SelectDisapprovedBlocks` (`/disapproved` page) — 5 cols, skips `is_valid` (the WHERE already filters `is_valid=false`). See [db/dcrpg/internal/blockstmts.go:189-193](../../../db/dcrpg/internal/blockstmts.go#L189-L193).
+  - `SelectSideChainBlocks` (this flow) — 5 cols, skips `is_mainchain`. See [db/dcrpg/internal/blockstmts.go:180-184](../../../db/dcrpg/internal/blockstmts.go#L180-L184).
+  - `SelectBlockStatus` — 6 cols, all fields. See [db/dcrpg/internal/blockstmts.go:186-190](../../../db/dcrpg/internal/blockstmts.go#L186-L190) and [db/dcrpg/queries.go:4152-4157](../../../db/dcrpg/queries.go#L4152-L4157).
+  - `SelectBlockStatuses` — 3 cols (height-keyed status lookup). See [db/dcrpg/internal/blockstmts.go:191-198](../../../db/dcrpg/internal/blockstmts.go#L191-L198) and the Scan around [db/dcrpg/queries.go:4160-4170](../../../db/dcrpg/queries.go#L4160-L4170).
+  - `SelectDisapprovedBlocks` (`/disapproved` page) — 5 cols, skips `is_valid` (the WHERE already filters `is_valid=false`). See [db/dcrpg/internal/blockstmts.go:199-204](../../../db/dcrpg/internal/blockstmts.go#L199-L204).
 - **Implication:** any reordering or addition of fields on `BlockStatus`, or any column reordering in any of these four queries, breaks at least one positional `Scan` silently (wrong field gets the value) or loudly (`sql.Scan: expected N destinations, got M`).
 
 ### Template
@@ -133,22 +133,22 @@ views/sidechains.tmpl  →  HTML response
 There are **two and only two** writer paths that populate the rows /side reads:
 
 1. **Startup batch import** (gated by the `ImportSideChains` config flag).
-   - Flag definition: [cmd/dcrdata/config.go:151](../../../cmd/dcrdata/config.go#L151) — marked *experimental*, defaults to `false`. Env: `DCRDATA_IMPORT_SIDE_CHAINS`.
-   - Caller: [cmd/dcrdata/main.go:885-960](../../../cmd/dcrdata/main.go#L885-L960). Calls `chainDB.MissingSideChainBlocks(ctx)` then loops over each `SideChain.Hashes`, calls `collector.CollectHash(&blockHash)` + `chainDB.StoreBlock(msgBlock, /*isValid*/ true, /*isMainchain*/ false, ...)`.
-   - `MissingSideChainBlocks`: [db/dcrpg/pgblockchain.go:345-401](../../../db/dcrpg/pgblockchain.go#L345-L401) — drives off `rpcutils.SideChains(pgb.Client)` (filters `getchaintips` results by status `valid-headers` / `valid-fork`, see [rpcutils/rpcclient.go:315-322](../../../rpcutils/rpcclient.go#L315-L322)) and walks each tip backwards via `rpcutils.SideChainFull` ([rpcutils/rpcclient.go:334-371](../../../rpcutils/rpcclient.go#L334-L371)).
-   - `StoreBlock` writes a `block_chain` row for each side-chain block with `isMainchain=false`. The `block_chain` row is inserted via `insertBlockPrevNext` ([db/dcrpg/queries.go:3873](../../../db/dcrpg/queries.go#L3873)). Side-chain blocks **skip** the `updateLastBlock` chain-linking when the previous block is mainchain ([db/dcrpg/pgblockchain.go:4058-4076](../../../db/dcrpg/pgblockchain.go#L4058-L4076)) — so /side rows whose `PrevHash` points at a mainchain block correctly leave the mainchain block's `next_hash` alone.
+   - Flag definition: [cmd/dcrdata/config.go:147](../../../cmd/dcrdata/config.go#L147) — marked *experimental*, defaults to `false`. Env: `DCRDATA_IMPORT_SIDE_CHAINS`.
+   - Caller: [cmd/dcrdata/main.go:855-927](../../../cmd/dcrdata/main.go#L855-L927). Calls `chainDB.MissingSideChainBlocks(ctx)` then loops over each `SideChain.Hashes`, calls `collector.CollectHash(&blockHash)` + `chainDB.StoreBlock(msgBlock, /*isValid*/ true, /*isMainchain*/ false, ...)`.
+   - `MissingSideChainBlocks`: [db/dcrpg/pgblockchain.go:341-401](../../../db/dcrpg/pgblockchain.go#L341-L401) — drives off `rpcutils.SideChains(pgb.Client)` (filters `getchaintips` results by status `valid-headers` / `valid-fork`, see [rpcutils/rpcclient.go:315-322](../../../rpcutils/rpcclient.go#L315-L322)) and walks each tip backwards via `rpcutils.SideChainFull` ([rpcutils/rpcclient.go:334-371](../../../rpcutils/rpcclient.go#L334-L371)).
+   - `StoreBlock` writes a `block_chain` row for each side-chain block with `isMainchain=false`. The `block_chain` row is inserted via `insertBlockPrevNext` ([db/dcrpg/queries.go:3969](../../../db/dcrpg/queries.go#L3969)). Side-chain blocks **skip** the `updateLastBlock` chain-linking when the previous block is mainchain ([db/dcrpg/pgblockchain.go:4056-4085](../../../db/dcrpg/pgblockchain.go#L4056-L4085)) — so /side rows whose `PrevHash` points at a mainchain block correctly leave the mainchain block's `next_hash` alone.
 
 2. **Live reorg** (every running instance, no flag).
-   - Notifier registers reorg handlers at [cmd/dcrdata/main.go:1066-1068](../../../cmd/dcrdata/main.go#L1066-L1068).
+   - Notifier registers reorg handlers at [cmd/dcrdata/main.go:1036-1038](../../../cmd/dcrdata/main.go#L1036-L1038).
    - `db/dcrpg.ChainMonitor.ReorgHandler` ([db/dcrpg/chainmonitor.go:139-175](../../../db/dcrpg/chainmonitor.go#L139-L175)) sets `InReorg=true`, calls `switchToSideChain(reorg)` ([db/dcrpg/chainmonitor.go:34-…](../../../db/dcrpg/chainmonitor.go#L34)).
-   - `switchToSideChain` → `ChainDB.TipToSideChain(mainRoot)` ([db/dcrpg/pgblockchain.go:3647-…](../../../db/dcrpg/pgblockchain.go#L3647)) walks from the current tip down to the common ancestor, calling `setMainchainByBlockHash(tipHash, false)` ([db/dcrpg/queries.go:4200-4203](../../../db/dcrpg/queries.go#L4200-L4203), backed by `UpdateBlockMainchain` in [db/dcrpg/internal/blockstmts.go:211](../../../db/dcrpg/internal/blockstmts.go#L211)) for each block. The same loop also flips `is_mainchain` on transactions, votes, tickets, addresses, and clears spent-vout markers via `clearVoutAllSpendTxRowIDs`.
+   - `switchToSideChain` → `ChainDB.TipToSideChain(mainRoot)` ([db/dcrpg/pgblockchain.go:3689](../../../db/dcrpg/pgblockchain.go#L3689)) walks from the current tip down to the common ancestor, calling `setMainchainByBlockHash(tipHash, false)` ([db/dcrpg/queries.go:4301-4304](../../../db/dcrpg/queries.go#L4301-L4304), backed by `UpdateBlockMainchain` in [db/dcrpg/internal/blockstmts.go:214](../../../db/dcrpg/internal/blockstmts.go#L214)) for each block. The same loop also flips `is_mainchain` on transactions, votes, tickets, addresses, and clears spent-vout markers via `clearVoutAllSpendTxRowIDs`.
    - The new mainchain branch then comes in through the normal block-connect path.
 
 **Observation:** the reorg writer path mutates only the `blocks.is_mainchain` column on existing rows; it does **not** insert new `block_chain` rows for the demoted blocks (they already exist from when they were mainchain). The startup import path is the only one that *inserts* fresh `block_chain` rows for side blocks the explorer has never seen as mainchain.
 
 ## Section 4 — Cross-Layer Dependencies
 
-- **Handler ↔ DataSource interface:** the `SideChainBlocks(ctx)` method is one of ~30 methods on the `dataSource` interface ([cmd/dcrdata/internal/explorer/explorer.go:80-110](../../../cmd/dcrdata/internal/explorer/explorer.go#L80-L110)). The test mock at [cmd/dcrdata/internal/explorer/explorer_test.go:70](../../../cmd/dcrdata/internal/explorer/explorer_test.go#L70) must track the signature.
+- **Handler ↔ DataSource interface:** the `SideChainBlocks(ctx)` method is one of ~30 methods on the `dataSource` interface ([cmd/dcrdata/internal/explorer/explorer.go:80-110](../../../cmd/dcrdata/internal/explorer/explorer.go#L80-L110)). The test mock at [cmd/dcrdata/internal/explorer/explorer_test.go:76](../../../cmd/dcrdata/internal/explorer/explorer_test.go#L76) must track the signature.
 - **SQL ↔ Scan ↔ Struct:** **three independent files** must stay in lockstep — `blockstmts.go` (SELECT column list), `queries.go` (`rows.Scan` destinations), `db/dbtypes/types.go` (struct field order/types). Positional binding means a one-line edit in any of the three can silently rewire data into the wrong field.
 - **Struct ↔ Sibling readers:** because `BlockStatus` is the return type of four different SQL functions with four different column subsets, a struct change ripples into `SideChainBlocks`, `DisapprovedBlocks`, `BlockStatus(hash)`, and `BlockStatuses(height)`. Two of those are page handlers (`/side`, `/disapproved`), two feed the `/block/{hash}` rendering and stakeholder approval checks (see [cmd/dcrdata/internal/explorer/explorerroutes.go:730](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L730)).
 - **Writer races:** a reorg can flip `is_mainchain` on rows mid-request. The page is best-effort consistent (each row reflects its current `is_mainchain`/`next_hash` state). No locking ties the read against `TipToSideChain`. Because the query is short, the practical window is small, but `next_hash` may briefly point at a hash whose own `is_mainchain` has just been flipped.
@@ -202,23 +202,23 @@ When modifying anything in this flow, check:
 
 ## Section 8 — Evidence
 
-- Route registration — [cmd/dcrdata/main.go:768](../../../cmd/dcrdata/main.go#L768)
-- Handler — [cmd/dcrdata/internal/explorer/explorerroutes.go:238-268](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L238-L268)
-- Interface — [cmd/dcrdata/internal/explorer/explorer.go:90](../../../cmd/dcrdata/internal/explorer/explorer.go#L90)
-- Test mock — [cmd/dcrdata/internal/explorer/explorer_test.go:70](../../../cmd/dcrdata/internal/explorer/explorer_test.go#L70)
+- Route registration — [cmd/dcrdata/main.go:735](../../../cmd/dcrdata/main.go#L735)
+- Handler — [cmd/dcrdata/internal/explorer/explorerroutes.go:273-296](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L273-L296)
+- Interface — [cmd/dcrdata/internal/explorer/explorer.go:85](../../../cmd/dcrdata/internal/explorer/explorer.go#L85)
+- Test mock — [cmd/dcrdata/internal/explorer/explorer_test.go:76](../../../cmd/dcrdata/internal/explorer/explorer_test.go#L76)
 - ChainDB read method — [db/dcrpg/pgblockchain.go:852-857](../../../db/dcrpg/pgblockchain.go#L852-L857)
-- SQL — [db/dcrpg/internal/blockstmts.go:170-193](../../../db/dcrpg/internal/blockstmts.go#L170-L193)
-- Scan — [db/dcrpg/queries.go:3969-3991](../../../db/dcrpg/queries.go#L3969-L3991)
-- Struct — [db/dbtypes/types.go:2267-2275](../../../db/dbtypes/types.go#L2267-L2275)
+- SQL — [db/dcrpg/internal/blockstmts.go:180-204](../../../db/dcrpg/internal/blockstmts.go#L180-L204)
+- Scan — [db/dcrpg/queries.go:4075-4097](../../../db/dcrpg/queries.go#L4075-L4097)
+- Struct — [db/dbtypes/types.go:2274-2282](../../../db/dbtypes/types.go#L2274-L2282)
 - Template — [cmd/dcrdata/views/sidechains.tmpl](../../../cmd/dcrdata/views/sidechains.tmpl)
-- Startup import — [cmd/dcrdata/main.go:885-960](../../../cmd/dcrdata/main.go#L885-L960); [cmd/dcrdata/config.go:151](../../../cmd/dcrdata/config.go#L151)
-- `MissingSideChainBlocks` — [db/dcrpg/pgblockchain.go:345-401](../../../db/dcrpg/pgblockchain.go#L345-L401)
+- Startup import — [cmd/dcrdata/main.go:855-927](../../../cmd/dcrdata/main.go#L855-L927); [cmd/dcrdata/config.go:147](../../../cmd/dcrdata/config.go#L147)
+- `MissingSideChainBlocks` — [db/dcrpg/pgblockchain.go:341-401](../../../db/dcrpg/pgblockchain.go#L341-L401)
 - `rpcutils.SideChains` / `SideChainFull` — [rpcutils/rpcclient.go:315-371](../../../rpcutils/rpcclient.go#L315-L371)
-- `StoreBlock` writer — [db/dcrpg/pgblockchain.go:3977-4040](../../../db/dcrpg/pgblockchain.go#L3977-L4040)
-- `updateLastBlock` side-chain guard — [db/dcrpg/pgblockchain.go:4058-4076](../../../db/dcrpg/pgblockchain.go#L4058-L4076)
-- Reorg handler chain — [cmd/dcrdata/main.go:1066-1068](../../../cmd/dcrdata/main.go#L1066-L1068); [db/dcrpg/chainmonitor.go:139-175](../../../db/dcrpg/chainmonitor.go#L139-L175)
-- `TipToSideChain` — [db/dcrpg/pgblockchain.go:3647](../../../db/dcrpg/pgblockchain.go#L3647)
-- `setMainchainByBlockHash` — [db/dcrpg/queries.go:4200-4203](../../../db/dcrpg/queries.go#L4200-L4203); UpdateBlockMainchain SQL — [db/dcrpg/internal/blockstmts.go:211](../../../db/dcrpg/internal/blockstmts.go#L211)
+- `StoreBlock` writer — [db/dcrpg/pgblockchain.go:3822-4055](../../../db/dcrpg/pgblockchain.go#L3822-L4055)
+- `updateLastBlock` side-chain guard — [db/dcrpg/pgblockchain.go:4056-4085](../../../db/dcrpg/pgblockchain.go#L4056-L4085)
+- Reorg handler chain — [cmd/dcrdata/main.go:1036-1038](../../../cmd/dcrdata/main.go#L1036-L1038); [db/dcrpg/chainmonitor.go:139-175](../../../db/dcrpg/chainmonitor.go#L139-L175)
+- `TipToSideChain` — [db/dcrpg/pgblockchain.go:3689](../../../db/dcrpg/pgblockchain.go#L3689)
+- `setMainchainByBlockHash` — [db/dcrpg/queries.go:4301-4304](../../../db/dcrpg/queries.go#L4301-L4304); UpdateBlockMainchain SQL — [db/dcrpg/internal/blockstmts.go:214](../../../db/dcrpg/internal/blockstmts.go#L214)
 
 See also:
 

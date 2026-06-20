@@ -1,7 +1,7 @@
 ### Section 1 — Overview
 Tracing the data flow that drives `/visualblocks` — the latest-N-blocks-plus-mempool tile page rendered as a 3-row block-tile (votes / tickets / indicator-fill bars) plus a mempool tile of identical shape. The page has **two independent pipelines** that feed the same DOM: an HTTP `GET` handler that server-renders 30 trimmed blocks plus a mempool tile, and a WebSocket push channel that re-renders individual tiles when new blocks arrive or the mempool changes.
 
-**Revision tag:** `HEAD=38636d52`. This is the post-rewrite snapshot for issue #270 on top of PR #284's data contract. The 386f2e12 revision documented the contract as "populated but not yet consumed by the UI"; commit `38636d52` is that UI rewrite plus one additional contract field (`TotalFillRatio`). Net page-surface changes vs the legacy state:
+**Revision tag:** `HEAD=717be5a6`. This is the post-rewrite snapshot for issue #270 on top of PR #284's data contract. The 386f2e12 revision documented the contract as "populated but not yet consumed by the UI"; commit `38636d52` is that UI rewrite plus one additional contract field (`TotalFillRatio`). Subsequent fixes (`793610c8`/`2218b9c`/`fe58506`) replaced fragile `box.firstChild` DOM-position assumptions with a stable `[data-role="mempool-tile"]` CSS selector in both `_handleVisualBlocksUpdate` and `handleMempoolUpdate`, added a null guard for the empty-box case during reconnect, and removed HTML comments from the template that had been creating whitespace `Text` nodes that displaced `firstChild`. Net page-surface changes vs the legacy state:
 
 - The hard-coded `DCR` label and aggregate amount are gone everywhere. The tile header now shows block size (humanize.Bytes) + an optional `% of maxBlockSize` next to it. The mempool tile shows the current mempool size with the same `%` semantics.
 - The rewards row (`block-rewards` with `.pow/.pos/.fund/.fees` segments) is deleted from both tile types in template + controller + SCSS. Project Fund/Treasury share is absent in Monetarium; PoW/PoS is fixed 50/50, so the bar carried no information.
@@ -74,8 +74,9 @@ WebSocket mempool path:
 - **Location:** `pubsub/pubsubhub.go`
   - **Transformations:** **STILL not patched** — `sigNewBlock` broadcast at [`:459-472`](../../../pubsub/pubsubhub.go#L459-L472) encodes `psh.state.BlockInfo` directly. The PR #284 divergence carries forward unchanged for all five contract fields. `/ps` subscribers see `coin_fills`/`active_ska_count`/`max_block_size`/`regular_coin_counts`/`total_fill_ratio` as zero/nil/empty.
 
-- **Location:** `cmd/dcrdata/views/visualblocks.tmpl` (fully rewritten in `38636d52`)
+- **Location:** `cmd/dcrdata/views/visualblocks.tmpl` (fully rewritten in `38636d52`; HTML comments removed + `data-role` added in `793610c8`)
   - **Data Structures:** `.Info` (`*types.HomeInfo`), `.Mempool` (`*types.TrimmedMempoolInfo`), `.Blocks` (`[]*types.TrimmedBlockInfo`).
+  - **Template structure post-`793610c8`:** the `<!-- Mempool tile -->` and `<!-- Block tiles -->` HTML comments were removed. These comments had created whitespace `Text` nodes in the DOM, displacing `box.firstChild` from the actual mempool element and triggering the duplicate-tile bug (#460). The mempool tile `<div>` now carries `data-role="mempool-tile"` as a stable identity attribute alongside `data-visualBlocks-target="block"`.
   - **Transformations / new structure:**
     - **Tile header** (`block-info`): link + `<span class="size">{{formatBytes .Size}}</span>` + (when `MaxBlockSize > 0`) `<span class="size-pct">{{printf "%.0f" (mulf .TotalFillRatio 100.0)}}%</span>` + age. Mempool variant uses `formatBytes .TotalSize`.
     - **Vote row**: `{{if .Voted}}{{if .VoteValid}}vote-yes{{else}}vote-no{{end}}{{else}}vote-skip{{end}}` for the span class. `title` JSON: `{"object": "Vote", "coin": "VAR", "voted": "<bool>", "voteValid": "<bool>"}`. Empty-slot pad to 5 unchanged.
@@ -90,7 +91,7 @@ WebSocket mempool path:
   - **Layout:** `.block-rows { height: 90px; }` restored after a brief stint without it (the no-height version made votes/tickets visibly thinner — see the post-rewrite tuning in the same commit). `flex-grow: 1` on `.block-votes` and `.block-tickets`; `flex-grow: 2` on `.block-indicator-fill` to give the 3-bar component the room it needs (~45px for 3 sub-bars at 0.75rem each).
   - Dark-theme `body.darkBG { … }` updated to keep the new vote-skip class legible.
 
-- **Location:** `cmd/dcrdata/public/js/controllers/visualBlocks_controller.js` (full rewrite in `38636d52`)
+- **Location:** `cmd/dcrdata/public/js/controllers/visualBlocks_controller.js` (full rewrite in `38636d52`; selector fixes in `793610c8` / `2218b9c` / `fe58506`; reconnect handler in `aa356db6`)
   - **Data Structures:** Stimulus controller with targets `box, title, showmore, root, tooltip, block, indicator`.
   - **Named exports (for vitest):** `makeMempoolBlock(tile)`, `newBlockHtmlElement(tile)`, `makeVoteElements(votes)`, `makeTicketAndRevocationElements(tickets, revs, blockHref)`, `makeIndicatorBars(totalFillRatio, coinFills, totalTxCount, countForSymbol)`, `normaliseWsBlock(block)`. Default export is the Stimulus Controller class.
   - **Pure helpers (file scope, not exported):** `makeNode`, `coinTypeFromSymbol`, `formatBytes`, `regularCountForSymbol`, `sumRegularCoinCounts`, `mempoolRegularCountForSymbol`, `sumMempoolRegularCounts`, `fillBarHtml`, `totalBarHtml`, `stakeTxSpan`, `blockInfoHtml`. Each helper has an equivalent on the Go side (`templates.go`); future contributors must keep the pair in sync.
@@ -98,9 +99,11 @@ WebSocket mempool path:
     - `normaliseWsBlock(block)` translates the WS wire-shape into a canonical PascalCase tile: reads `block.height` / `block.time` / `block.size` / `block.formatted_bytes` (BlockBasic lowercase JSON tags), `block.Votes` / `block.Tickets` / `block.Revs` (BlockInfo PascalCase, no JSON tags), `block.coin_fills` / `block.regular_coin_counts` / `block.total_fill_ratio` / `block.max_block_size` / `block.active_ska_count` (snake_case from the contract patch).
     - `normaliseMempool(mempool)` translates `TrimmedMempoolInfo`: reads `mempool.Votes/Tickets/Revocations/Time` (PascalCase) and `mempool.coin_fills` / `mempool.coin_stats` / `mempool.total_fill_ratio` / `mempool.total_size` / `mempool.max_block_size` (snake_case).
     - `normaliseTxs(txs)` normalises nested `TrimmedTxInfo` records: PascalCase `TxID`/`Total` (TxBasic no JSON tags) + snake-case `voted`/`vote_valid`/`vin_count`/`vout_count` (TrimmedTxInfo JSON tags) → single PascalCase shape.
-  - **WS handlers:**
-    - `_handleVisualBlocksUpdate(newBlock)` reads `newBlock.block`, normalises it, builds the new tile via `newBlockHtmlElement(tile)`, inserts after the mempool tile (`box.firstChild.nextSibling`), drops the `visible` class from the last visible tile, and `removeChild(lastChild)` to maintain ≤30 DOM tiles. The JS-side coinbase filter (`block.Tx.filter(!Coinbase)`) is gone — no per-tx rendering anymore.
-    - `handleMempoolUpdate(evt)` parses, normalises, and `replaceChild` the first child (mempool tile) with the freshly-built tile.
+  - **`makeMempoolBlock(mempool)`** (`793610c8`): now emits `data-role="mempool-tile"` on the outer `<div>` of the built tile. This is the stable identity attribute the two WS handlers use to locate the mempool tile in the DOM, replacing the fragile `box.firstChild` assumption.
+  - **WS handlers (post-selector fix):**
+    - `_handleVisualBlocksUpdate(newBlock)` (`fe58506` / `2218b9c`): reads `newBlock.block`, normalises it, builds the new tile via `newBlockHtmlElement(tile)`. **Post-fix:** locates the mempool tile via `box.querySelector('[data-role="mempool-tile"]')`; if `null` (empty box during reconnect), returns immediately — **null guard** added by `2218b9c`. If found, inserts the new tile immediately after it, drops `visible` from the last visible tile, and `removeChild(lastChild)` to maintain ≤30 DOM tiles.
+    - `handleMempoolUpdate(evt)` (`793610c8`): parses, normalises, locates the mempool tile via `this.boxTarget.querySelector('[data-role="mempool-tile"]')`, and calls `mempoolTile.replaceWith(makeMempoolBlock(tile))`. If the tile is not found (null), no-ops silently. **Pre-fix behaviour** was `this.boxTarget.replaceChild(makeMempoolBlock(tile), this.boxTarget.firstChild)` — always operated on the first child, which could be a comment `Text` node.
+  - **Reconnect handler (`aa356db6`):** `connect()` registers `this.reconnectUnsub = ws.registerEvtHandler('reconnect', () => { ws.send('getmempooltrimmed', '') })` so that after a socket drop-and-reconnect, the controller re-requests the trimmed mempool snapshot. `disconnect()` calls `this.reconnectUnsub()` to prevent the handler from leaking after the controller is detached.
   - **Tooltips (`setupTooltips`)** updated for the new title JSON shapes:
     - `Vote`: `"Voted YES"` / `"Voted NO"` / `"Did not vote"` based on `voted` + `voteValid`.
     - `FillBar`: `"N transactions"` (TOTAL) or `"N <coin>-transactions"` (per-coin).
@@ -110,20 +113,21 @@ WebSocket mempool path:
 - **Location:** `cmd/dcrdata/internal/explorer/visualblocks_contract_test.go` (extended in `38636d52`)
   - **Transformations:** Sub-test `BlockContractWireFormat` adds `total_fill_ratio` assertion (`wantRatio := float64(15000) / maxBlockSize`). Sub-test `BlockWSWireFormatEquivalence` adds `total_fill_ratio` to `contractFields` and patches `RegularCoinCounts` + `TotalFillRatio` onto the test's `blockCopy` to mirror the production handler. **The contract now asserts five fields are wire-identical between HTTP and WS**, not four.
 
-- **Location:** `cmd/dcrdata/public/js/controllers/visualBlocks_controller.test.js` (new in `38636d52`)
-  - **Coverage:** 15 tests across `makeMempoolBlock` (6), `newBlockHtmlElement` (5), `normaliseWsBlock` (2), and `visualBlocks reconnect resync` (2, added after `38636d52`). Asserts:
-    - Header size + percent, no DCR text.
-    - No `.block-rewards`/`.block-transactions`/`.block-tx`/`.fund`/`.pow`/`.pos`/`.fees`.
-    - Three vote-state classes by `(Voted, VoteValid)`; empty slots to 5.
-    - Indicator-fill: one TOTAL + one fill-bar per CoinFills entry, ordered `VAR, SKA1, …`.
-    - FillBar `txCount` derived correctly (block: from `RegularCoinCounts`; mempool: from `CoinStats[ct].regular_count`).
-    - Ticket title carries `"coin": "VAR"`.
-    - `block-rows > *` order: votes → tickets → indicator-fill.
-    - Regression: `normaliseWsBlock` reads BlockBasic's lowercase JSON tags (`height`/`time`/`size`/`formatted_bytes`) instead of PascalCase — locks in the fix for the `/block/undefined` bug observed during in-browser verification.
-    - Reconnect resync (`visualBlocks reconnect resync`): re-requests the trimmed mempool on the synthetic `reconnect` event, and removes its own `reconnect` handler on `disconnect`.
+- **Location:** `cmd/dcrdata/public/js/controllers/visualBlocks_controller.test.js` (new in `38636d52`; extended in `aa356db6`, `793610c8`, `e72ee50c`)
+  - **Coverage:** 19 tests across five describe blocks. Asserts:
+    - `makeMempoolBlock` (6): header size + percent, no DCR text; no legacy rewards/transactions/fund classes; three vote-state classes + coin:VAR; indicator-fill one TOTAL + one fill-bar per CoinFills; FillBar `txCount` from `CoinStats.regular_count`; ticket coin:VAR.
+    - `newBlockHtmlElement` (5): same surface for block tiles; FillBar `txCount` from `RegularCoinCounts`; block-rows order votes → tickets → indicator-fill.
+    - `normaliseWsBlock` (2): reads `height`/`time`/`size`/`formatted_bytes` from BlockBasic's lowercase JSON tags; normalises nested vote records from snake-case to PascalCase. Locks the `/block/undefined` bug class.
+    - `visualBlocks reconnect resync` (2, added by `aa356db6`): re-requests the trimmed mempool on the synthetic `reconnect` event; removes its own handler on `disconnect`.
+    - `controller mempool-tile lifecycle` (4, added by `793610c8` + `e72ee50c`): `handleMempoolUpdate` replaces the mempool tile in place preserving count; `_handleVisualBlocksUpdate` inserts a new tile after the mempool tile and trims the last; mempool tile remains singular after both mempool and block updates; **empty-box null guard** — `_handleVisualBlocksUpdate` with an empty `boxTarget` does not throw and inserts nothing.
 
 ### Section 4 — Cross-Layer Dependencies
 - **Two transport shapes for "one block."** HTTP renders `TrimmedBlockInfo` (already filtered, `Transactions` field name — still present on the wire but the new template does NOT iterate it). WebSocket pushes the full `BlockInfo` (`Tx` field name, includes coinbase — also no longer iterated by the controller). The five contract fields (`regular_coin_counts`, `coin_fills`, `active_ska_count`, `max_block_size`, `total_fill_ratio`) are patched onto the WS shallow-copy so the contract test can assert byte-identical JSON for them across transports. The remaining asymmetry (Tx/Transactions, coinbase filter, Subsidy struct) no longer reaches the page — every consumer the rewrite added reads only the five contract fields plus the BlockBasic embeds (`Size`/`FormattedBytes`) plus Votes/Tickets/Revs.
+
+- **`data-role="mempool-tile"` is now a DOM contract (added `793610c8`).** The mempool tile must carry this attribute on both transport paths:
+  - Server render (`visualblocks.tmpl`): emits `data-role="mempool-tile"` on the mempool `<div>` (the template previously carried only `data-visualBlocks-target="block"`).
+  - WS `getmempooltrimmedResp` path (`makeMempoolBlock`): the JS-built tile also emits `data-role="mempool-tile"`.
+  - Both `_handleVisualBlocksUpdate` and `handleMempoolUpdate` now locate the mempool tile via `querySelector('[data-role="mempool-tile"]')`. If either emitter stops setting the attribute, both WS handlers silently no-op (null guard returns early). The `controller mempool-tile lifecycle` vitest suite enforces this contract.
 
 - **WS wire-shape mix is now an explicit JS concern.** `normaliseWsBlock` and `normaliseMempool` are load-bearing: they paper over the BlockBasic-vs-BlockInfo JSON-tag inconsistency in one place so the rest of the controller sees PascalCase only. Future contract additions should mirror the existing pattern — populate in `Trim`, patch on `blockCopy`, and *add the field to `normaliseWsBlock`* (the controller will silently miss the field otherwise).
 
@@ -204,6 +208,7 @@ When modifying `/visualblocks` data:
 **Silent failures:**
 
 - WS-shape regression (lowercase JSON tag fields read as PascalCase) → `/block/undefined`, `NaNs ago`. Locked by `normaliseWsBlock` test.
+- `data-role="mempool-tile"` missing from either emitter → `querySelector` returns `null`; both WS handlers silently no-op (null guard returns early). Page becomes stale: no new blocks inserted, no mempool tile refresh. Not currently locked by a lint rule — only covered at the HTML/JS emitter level.
 - New contract field added to `TrimmedBlockInfo` + `Trim` but not to `blockCopy` patch → first 30 tiles correct, WS-pushed tiles silently miss the field. Contract test catches only the five currently asserted.
 - New contract field patched but not added to `normaliseWsBlock` → WS shape carries it but the JS tile builder reads `undefined`.
 - Template helper diverges from JS equivalent → header/tooltip mismatch between first-render and live-update tiles. Not currently locked.
@@ -223,6 +228,8 @@ When modifying `/visualblocks` data:
 
 ### Section 7 — Common Pitfalls
 1. **Reading PascalCase Go fields from the WS wire-shape.** `BlockBasic` fields have lowercase JSON tags (`height`, `time`, `size`, `formatted_bytes`); `BlockInfo`'s non-embedded fields have no JSON tags and serialise as PascalCase (`Votes`, `Tickets`, `Revs`, `Tx`). The mixing is real and intentional, and `normaliseWsBlock` is the single place that resolves it. New WS-shape code outside this normaliser will reintroduce the `/block/undefined` bug class.
+
+1a. **Assuming `box.firstChild` is the mempool tile.** HTML comments in the blocks-holder create `Text` nodes that displace `firstChild` from the actual mempool element — this was the root cause of bug #460. Both WS handlers (`_handleVisualBlocksUpdate` and `handleMempoolUpdate`) now use `querySelector('[data-role="mempool-tile"]')`. Do NOT add HTML comments inside the blocks-holder container (`data-visualBlocks-target="box"`). Do NOT revert from the selector to `box.firstChild`.
 
 2. **Adding a contract field without updating the JS normaliser.** Five steps per addition: (a) `TrimmedBlockInfo` struct + JSON tag; (b) `BlockInfo` struct + JSON tag; (c) `(*BlockInfo).Trim` populates it; (d) `websockethandlers.go:sigNewBlock` patches it onto `blockCopy`; (e) `visualBlocks_controller.js:normaliseWsBlock` reads it. Skip (e) and the JS tile silently misses the field on live updates.
 
@@ -262,9 +269,12 @@ When modifying `/visualblocks` data:
 - `pubsub/pubsubhub.go:459-472` — `sigNewBlock` (still NOT patched).
 - `cmd/dcrdata/internal/explorer/visualblocks_contract_test.go` — `BlockContractWireFormat` asserts `total_fill_ratio`; `BlockWSWireFormatEquivalence` asserts five-field parity; `MempoolContractWireFormat` unchanged.
 - `cmd/dcrdata/public/index.js:46-64` — `ws.registerEvtHandler('newblock', ...)` → `globalEventBus.publish('BLOCK_RECEIVED', newBlock)`.
-- `cmd/dcrdata/public/js/controllers/visualBlocks_controller.js:1-420` — full rewrite: helpers, normalisers, exported builders, Stimulus controller.
-- `cmd/dcrdata/public/js/controllers/visualBlocks_controller.test.js:1-356` — 15 tests (vote states, indicator-fill structure, FillBar tooltip JSON, ticket coin label, block-rows order, WS-shape regression, reconnect resync).
-- `cmd/dcrdata/views/visualblocks.tmpl` — full rewrite: 3-row tile (votes / tickets / indicator-fill), three vote states, formatBytes header, indicator-fill markup mirroring `home_mempool.tmpl`.
+- `cmd/dcrdata/public/js/controllers/visualBlocks_controller.js:242` — `makeMempoolBlock` emits `data-role="mempool-tile"` on the outer `<div>` (added `793610c8`).
+- `cmd/dcrdata/public/js/controllers/visualBlocks_controller.js:384-396` — `_handleVisualBlocksUpdate` now uses `querySelector('[data-role="mempool-tile"]')` + null guard (`fe58506`, `2218b9c`).
+- `cmd/dcrdata/public/js/controllers/visualBlocks_controller.js:398-407` — `handleMempoolUpdate` uses `querySelector('[data-role="mempool-tile"]')` + `replaceWith` (`793610c8`).
+- `cmd/dcrdata/public/js/controllers/visualBlocks_controller.js:363-370` — `connect()` registers reconnect handler; `disconnect()` calls `this.reconnectUnsub()` (`aa356db6`).
+- `cmd/dcrdata/public/js/controllers/visualBlocks_controller.test.js:1-456` — 19 tests across 5 suites (vote states, indicator-fill, normaliseWsBlock regression, reconnect resync, mempool-tile lifecycle).
+- `cmd/dcrdata/views/visualblocks.tmpl:27` — mempool tile `<div>` carries `data-role="mempool-tile"`; HTML comments removed (`793610c8`).
 - `cmd/dcrdata/public/scss/visualblocks.scss` — vote-state classes, compact indicator-fill overrides, dark-theme update.
 - `cmd/dcrdata/public/scss/_indicator-fill.scss` — base partial (shared with homepage), imported globally via `application.scss:56`.
 

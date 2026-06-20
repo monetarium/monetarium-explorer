@@ -51,6 +51,9 @@ type SKASubRow struct {
 
 // buildHomeBlockRows converts a slice of BlockBasic pointers into HomeBlockRow
 // view models using real CoinRows data. Nil entries are skipped.
+// Coin-row flattening here intentionally duplicates types.BlockBasic.FlattenCoinRows
+// because HomeBlockRow needs pre-formatted fields (string TxCount, formatted amounts)
+// while FlattenCoinRows stores raw values for the block table template. Keep both in sync.
 func buildHomeBlockRows(blocks []*types.BlockBasic) []HomeBlockRow {
 	rows := make([]HomeBlockRow, 0, len(blocks))
 	for _, b := range blocks {

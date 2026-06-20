@@ -1,0 +1,12 @@
+domain: disapproved-blocks
+anchor: 883c700f
+files:
+  - cmd/dcrdata/internal/explorer/explorer.go
+  - cmd/dcrdata/internal/explorer/explorermiddleware.go
+  - cmd/dcrdata/internal/explorer/explorerroutes.go
+  - cmd/dcrdata/views/disapproved.tmpl
+  - cmd/dcrdata/views/sidechains.tmpl
+  - db/dbtypes/types.go
+  - db/dcrpg/internal/blockstmts.go
+  - db/dcrpg/pgblockchain.go
+  - db/dcrpg/queries.go

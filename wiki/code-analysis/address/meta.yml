@@ -1,0 +1,15 @@
+domain: address
+anchor: a48ea0e1
+files:
+  - cmd/dcrdata/internal/api/apiroutes.go
+  - cmd/dcrdata/internal/explorer/explorer.go
+  - cmd/dcrdata/internal/explorer/explorerroutes.go
+  - cmd/dcrdata/public/js/controllers/address_controller.js
+  - cmd/dcrdata/public/js/helpers/ska_helper.js
+  - cmd/dcrdata/views/address.tmpl
+  - cmd/dcrdata/views/extras.tmpl
+  - db/cache/addresscache.go
+  - db/dbtypes/types.go
+  - db/dcrpg/internal/addrstmts.go
+  - db/dcrpg/pgblockchain.go
+  - db/dcrpg/queries.go

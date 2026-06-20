@@ -1,0 +1,17 @@
+domain: mempool
+anchor: 7dac4adc
+files:
+  - cmd/dcrdata/internal/explorer/dev_indicators.go
+  - cmd/dcrdata/internal/explorer/explorer.go
+  - cmd/dcrdata/internal/explorer/websockethandlers.go
+  - cmd/dcrdata/public/js/controllers/homepage_controller.js
+  - cmd/dcrdata/public/js/controllers/mempool_controller.js
+  - cmd/dcrdata/public/js/helpers/indicator_fill.js
+  - cmd/dcrdata/views/home_mempool.tmpl
+  - cmd/dcrdata/views/mempool.tmpl
+  - explorer/types/explorertypes.go
+  - mempool/collector.go
+  - mempool/mempoolcache.go
+  - mempool/monitor.go
+  - mempool/monitor_test.go
+  - pubsub/pubsubhub.go

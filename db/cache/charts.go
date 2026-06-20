@@ -475,6 +475,30 @@ func newWindowSet(size int) *windowSet {
 	}
 }
 
+// PartialWindow holds data for an incomplete difficulty window. When the
+// latest block is not at a window boundary (e.g. block 500 of a 144-block
+// window), the accumulated values are stored here so chart makers can append
+// them as the last data point and match the home page's current value.
+type PartialWindow struct {
+	Height     uint64
+	Time       uint64
+	Price      uint64
+	Diff       float64
+	StakeCount uint64
+}
+
+// ChartTip holds current live (RPC) values pushed from explorer.Store().
+// Chart makers use these to override the last data point so the chart's
+// final value matches what the home page displays.
+type ChartTip struct {
+	Height      uint64
+	Time        uint64
+	TicketPrice uint64 // atoms
+	Difficulty  float64
+	PoolValue   uint64 // atoms
+	CoinSupply  uint64 // atoms
+}
+
 // ChartGobject is the storage object for saving to a gob file. ChartData itself
 // has a lot of extraneous fields, and also embeds sync.RWMutex, so is not
 // suitable for gobbing.
@@ -561,6 +585,12 @@ type ChartData struct {
 	// SKAFeesMtx must be held when reading or mutating SKAFees.
 	SKAFeesMtx  sync.RWMutex
 	MinerRanges []MinerRange
+	// PartialWindow holds accumulated data for the current incomplete
+	// difficulty window. Must only be written via SetPartialWindow() to
+	// synchronise with chart makers that read it under tipMtx.
+	PartialWindow PartialWindow
+	Tip           ChartTip
+	tipMtx        sync.RWMutex
 }
 
 // ValidateLengths checks that the length of all arguments is equal.
@@ -855,6 +885,24 @@ func (charts *ChartData) Dump(dumpPath string) {
 	} else {
 		log.Debug("Dumping the charts cache data was successful")
 	}
+}
+
+// SetTip pushes current RPC values from explorer.Store() into the chart
+// cache. Chart makers use these to ensure the last data point matches the
+// home page.
+func (charts *ChartData) SetTip(tip ChartTip) {
+	charts.tipMtx.Lock()
+	defer charts.tipMtx.Unlock()
+	charts.Tip = tip
+}
+
+// SetPartialWindow stores accumulated data for the current (incomplete)
+// difficulty window. Chart makers append this as an extra data point when
+// the tip is not at a window boundary.
+func (charts *ChartData) SetPartialWindow(pw PartialWindow) {
+	charts.tipMtx.Lock()
+	defer charts.tipMtx.Unlock()
+	charts.PartialWindow = pw
 }
 
 // TriggerUpdate triggers (*ChartData).Update.
@@ -1747,15 +1795,32 @@ func hashRateChart(charts *ChartData, bin binLevel, axis axisType, interval inte
 func powDifficultyChart(charts *ChartData, _ binLevel, axis axisType, _ intervalType) ([]byte, error) {
 	// Pow Difficulty only has window level bin, so all others are ignored.
 	seed := chartResponse{windowKey: charts.DiffInterval}
+
+	charts.tipMtx.RLock()
+	pw := charts.PartialWindow
+	tip := charts.Tip
+	charts.tipMtx.RUnlock()
+
 	switch axis {
 	case HeightAxis:
 		return encode(lengtherMap{
 			diffKey: charts.Windows.PowDiff,
 		}, seed)
 	default:
+		diffData := charts.Windows.PowDiff
+		timeData := charts.Windows.Time
+		if pw.Height > 0 {
+			diffData = append(diffData[:len(diffData):len(diffData)], pw.Diff)
+			timeData = append(timeData[:len(timeData):len(timeData)], pw.Time)
+			// Override the partial window's diff with the current RPC value
+			// so it matches the home page.
+			if tip.Difficulty > 0 {
+				diffData[len(diffData)-1] = tip.Difficulty
+			}
+		}
 		return encode(lengtherMap{
-			diffKey: charts.Windows.PowDiff,
-			timeKey: charts.Windows.Time,
+			diffKey: diffData,
+			timeKey: timeData,
 		}, seed)
 	}
 }
@@ -1763,6 +1828,12 @@ func powDifficultyChart(charts *ChartData, _ binLevel, axis axisType, _ interval
 func ticketPriceChart(charts *ChartData, _ binLevel, axis axisType, _ intervalType) ([]byte, error) {
 	// Ticket price only has window level bin, so all others are ignored.
 	seed := chartResponse{windowKey: charts.DiffInterval}
+
+	charts.tipMtx.RLock()
+	pw := charts.PartialWindow
+	tip := charts.Tip
+	charts.tipMtx.RUnlock()
+
 	switch axis {
 	case HeightAxis:
 		return encode(lengtherMap{
@@ -1770,10 +1841,23 @@ func ticketPriceChart(charts *ChartData, _ binLevel, axis axisType, _ intervalTy
 			countKey: charts.Windows.StakeCount,
 		}, seed)
 	default:
+		priceData := charts.Windows.TicketPrice
+		countData := charts.Windows.StakeCount
+		timeData := charts.Windows.Time
+		if pw.Height > 0 {
+			priceData = append(priceData[:len(priceData):len(priceData)], pw.Price)
+			countData = append(countData[:len(countData):len(countData)], pw.StakeCount)
+			timeData = append(timeData[:len(timeData):len(timeData)], pw.Time)
+			// Override the partial window's price with the current RPC value
+			// so the chart matches the home page (CurrentStakeDifficulty).
+			if tip.TicketPrice > 0 {
+				priceData[len(priceData)-1] = tip.TicketPrice
+			}
+		}
 		return encode(lengtherMap{
-			timeKey:  charts.Windows.Time,
-			priceKey: charts.Windows.TicketPrice,
-			countKey: charts.Windows.StakeCount,
+			timeKey:  timeData,
+			priceKey: priceData,
+			countKey: countData,
 		}, seed)
 	}
 }
@@ -1964,34 +2048,61 @@ func missedVotesChart(charts *ChartData, _ binLevel, axis axisType, _ intervalTy
 
 func stakedCoinsChart(charts *ChartData, bin binLevel, axis axisType, _ intervalType) ([]byte, error) {
 	seed := binAxisSeed(bin, axis)
+
+	charts.tipMtx.RLock()
+	tip := charts.Tip
+	charts.tipMtx.RUnlock()
+
+	// Block/day-binned data has no window concept, so the override guard
+	// is whether a tip was pushed, not whether a partial window exists.
+	// The last block's accumulated supply/pool-value may be stale relative
+	// to the live RPC values. Unlike window charts, this override applies
+	// to both time and height axis — it updates the last point in-place
+	// rather than appending, so there's no missing x-position problem.
+	override := tip.CoinSupply > 0
+
 	switch bin {
 	case BlockBin:
+		circulation := accumulate(charts.Blocks.NewAtoms)
+		poolVal := charts.Blocks.PoolValue
+		if override && len(circulation) > 0 && len(poolVal) > 0 {
+			circulation[len(circulation)-1] = tip.CoinSupply
+			poolVal = append(ChartUints(nil), poolVal...)
+			poolVal[len(poolVal)-1] = tip.PoolValue
+		}
 		switch axis {
 		case HeightAxis:
 			return encode(lengtherMap{
-				circulationKey: accumulate(charts.Blocks.NewAtoms),
-				poolValKey:     charts.Blocks.PoolValue,
+				circulationKey: circulation,
+				poolValKey:     poolVal,
 			}, seed)
 		default:
 			return encode(lengtherMap{
 				timeKey:        charts.Blocks.Time,
-				circulationKey: accumulate(charts.Blocks.NewAtoms),
-				poolValKey:     charts.Blocks.PoolValue,
+				circulationKey: circulation,
+				poolValKey:     poolVal,
 			}, seed)
 		}
 	case DayBin:
+		circulation := accumulate(charts.Days.NewAtoms)
+		poolVal := charts.Days.PoolValue
+		if override && len(circulation) > 0 && len(poolVal) > 0 {
+			circulation[len(circulation)-1] = tip.CoinSupply
+			poolVal = append(ChartUints(nil), poolVal...)
+			poolVal[len(poolVal)-1] = tip.PoolValue
+		}
 		switch axis {
 		case HeightAxis:
 			return encode(lengtherMap{
 				heightKey:      charts.Days.Height,
-				circulationKey: accumulate(charts.Days.NewAtoms),
-				poolValKey:     charts.Days.PoolValue,
+				circulationKey: circulation,
+				poolValKey:     poolVal,
 			}, seed)
 		default:
 			return encode(lengtherMap{
 				timeKey:        charts.Days.Time,
-				circulationKey: accumulate(charts.Days.NewAtoms),
-				poolValKey:     charts.Days.PoolValue,
+				circulationKey: circulation,
+				poolValKey:     poolVal,
 			}, seed)
 		}
 	}

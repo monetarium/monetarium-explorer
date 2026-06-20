@@ -95,7 +95,7 @@ function txCoinSymbolText(tx) {
 
 function cloneTxRow(template, tx) {
   const tr = template.content.firstElementChild.cloneNode(true)
-  setHashLink(tr.querySelector('[data-slot="hashLink"]'), tx.hash)
+  setHashLink(tr.querySelector('[data-slot="hashLink"]'), tx.txid)
   tr.querySelector('[data-slot="coinSymbol"]').textContent = txCoinSymbolText(tx)
   fillTxAmountCell(tr.querySelector('[data-slot="amount"]'), tx)
   tr.querySelector('[data-slot="size"]').textContent = `${tx.size} B`
@@ -106,7 +106,7 @@ function cloneTxRow(template, tx) {
 
 function cloneTicketRow(template, tx) {
   const tr = template.content.firstElementChild.cloneNode(true)
-  setHashLink(tr.querySelector('[data-slot="hashLink"]'), tx.hash)
+  setHashLink(tr.querySelector('[data-slot="hashLink"]'), tx.txid)
   setVarAmountHTML(tr.querySelector('[data-slot="amount"]'), tx.total)
   tr.querySelector('[data-slot="size"]').textContent = `${tx.size} B`
   tr.querySelector('[data-slot="feeRate"]').textContent = `${tx.fee_rate} VAR/kB`
@@ -118,7 +118,7 @@ function cloneTicketRow(template, tx) {
 
 function cloneRevocationRow(template, tx) {
   const tr = template.content.firstElementChild.cloneNode(true)
-  setHashLink(tr.querySelector('[data-slot="hashLink"]'), tx.hash)
+  setHashLink(tr.querySelector('[data-slot="hashLink"]'), tx.txid)
   setVarAmountHTML(tr.querySelector('[data-slot="amount"]'), tx.total)
   tr.querySelector('[data-slot="size"]').textContent = `${tx.size} B`
   setAgeCell(tr.querySelector('[data-slot="age"]'), tx.time)
@@ -130,7 +130,7 @@ function cloneVoteRow(template, tx) {
   const v = tx.vote_info
   tr.dataset.height = v.block_validation.height
   tr.dataset.blockhash = v.block_validation.hash
-  setHashLink(tr.querySelector('[data-slot="hashLink"]'), tx.hash, false)
+  setHashLink(tr.querySelector('[data-slot="hashLink"]'), tx.txid, false)
   const blockLink = tr.querySelector('[data-slot="blockLink"]')
   blockLink.href = `/block/${v.block_validation.hash}`
   tr.querySelector('[data-slot="blockHeight"]').textContent = v.block_validation.height
@@ -140,7 +140,7 @@ function cloneVoteRow(template, tx) {
   ticketLink.textContent = v.mempool_ticket_index
   tr.querySelector('[data-slot="voteVersion"]').textContent = v.vote_version
   setVarAmountHTML(tr.querySelector('[data-slot="amount"]'), tx.total)
-  tr.querySelector('[data-slot="size"]').textContent = humanize.bytes(tx.size)
+  tr.querySelector('[data-slot="size"]').textContent = `${tx.size} B`
   setAgeCell(tr.querySelector('[data-slot="age"]'), tx.time)
   return tr
 }
@@ -275,6 +275,7 @@ export default class extends Controller {
     ws.send('getmempooltxs', mempoolData.id)
     this.mempool = new Mempool(mempoolData, this.voteTallyTargets)
     this.lastCoinStats = null
+    this._prevCoinStats = null
     this.txTableRow = (tx) => cloneTxRow(this.txRowTemplateTarget, tx)
     this.ticketTableRow = (tx) => cloneTicketRow(this.ticketRowTemplateTarget, tx)
     this.revocationTableRow = (tx) => cloneRevocationRow(this.revocationRowTemplateTarget, tx)
@@ -284,6 +285,12 @@ export default class extends Controller {
       Ticket: this.ticketTransactionsTarget,
       Revocation: this.revocationTransactionsTarget,
       Regular: this.regularTransactionsTarget
+    }
+    this.countTargetMap = {
+      Vote: this.voteCountTarget,
+      Ticket: this.ticketCountTarget,
+      Revocation: this.revCountTarget,
+      Regular: this.regCountTarget
     }
     ws.registerEvtHandler('newtxs', (evt) => {
       const m = JSON.parse(evt)
@@ -327,6 +334,7 @@ export default class extends Controller {
     ws.deregisterEvtHandlers('newtxs')
     ws.deregisterEvtHandlers('mempool')
     ws.deregisterEvtHandlers('getmempooltxsResp')
+    this.countTargetMap = null
   }
 
   updateBlock(m) {
@@ -337,7 +345,12 @@ export default class extends Controller {
   }
 
   setMempoolFigures() {
-    this.applyCoinStats(this.lastCoinStats)
+    // Only apply coin stats when the reference actually changed,
+    // otherwise every WS event churns the DOM unnecessarily.
+    if (this.lastCoinStats !== this._prevCoinStats) {
+      this._prevCoinStats = this.lastCoinStats
+      this.applyCoinStats(this.lastCoinStats)
+    }
     // Vote tally HTML is driven by the local Mempool helper; vote totals are
     // already covered by applyCoinStats (CoinStats[0].vote_amount).
     const counts = this.mempool.counts()
@@ -441,9 +454,6 @@ export default class extends Controller {
       } else if (voteValidationHash !== bestBlockHash) {
         tr.classList.add('disabled-row')
         tr.classList.remove('blue-row')
-        if (tr.classList.contains('last_block')) {
-          tr.textContent = 'False'
-        }
       } else {
         tr.classList.remove('disabled-row')
         tr.classList.remove('blue-row')

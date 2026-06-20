@@ -1,7 +1,7 @@
 ### One-line Flow
 chi `/address/{addr}` → `AddressPathCtx` → `AddressPage` + `middleware.GetCoinCtx` → `AddressData(...coinType)` → `AddressHistory(...,coinType)` [`coinType≠255`: load full per-coin rows, **filter then `SliceAddressRows`**, + full `AddressBalance`] → mempool overlay appends coin-filtered unconfirmed rows but **not** balance → `AddressInfo{Balance.Coins, ActiveCoins, NumUnconfirmedByCoin}` → `address.tmpl` (`range .ActiveCoins`) + `extras.tmpl` (Coin column) → `address` controller (TurboQuery incl. `coin`; charts `/api/address/{addr}/{types|amountflow}/{bin}?coin=N`; table `/addresstable/{addr}?...&coin=N`).
 
-> Revised at `HEAD=1b670255` (PR #265/#266 + db coin-filter series). Prior revision (`a8f641f2`) is overturned — see delta table below.
+> Revised at `HEAD=a48ea0e1` (original multi-coin at `1b670255`; post-launch fixes through 2026-06-18). Delta tables: (1) `a8f641f2→1b670255` — original multi-coin; (2) `1b670255→a48ea0e1` — Refresh delta below.
 
 ### Key Architectural Patterns
 - **Filter-before-paginate (new invariant):** coin-filtered `AddressHistory` pulls the full per-coin row set (cache or `updateAddressRows`), filters by `r.CoinType`, *then* `SliceAddressRows`. Filtering after LIMIT/OFFSET = unreachable rows. Guarded by `db/dbtypes/coinfilter_test.go`.
@@ -14,6 +14,7 @@ chi `/address/{addr}` → `AddressPathCtx` → `AddressPage` + `middleware.GetCo
 ### Critical Constraints
 - **Coin filter must precede LIMIT/OFFSET** (`TestCoinFilterBeforePagination`).
 - **`CoinTypeAll` must stay 255**, distinct from every real coin (`TestCoinTypeAllSentinel`). Any in-memory `if r.CoinType == coinType` row filter must short-circuit on `CoinTypeAll` (return all rows) — `AddressCache.Rows` / `AddressRowsCompact` do; missing this empties the no-`?coin=` CSV (`TestAddressCacheRows_CoinTypeAll`).
+- **`utxoStore.set()` must pass `SKAValue` through.** The `skaValue string` eighth parameter of `utxoStore.set()` (pgblockchain.go:176) feeds `insertSpendingAddressRow`; dropping it silently zeroes `sent_ska` on every address amount-flow chart for SKA coins.
 - **Mempool must not affect balance** — confirmed-DB only by design; don't reintroduce the deleted accumulator.
 - **Merged view has no `coin_type` predicate** — query `SelectAddressMergedView` directly with `(address,N,offset)`; the old stmt-helper route bound `coinType=0` as `LIMIT 0` → zero rows (fixed `be28442e`).
 - **CSV download is a deliberate full export.** `/download/address/io/{addr}` link (`address.tmpl:346`) is static — no `?coin=`/`?txntype=`; `addressIoCsv` always pulls `AddressRowsCompact(..., CoinTypeAll)` (full, non-merged, all-coin). On-page Type/Coin filters scoping it was explicitly declined; don't "fix" it. Rows still carry correct per-row coin/amount.
@@ -32,7 +33,7 @@ chi `/address/{addr}` → `AddressPathCtx` → `AddressPage` + `middleware.GetCo
 - [ ] SKA values? `coinSymbol`/`skaDecimalParts` (template) or `renderCoinType`/`splitSkaAtomsNoTrailing` (JS); never float a displayed SKA amount.
 - [ ] `data-coin-type` attr or unconfirmed-decrement logic? Keep the SSR attr and JS string compare in lockstep.
 
-### Stale-Claim Delta (prior `a8f641f2` revision → current)
+### Stale-Claim Delta (prior `a8f641f2` → `1b670255` — original multi-coin)
 | Prior wiki claim | Current reality |
 |---|---|
 | Frontend renders VAR only; hard-coded `DCR` | Multi-coin end-to-end; `coinSymbol`/`renderCoinType`; per-coin summary + Coin column |
@@ -42,6 +43,15 @@ chi `/address/{addr}` → `AddressPathCtx` → `AddressPage` + `middleware.GetCo
 | `AddressHistory(... txnView)` | `AddressHistory(... txnView, coinType uint8)` |
 | (not documented) | merged-view LIMIT-0 fix + filter-before-paginate invariant + regression tests |
 | Chart `amountflow` SKA SQL fix (PR #263) | Still valid; JS chart pipeline now coin-keyed + server-precomputed cumulative balance |
+
+### Stale-Claim Delta (`1b670255` → `a48ea0e1` — Refresh delta)
+| Prior wiki claim | Current reality |
+|---|---|
+| `utxoStore` SKA handling undocumented | `utxoStore.set()` now stores `SKAValue` (pgblockchain.go:176-196); prior omission caused all SKA spending rows to have `ska_value=''` → `sent_ska=0` on amount-flow charts |
+| `FromStake`/`ToStake` VAR-only (from `ReduceAddressHistory`) | `retrieveAddressBalance` (queries.go:1440-1632) now computes per-coin `FromStake`/`ToStake` via SQL; `HasStakeOutputs/HasStakeInputs` iterate `Coins` map; VAR-only in practice (SKA staking not planned) |
+| Dygraph `ylabel` option used for chart title | `ylabel` removed; chart title written to `data-address-target="chartTitle"` DOM div (`address.tmpl:271`); set via `ctrl.chartTitleTarget.textContent` (controller:713) |
+| `maxAddrRows` / `pageSizeOptions` present in controller | Both removed (`4d5f63ee`); template has always-enabled stable 20/40/80/160 dropdown |
+| Per-index `setVisibility` loop in `updateFlow` | `flowVisibility(bitmap)` export (controller:209) returns single map; `updateFlow` makes one `setVisibility(object)` call to avoid transient-empty predraw_ crash |
 
 See also:
 - /wiki/code-analysis/address/flow.full.md (Sections 1–8)

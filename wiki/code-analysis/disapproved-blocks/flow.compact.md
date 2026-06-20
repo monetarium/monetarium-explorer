@@ -24,4 +24,4 @@
 5. Adding a field driven by anything other than new-block → break ETag invalidation or move off `withCache`.
 6. Adding real-time updates → imports C3/C6/C8; needs a dedicated WS message and a `data-controller` clone-template flow.
 7. Adding amounts → imports C1/C7; do not extend `BlockStatus`; build a new row type with SKA-string pipeline.
-8. Renaming the template or the dataSource method → update [explorer.go:392](../../../cmd/dcrdata/internal/explorer/explorer.go#L392) and [explorer_test.go:73](../../../cmd/dcrdata/internal/explorer/explorer_test.go#L73) mock.
+8. Renaming the template or the dataSource method → update [explorer.go:396](../../../cmd/dcrdata/internal/explorer/explorer.go#L396) and [explorer_test.go:79](../../../cmd/dcrdata/internal/explorer/explorer_test.go#L79) mock.

@@ -7,8 +7,8 @@ these pages.
 
 ## Risk: Orphaned page / dead link (route ↔ nav drift)
 - **Status:** currently in sync — routes at
-  [main.go:780-781](../../../cmd/dcrdata/main.go#L780-L781) and the "Agendas" navbar item at
-  [extras.tmpl:84](../../../cmd/dcrdata/views/extras.tmpl#L84) (both added in PR #395).
+  [main.go:785-786](../../../cmd/dcrdata/main.go#L785-L786) and the "Agendas" navbar item at
+  [extras.tmpl:85](../../../cmd/dcrdata/views/extras.tmpl#L85) (both added in PR #395).
 - **Trigger:** remove one without the other — drop the navbar item and the page is reachable only
   by direct URL or the vote-tx link in [tx.tmpl:593](../../../cmd/dcrdata/views/tx.tmpl#L593); drop
   the route and the navbar item becomes a dead 404/410 link.
@@ -18,7 +18,7 @@ these pages.
 ## Risk: Not-yet-started agenda nil summary (panic)
 - **Trigger:** visit `/agenda/{id}` for a deployment whose `StartTime` is still in the future, or
   remove the nil-summary guard at
-  [explorerroutes.go:1998-2003](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L1998-L2003).
+  [explorerroutes.go:2068-2072](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L2068-L2072).
 - **Affected:** `ChainDB.AgendasVotesSummary` returns `(nil, nil)` for a future-`StartTime` agenda;
   `AgendaPage` then dereferences `summary.Abstain/Yes/No` (choice override) and `summary.LockedIn`
   (time-left).
@@ -28,16 +28,33 @@ these pages.
   [agendapage_test.go](../../../cmd/dcrdata/internal/explorer/agendapage_test.go) (`f6ea9703`).
   **Do not remove the guard** — it is the only thing between a freshly-defined agenda and a 500.
 
+## Risk: PRE-VOTING meters rendered for Decred-era vote version
+- **Trigger:** remove or weaken the `.Agendas` guard from the PRE-VOTING `{{if}}` at
+  [agendas.tmpl:105](../../../cmd/dcrdata/views/agendas.tmpl#L105) — reverts from
+  `{{if and (or (not .NetworkUpgraded) .VotingTriggered) .Agendas}}` back to
+  `{{if or (not .NetworkUpgraded) .VotingTriggered}}`.
+- **Context:** inside the `{{with .VotingSummary}}` block, `.Agendas` is `VoteSummary.Agendas`
+  (the tracker's `[]AgendaSummary`), already cross-filtered by `filterAgendaSummaries`. On mainnet
+  with no VoteVersion ≥ 11 agendas, that slice is empty after filtering — the meters should be
+  hidden. Without the guard, `.NetworkUpgraded`/`.VotingTriggered` from the v10 tracker state
+  could still be true, so v10 Miners/Voters progress meters appear while the table shows the
+  "No agendas found" empty state.
+- **Affected:** the v{{.Version}} Miners + Voters progress meter `<div>`s in the PRE-VOTING
+  section of the `/agendas` page.
+- **Failure mode:** silent — inconsistent UI (meters show while table shows empty state), no
+  build/test error.
+- **Added:** commit `07f2d444`.
+
 ## Risk: Empty historical vote charts
 - **Trigger:** open `/agenda/{id}` on a DB that synced *after* an agenda's votes were cast,
   or for a vote version with no deployments (`SSGenVoteChoices` returns `[]`).
 - **Affected:** `agenda_votes` table; `AgendaVotes`
-  ([pgblockchain.go:1588](../../../db/dcrpg/pgblockchain.go#L1588)); `/api/agenda/{id}`;
+  ([pgblockchain.go:1619](../../../db/dcrpg/pgblockchain.go#L1619)); `/api/agenda/{id}`;
   `agenda_controller.js` (falls back to `[[0,0,0,0]]`).
 - **Failure mode:** silent — charts render blank, page is otherwise correct.
 - **Fix / note:** `agenda_votes` is populated **forward** during sync via `insertVotes`
   ([queries.go:382](../../../db/dcrpg/queries.go#L382), called at
-  [pgblockchain.go:4340](../../../db/dcrpg/pgblockchain.go#L4340)). Backfilling completed
+  [pgblockchain.go:4426](../../../db/dcrpg/pgblockchain.go#L4426)). Backfilling completed
   pre-sync votes requires a resync from genesis. The choice *table* on the page (counts via
   `AgendasVotesSummary`) shares the same data source, so it is subject to the same gap.
 
@@ -48,12 +65,12 @@ these pages.
 - **Failure mode:** hard — explorer fails to start. **Pre-existing**, unchanged by re-enabling
   the page; if the explorer already runs on the target net, the tracker already initializes.
 - **Simnet:** `voteTracker == nil` → `AgendasPage` returns the "agendas disabled on simnet"
-  status page by design ([explorerroutes.go:2073-2077](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L2073-L2077)).
+  status page by design ([explorerroutes.go:2143-2147](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L2143-L2147)).
 
 ## Risk: Choice-ID / JSON-tag drift
 - **Trigger:** rename a vote choice ID or a `dbtypes.AgendaVoteChoices` JSON tag.
 - **Affected:** the lower-cased switch at
-  [explorerroutes.go:2009-2017](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L2009-L2017)
+  [explorerroutes.go:2079-2087](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L2079-L2087)
   (`"abstain"/"yes"/"no"`); `agenda_controller.js` keys (`d.yes/d.abstain/d.no/d.time/d.height`);
   meter `data-*` attrs in `agendas.tmpl`.
 - **Failure mode:** silent — counts mis-mapped or charts blank; no build/test error
@@ -63,9 +80,9 @@ these pages.
 ## Risk: Milestone unavailability
 - **Trigger:** `GetBlockChainInfo` stops returning a deployment whose `agenda_votes` rows exist.
 - **Affected:** `ChainInfo().AgendaMileStones[id]` lookups in `AgendaVotes`/`AgendasVotesSummary`/
-  `AgendaVoteCounts` ([pgblockchain.go:1593,1612,1635](../../../db/dcrpg/pgblockchain.go#L1593));
+  `AgendaVoteCounts` ([pgblockchain.go:1624,1643,1666](../../../db/dcrpg/pgblockchain.go#L1624));
   also the consensus-gating helpers `IsDCP0010/0011/0012Active`
-  ([pgblockchain.go:5064-5152](../../../db/dcrpg/pgblockchain.go#L5064-L5152)).
+  ([pgblockchain.go:5170-5235](../../../db/dcrpg/pgblockchain.go#L5170-L5235)).
 - **Failure mode:** silent for the UI (empty/zero); potentially behavioral for subsidy/blake3pow
   gating (separate concern, not touched by re-enabling).
 
@@ -79,11 +96,11 @@ these pages.
   literal `11` elsewhere → versions 1–10 reappear in both list surfaces. No error, just wrong rows.
 - **Trigger (loud):** let `AllAgendas` propagate storm's `ErrNotFound` (returned when *no* agenda
   reaches the threshold) instead of mapping it to an empty slice + nil error. Both `AgendasPage`
-  ([explorerroutes.go:2080-2084](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L2080-L2084))
+  ([explorerroutes.go:2149-2153](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L2149-L2153))
   and `getAgendasData`
-  ([apiroutes.go:2048-2052](../../../cmd/dcrdata/internal/api/apiroutes.go#L2048-L2052)) treat any
+  ([apiroutes.go:2070-2074](../../../cmd/dcrdata/internal/api/apiroutes.go#L2070-L2074)) treat any
   returned error as a hard failure → `ExpStatusError` page / HTTP 503 instead of the
-  *"No agendas found"* empty state ([agendas.tmpl:227-232](../../../cmd/dcrdata/views/agendas.tmpl#L227-L232), HTTP 200).
+  *"No agendas found"* empty state ([agendas.tmpl:230](../../../cmd/dcrdata/views/agendas.tmpl#L230), HTTP 200).
 - **Out of scope:** the gate is list-only. `AgendaInfo(id)` stays unfiltered, so `/agenda/{id}` for
   a hidden version is still reachable by direct URL — do not "fix" that by filtering the single-ID
   lookup.
@@ -94,8 +111,8 @@ these pages.
 ## Risk: Summary cards drift from the filtered list (`/agendas` two-render gap)
 - **Status:** `AgendasPage` cross-filters `VoteSummary.Agendas` against the `AllAgendas` ID set
   via the pure helper `filterAgendaSummaries`
-  ([call explorerroutes.go:2104](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L2104),
-  [func 2126-2138](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L2126-L2138), PR #401) so
+  ([call explorerroutes.go:2174](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L2174),
+  [func 2200-2208](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L2200-L2208), PR #401) so
   the live progress cards match the version-filtered table.
 - **Why it exists:** the `/agendas` page renders agendas from **two** sources — the table from
   `AllAgendas()` (version-filtered) and the live cards from `voteTracker.Summary().Agendas` (the
@@ -111,7 +128,7 @@ these pages.
   ([tracker.go:479-483](../../../gov/agendas/tracker.go#L479-L483)), so reassigning `.Agendas` in
   place would corrupt tracker state across requests / race the template read.
 - **Coverage:** the filter is extracted into the pure helper `filterAgendaSummaries`
-  ([explorerroutes.go:2126-2138](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L2126-L2138))
+  ([explorerroutes.go:2200-2208](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L2200-L2208))
   and unit-tested by `TestFilterAgendaSummaries`
   ([agendapage_test.go:78](../../../cmd/dcrdata/internal/explorer/agendapage_test.go#L78), 4 cases).
   The handler wiring stays uncovered (`voteTracker` is a concrete `*agendas.VoteTracker`, not

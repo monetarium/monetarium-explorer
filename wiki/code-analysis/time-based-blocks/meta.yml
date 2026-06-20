@@ -1,0 +1,10 @@
+domain: time-based-blocks
+anchor: b9d2b324
+files:
+  - cmd/dcrdata/internal/explorer/explorer.go
+  - cmd/dcrdata/internal/explorer/explorerroutes.go
+  - cmd/dcrdata/views/timelisting.tmpl
+  - db/dbtypes/types.go
+  - db/dcrpg/internal/blockstmts.go
+  - db/dcrpg/pgblockchain.go
+  - db/dcrpg/queries.go

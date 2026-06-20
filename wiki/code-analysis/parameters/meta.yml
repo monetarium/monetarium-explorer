@@ -1,0 +1,9 @@
+domain: parameters
+anchor: c0cf86f4
+files:
+  - blockdata/blockdata.go
+  - cmd/dcrdata/internal/explorer/explorer.go
+  - cmd/dcrdata/internal/explorer/explorermiddleware.go
+  - cmd/dcrdata/internal/explorer/explorerroutes.go
+  - cmd/dcrdata/internal/explorer/parameters.go
+  - cmd/dcrdata/views/parameters.tmpl

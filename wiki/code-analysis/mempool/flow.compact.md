@@ -24,7 +24,8 @@
 - New `MempoolCoinStats` field → update `ParseTxns` (batch) **AND** `addTxToCoinStats` (incremental) **AND** `normalizeCoinStatsAmounts` (if string) **AND** `MempoolShort.DeepCopy` **AND** monitor_test.go.
 - New `MempoolShort` field → `DeepCopy` + `Trim` + both WS encoders (root + pubsub).
 - New `CoinFillData` field or status → Go `computeCoinFills` **AND** JS `indicator_fill.js` mirror **AND** `home_mempool.tmpl` + `<template id="fill-bar-template">` **AND** `dev_indicators.go` fixtures.
-- New per-tx `MempoolTx` field → populate in **BOTH** `mempoolTxns` (batch) **AND** `TxHandler` (incremental); prefer one shared source — `Fees`/`SKAFeeRates` already diverge by source (batch=node GRM, incremental=recomputed).
+- New per-tx `MempoolTx` field → populate in **BOTH** `mempoolTxns` (batch) **AND** `TxHandler` (incremental); prefer one shared function — `TicketStage` demonstrates the correct approach (same `ticketStage()` function in both paths); `Fees`/`SKAFeeRates` are the canonical divergent case.
+- Change `TicketStage` logic → update `ticketStage()` caller sites in **BOTH** `mempoolTxns` (`collector.go:166-169`) **AND** `TxHandler` (`monitor.go:291`); template `mempool.tmpl:270` + `ticketRowTemplate:232`; JS `mempool_controller.js::cloneTicketRow`.
 - New saver → must handle `stakeData == nil` (cf. `DataCache.StoreMPData`).
 - Change `CoinFills` inputs → update both call sites (`StoreMPData` AND new-block `Store`).
 

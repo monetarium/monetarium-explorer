@@ -64,8 +64,12 @@ func (c *DataCache) StoreMPData(stakeData *StakeData, txsCopy []exptypes.Mempool
 	c.allFeeRates = stakeData.MinableFees.allFeeRates
 	c.lowestMineableByFeeRate = stakeData.MinableFees.lowestMineableFee
 	c.allTicketsDetails = stakeData.AllTicketsDetails
-	sbits, _ := dcrutil.NewAmount(stakeData.StakeDiff) // 0 if err!=nil
-	c.stakeDiff = int64(sbits)
+	sbits, err := dcrutil.NewAmount(stakeData.StakeDiff)
+	if err != nil {
+		log.Warnf("Invalid stake difficulty %v: %v", stakeData.StakeDiff, err)
+	} else {
+		c.stakeDiff = int64(sbits)
+	}
 }
 
 // GetHeight returns the mempool height

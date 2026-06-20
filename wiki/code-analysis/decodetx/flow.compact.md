@@ -1,6 +1,6 @@
 # Decode/Broadcast Tx (`/decodetx`) — Compact
 
-**Flow:** `GET /decodetx` → `DecodeTxPage` → `rawtx.tmpl` (form only, no data); interactive `<textarea>` + Decode/Broadcast buttons → `messagesocket_service.send({event,message})` → `/ws` → `RootWebsocket` `switch msg.EventId` → `dataSource.DecodeRawTransaction`/`SendRawTransaction` (`ChainDB` → node RPC `decoderawtransaction`/`sendrawtransaction`) → JSON pretty-print → `{EventId: <id>+"Resp", Message}` → `rawtx_controller` `<pre>.textContent = evt`. A parallel handler exists at `/ps` ([pubsub/pubsubhub.go:290-316](../../../pubsub/pubsubhub.go#L290-L316)); `sendtx` is also exposed as `POST /insight/api/tx/send`.
+**Flow:** `GET /decodetx` → `DecodeTxPage` → `rawtx.tmpl` (form only, no data); interactive `<textarea>` + Decode/Broadcast buttons → `messagesocket_service.send({event,message})` → `/ws` → `RootWebsocket` `switch msg.EventId` → `dataSource.DecodeRawTransaction`/`SendRawTransaction` (`ChainDB` → node RPC `decoderawtransaction`/`sendrawtransaction`) → JSON pretty-print → `{EventId: <id>+"Resp", Message}` → `rawtx_controller` `<pre>.textContent = evt`. A parallel handler exists at `/ps` ([pubsub/pubsubhub.go:292-319](../../../pubsub/pubsubhub.go#L292-L319)); `sendtx` is also exposed as `POST /insight/api/tx/send`.
 
 **Key architectural patterns:**
 

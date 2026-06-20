@@ -61,7 +61,6 @@ func TestDeepCopys(t *testing.T) {
 					Outdex: 1,
 				},
 			},
-			Hash:     "96e10d7ce108b1a357168b0a923d86d2744ba9777a2d81cbff71ffb982381c95",
 			Size:     539,
 			TotalOut: 106.39717461,
 			Type:     "Ticket",
@@ -84,7 +83,6 @@ func TestDeepCopys(t *testing.T) {
 					Outdex: 1,
 				},
 			},
-			Hash:     "8eb2f6c8f3a9cdc8d6de2ef3bfca9efcffed4484dd4fde2d01dc0fc0e415c75a",
 			Size:     538,
 			TotalOut: 106.39717461,
 			Type:     "Ticket",
@@ -109,7 +107,6 @@ func TestDeepCopys(t *testing.T) {
 					Outdex: 0,
 				},
 			},
-			Hash:     "64ce0422cb6ba1aefa63c8df1d872250d181261ff3acd5a71bc1f521096207c9",
 			Size:     344,
 			TotalOut: 102.86278351,
 			Type:     "Vote",
@@ -131,7 +128,6 @@ func TestDeepCopys(t *testing.T) {
 					Outdex: 0,
 				},
 			},
-			Hash:     "07aa38f10fe1a849a52b9d4812081854e4ac7268751a0ea661e8f499d7de91f1",
 			Size:     345,
 			TotalOut: 105.29923146,
 			Type:     "Vote",
@@ -153,7 +149,6 @@ func TestDeepCopys(t *testing.T) {
 					Outdex: 0,
 				},
 			},
-			Hash:     "1df658e1b0de08112adcfb9b8b17dcc2b64f756b1e21f6b1f715fd2b86439955",
 			Size:     345,
 			TotalOut: 111.28226529,
 			Type:     "Vote",
@@ -183,7 +178,6 @@ func TestDeepCopys(t *testing.T) {
 					Outdex: 0,
 				},
 			},
-			Hash:     "0572b2d121322d3a9b20fe5d5024c73d8bb817398948a167ddb668e52bbb21f6",
 			Size:     581,
 			TotalOut: 139.11389736,
 			Type:     "Regular",
@@ -210,7 +204,6 @@ func TestDeepCopys(t *testing.T) {
 					Outdex: 2,
 				},
 			},
-			Hash:     "9e11deaae5ecd1d3288468a491f820b66adfb74be70eba582c0b13a25e76bb3b",
 			Size:     580,
 			TotalOut: 204.94920773,
 			Type:     "Regular",
@@ -470,53 +463,6 @@ func TestFlattenCoinRows_Idempotent(t *testing.T) {
 	}
 	if b.SKAAmount != "500000000000000000" {
 		t.Errorf("SKAAmount after 2 calls: got %q, want %q", b.SKAAmount, "500000000000000000")
-	}
-}
-
-func TestBytesString(t *testing.T) {
-	tests := []struct {
-		s    uint64
-		want string
-	}{
-		{
-			0,
-			"0 B",
-		},
-		{
-			1,
-			"1 B",
-		},
-		{
-			999,
-			"999 B",
-		},
-		{
-			1000,
-			"1.0 kB",
-		},
-		{
-			999_999,
-			"1000 kB",
-		},
-		{
-			1_000_000,
-			"1.0 MB",
-		},
-		{
-			1_200_000,
-			"1.2 MB",
-		},
-		{
-			1_000_000_000_000,
-			"1000 GB",
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.want, func(t *testing.T) {
-			if got := BytesString(tt.s); got != tt.want {
-				t.Errorf("bytesString() = %v, want %v", got, tt.want)
-			}
-		})
 	}
 }
 

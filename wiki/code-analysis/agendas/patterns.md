@@ -36,7 +36,7 @@ Agenda pages compose two independent origins for the same logical entity:
   vote tx; milestones rebuilt from `GetBlockChainInfo.Deployments`
   ([pgblockchain.go:3118-3157](../../../db/dcrpg/pgblockchain.go#L3118-L3157)).
 - **Join key:** string agenda `ID` + lower-cased choice ID (`"yes"`/`"no"`/`"abstain"`) at
-  [explorerroutes.go:2009-2017](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L2009-L2017).
+  [explorerroutes.go:2079-2087](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L2079-L2087).
 - **Constraint:** the live source determines *which agendas exist*; the Postgres source supplies
   *how votes were cast over time*. The two can disagree (a deployment dropped from
   `GetBlockChainInfo` orphans its still-present `agenda_votes` rows). Historical data is only as
@@ -69,9 +69,9 @@ source and needed their own filter.
   agendas with `q.Gte("VoteVersion", MinVoteVersion)` (constant `MinVoteVersion = 11`,
   [deployments.go:57](../../../gov/agendas/deployments.go#L57)). The one accessor feeds the
   `/agendas` table (`AgendasPage`,
-  [explorerroutes.go:2079](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L2079)) **and**
+  [explorerroutes.go:2149](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L2149)) **and**
   the `/api/agendas` JSON (`getAgendasData`,
-  [apiroutes.go:2047](../../../cmd/dcrdata/internal/api/apiroutes.go#L2047)). Introduced for
+  [apiroutes.go:2070](../../../cmd/dcrdata/internal/api/apiroutes.go#L2070)). Introduced for
   issue #400.
 - **Single-row lookups stay unfiltered.** The companion accessor `AgendaInfo(id)`
   ([deployments.go:270](../../../gov/agendas/deployments.go#L270)) is *not* filtered: the list gate
@@ -83,7 +83,7 @@ source and needed their own filter.
   from `AllAgendas()`. Filtering only the accessor left those cards still showing Decred-era
   agendas, so `AgendasPage` cross-filters them against the `AllAgendas()` ID set via the pure helper
   `filterAgendaSummaries`
-  ([explorerroutes.go:2126-2138](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L2126-L2138),
+  ([explorerroutes.go:2200-2208](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L2200-L2208),
   tested by `TestFilterAgendaSummaries`; PR #401). Match by **ID** — `AgendaSummary` has no
   `VoteVersion` — on a **defensive copy** of the shared, mutex-guarded `tracker.summary` (must not
   mutate tracker state). Extracting the filter as a pure function is what makes it unit-testable; the

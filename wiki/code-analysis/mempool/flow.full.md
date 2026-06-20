@@ -41,6 +41,7 @@ views/home_mempool.tmpl  ──► homepage_controller.js (rAF-buffered indicato
   - `mempool/collector.go:162` — `SKATotals: txhelpers.SKATotalsFromMsgTx(msgTx)` (returns `nil` for VAR-only txs).
   - `mempool/collector.go:148,163` — the batch path's **fee fields trust the node's GRM verbose result**: `Fees: tx.Fee` (float from `GetRawMempoolVerbose`) and `SKAFeeRates: txhelpers.SKAFeeRateMapFromAtoms(tx.SKAFee, msgTx)`. Only `FeeRate` is recomputed locally via `txhelpers.TxFeeRate(msgTx)` (`collector.go:143,149`). This is a **different upstream source** from the incremental `TxHandler` path — see §3.2 and Pitfall 8.
 - **`populateMempoolInputs`** — for `TxTypeRegular` only, resolves `input.CoinType` and `input.SKAValue` from the prev outpoint, either via the mempool's own `TxnsStore` or by an RPC fallback `GetRawTransaction`. Returns `nil` for `SKAValue` outside Regular txs (`mempool/collector.go:169-206`).
+- **`ticketStage(vin []MempoolInput, txnsStore TxnsStore)`** (`mempool/collector.go:175-193`) — determines ticket mining readiness for a `TxTypeSStx` tx. Iterates each input's parent tx hash against `txnsStore`; if the parent is **absent from the store** (pessimistic fallback: treated as unconfirmed) or has `BlockHeight == 0` (still in mempool), returns `"Staging"`. Returns `"Ready"` only when all parents are confirmed. Called immediately after the `TxTypeSStx` check in `mempoolTxns` (`collector.go:166-169`): `txs[len(txs)-1].TicketStage = ticketStage(txs[len(txs)-1].Vin, txnsStore)`.
 - **`ParseTxns`** — the batch aggregator that builds `MempoolInfo.MempoolShort.CoinStats`. Internally uses a `coinAccum` struct with **native `int64` (VAR) and `*big.Int` (SKA) accumulators** plus per-type accumulators for Regular/Ticket/Vote/Revocation; only at the end does it format `Amount`, `RegularAmount`, `TicketAmount`, `VoteAmount`, `RevokeAmount` to decimal-atom strings (`mempool/collector.go:519-644`).
   - SKA per-type maps `skaRegAmt/skaTixAmt/skaVoteAmt/skaRevAmt` exist but **stay empty in practice** by chain invariant (SKA cannot be ticket/vote/revoke). `skaPerTypeStr` returns `"0"` when missing so the JSON contract is stable (`mempool/collector.go:607-614`).
 
@@ -50,7 +51,7 @@ views/home_mempool.tmpl  ──► homepage_controller.js (rAF-buffered indicato
 - **`(*MempoolMonitor).TxHandler(rawTx)`** (per-tx, incremental):
   1. Ignores txs older than `LastBlockTime` (`monitor.go:128-131`).
   2. Decodes; computes `tx.SKATotals` via `txhelpers.SKATotalsFromMsgTx(msgTx)` (`monitor.go:261`). **Fee fields are recomputed locally, not taken from a verbose result**: `Fees: fee.ToCoin()` from `txhelpers.TxFeeRate(msgTx)` (after `valsIn` is back-filled onto `msgTx.TxIn` at `monitor.go:252-254`) and `SKAFeeRates: txhelpers.SKAFeeRateMapFromVerboseVin(rawTx.Vin, msgTx)`. `FeeRate` matches the batch path (`TxFeeRate`), but `Fees`/`SKAFeeRates` come from a **different source** than `mempoolTxns` (`tx.Fee` / `SKAFeeRateMapFromAtoms`) — see §3.1 and Pitfall 8.
-  3. Appends to the appropriate slice (`Transactions/Tickets/Votes/Revocations/TSpends/TAdds`) under `p.mtx.RLock()` + `p.inventory.Lock()`.
+  3. Appends to the appropriate slice (`Transactions/Tickets/Votes/Revocations/TSpends/TAdds`) under `p.mtx.RLock()` + `p.inventory.Lock()`. For `TxTypeSStx`, also sets `tx.TicketStage = ticketStage(tx.Vin, p.txnsStore)` (`monitor.go:291`) before appending — mirrors the batch path using the same `ticketStage()` function against the in-memory store snapshot.
   4. **Incrementally updates `p.inventory.CoinStats`** via `addTxToCoinStats(...)` (`monitor.go:359-363`).
   5. **DeepCopies inventory and fans out to all savers** with `stakeData == nil`: `go s.StoreMPData(nil, nil, invCopy)` (`monitor.go:368-377`). This is what triggers `computeCoinFills` recomputation on new-tx arrival without waiting for the next block.
   6. Broadcasts `pstypes.SigNewTx` on `signalOuts`.
@@ -90,6 +91,7 @@ Additional CoinFills recomputation lives in **`(*explorerUI).Store`** (new-block
 - **`MempoolShort`** (`:1126-1157`) — embedded in `MempoolInfo`; carries `CoinStats`, `CoinFills`, `TotalFillRatio`, `ActiveSKACount`. **`DeepCopy(MempoolShort)`** (`:1174-1248`) manually copies `CoinStats` (shallow per-entry copy — value type) and `CoinFills` via `CopyCoinFillSlice`.
 - **`MempoolInfo`** (`:866-878`) — embeds `MempoolShort`, holds tx slices and `Ident`; has its own embedded `sync.RWMutex` (separate from `MempoolMonitor.mtx`). `DeepCopy` produces a fully-detached snapshot for fan-out.
 - **`MempoolTx.SKATotals map[uint8]string`** (`:1405`) — per-coin SKA totals in atom-string form.
+- **`MempoolTx.TicketStage string`** (`explorertypes.go:1513`, `json:"ticket_stage,omitempty"`) — `"Ready"` or `"Staging"` for ticket purchase (`TxTypeSStx`) txs; empty string (omitted from JSON) for all other types. Value type — `DeepCopy` propagates it automatically. Not carried through `TrimMempoolTx` → `TrimmedTxInfo` since VisualBlocks/trimmed view does not display the tickets table.
 - **`primaryCoinType(tx)`** (`:1056-1065`) — encodes the chain invariant "a mempool tx is single-coin": returns the single key from `SKATotals` or `0` for VAR (empty `SKATotals`).
 - **`TrimMempoolTx`** (`:1067-1099`) — now propagates `CoinType = primaryCoinType(tx)` and `SKASent = tx.SKATotals` onto `TxBasic`, so trimmed mempool entries no longer drop SKA totals. (Note: `TxBasic.SKASent` is marked `// Deprecated: use TotalRaw + CoinType` at `:353`.)
 - **`TrimmedMempoolInfo`** (`:847-863`) — for the home page; carries `CoinFills`, `TotalFillRatio`, `ActiveSKACount`, `CoinStats`. Built by `(*MempoolInfo).Trim()` (`:905-942`).
@@ -126,12 +128,15 @@ In both pipelines the **CoinFills attached to `sigNewTxs` come from `MempoolShor
   - Current Mempool card: `Total Sent` iterates `orderedMempoolCoinStats .CoinStats` and renders one `{amount, symbol}` line per coin (VAR always; SKA-n only when `TxCount > 0`).
   - Transactions card: VAR section is static (Regular / Tickets / Votes / Revocations from `CoinStats[0]`); SKA sections render Regular-only inside `data-mempool-target="skaSections"` for live JS rebuild.
   - Regular transactions table: `{{if .SKATotals}}` branches per row — SKA txs show `coinSymbol` + `skaDecimalParts $amt false`, VAR txs show `VAR` + `float64AsDecimalParts .TotalOut 8 false`. SKA Fee Rate cell renders `—` (em-dash) because `MempoolTx.FeeRate` is VAR-only float64; a follow-up will add `FeeRateRaw string` for precise SKA display.
-  - Tickets / Votes / Revocations tables stay VAR-only per spec; column headers say `Total VAR` and fee-rate unit is `VAR/kB`.
+  - Tickets table: now includes a `Ticket Stage` column (header `:242-253` with tooltip "Ticket stage: Ready (all inputs confirmed) or Staging (spends an unconfirmed output)") that renders `{{.TicketStage}}` per row (`:270`). The `ticketRowTemplate` (`:222-234`) includes `<td data-slot="ticketStage">` so dynamically inserted rows also show the stage.
+  - Votes / Revocations tables stay VAR-only per spec; column headers say `Total VAR` and fee-rate unit is `VAR/kB`.
   - Treasury Spends and Treasury Adds sections both removed — Monetarium has no treasury (cf. `/treasury` → 410 in [core/pages.md](../../core/pages.md)), so neither tx type can occur on-chain. Backend `TAdds` / `NumTAdds` plumbing in `explorertypes.go`, `monitor.go`, `collector.go` is retained as dead code; UI no longer surfaces it.
   - `CoinFills` is not consumed here (it's a homepage indicator-bar concept).
 
 #### 3.9 Frontend — `cmd/dcrdata/public/js/`
 
+- **`controllers/mempool_controller.js`** — the full-page mempool view (`data-controller="mempool time"` in `mempool.tmpl:8`) uses this controller, not `homepage_controller.js`. Key additions for `TicketStage`:
+  - `cloneTicketRow(template, tx)` (`:107-116`) reads `tx.ticket_stage` from the `sigNewTxs` payload and sets the `[data-slot="ticketStage"]` cell (fallback `''` for non-ticket txs). `ticket_stage` arrives via `sigNewTxs.Txs` since `MempoolTx` already carries `TicketStage` in the JSON; **no WS schema change** was required.
 - **`controllers/homepage_controller.js`** registers handlers for `newtxs`, `mempool`, `getmempooltxsResp`. Key behaviours:
   - All indicator DOM writes funnel through `updateIndicators(payload)` which schedules a single `requestAnimationFrame` flush; multiple payloads inside the same frame collapse into the latest (`:216-226`).
   - `_flushIndicators` reads `coin_fills`, `total_fill_ratio`, `active_ska_count`. For each entry it calls `applyFillBar` (existing `[data-coin=…]`) or `injectFillBar` (new). Bars for coins no longer in the payload are zeroed via `zeroFillEntry`, **never removed**.
@@ -199,6 +204,13 @@ When adding a **new saver**:
 - It MUST handle `stakeData == nil` (incremental path) without corrupting state. Cf. `DataCache.StoreMPData`.
 - It MUST treat the `*MempoolInfo` it receives as **shared** when called from `CollectAndStore` (slice is deep-copied per saver but the struct pointer is shared from `TxHandler`).
 
+When modifying **`TicketStage` / `ticketStage()` classification logic**:
+- Update **both** call sites: `mempoolTxns` batch path (`collector.go:166-169`) and `TxHandler` incremental path (`monitor.go:291`).
+- The same `ticketStage(vin, txnsStore)` function is used by both; changing its signature cascades to both callers.
+- Template: `mempool.tmpl:270` (static render) + `ticketRowTemplate:232` (dynamic `data-slot="ticketStage"`).
+- JS: `mempool_controller.js::cloneTicketRow` reads `tx.ticket_stage` from `sigNewTxs.Txs`.
+- No `DeepCopy` or `MempoolShort` update needed (string value type, not on `MempoolShort`).
+
 **Silent failure modes:**
 - Converting an SKA `Amount` string to `float64` anywhere in the pipeline → precision loss past ~17 significant digits (an 18-decimal SKA amount > 10 will mis-render).
 - Forgetting `isBig=true` for SKA in `addAtomStrings` → silently truncates SKA atoms to `int64`.
@@ -222,6 +234,7 @@ When adding a **new saver**:
 5. **Adding a saver that mutates `inv` after `CollectAndStore`.** `CollectAndStore` passes one freshly-allocated `inv` to all savers; `TxHandler` passes a `DeepCopy`. A saver that mutates `inv` in the `CollectAndStore` path can be observed by other savers' goroutines.
 6. **Updating the SCSS clamp instead of the JS/Go raw value.** Bars visually clipping at 100% with text showing 150% is intentional. Removing the SCSS clamp produces broken layouts; clamping the value at source breaks the overflow signal.
 7. **Re-deriving `MempoolTx.Fees` for SKA.** The fee field is in VAR even for SKA txs (per CLAUDE.md chain invariant: SKA tx fees are paid in SKA, but the explorer currently surfaces the raw `dcrutil.Amount` from `txhelpers.TxFeeRate` which is VAR-typed — verify in `monitor.go:243-249` and `collector.go:143-149`). This is a known modelling gap.
+9. **`TicketStage` accuracy depends on `txnsStore` snapshot timing.** `ticketStage()` reads `txnsStore` at classification time. If a parent tx is inserted by a concurrent `TxHandler` goroutine that runs between the current handler's lock acquisition and its `ticketStage()` call, the stage may read `"Staging"` even though the parent just arrived. The pessimistic absent-parent fallback is intentional: a parent not yet in the store is conservatively treated as unconfirmed. Self-corrects at the next `CollectAndStore`.
 8. **Assuming `MempoolTx.Fees`/`SKAFeeRates` are computed identically on both collection paths.** They are not: the batch path (`mempoolTxns`) trusts the node's GRM verbose result (`tx.Fee`, `SKAFeeRateMapFromAtoms(tx.SKAFee, …)`), while the incremental path (`TxHandler`) recomputes from the decoded `msgTx` (`TxFeeRate`, `SKAFeeRateMapFromVerboseVin(rawTx.Vin, …)`). The incremental computation depends on `valsIn` being correctly back-filled onto `msgTx.TxIn`; if a prev-out value is missing, the locally-computed `Fees` can disagree with the node's, so the same tx may show one fee while in mempool and a corrected fee after the next block's batch refresh. This is manifestation (B) of the consolidated [impact.md → "Dual collection path divergence (batch vs incremental)"](impact.md) risk (manifestation (A) is `CoinStats` aggregate drift). `FeeRate` is *not* affected — both paths use `TxFeeRate(msgTx)`.
 
 ---
@@ -254,6 +267,14 @@ When adding a **new saver**:
 - `cmd/dcrdata/public/js/controllers/homepage_controller.js:25-269` — handler registration, `updateIndicators` rAF batching, `_flushIndicators` apply/inject/zero loop.
 - `cmd/dcrdata/public/js/helpers/indicator_fill.js:20-168` — JS mirror of `types.ComputeCoinFills`.
 - `txhelpers/txhelpers.go:1305-1329` — `SKATotalsFromMsgTx`; nil-return for VAR-only txs.
+- `explorer/types/explorertypes.go:1513` — `MempoolTx.TicketStage` field (`json:"ticket_stage,omitempty"`).
+- `mempool/collector.go:175-193` — `ticketStage()` function; pessimistic absent-parent fallback.
+- `mempool/collector.go:166-169` — batch population of `TicketStage` for ticket purchase txs.
+- `mempool/monitor.go:291` — incremental population of `TicketStage` in `TxHandler`.
+- `cmd/dcrdata/views/mempool.tmpl:222-234` — `ticketRowTemplate` with `data-slot="ticketStage"`.
+- `cmd/dcrdata/views/mempool.tmpl:242-253` — Ticket Stage column header with tooltip.
+- `cmd/dcrdata/views/mempool.tmpl:270` — `{{.TicketStage}}` rendering in static ticket row.
+- `cmd/dcrdata/public/js/controllers/mempool_controller.js:107-116` — `cloneTicketRow`; `tx.ticket_stage`.
 
 See also:
 - [/wiki/code-analysis/page-rendering/patterns.md](../page-rendering/patterns.md) (shares-pattern-with: out-of-band shared page state; shared-state lock discipline; block-scoped ETag cache)

@@ -456,7 +456,7 @@ func (wsh *WebsocketHub) Run() {
 				if !ok || newTx == nil {
 					continue
 				}
-				log.Tracef("Received new tx %s. Queueing in each client's send buffer...", newTx.Hash)
+				log.Tracef("Received new tx %s. Queueing in each client's send buffer...", newTx.TxID)
 				// Only signal clients if there are tx buffers ready to send or
 				// the ticker has fired.
 				if !(wsh.maybeSendTxns(newTx) || wsh.TimeToSendTxBuffer()) {

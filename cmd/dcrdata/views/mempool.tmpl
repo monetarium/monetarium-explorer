@@ -193,7 +193,7 @@
                               data-ticket-index="{{.VoteInfo.MempoolTicketIndex}}"
                               >
                                   <td class="break-word clipboard">
-                                    <a class="hash lh1rem" href="/tx/{{.Hash}}">{{.Hash}}</a>
+                                    <a class="hash lh1rem" href="/tx/{{.TxID}}">{{.TxID}}</a>
                                     {{template "copyTextIcon"}}
                                   </td>
                                   <td class="mono fs15"><a href="/block/{{.VoteInfo.Validation.Hash}}">{{.VoteInfo.Validation.Height}}<span
@@ -258,7 +258,7 @@
                               {{- range .Tickets -}}
                               <tr>
                                   <td class="break-word clipboard">
-                                    <a class="hash lh1rem" href="/tx/{{.Hash}}">{{.Hash}}</a>
+                                    <a class="hash lh1rem" href="/tx/{{.TxID}}">{{.TxID}}</a>
                                     {{template "copyTextIcon"}}
                                   </td>
                                   <td class="mono fs15 text-end">
@@ -313,7 +313,7 @@
                               {{- range .Revocations -}}
                               <tr>
                                   <td class="break-word clipboard">
-                                    <a class="hash lh1rem" href="/tx/{{.Hash}}">{{.Hash}}</a>
+                                    <a class="hash lh1rem" href="/tx/{{.TxID}}">{{.TxID}}</a>
                                     {{template "copyTextIcon"}}
                                   </td>
                                   <td class="mono fs15 text-end">
@@ -373,7 +373,7 @@
                               {{- range .Transactions -}}
                               <tr>
                                   <td class="break-word clipboard">
-                                      <a class="hash lh1rem" href="/tx/{{.Hash}}">{{.Hash}}</a>
+                                      <a class="hash lh1rem" href="/tx/{{.TxID}}">{{.TxID}}</a>
                                       {{template "copyTextIcon"}}
                                   </td>
                                   {{- if .SKATotals -}}
