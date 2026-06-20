@@ -3562,15 +3562,15 @@ func appendWindowStats(charts *cache.ChartData, rows *sql.Rows) error {
 	if lastHeight > 0 {
 		if lastHeight == nextWindowHeight-1 {
 			// The last row completed a window — no partial remains.
-			charts.PartialWindow = cache.PartialWindow{}
+			charts.SetPartialWindow(cache.PartialWindow{})
 		} else {
-			charts.PartialWindow = cache.PartialWindow{
+			charts.SetPartialWindow(cache.PartialWindow{
 				Height:     uint64(lastHeight),
 				Time:       uint64(timestamp.Unix()),
 				Price:      price,
 				Diff:       difficulty,
 				StakeCount: ticketsCount,
-			}
+			})
 		}
 	}
 

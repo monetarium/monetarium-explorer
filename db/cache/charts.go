@@ -893,6 +893,15 @@ func (charts *ChartData) SetTip(tip ChartTip) {
 	charts.Tip = tip
 }
 
+// SetPartialWindow stores accumulated data for the current (incomplete)
+// difficulty window. Chart makers append this as an extra data point when
+// the tip is not at a window boundary.
+func (charts *ChartData) SetPartialWindow(pw PartialWindow) {
+	charts.tipMtx.Lock()
+	defer charts.tipMtx.Unlock()
+	charts.PartialWindow = pw
+}
+
 // TriggerUpdate triggers (*ChartData).Update.
 func (charts *ChartData) TriggerUpdate(_ string, _ uint32) error {
 	if err := charts.Update(); err != nil {
@@ -2041,6 +2050,10 @@ func stakedCoinsChart(charts *ChartData, bin binLevel, axis axisType, _ interval
 	tip := charts.Tip
 	charts.tipMtx.RUnlock()
 
+	// Block/day-binned data has no window concept, so the override guard
+	// is whether a tip was pushed, not whether a partial window exists.
+	// The last block's accumulated supply/pool-value may be stale relative
+	// to the live RPC values.
 	override := tip.CoinSupply > 0
 
 	switch bin {

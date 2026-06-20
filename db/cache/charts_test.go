@@ -706,4 +706,89 @@ func TestChartTipOverride(t *testing.T) {
 			t.Errorf("last diff: got %f, want 2.0", got)
 		}
 	})
+
+	t.Run("staked_coins_tip_override", func(t *testing.T) {
+		for _, bin := range []string{string(BlockBin), string(DayBin)} {
+			t.Run(bin, func(t *testing.T) {
+				for _, axis := range []string{string(TimeAxis), string(HeightAxis)} {
+					t.Run(axis, func(t *testing.T) {
+						charts := NewChartData(ctx, 0, chaincfg.MainNetParams())
+
+						// Seed block/day data: NewAtoms=[100,200] → accumulate → [100,300]
+						charts.Blocks.NewAtoms = ChartUints{100, 200}
+						charts.Blocks.PoolValue = ChartUints{50, 60}
+						charts.Blocks.Time = ChartUints{100, 200}
+						charts.Blocks.Height = ChartUints{1, 2}
+
+						charts.Days.NewAtoms = ChartUints{100, 200}
+						charts.Days.PoolValue = ChartUints{50, 60}
+						charts.Days.Time = ChartUints{0, 86400}
+						charts.Days.Height = ChartUints{1, 2}
+
+						// With tip set — last values should be overridden
+						charts.SetTip(ChartTip{CoinSupply: 500, PoolValue: 99})
+
+						data, err := charts.Chart(PercentStaked, bin, axis, string(DefaultInterval))
+						if err != nil {
+							t.Fatalf("stakedCoinsChart: %v", err)
+						}
+						resp := decodeChart(t, data)
+						circ := resp[circulationKey].([]interface{})
+						if len(circ) != 2 {
+							t.Fatalf("circulation: expected 2, got %d", len(circ))
+						}
+						if got := uint64(lastFloat(circ)); got != 500 {
+							t.Errorf("last circulation: got %d, want 500 (tip override)", got)
+						}
+						pv := resp[poolValKey].([]interface{})
+						if len(pv) != 2 {
+							t.Fatalf("poolval: expected 2, got %d", len(pv))
+						}
+						if got := uint64(lastFloat(pv)); got != 99 {
+							t.Errorf("last poolval: got %d, want 99 (tip override)", got)
+						}
+					})
+				}
+			})
+		}
+	})
+
+	t.Run("staked_coins_no_tip_no_override", func(t *testing.T) {
+		for _, bin := range []string{string(BlockBin), string(DayBin)} {
+			t.Run(bin, func(t *testing.T) {
+				charts := NewChartData(ctx, 0, chaincfg.MainNetParams())
+				charts.Blocks.NewAtoms = ChartUints{100, 200}
+				charts.Blocks.PoolValue = ChartUints{50, 60}
+				charts.Blocks.Time = ChartUints{100, 200}
+				charts.Blocks.Height = ChartUints{1, 2}
+
+				charts.Days.NewAtoms = ChartUints{100, 200}
+				charts.Days.PoolValue = ChartUints{50, 60}
+				charts.Days.Time = ChartUints{0, 86400}
+				charts.Days.Height = ChartUints{1, 2}
+
+				// No tip set — data should be unchanged
+				data, err := charts.Chart(PercentStaked, bin, string(TimeAxis), string(DefaultInterval))
+				if err != nil {
+					t.Fatalf("stakedCoinsChart: %v", err)
+				}
+				resp := decodeChart(t, data)
+				circ := resp[circulationKey].([]interface{})
+				if len(circ) != 2 {
+					t.Fatalf("circulation: expected 2, got %d", len(circ))
+				}
+				// accumulate → [100, 300], last = 300
+				if got := uint64(lastFloat(circ)); got != 300 {
+					t.Errorf("last circulation: got %d, want 300 (no override)", got)
+				}
+				pv := resp[poolValKey].([]interface{})
+				if len(pv) != 2 {
+					t.Fatalf("poolval: expected 2, got %d", len(pv))
+				}
+				if got := uint64(lastFloat(pv)); got != 60 {
+					t.Errorf("last poolval: got %d, want 60 (no override)", got)
+				}
+			})
+		}
+	})
 }
