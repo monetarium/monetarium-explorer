@@ -643,6 +643,48 @@ body.darkBG {
   display: none; /* the shell renders its own fixed legend below the chart */
 }
 
+.chart-ranger .u-axis {
+  pointer-events: none;
+}
+
 body.darkBG .chartview .u-axis {
   color: #c8c8c8;
+}
+
+.chart-ranger {
+  position: relative;
+  width: 100%;
+  margin-bottom: 0.35rem;
+
+  // The drag-to-pan selection window.
+  .u-select {
+    pointer-events: all;
+    cursor: grab;
+    background: rgb(41 112 255 / 14%);
+    border-left: 1px solid rgb(41 112 255 / 55%);
+    border-right: 1px solid rgb(41 112 255 / 55%);
+
+    &:active {
+      cursor: grabbing;
+    }
+  }
+
+  // Edge resize handles.
+  .u-grip-l,
+  .u-grip-r {
+    position: absolute;
+    top: 0;
+    width: 8px;
+    height: 100%;
+    background: rgb(41 112 255 / 55%);
+    cursor: ew-resize;
+  }
+
+  .u-grip-l {
+    left: -4px;
+  }
+
+  .u-grip-r {
+    right: -4px;
+  }
 }
