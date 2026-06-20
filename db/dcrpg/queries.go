@@ -3524,6 +3524,7 @@ func appendWindowStats(charts *cache.ChartData, rows *sql.Rows) error {
 	var timestamp time.Time
 	var difficulty float64
 	var lastHeight int
+	var lastWasComplete bool
 	for rows.Next() {
 		var height int
 		var count uint64
@@ -3543,12 +3544,16 @@ func appendWindowStats(charts *cache.ChartData, rows *sql.Rows) error {
 			windows.StakeCount = append(windows.StakeCount, ticketsCount)
 
 			// Next sdiff window
+			lastWasComplete = true
 			ticketsCount = 0
 			nextWindowHeight += windowSize
-		} else if height >= nextWindowHeight {
-			return fmt.Errorf("reach height %d before the end of an sdiff window at %d",
-				height, nextWindowHeight)
-		} // else height < nextWindowHeight-1
+		} else {
+			lastWasComplete = false
+			if height >= nextWindowHeight {
+				return fmt.Errorf("reach height %d before the end of an sdiff window at %d",
+					height, nextWindowHeight)
+			} // else height < nextWindowHeight-1
+		}
 	}
 
 	if err := rows.Err(); err != nil {
@@ -3560,7 +3565,7 @@ func appendWindowStats(charts *cache.ChartData, rows *sql.Rows) error {
 	// Only update when rows were actually processed; otherwise keep the
 	// existing partial window (no new data since last refresh).
 	if lastHeight > 0 {
-		if lastHeight == nextWindowHeight-1 {
+		if lastWasComplete {
 			// The last row completed a window — no partial remains.
 			charts.SetPartialWindow(cache.PartialWindow{})
 		} else {

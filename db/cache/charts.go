@@ -583,8 +583,11 @@ type ChartData struct {
 	SKASupplyMtx sync.RWMutex
 	SKAFees      SKAFeesData
 	// SKAFeesMtx must be held when reading or mutating SKAFees.
-	SKAFeesMtx    sync.RWMutex
-	MinerRanges   []MinerRange
+	SKAFeesMtx  sync.RWMutex
+	MinerRanges []MinerRange
+	// PartialWindow holds accumulated data for the current incomplete
+	// difficulty window. Must only be written via SetPartialWindow() to
+	// synchronise with chart makers that read it under tipMtx.
 	PartialWindow PartialWindow
 	Tip           ChartTip
 	tipMtx        sync.RWMutex
@@ -2053,7 +2056,9 @@ func stakedCoinsChart(charts *ChartData, bin binLevel, axis axisType, _ interval
 	// Block/day-binned data has no window concept, so the override guard
 	// is whether a tip was pushed, not whether a partial window exists.
 	// The last block's accumulated supply/pool-value may be stale relative
-	// to the live RPC values.
+	// to the live RPC values. Unlike window charts, this override applies
+	// to both time and height axis — it updates the last point in-place
+	// rather than appending, so there's no missing x-position problem.
 	override := tip.CoinSupply > 0
 
 	switch bin {
