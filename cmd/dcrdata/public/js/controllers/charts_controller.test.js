@@ -100,7 +100,11 @@ vi.mock('../helpers/chart_helper', () => ({
   isEqual: vi.fn().mockReturnValue(false)
 }))
 
-const { default: ChartsController, sanitizeLogValueRange } = await import('./charts_controller.js')
+const {
+  default: ChartsController,
+  sanitizeLogValueRange,
+  clampLogFloor
+} = await import('./charts_controller.js')
 
 function makeController() {
   const c = new ChartsController()
@@ -276,6 +280,73 @@ describe('sanitizeLogValueRange', () => {
   })
   it('returns a null range unchanged (a valid Dygraphs value)', () => {
     expect(sanitizeLogValueRange(null, true)).toBe(null)
+  })
+})
+
+describe('clampLogFloor', () => {
+  it('raises a zero value to the floor under log scale', () => {
+    expect(clampLogFloor(0, true)).toBe(1)
+  })
+  it('raises a sub-floor positive value to the floor under log scale', () => {
+    expect(clampLogFloor(0.5, true)).toBe(1)
+  })
+  it('leaves a value at the floor unchanged', () => {
+    expect(clampLogFloor(1, true)).toBe(1)
+  })
+  it('leaves a value above the floor unchanged under log scale', () => {
+    expect(clampLogFloor(5000000, true)).toBe(5000000)
+  })
+  it('does not clamp in linear scale', () => {
+    expect(clampLogFloor(0, false)).toBe(0)
+    expect(clampLogFloor(0.5, false)).toBe(0.5)
+  })
+  it('accepts a custom floor', () => {
+    expect(clampLogFloor(3, true, 10)).toBe(10)
+  })
+})
+
+describe('ChartsController coin-supply SKA log floor', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  const skaData = () => ({
+    t: [1000, 2000, 3000],
+    supply: ['0', '0', '5000000000000000000000000']
+  })
+
+  async function plotSka(scale) {
+    const c = makeController()
+    await c.connect()
+    c.settings.scale = scale
+    c.settings.axis = 'time'
+    c.settings.bin = 'block'
+    c.settings.interval = 'week'
+    c.chartsView.updateOptions.mockClear()
+    c.plotGraph('coin-supply/2', skaData())
+    const call = c.chartsView.updateOptions.mock.calls.find((args) => args[1] === false)
+    expect(call).toBeTruthy()
+    return { c: c, file: call[0].file }
+  }
+
+  it('clamps zero/pre-mint SKA supply points up to the floor (1) in log scale', async () => {
+    const { file } = await plotSka('log')
+    expect(file[0][1]).toBe(1) // pre-mint 0 clamped to floor
+    expect(file[1][1]).toBe(1)
+    // real value untouched (toBeCloseTo: SKA atoms exceed float precision, so
+    // the line is inherently lossy — exactly why the legend uses raw strings)
+    expect(file[2][1]).toBeCloseTo(5000000, 0)
+  })
+
+  it('does not clamp SKA supply points in linear scale', async () => {
+    const { file } = await plotSka('linear')
+    expect(file[0][1]).toBe(0)
+    expect(file[2][1]).toBeCloseTo(5000000, 0)
+  })
+
+  it('keeps the exact SKA atom strings for the legend (clamp is line-only)', async () => {
+    const { c } = await plotSka('log')
+    expect(c._skaSupplyRaw).toEqual(['0', '0', '5000000000000000000000000'])
   })
 })
 

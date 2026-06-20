@@ -59,6 +59,21 @@ export function sanitizeLogValueRange(valueRange, isLog) {
   return valueRange
 }
 
+// clampLogFloor raises a plotted line value up to `floor` when in log scale. A
+// cumulative-supply series is 0 until a single mint then a near-constant
+// plateau; on a log axis the 0s cannot plot and Dygraphs auto-ranges onto the
+// clustered plateau, collapsing the axis. Flooring the 0/sub-floor points at 1
+// whole coin makes the plotted minimum 1, so the axis spans orders of magnitude
+// and the pre-mint period draws as a baseline. Render-only: the exact
+// big.Int-derived value still drives the legend/tooltip; only the (already
+// lossy) float line position is floored. Applied to the SKA supply line only —
+// the VAR supply legend reads the plotted value, so flooring it would misreport
+// pre-genesis 0s, and VAR supply spans decades and never collapses anyway.
+export function clampLogFloor(value, isLog, floor = 1) {
+  if (!isLog) return value
+  return value < floor ? floor : value
+}
+
 function hasMultipleVisibility(chart) {
   return multiYAxisChart.indexOf(chart) > -1
 }
@@ -674,7 +689,7 @@ export default class extends Controller {
       case 'coin-supply':
         if (isSKA) {
           this._skaSupplyRaw = data.supply
-          const ys = data.supply.map((s) => Number(s) * 1e-18)
+          const ys = data.supply.map((s) => clampLogFloor(Number(s) * 1e-18, isLog))
           d = zip2D(data, ys)
           assign(
             gOptions,
