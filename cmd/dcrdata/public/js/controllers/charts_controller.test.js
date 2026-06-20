@@ -274,6 +274,9 @@ describe('sanitizeLogValueRange', () => {
   it('returns non-array input unchanged', () => {
     expect(sanitizeLogValueRange(undefined, true)).toBe(undefined)
   })
+  it('returns a null range unchanged (a valid Dygraphs value)', () => {
+    expect(sanitizeLogValueRange(null, true)).toBe(null)
+  })
 })
 
 describe('ChartsController plotGraph log-axis guard', () => {
@@ -316,6 +319,7 @@ describe('ChartsController plotGraph log-axis guard', () => {
     })
 
     const call = c.chartsView.updateOptions.mock.calls.find((args) => args[1] === false)
+    expect(call).toBeTruthy()
     const gOptions = call[0]
     expect(gOptions.axes.y.valueRange).toEqual([null, null]) // primary y unbounded
     expect(gOptions.axes.y2.valueRange).toEqual([0, null]) // y2 floor untouched
