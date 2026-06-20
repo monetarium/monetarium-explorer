@@ -46,6 +46,19 @@ function isModeEnabled(chart) {
   return modeScales.includes(chart)
 }
 
+// sanitizeLogValueRange collapses a non-positive lower bound to null when the
+// chart is rendered in log scale. Dygraphs computes a log axis with log10(min);
+// a floor of 0 (or negative) yields -Infinity and breaks the whole axis.
+// Returning null lets Dygraphs auto-range from the positive data instead.
+// Apply to the primary y-axis only — the global `logscale` option never
+// log-scales y2, so a y2 floor of 0 is valid and must be left alone.
+export function sanitizeLogValueRange(valueRange, isLog) {
+  if (!isLog || !Array.isArray(valueRange)) return valueRange
+  const [lo, hi] = valueRange
+  if (lo != null && lo <= 0) return [null, hi]
+  return valueRange
+}
+
 function hasMultipleVisibility(chart) {
   return multiYAxisChart.indexOf(chart) > -1
 }

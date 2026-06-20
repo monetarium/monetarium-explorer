@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { requestJSON } from '../helpers/http'
 
 const mockReplace = vi.fn()
 
@@ -99,7 +100,7 @@ vi.mock('../helpers/chart_helper', () => ({
   isEqual: vi.fn().mockReturnValue(false)
 }))
 
-const { default: ChartsController } = await import('./charts_controller.js')
+const { default: ChartsController, sanitizeLogValueRange } = await import('./charts_controller.js')
 
 function makeController() {
   const c = new ChartsController()
@@ -248,5 +249,29 @@ describe('ChartsController hashrate chart', () => {
 
     expect(c.chartsViewTarget.classList.add).toHaveBeenCalledWith('chart-hashrate')
     expect(c.chartsViewTarget.classList.remove).toHaveBeenCalledWith('chart-hashrate')
+  })
+})
+
+describe('sanitizeLogValueRange', () => {
+  it('collapses a zero floor to null under log scale', () => {
+    expect(sanitizeLogValueRange([0, null], true)).toEqual([null, null])
+  })
+  it('collapses a zero floor but preserves the upper bound under log scale', () => {
+    expect(sanitizeLogValueRange([0, 100], true)).toEqual([null, 100])
+  })
+  it('collapses a negative floor to null under log scale', () => {
+    expect(sanitizeLogValueRange([-5, 100], true)).toEqual([null, 100])
+  })
+  it('preserves a positive floor under log scale', () => {
+    expect(sanitizeLogValueRange([5, 100], true)).toEqual([5, 100])
+  })
+  it('leaves a null floor unchanged under log scale', () => {
+    expect(sanitizeLogValueRange([null, null], true)).toEqual([null, null])
+  })
+  it('does not modify the range in linear scale', () => {
+    expect(sanitizeLogValueRange([0, null], false)).toEqual([0, null])
+  })
+  it('returns non-array input unchanged', () => {
+    expect(sanitizeLogValueRange(undefined, true)).toBe(undefined)
   })
 })
