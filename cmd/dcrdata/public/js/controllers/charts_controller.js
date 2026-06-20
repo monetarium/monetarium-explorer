@@ -8,6 +8,7 @@ import { animationFrame } from '../helpers/animation_helper' // eslint-disable-l
 import globalEventBus from '../services/event_bus_service'
 import { darkEnabled } from '../services/theme_service'
 import { createChart } from '../helpers/uplot_adapter'
+import { createRanger } from '../helpers/uplot_ranger'
 import { getDefinition } from '../charts/registry'
 import '../charts/definitions/index' // side-effect: register all definitions
 
@@ -37,7 +38,8 @@ export default class extends Controller {
       'modeOption',
       'intervalSelector',
       'intervalOption',
-      'rawDataURL'
+      'rawDataURL',
+      'rangerView'
     ]
   }
 
@@ -65,6 +67,7 @@ export default class extends Controller {
     this.payload = null
     this.selectedChartName = null
     this.zoomGuard = false
+    this.ranger = null
 
     // Legend element generators (cloned from the template nodes).
     this.legendElement = this.labelsTarget
@@ -110,24 +113,51 @@ export default class extends Controller {
       this.handle.destroy()
       this.handle = null
     }
+    if (this.ranger) {
+      this.ranger.destroy()
+      this.ranger = null
+    }
   }
 
-  // Called by the adapter on a user-driven x-range change (drag-zoom or double-click
-  // reset) — never for our own programmatic zooms. Translate the new range into the
-  // ZOOM control + URL: snap it to a preset when it lines up with one (so a drag that
-  // happens to match a week, or a double-click reset to 'all', re-highlights the right
-  // button), otherwise persist the exact window as an encoded range and clear presets.
+  // Called by the adapter on a user-driven main-chart x-range change (drag-zoom or
+  // double-click reset). Persist with preset-snapping (existing behavior) and reflect the
+  // new window in the overview strip.
   onChartRangeChange(min, max) {
+    this.persistRange(min, max, true)
+    if (this.ranger) this.ranger.setSelection(min, max)
+  }
+
+  // Called by the overview strip on a grip/body/native-paint drag. Drive the main chart
+  // (silent — setXRange does not re-fire onChartRangeChange) and persist as a CUSTOM range
+  // that clears every preset (snap=false). The strip already shows the new selection.
+  onRangerSelect(min, max) {
+    if (!this.handle) return
+    this.handle.setXRange(min, max)
+    this.persistRange(min, max, false)
+  }
+
+  // Push an x-range to the main chart and mirror it onto the strip. Used by the
+  // programmatic zoom paths (applyZoom / presets / privacy default).
+  setMainXRange(min, max) {
+    if (!this.handle) return
+    this.handle.setXRange(min, max)
+    if (this.ranger) this.ranger.setSelection(min, max)
+  }
+
+  // Persist a visible [min,max] window to the URL + ZOOM control. When snap is true, a
+  // window that lines up with a preset re-highlights it; when false (strip drags), always
+  // store an encoded custom range and clear every preset.
+  persistRange(min, max, snap) {
     if (!this.handle || !this.payload) return
     const xs = this.handle.uplot.data[0]
     if (!xs || !xs.length) return
-    const preset = this.presetForRange(min, max, xs[0], xs[xs.length - 1])
+    const preset = snap ? this.presetForRange(min, max, xs[0], xs[xs.length - 1]) : null
     if (preset) {
       this.settings.zoom = preset
       this.setActiveOptionBtn(preset, this.zoomOptionTargets)
     } else {
       this.settings.zoom = this.encodeRange(min, max)
-      this.setActiveOptionBtn(null, this.zoomOptionTargets) // custom range: no preset active
+      this.setActiveOptionBtn(null, this.zoomOptionTargets)
     }
     this.query.replace(this.settings)
   }
@@ -238,13 +268,14 @@ export default class extends Controller {
         xTime: xTime,
         hooks: this.buildHooks(),
         onRangeChange: (min, max) => this.onChartRangeChange(min, max)
-      }).then((h) => {
+      }).then(async (h) => {
         this.handle = h
         this.renderedName = renderDef.name
         this.renderedXTime = xTime
         this.renderedSeriesCount = renderDef.series.length
         h.setData(cols)
         if (this.settings.mode === 'stepped') h.setMode('stepped')
+        await this.recreateRanger(renderDef, cols, xTime)
         this.applyZoom()
         this.setVisibilityFromSettings()
         return h
@@ -252,7 +283,26 @@ export default class extends Controller {
       return this.pendingCreate
     }
     this.handle.setData(cols)
+    if (this.ranger) this.ranger.setData([cols[0], cols[1]])
     this.applyZoom()
+  }
+
+  // (Re)build the overview strip for the current chart. The strip always shows the full
+  // extent of the primary series; it is recreated whenever the main chart is, so its
+  // primary color and x-axis type stay in step.
+  async recreateRanger(renderDef, cols, xTime) {
+    if (this.ranger) {
+      this.ranger.destroy()
+      this.ranger = null
+    }
+    if (!this.hasRangerViewTarget) return
+    this.ranger = await createRanger(this.rangerViewTarget, renderDef, {
+      dark: darkEnabled(),
+      width: this.rangerViewTarget.clientWidth || this.chartsViewTarget.clientWidth || 800,
+      xTime: xTime,
+      onSelect: (min, max) => this.onRangerSelect(min, max)
+    })
+    this.ranger.setData([cols[0], cols[1]])
   }
 
   // chainwork/hashrate set a dynamic axis label; hashrate may drop its y2 series.
@@ -359,7 +409,7 @@ export default class extends Controller {
       const [start] = this.currentDef.limits(this.payload)
       const startX = this.settings.axis === 'time' ? start / 1000 : start
       this.zoomGuard = true
-      this.handle.setXRange(startX, dataMax)
+      this.setMainXRange(startX, dataMax)
       this.zoomGuard = false
       return
     }
@@ -374,7 +424,7 @@ export default class extends Controller {
         const hi = Math.min(dataMax, r.max)
         if (hi > lo) {
           this.zoomGuard = true
-          this.handle.setXRange(lo, hi)
+          this.setMainXRange(lo, hi)
           this.zoomGuard = false
           return
         }
@@ -387,7 +437,7 @@ export default class extends Controller {
     const span = this.zoomSpan(preset)
     if (span != null) min = Math.max(dataMin, dataMax - span)
     this.zoomGuard = true
-    this.handle.setXRange(min, max)
+    this.setMainXRange(min, max)
     this.zoomGuard = false
   }
 
@@ -405,6 +455,7 @@ export default class extends Controller {
 
   redrawTheme() {
     if (this.handle) this.handle.setData(this.handle.uplot.data) // cheap redraw; colors flow via chart_theme on next rebuild
+    if (this.ranger) this.ranger.setDark(darkEnabled())
   }
 
   async setBin(e) {

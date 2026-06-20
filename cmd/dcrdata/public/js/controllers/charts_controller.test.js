@@ -83,6 +83,21 @@ vi.mock('../helpers/uplot_adapter', () => ({
   createSyncKey: (n) => `mon-chart-sync:${n}`
 }))
 
+const fakeRanger = {
+  uplot: {},
+  setData: vi.fn(),
+  setSelection: vi.fn(),
+  setDark: vi.fn(),
+  destroy: vi.fn()
+}
+let capturedRangerOpts = null
+vi.mock('../helpers/uplot_ranger', () => ({
+  createRanger: vi.fn((el, def, opts) => {
+    capturedRangerOpts = opts
+    return Promise.resolve(fakeRanger)
+  })
+}))
+
 // Side-effect barrel is a no-op import in tests; stub it.
 vi.mock('../charts/definitions/index', () => ({}))
 
@@ -216,6 +231,8 @@ function makeController() {
   c.hashrateMinersTarget = { checked: true }
   c.intervalSelectorTarget = { classList: { add: vi.fn(), remove: vi.fn() } }
   c.intervalOptionTargets = []
+  c.hasRangerViewTarget = true
+  c.rangerViewTarget = { clientWidth: 800 }
   return c
 }
 
@@ -568,5 +585,93 @@ describe('ChartsController control handlers', () => {
 
     // createChart must have been called again because series count went from 1 to 2
     expect(createChart.mock.calls.length).toBeGreaterThan(callsAfterConnect)
+  })
+})
+
+describe('ChartsController ranger strip', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    restoreSettings = null
+    capturedRangerOpts = null
+    fakeHandle.uplot.data = [[]]
+  })
+
+  it('creates the ranger and feeds it the x + primary columns', async () => {
+    const c = makeController()
+    await c.connect()
+    expect(fakeRanger.setData).toHaveBeenCalledWith([
+      [1, 2],
+      [10, 20]
+    ])
+    expect(typeof capturedRangerOpts.onSelect).toBe('function')
+  })
+
+  it('a strip drag persists a CUSTOM range and clears presets, even at a preset-width span', async () => {
+    const c = makeController()
+    const allBtn = optBtn('all', true)
+    const weekBtn = optBtn('week')
+    c.zoomOptionTargets = [allBtn, weekBtn]
+    await c.connect()
+    fakeHandle.uplot.data = [
+      [1000, 1000000],
+      [10, 20]
+    ]
+    mockReplace.mockClear()
+
+    // A trailing week-wide window — onChartRangeChange would snap this to "week", but the
+    // strip path must NOT snap.
+    const dataMax = 1000000
+    capturedRangerOpts.onSelect(dataMax - 604800, dataMax)
+
+    expect(fakeHandle.setXRange).toHaveBeenCalledWith(dataMax - 604800, dataMax)
+    expect(weekBtn.classList.contains('active')).toBe(false)
+    expect(allBtn.classList.contains('active')).toBe(false)
+    const expected = `${((dataMax - 604800) * 1000).toString(36)}-${(dataMax * 1000).toString(36)}`
+    expect(c.settings.zoom).toBe(expected)
+    expect(mockReplace).toHaveBeenCalledWith(expect.objectContaining({ zoom: expected }))
+  })
+
+  it('a main-chart drag-zoom still snaps to a preset AND moves the strip selection', async () => {
+    const c = makeController()
+    const allBtn = optBtn('all', true)
+    const weekBtn = optBtn('week')
+    c.zoomOptionTargets = [allBtn, weekBtn]
+    await c.connect()
+    const dataMax = 1000000
+    fakeHandle.uplot.data = [
+      [1000, dataMax],
+      [10, 20]
+    ]
+    mockReplace.mockClear()
+
+    c.onChartRangeChange(dataMax - 604800, dataMax)
+
+    expect(c.settings.zoom).toBe('week')
+    expect(weekBtn.classList.contains('active')).toBe(true)
+    expect(fakeRanger.setSelection).toHaveBeenCalledWith(dataMax - 604800, dataMax)
+  })
+
+  it('clicking a preset moves the strip selection', async () => {
+    const c = makeController()
+    await c.connect()
+    fakeHandle.uplot.data = [
+      [1000, 1000000],
+      [10, 20]
+    ]
+    const dayBtn = optBtn('day')
+    c.zoomOptionTargets = [dayBtn]
+    fakeRanger.setSelection.mockClear()
+
+    c.setZoom({ target: dayBtn })
+
+    expect(fakeRanger.setSelection).toHaveBeenCalled()
+  })
+
+  it('forwards a dark-mode flip to the ranger', async () => {
+    const c = makeController()
+    await c.connect()
+    fakeRanger.setDark.mockClear()
+    c.redrawTheme()
+    expect(fakeRanger.setDark).toHaveBeenCalled()
   })
 })
