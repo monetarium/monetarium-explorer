@@ -459,4 +459,32 @@ describe('ChartsController setScale', () => {
 
     expect(c.chartsView.updateOptions).toHaveBeenCalledWith({ logscale: true })
   })
+
+  // End-to-end guard: the other setScale tests stub plotGraph, so they verify the
+  // wiring (scale set first, right args, no re-fetch) but not that toggling to log
+  // actually re-applies the log-axis guard. This drives the REAL plotGraph through
+  // a scale toggle and asserts the stale [0, null] floor collapses to [null, null].
+  it('re-applies the log-axis guard through a real re-plot on toggle', async () => {
+    const c = makeController()
+    await c.connect()
+    c.settings.scale = 'linear'
+    c.settings.axis = 'time'
+    c.settings.bin = 'block'
+    c.settings.interval = 'week'
+
+    // Plot once in linear to populate the cache; the floor stays [0, null] here.
+    // Clear first so the find() below matches this plot, not connect()'s.
+    c.chartsView.updateOptions.mockClear()
+    c.plotGraph('duration-btw-blocks', { t: [1000, 2000], duration: [10, 20] })
+    const linearCall = c.chartsView.updateOptions.mock.calls.find((args) => args[1] === false)
+    expect(linearCall[0].axes.y.valueRange).toEqual([0, null])
+
+    c.chartsView.updateOptions.mockClear()
+    c.setScale({ target: { dataset: { option: 'log' } } })
+
+    const logCall = c.chartsView.updateOptions.mock.calls.find((args) => args[1] === false)
+    expect(logCall).toBeTruthy()
+    expect(logCall[0].logscale).toBe(true)
+    expect(logCall[0].axes.y.valueRange).toEqual([null, null]) // guard reapplied
+  })
 })
