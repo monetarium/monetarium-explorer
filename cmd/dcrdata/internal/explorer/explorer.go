@@ -30,6 +30,7 @@ import (
 
 	apitypes "github.com/monetarium/monetarium-explorer/api/types"
 	"github.com/monetarium/monetarium-explorer/blockdata"
+	"github.com/monetarium/monetarium-explorer/db/cache"
 	"github.com/monetarium/monetarium-explorer/db/dbtypes"
 	"github.com/monetarium/monetarium-explorer/explorer/types"
 	"github.com/monetarium/monetarium-explorer/gov/agendas"
@@ -642,6 +643,23 @@ func (exp *explorerUI) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgB
 			PercentTarget: 100 * float64(blockData.PoolInfo.Size) / float64(tpTarget),
 			Target:        tpTarget,
 		}
+	}
+
+	// Push current RPC values to the chart cache so chart makers can align
+	// their last data point with the home page.
+	if cd, ok := exp.chartSource.(*cache.ChartData); ok {
+		poolValAtoms := uint64(0)
+		if blockData.PoolInfo != nil {
+			poolValAtoms = uint64(blockData.PoolInfo.Value * 1e8)
+		}
+		cd.SetTip(cache.ChartTip{
+			Height:      uint64(blockData.Header.Height),
+			Time:        uint64(blockData.Header.Time),
+			TicketPrice: uint64(blockData.CurrentStakeDiff.CurrentStakeDifficulty * 1e8),
+			Difficulty:  blockData.Header.Difficulty,
+			PoolValue:   poolValAtoms,
+			CoinSupply:  uint64(blockData.ExtraInfo.CoinSupply),
+		})
 	}
 
 	// Compute 30-day history for fee and reward averages
