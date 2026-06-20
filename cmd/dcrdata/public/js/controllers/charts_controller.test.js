@@ -120,7 +120,9 @@ vi.mock('../helpers/zoom_helper', () => ({
     project: vi.fn().mockReturnValue({ start: 0, end: 100 }),
     object: vi.fn().mockReturnValue({ start: 0, end: 100 }),
     encode: vi.fn().mockReturnValue('zoom-string'),
-    mapKey: vi.fn().mockReturnValue('zoom-option')
+    mapKey: vi.fn().mockReturnValue('zoom-option'),
+    // 'all' maps to 0 (full extent → null span); any other preset gets a finite span.
+    mapValue: vi.fn((key) => (key === 'all' ? 0 : 7 * 24 * 60 * 60 * 1000))
   }
 }))
 
@@ -460,6 +462,32 @@ describe('ChartsController control handlers', () => {
     c.chartsViewTarget.listeners.dblclick()
 
     expect(mockReplace).not.toHaveBeenCalled()
+  })
+
+  it('double-click resyncs the chart range to the full extent so a later rebuild keeps it', async () => {
+    restoreSettings = { chart: 'ticket-pool-size', zoom: 'week' }
+    const c = makeController()
+    c.zoomOptionTargets = [optBtn('all'), optBtn('week', true)]
+
+    await c.connect()
+    // applyZoom reads the live x-axis off the handle; give it a real extent so the
+    // reset can push it back into the adapter (otherwise applyZoom early-returns).
+    fakeHandle.uplot.data = [
+      [1000, 2000],
+      [10, 20]
+    ]
+    fakeHandle.setXRange.mockClear()
+
+    try {
+      c.chartsViewTarget.listeners.dblclick()
+
+      // The reset must hand the adapter the full data extent, replacing the stale
+      // 'week' window it still remembers — otherwise the next MODE/SCALE rebuild
+      // restores the old zoom even though the control now reads 'all'.
+      expect(fakeHandle.setXRange).toHaveBeenCalledWith(1000, 2000)
+    } finally {
+      fakeHandle.uplot.data = [[]] // restore the shared fake for later tests
+    }
   })
 
   it('disconnect removes the dblclick reset listener', async () => {

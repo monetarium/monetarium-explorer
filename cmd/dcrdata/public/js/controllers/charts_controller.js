@@ -127,6 +127,11 @@ export default class extends Controller {
     if (this.settings.zoom === 'all') return
     this.settings.zoom = 'all'
     this.setActiveOptionBtn('all', this.zoomOptionTargets)
+    // uPlot's native double-click sets the visible x-scale directly, bypassing the
+    // adapter's remembered range. Re-apply 'all' through applyZoom so that range is
+    // updated too — otherwise the next rebuild (a MODE or SCALE switch) would restore
+    // the stale pre-reset window. Mirrors what the real 'all' button (setZoom) does.
+    this.applyZoom()
     this.query.replace(this.settings)
   }
 
