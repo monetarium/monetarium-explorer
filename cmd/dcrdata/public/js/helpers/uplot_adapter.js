@@ -68,11 +68,11 @@ function resolveSeriesColor(s, i, dark) {
 }
 
 /**
- * Log-scale y-range that centers the visible data. uPlot's built-in log range rounds
- * out to whole decades, which pins a near-constant series (e.g. ticket pool size in a
- * zoomed window) to the top or bottom edge. Instead we pad symmetrically in log10
- * space — 10% of the visible span, with a 0.15-decade floor so a flat series still
- * lands mid-plot. Guards keep both bounds strictly positive (log needs > 0) and finite.
+ * Tight, adaptive log-scale y-range. uPlot's built-in log range rounds out to whole
+ * decades, which strands a near-constant series (e.g. ticket pool size in a zoomed
+ * window) as a flat line floating in empty space. Instead we hug the visible data,
+ * padding by just 5% of the visible log span so the data fills the plot. Guards keep
+ * both bounds strictly positive (log needs > 0) and finite.
  * @param {number} dataMin
  * @param {number} dataMax
  * @returns {[number, number]}
@@ -85,8 +85,75 @@ export function logRange(dataMin, dataMax) {
   if (lo > hi) [lo, hi] = [hi, lo]
   const lLo = Math.log10(lo)
   const lHi = Math.log10(hi)
-  const pad = Math.max((lHi - lLo) * 0.1, 0.15)
+  const span = lHi - lLo
+  const pad = span > 0 ? span * 0.05 : 0.02 // 0.02-decade fallback for a perfectly flat series
   return [Math.pow(10, lLo - pad), Math.pow(10, lHi + pad)]
+}
+
+/**
+ * Evenly-spaced "nice" tick values (…1, 2, 5, 10…) covering [min, max]. Used for the
+ * sub-decade log case, where 1/2/5×10ⁿ decade ticks fall outside the range entirely.
+ * @param {number} min
+ * @param {number} max
+ * @param {number} target  approximate desired tick count
+ * @returns {number[]}
+ */
+export function niceLinearTicks(min, max, target) {
+  const span = max - min
+  if (!(span > 0)) return [min]
+  const rawStep = span / target
+  const mag = Math.pow(10, Math.floor(Math.log10(rawStep)))
+  const norm = rawStep / mag
+  const step = (norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 5 ? 5 : 10) * mag
+  const out = []
+  for (let v = Math.ceil(min / step - 1e-9) * step; v <= max + step * 1e-9; v += step) {
+    out.push(+v.toFixed(10)) // tame float accumulation (…00001)
+  }
+  return out
+}
+
+// uPlot axis `splits` for a log y-scale. Wide ranges (≥ 1 decade) get 1/2/5×10ⁿ
+// decade ticks — thinned to powers of ten past 4 decades to avoid crowding. Narrow
+// (sub-decade) ranges fall back to linear nice-ticks so the axis still has labels.
+function logSplits(u, axisIdx, scaleMin, scaleMax) {
+  if (!(scaleMin > 0) || !(scaleMax > scaleMin)) return niceLinearTicks(scaleMin, scaleMax, 6)
+  const decades = Math.log10(scaleMax) - Math.log10(scaleMin)
+  if (decades < 1) return niceLinearTicks(scaleMin, scaleMax, 8)
+  const mantissas = decades <= 4 ? [1, 2, 5] : [1]
+  const out = []
+  for (let e = Math.floor(Math.log10(scaleMin)); e <= Math.ceil(Math.log10(scaleMax)); e++) {
+    for (const m of mantissas) {
+      const v = m * Math.pow(10, e)
+      if (v >= scaleMin && v <= scaleMax) out.push(v)
+    }
+  }
+  return out.length ? out : niceLinearTicks(scaleMin, scaleMax, 6)
+}
+
+// uPlot axis `values` for a log y-scale. Prefer compact k/M/B labels (threeSigFigs),
+// but if that rounds adjacent ticks to the same string (very tight ranges, e.g.
+// 5,118 vs 5,119 → "5.12k"), fall back to grouped full numbers at the step's precision.
+function adaptiveLogValues(u, splits) {
+  const sig = splits.map((v) => (v == null ? '' : humanize.threeSigFigs(v)))
+  let collide = false
+  for (let i = 1; i < sig.length; i++) {
+    if (sig[i] && sig[i] === sig[i - 1]) {
+      collide = true
+      break
+    }
+  }
+  if (!collide) return sig
+  const finite = splits.filter((v) => v != null && isFinite(v))
+  const step = finite.length >= 2 ? Math.abs(finite[1] - finite[0]) : 0
+  const decimals = step >= 1 || step === 0 ? 0 : Math.min(8, Math.ceil(-Math.log10(step)))
+  return splits.map((v) =>
+    v == null
+      ? ''
+      : v.toLocaleString('en-US', {
+          minimumFractionDigits: decimals,
+          maximumFractionDigits: decimals
+        })
+  )
 }
 
 /**
@@ -114,7 +181,7 @@ export function buildOpts(UPlot, def, opts = {}) {
   const scales = { x: { time: xTime } }
   scales.y = { distr: isLog ? LOG_DISTR : LINEAR_DISTR }
   if (isLog) {
-    // Center near-constant data instead of letting uPlot snap to whole decades.
+    // Hug the data tightly instead of letting uPlot snap out to whole decades.
     scales.y.range = (u, dataMin, dataMax) => logRange(dataMin, dataMax)
   } else if (def.yMin != null) {
     const yMin = def.yMin
@@ -142,14 +209,20 @@ export function buildOpts(UPlot, def, opts = {}) {
         labelFont: AXIS_LABEL_FONT,
         stroke: axisColor,
         grid: { stroke: scale === 'y' ? c.grid : 'transparent' },
-        side: scale === 'y2' ? 1 : 3, // 3 = left, 1 = right
-        values: a.intTicks
-          ? (u, splits) =>
-              splits.map((v) => (v == null ? '' : Math.round(v).toLocaleString('en-US')))
-          : (u, splits) => splits.map((v) => (v == null ? '' : humanize.threeSigFigs(v)))
+        side: scale === 'y2' ? 1 : 3 // 3 = left, 1 = right
       }
-      // Count axes (e.g. Active Miners) tick on integers only.
-      if (a.intTicks) axis.incrs = INT_INCRS
+      if (isLog && scale === 'y') {
+        // Adaptive ticks for the (tight) log y-scale — see logSplits / adaptiveLogValues.
+        axis.splits = logSplits
+        axis.values = adaptiveLogValues
+      } else if (a.intTicks) {
+        // Count axes (e.g. Active Miners) tick on integers only.
+        axis.incrs = INT_INCRS
+        axis.values = (u, splits) =>
+          splits.map((v) => (v == null ? '' : Math.round(v).toLocaleString('en-US')))
+      } else {
+        axis.values = (u, splits) => splits.map((v) => (v == null ? '' : humanize.threeSigFigs(v)))
+      }
       return axis
     })
   ]

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { buildOpts, createChart, createSyncKey, logRange } from './uplot_adapter'
+import { buildOpts, createChart, createSyncKey, logRange, niceLinearTicks } from './uplot_adapter'
 import { getDefault } from './module_helper'
 
 // Mock the dynamic-import helper so createChart gets a fake uPlot class. The fake
@@ -120,16 +120,38 @@ describe('buildOpts — options', () => {
     expect(opts.scales.y.range(null, -5, 100)).toEqual([0, 100])
   })
 
-  it('centers a near-constant series in log mode instead of pinning it to an edge', () => {
+  it('hugs a near-constant series in log mode so it fills the plot', () => {
     const opts = buildOpts(fakeUPlot, lineDef, { scaleType: 'log' })
     expect(typeof opts.scales.y.range).toBe('function')
     const [lo, hi] = opts.scales.y.range(null, 5000, 5125)
-    // The visible band must sit around the middle of the padded log range.
-    const mid = Math.pow(10, (Math.log10(lo) + Math.log10(hi)) / 2)
-    expect(mid).toBeGreaterThan(5000)
-    expect(mid).toBeLessThan(5125)
+    // The data must stay enclosed, but the range must be tight (a near-constant
+    // series should not float in empty space): well under one extra decade.
     expect(lo).toBeLessThan(5000)
     expect(hi).toBeGreaterThan(5125)
+    expect(hi / lo).toBeLessThan(1.1)
+  })
+
+  it('gives the log y-axis adaptive splits + values, not the int/sigfig formatter', () => {
+    const opts = buildOpts(fakeUPlot, lineDef, { scaleType: 'log' })
+    const y = opts.axes[1]
+    expect(typeof y.splits).toBe('function')
+    // Sub-decade range → linear nice-ticks inside it (uPlot would otherwise draw none).
+    const ticks = y.splits(null, 1, 5105, 5170)
+    expect(ticks.length).toBeGreaterThan(2)
+    expect(ticks.every((t) => t >= 5105 && t <= 5170)).toBe(true)
+    // Wide range → 1/2/5×10ⁿ decade ticks.
+    const wide = y.splits(null, 1, 100, 100000)
+    expect(wide).toContain(1000)
+    expect(wide).toContain(10000)
+  })
+
+  it('falls back to grouped numbers when sigfig labels would collide', () => {
+    const opts = buildOpts(fakeUPlot, lineDef, { scaleType: 'log' })
+    const y = opts.axes[1]
+    // 5118 and 5119 both round to "5.12k" — must disambiguate.
+    expect(y.values(null, [5118, 5119, 5120])).toEqual(['5,118', '5,119', '5,120'])
+    // Distinct sigfig labels are kept compact.
+    expect(y.values(null, [5110, 5120, 5130])).toEqual(['5.11k', '5.12k', '5.13k'])
   })
 
   it('ignores def.yMin in log mode (log requires a positive floor)', () => {
@@ -170,7 +192,15 @@ describe('buildOpts — options', () => {
 })
 
 describe('logRange', () => {
-  it('pads symmetrically in log space so a flat series stays centered', () => {
+  it('hugs the data tightly so a near-constant series fills the plot', () => {
+    const [lo, hi] = logRange(5000, 5125)
+    expect(lo).toBeLessThan(5000)
+    expect(hi).toBeGreaterThan(5125)
+    // Padding is a small fraction of the visible span, not a fixed decade.
+    expect(hi / lo).toBeLessThan(1.05)
+  })
+
+  it('keeps a small but finite range for a perfectly flat series', () => {
     const [lo, hi] = logRange(5000, 5000)
     expect(lo).toBeLessThan(5000)
     expect(hi).toBeGreaterThan(5000)
@@ -183,6 +213,21 @@ describe('logRange', () => {
     expect(logRange(-5, 100).every((v) => v > 0 && isFinite(v))).toBe(true)
     expect(logRange(null, null).every((v) => v > 0 && isFinite(v))).toBe(true)
     expect(logRange(Infinity, Infinity).every((v) => v > 0 && isFinite(v))).toBe(true)
+  })
+})
+
+describe('niceLinearTicks', () => {
+  it('places evenly-spaced round ticks inside [min, max]', () => {
+    const ticks = niceLinearTicks(5105, 5170, 8)
+    expect(ticks.length).toBeGreaterThan(2)
+    expect(ticks[0]).toBeGreaterThanOrEqual(5105)
+    expect(ticks[ticks.length - 1]).toBeLessThanOrEqual(5170)
+    const step = ticks[1] - ticks[0]
+    expect(ticks.every((t, i) => i === 0 || Math.abs(t - ticks[i - 1] - step) < 1e-6)).toBe(true)
+  })
+
+  it('returns a single value for a zero-width span', () => {
+    expect(niceLinearTicks(42, 42, 8)).toEqual([42])
   })
 })
 
