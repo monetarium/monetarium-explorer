@@ -25,6 +25,7 @@ export const ticketPoolSize = {
       kind: 'line',
       color: '#888',
       dash: [5, 3],
+      width: 2,
       spanGaps: true
     }
   ],

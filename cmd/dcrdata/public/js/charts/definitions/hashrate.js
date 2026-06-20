@@ -16,7 +16,7 @@ export const hashrate = {
   },
   axes: [
     { label: 'Network Hashrate (H/s)', scale: 'y' },
-    { label: 'Active Miners', scale: 'y2' }
+    { label: 'Active Miners', scale: 'y2', intTicks: true }
   ],
   series: [
     { label: 'Hashrate', scale: 'y', kind: 'line', colorKey: 'hashrate-rate' },

@@ -48,6 +48,13 @@ describe('hashrate.formatValue', () => {
   })
 })
 
+describe('hashrate.axes', () => {
+  it('marks the Active Miners (y2) axis as integer-ticked', () => {
+    const y2 = hashrate.axes.find((a) => a.scale === 'y2')
+    expect(y2.intTicks).toBe(true)
+  })
+})
+
 describe('hashrate.controls', () => {
   it('is mode-enabled, interval-enabled, dual-visibility', () => {
     expect(hashrate.controls.mode).toBe(true)

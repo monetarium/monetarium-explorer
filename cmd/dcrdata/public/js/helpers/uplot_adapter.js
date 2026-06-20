@@ -9,16 +9,34 @@ import humanize from './humanize_helper'
 const LINEAR_DISTR = 1
 const LOG_DISTR = 3 // uPlot scale.distr: 1 = linear, 3 = log
 
+// Axis title font. uPlot draws axis labels on canvas at 12px by default — too small
+// next to the data — so titles are bumped to 16px for legibility.
+const AXIS_LABEL_FONT = '600 16px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif'
+
+// Integer-only tick increments (1/2/5 × 10ⁿ) for count axes like "Active Miners",
+// which must never show fractional ticks. Constrains uPlot's auto-stepper to integers.
+const INT_INCRS = (() => {
+  const incrs = []
+  for (let e = 0; e <= 9; e++) for (const m of [1, 2, 5]) incrs.push(m * 10 ** e)
+  return incrs
+})()
+
 /**
  * @typedef {Object} AxisSpec
  * @property {string} label
  * @property {('y'|'y2')} [scale]  // defaults to 'y'
+ * @property {boolean} [intTicks]  // restrict ticks to integers (count axes)
  *
  * @typedef {Object} SeriesSpec
  * @property {string} label
  * @property {('y'|'y2')} [scale]  // defaults to 'y'
  * @property {('line'|'stepped'|'area'|'bars')} kind
  * @property {number} [colorIndex]  // defaults to the series' position
+ * @property {string} [color]       // explicit stroke, bypasses the palette
+ * @property {string} [colorKey]    // named theme color (chart_theme.seriesColorByKey)
+ * @property {number[]} [dash]      // dashed-line pattern
+ * @property {number} [width]       // stroke width in px (uPlot default is 1)
+ * @property {boolean} [spanGaps]   // draw the line across null gaps
  *
  * @typedef {Object} ChartDefinition
  * @property {string} name
@@ -50,6 +68,28 @@ function resolveSeriesColor(s, i, dark) {
 }
 
 /**
+ * Log-scale y-range that centers the visible data. uPlot's built-in log range rounds
+ * out to whole decades, which pins a near-constant series (e.g. ticket pool size in a
+ * zoomed window) to the top or bottom edge. Instead we pad symmetrically in log10
+ * space — 10% of the visible span, with a 0.15-decade floor so a flat series still
+ * lands mid-plot. Guards keep both bounds strictly positive (log needs > 0) and finite.
+ * @param {number} dataMin
+ * @param {number} dataMax
+ * @returns {[number, number]}
+ */
+export function logRange(dataMin, dataMax) {
+  let lo = dataMin
+  let hi = dataMax
+  if (hi == null || !isFinite(hi) || hi <= 0) hi = lo != null && isFinite(lo) && lo > 0 ? lo : 10
+  if (lo == null || !isFinite(lo) || lo <= 0) lo = hi / 10
+  if (lo > hi) [lo, hi] = [hi, lo]
+  const lLo = Math.log10(lo)
+  const lHi = Math.log10(hi)
+  const pad = Math.max((lHi - lLo) * 0.1, 0.15)
+  return [Math.pow(10, lLo - pad), Math.pow(10, lHi + pad)]
+}
+
+/**
  * Translate a ChartDefinition into a uPlot options object. Pure.
  * @param {Function|{paths:object}} UPlot  uPlot constructor (for static `.paths`)
  * @param {ChartDefinition} def
@@ -70,9 +110,13 @@ export function buildOpts(UPlot, def, opts = {}) {
   const c = chartColors(dark)
   const seriesColors = def.series.map((s, i) => resolveSeriesColor(s, i, dark))
 
+  const isLog = scaleType === 'log'
   const scales = { x: { time: xTime } }
-  scales.y = { distr: scaleType === 'log' ? LOG_DISTR : LINEAR_DISTR }
-  if (def.yMin != null) {
+  scales.y = { distr: isLog ? LOG_DISTR : LINEAR_DISTR }
+  if (isLog) {
+    // Center near-constant data instead of letting uPlot snap to whole decades.
+    scales.y.range = (u, dataMin, dataMax) => logRange(dataMin, dataMax)
+  } else if (def.yMin != null) {
     const yMin = def.yMin
     scales.y.range = (u, dataMin, dataMax) => [yMin, dataMax]
   }
@@ -92,14 +136,21 @@ export function buildOpts(UPlot, def, opts = {}) {
       const scale = a.scale || 'y'
       const si = def.series.findIndex((s) => (s.scale || 'y') === scale && !s.color)
       const axisColor = si >= 0 ? seriesColors[si] : c.axis
-      return {
+      const axis = {
         scale: scale,
         label: a.label,
+        labelFont: AXIS_LABEL_FONT,
         stroke: axisColor,
         grid: { stroke: scale === 'y' ? c.grid : 'transparent' },
         side: scale === 'y2' ? 1 : 3, // 3 = left, 1 = right
-        values: (u, splits) => splits.map((v) => (v == null ? '' : humanize.threeSigFigs(v)))
+        values: a.intTicks
+          ? (u, splits) =>
+              splits.map((v) => (v == null ? '' : Math.round(v).toLocaleString('en-US')))
+          : (u, splits) => splits.map((v) => (v == null ? '' : humanize.threeSigFigs(v)))
       }
+      // Count axes (e.g. Active Miners) tick on integers only.
+      if (a.intTicks) axis.incrs = INT_INCRS
+      return axis
     })
   ]
 
@@ -117,6 +168,7 @@ export function buildOpts(UPlot, def, opts = {}) {
         spanGaps: !!s.spanGaps
       }
       if (s.dash) entry.dash = s.dash
+      if (s.width != null) entry.width = s.width
       return entry
     })
   ]

@@ -12,6 +12,15 @@ describe('ticketPoolSize.toColumns', () => {
   })
 })
 
+describe('ticketPoolSize.series', () => {
+  it('draws the Network Target as a bolder dashed line', () => {
+    const target = ticketPoolSize.series.find((s) => s.label === 'Network Target')
+    expect(target.dash).toEqual([5, 3])
+    expect(target.width).toBe(2)
+    expect(target.spanGaps).toBe(true)
+  })
+})
+
 describe('ticketPoolValue.toColumns', () => {
   it('height/block axis: [1+i, poolval*1e-8]', () => {
     const raw = { axis: 'height', bin: 'block', poolval: [100000000, 200000000] }

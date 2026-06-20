@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { buildOpts, createChart, createSyncKey } from './uplot_adapter'
+import { buildOpts, createChart, createSyncKey, logRange } from './uplot_adapter'
 import { getDefault } from './module_helper'
 
 // Mock the dynamic-import helper so createChart gets a fake uPlot class. The fake
@@ -118,6 +118,71 @@ describe('buildOpts — options', () => {
     const opts = buildOpts(fakeUPlot, { ...lineDef, yMin: 0 }, {})
     expect(typeof opts.scales.y.range).toBe('function')
     expect(opts.scales.y.range(null, -5, 100)).toEqual([0, 100])
+  })
+
+  it('centers a near-constant series in log mode instead of pinning it to an edge', () => {
+    const opts = buildOpts(fakeUPlot, lineDef, { scaleType: 'log' })
+    expect(typeof opts.scales.y.range).toBe('function')
+    const [lo, hi] = opts.scales.y.range(null, 5000, 5125)
+    // The visible band must sit around the middle of the padded log range.
+    const mid = Math.pow(10, (Math.log10(lo) + Math.log10(hi)) / 2)
+    expect(mid).toBeGreaterThan(5000)
+    expect(mid).toBeLessThan(5125)
+    expect(lo).toBeLessThan(5000)
+    expect(hi).toBeGreaterThan(5125)
+  })
+
+  it('ignores def.yMin in log mode (log requires a positive floor)', () => {
+    const opts = buildOpts(fakeUPlot, { ...lineDef, yMin: 0 }, { scaleType: 'log' })
+    const [lo] = opts.scales.y.range(null, 100, 1000)
+    expect(lo).toBeGreaterThan(0)
+  })
+
+  it('sets a 16px axis label font on the y axis', () => {
+    const opts = buildOpts(fakeUPlot, lineDef, {})
+    expect(opts.axes[1].labelFont).toContain('16px')
+  })
+
+  it('renders integer-only ticks for an intTicks axis', () => {
+    const def = {
+      ...dualAxisDef,
+      axes: [
+        { label: 'Hashrate', scale: 'y' },
+        { label: 'Active Miners', scale: 'y2', intTicks: true }
+      ]
+    }
+    const opts = buildOpts(fakeUPlot, def, {})
+    const y2 = opts.axes.find((a) => a.scale === 'y2')
+    expect(y2.incrs).toContain(1)
+    expect(y2.incrs.every((n) => Number.isInteger(n))).toBe(true)
+    // A fractional split would never be chosen, but the formatter rounds defensively.
+    expect(y2.values(null, [2.5, 10, 1000])).toEqual(['3', '10', '1,000'])
+  })
+
+  it('passes an explicit series width through to uPlot', () => {
+    const def = {
+      ...lineDef,
+      series: [{ label: 'Difficulty', scale: 'y', kind: 'line', width: 2 }]
+    }
+    const opts = buildOpts(fakeUPlot, def, {})
+    expect(opts.series[1].width).toBe(2)
+  })
+})
+
+describe('logRange', () => {
+  it('pads symmetrically in log space so a flat series stays centered', () => {
+    const [lo, hi] = logRange(5000, 5000)
+    expect(lo).toBeLessThan(5000)
+    expect(hi).toBeGreaterThan(5000)
+    const mid = Math.pow(10, (Math.log10(lo) + Math.log10(hi)) / 2)
+    expect(mid).toBeCloseTo(5000, 0)
+  })
+
+  it('returns strictly positive bounds when data is non-positive or non-finite', () => {
+    expect(logRange(0, 0).every((v) => v > 0)).toBe(true)
+    expect(logRange(-5, 100).every((v) => v > 0 && isFinite(v))).toBe(true)
+    expect(logRange(null, null).every((v) => v > 0 && isFinite(v))).toBe(true)
+    expect(logRange(Infinity, Infinity).every((v) => v > 0 && isFinite(v))).toBe(true)
   })
 })
 
