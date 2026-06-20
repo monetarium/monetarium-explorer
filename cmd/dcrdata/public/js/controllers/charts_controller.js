@@ -516,6 +516,11 @@ export default class extends Controller {
   }
 
   plotGraph(chartName, data) {
+    // Cache the render inputs so setScale() can re-plot on a SCALE toggle
+    // without re-fetching. `data` is held by reference and is treated as
+    // read-only — nothing downstream mutates the response or its arrays, and a
+    // scale toggle re-reads it as-is. Keep it that way: an in-place mutation
+    // here would corrupt the next toggle's re-plot.
     this.rawChartName = chartName
     this.rawChartData = data
     let d = []
@@ -689,6 +694,10 @@ export default class extends Controller {
       case 'coin-supply':
         if (isSKA) {
           this._skaSupplyRaw = data.supply
+          // Floor is applied after the atoms->coins conversion, so it is 1
+          // whole coin (not 1 atom). A genuine sub-1-coin supply (1..1e18 atoms)
+          // would also clamp to 1 on the log line — never a real state for a
+          // cumulative SKA supply, and the exact value still shows in the legend.
           const ys = data.supply.map((s) => clampLogFloor(Number(s) * 1e-18, isLog))
           d = zip2D(data, ys)
           assign(
