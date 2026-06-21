@@ -1,6 +1,13 @@
 import { describe, it, expect, vi } from 'vitest'
 import uPlot from 'uplot'
-import { buildOpts, createChart, createSyncKey, logRange, niceLinearTicks } from './uplot_adapter'
+import {
+  buildOpts,
+  createChart,
+  createSyncKey,
+  logRange,
+  niceLinearTicks,
+  trimTrailingZeros
+} from './uplot_adapter'
 import { getDefault } from './module_helper'
 
 // Mock the dynamic-import helper so createChart gets a fake uPlot class. The fake
@@ -231,6 +238,30 @@ describe('logRange', () => {
     expect(logRange(-5, 100).every((v) => v > 0 && isFinite(v))).toBe(true)
     expect(logRange(null, null).every((v) => v > 0 && isFinite(v))).toBe(true)
     expect(logRange(Infinity, Infinity).every((v) => v > 0 && isFinite(v))).toBe(true)
+  })
+})
+
+describe('trimTrailingZeros', () => {
+  it('drops trailing fractional zeros from whole-number labels', () => {
+    expect(trimTrailingZeros('75.0')).toBe('75')
+    expect(trimTrailingZeros('5.00')).toBe('5')
+    expect(trimTrailingZeros('-25.0')).toBe('-25')
+  })
+
+  it('drops trailing zeros but keeps significant decimals (suffixed labels)', () => {
+    expect(trimTrailingZeros('1.00k')).toBe('1k')
+    expect(trimTrailingZeros('12.0k')).toBe('12k')
+    expect(trimTrailingZeros('1.50k')).toBe('1.5k')
+    expect(trimTrailingZeros('1.50M')).toBe('1.5M')
+    expect(trimTrailingZeros('5.10k')).toBe('5.1k')
+  })
+
+  it('leaves labels with no removable zeros untouched', () => {
+    expect(trimTrailingZeros('5.11k')).toBe('5.11k')
+    expect(trimTrailingZeros('5.01k')).toBe('5.01k')
+    expect(trimTrailingZeros('300')).toBe('300')
+    expect(trimTrailingZeros('5,118')).toBe('5,118')
+    expect(trimTrailingZeros('0')).toBe('0')
   })
 })
 
@@ -495,14 +526,19 @@ describe('buildOpts — colorKey and axis color matching', () => {
 })
 
 describe('buildOpts — threeSigFigs axis tick formatter', () => {
-  it('y-axis values fn formats using threeSigFigs', () => {
+  it('y-axis values fn formats using threeSigFigs, trimming filler zeros', () => {
     const opts = buildOpts(fakeUPlot, lineDef, {})
     const yAxis = opts.axes.find((a) => a.scale === 'y')
-    expect(yAxis.values(null, [1000, 12000, 1500000])).toEqual(['1.00k', '12.0k', '1.50M'])
+    expect(yAxis.values(null, [1000, 12000, 1500000])).toEqual(['1k', '12k', '1.5M'])
   })
-  it('height x-axis values fn formats using threeSigFigs', () => {
+  it('drops the decimal part on whole-number y-axis ticks', () => {
+    const opts = buildOpts(fakeUPlot, lineDef, {})
+    const yAxis = opts.axes.find((a) => a.scale === 'y')
+    expect(yAxis.values(null, [25, 50, 75])).toEqual(['25', '50', '75'])
+  })
+  it('height x-axis values fn formats using threeSigFigs, trimming filler zeros', () => {
     const opts = buildOpts(fakeUPlot, lineDef, { xTime: false })
-    expect(opts.axes[0].values(null, [1000, 12000, 1500000])).toEqual(['1.00k', '12.0k', '1.50M'])
+    expect(opts.axes[0].values(null, [1000, 12000, 1500000])).toEqual(['1k', '12k', '1.5M'])
   })
   it('time x-axis carries a fmtDate stamp config (array of arrays)', () => {
     const opts = buildOpts(fakeUPlot, lineDef, { xTime: true })
@@ -514,7 +550,7 @@ describe('buildOpts — threeSigFigs axis tick formatter', () => {
   it('y-axis handles null splits gracefully', () => {
     const opts = buildOpts(fakeUPlot, lineDef, {})
     const yAxis = opts.axes.find((a) => a.scale === 'y')
-    expect(yAxis.values(null, [null, 1000])).toEqual(['', '1.00k'])
+    expect(yAxis.values(null, [null, 1000])).toEqual(['', '1k'])
   })
 })
 
@@ -564,7 +600,7 @@ describe('buildOpts — time x-axis date format ("01 Jun", not "6/1")', () => {
 
   it('leaves the height (non-time) x-axis on the numeric formatter', () => {
     const opts = buildOpts(fakeUPlot, lineDef, { xTime: false })
-    expect(opts.axes[0].values(null, [1000, 12000])).toEqual(['1.00k', '12.0k'])
+    expect(opts.axes[0].values(null, [1000, 12000])).toEqual(['1k', '12k'])
   })
 })
 

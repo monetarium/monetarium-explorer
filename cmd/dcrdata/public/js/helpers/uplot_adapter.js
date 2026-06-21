@@ -165,11 +165,24 @@ function logSplits(u, axisIdx, scaleMin, scaleMax) {
   return out.length ? out : niceLinearTicks(scaleMin, scaleMax, 6)
 }
 
+// Strip trailing fractional zeros (and a now-bare decimal point) from a formatted
+// number so whole-value axis ticks read "75"/"1k" instead of threeSigFigs' sig-fig
+// padding "75.0"/"1.00k". Lossless — "1.5k" still means 1500 — and suffix/grouping
+// aware: "1.50k"->"1.5k", "5.11k"->"5.11k", "5,118"->"5,118".
+export function trimTrailingZeros(s) {
+  return s.replace(/(\.\d*?)0+(?=\D|$)/, '$1').replace(/\.(?=\D|$)/, '')
+}
+
+// Compact threeSigFigs label with filler zeros trimmed; '' for a null split.
+function sigFigTick(v) {
+  return v == null ? '' : trimTrailingZeros(humanize.threeSigFigs(v))
+}
+
 // uPlot axis `values` for a log y-scale. Prefer compact k/M/B labels (threeSigFigs),
 // but if that rounds adjacent ticks to the same string (very tight ranges, e.g.
 // 5,118 vs 5,119 → "5.12k"), fall back to grouped full numbers at the step's precision.
 function adaptiveLogValues(u, splits) {
-  const sig = splits.map((v) => (v == null ? '' : humanize.threeSigFigs(v)))
+  const sig = splits.map(sigFigTick)
   let collide = false
   for (let i = 1; i < sig.length; i++) {
     if (sig[i] && sig[i] === sig[i - 1]) {
@@ -230,7 +243,7 @@ export function buildOpts(UPlot, def, opts = {}) {
   const xAxis = { stroke: c.axis, grid: { stroke: c.grid }, ticks: { stroke: c.grid } }
   xAxis.values = xTime
     ? TIME_AXIS_VALUES // date stamps -> "01 Jun" instead of uPlot's default "6/1"
-    : (u, splits) => splits.map((v) => (v == null ? '' : humanize.threeSigFigs(v)))
+    : (u, splits) => splits.map(sigFigTick)
 
   const axes = [
     xAxis,
@@ -256,7 +269,7 @@ export function buildOpts(UPlot, def, opts = {}) {
         axis.values = (u, splits) =>
           splits.map((v) => (v == null ? '' : Math.round(v).toLocaleString('en-US')))
       } else {
-        axis.values = (u, splits) => splits.map((v) => (v == null ? '' : humanize.threeSigFigs(v)))
+        axis.values = (u, splits) => splits.map(sigFigTick)
       }
       return axis
     })
