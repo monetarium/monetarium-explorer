@@ -17,6 +17,9 @@ import '../charts/definitions/index' // side-effect: register all definitions
 // so a constant is exact enough; the chart's measured top offset absorbs the variable
 // controls height (1 vs 2 rows).
 const BELOW_CHART_RESERVE = 140
+// Breathing room kept below the Time/Blocks row, within the viewport, so it isn't flush against
+// the fold.
+const BELOW_CHART_GAP = 32
 // Readability floor — below this the chart stops shrinking and the page scrolls instead.
 const CHART_MIN_HEIGHT = 320
 
@@ -356,7 +359,7 @@ export default class extends Controller {
   // readability. Used at chart creation and by the window-resize hook.
   computeChartHeight() {
     const top = this.chartsViewTarget.getBoundingClientRect().top
-    const avail = window.innerHeight - top - BELOW_CHART_RESERVE
+    const avail = window.innerHeight - top - BELOW_CHART_RESERVE - BELOW_CHART_GAP
     return Math.max(CHART_MIN_HEIGHT, Math.round(avail))
   }
 

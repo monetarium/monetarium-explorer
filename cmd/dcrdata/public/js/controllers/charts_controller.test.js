@@ -471,14 +471,14 @@ describe('ChartsController viewport fit', () => {
     const c = makeController()
     c.chartsViewTarget.getBoundingClientRect = () => ({ top: 200 })
     Object.defineProperty(window, 'innerHeight', { value: 1000, configurable: true })
-    expect(c.computeChartHeight()).toBe(660) // 1000 - 200 - 140
+    expect(c.computeChartHeight()).toBe(628) // 1000 - 200 - 140 - 32
   })
 
   it('computeChartHeight clamps to the 320px readability floor on short viewports', () => {
     const c = makeController()
     c.chartsViewTarget.getBoundingClientRect = () => ({ top: 200 })
     Object.defineProperty(window, 'innerHeight', { value: 500, configurable: true })
-    expect(c.computeChartHeight()).toBe(320) // 500 - 200 - 140 = 160 -> floored to 320
+    expect(c.computeChartHeight()).toBe(320) // 500 - 200 - 140 - 32 = 128 -> floored to 320
   })
 })
 
@@ -818,7 +818,7 @@ describe('ChartsController resize hook', () => {
     // Give the main chart a known x-range so we can assert setSelection is re-applied.
     fakeHandle.uplot.scales.x = { min: 5, max: 9 }
     c.resizeChartToViewport()
-    expect(fakeHandle.resize).toHaveBeenCalledWith(800, 660) // width 800, 1000-200-140
+    expect(fakeHandle.resize).toHaveBeenCalledWith(800, 628) // width 800, 1000-200-140-32
     // ranger strip must be re-pixelled to the rangerViewTarget.clientWidth (800 from makeController)
     expect(fakeRanger.setWidth).toHaveBeenCalledWith(800)
     // selection rectangle is pixel-based → must be re-applied at the new width
