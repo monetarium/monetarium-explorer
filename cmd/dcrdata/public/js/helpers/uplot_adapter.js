@@ -21,6 +21,41 @@ const INT_INCRS = (() => {
   return incrs
 })()
 
+// Time x-axis tick formats. Mirrors uPlot's built-in seconds-scale stamp matrix
+// (the chart's x values are seconds — opts.ms defaults to 1e-3) but renders dates as
+// "01 Jun" instead of uPlot's locale-ish default "6/1". Each row is
+//   [minTickIncrSecs, default, year, month, day, hour, min, sec, mode]
+// where columns 2-7 are "rollover" formats re-shown when that unit changes, and
+// mode 1 concatenates the rollover onto the default. uPlot picks the first row whose
+// threshold is <= the chosen tick increment (falling back to the last row), so the
+// labels coarsen to "Jun" / "2024" when zoomed out and stay "01 Jun" up close.
+// fmtDate tokens: {DD}=01 {MMM}=Jun {YYYY}=2024 {HH}=22 {mm}=05 {ss}=09.
+// Times use 24-hour {HH}:{mm} ("22:00"), not uPlot's 12-hour default ("10pm").
+const TIME_AXIS_VALUES = (() => {
+  const s = 1
+  const m = 60
+  const h = 60 * m
+  const d = 24 * h
+  const y = 365 * d
+  const _ = null
+  const NLyyyy = '\n{YYYY}'
+  const dmon = '{DD} {MMM}' // 01 Jun
+  const NLdmon = `\n${dmon}`
+  const NLdmonyy = `${NLdmon} {YYYY}` // \n01 Jun 2024
+  const hmm = '{HH}:{mm}' // 22:00
+  const NLhmm = `\n${hmm}`
+  const ss = ':{ss}'
+  return [
+    //  incr     default       year       month  day                   hour  min       sec  mode
+    [y, '{YYYY}', _, _, _, _, _, _, 1],
+    [d * 28, '{MMM}', NLyyyy, _, _, _, _, _, 1],
+    [d, dmon, NLyyyy, _, _, _, _, _, 1],
+    [h, hmm, NLdmonyy, _, NLdmon, _, _, _, 1],
+    [m, hmm, NLdmonyy, _, NLdmon, _, _, _, 1],
+    [s, ss, `${NLdmonyy} ${hmm}`, _, `${NLdmon} ${hmm}`, _, NLhmm, _, 1]
+  ]
+})()
+
 /**
  * @typedef {Object} AxisSpec
  * @property {string} label
@@ -193,9 +228,9 @@ export function buildOpts(UPlot, def, opts = {}) {
   }
 
   const xAxis = { stroke: c.axis, grid: { stroke: c.grid }, ticks: { stroke: c.grid } }
-  if (!xTime) {
-    xAxis.values = (u, splits) => splits.map((v) => (v == null ? '' : humanize.threeSigFigs(v)))
-  }
+  xAxis.values = xTime
+    ? TIME_AXIS_VALUES // date stamps -> "01 Jun" instead of uPlot's default "6/1"
+    : (u, splits) => splits.map((v) => (v == null ? '' : humanize.threeSigFigs(v)))
 
   const axes = [
     xAxis,

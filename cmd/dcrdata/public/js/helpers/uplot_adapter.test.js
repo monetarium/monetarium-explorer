@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
+import uPlot from 'uplot'
 import { buildOpts, createChart, createSyncKey, logRange, niceLinearTicks } from './uplot_adapter'
 import { getDefault } from './module_helper'
 
@@ -503,14 +504,67 @@ describe('buildOpts — threeSigFigs axis tick formatter', () => {
     const opts = buildOpts(fakeUPlot, lineDef, { xTime: false })
     expect(opts.axes[0].values(null, [1000, 12000, 1500000])).toEqual(['1.00k', '12.0k', '1.50M'])
   })
-  it('time x-axis has no values override (uPlot handles date formatting)', () => {
+  it('time x-axis carries a fmtDate stamp config (array of arrays)', () => {
     const opts = buildOpts(fakeUPlot, lineDef, { xTime: true })
-    expect(opts.axes[0].values).toBeUndefined()
+    // An array whose first element is itself an array → uPlot reads it as a
+    // per-zoom-level fmtDate stamp config rather than static tick values.
+    expect(Array.isArray(opts.axes[0].values)).toBe(true)
+    expect(Array.isArray(opts.axes[0].values[0])).toBe(true)
   })
   it('y-axis handles null splits gracefully', () => {
     const opts = buildOpts(fakeUPlot, lineDef, {})
     const yAxis = opts.axes.find((a) => a.scale === 'y')
     expect(yAxis.values(null, [null, 1000])).toEqual(['', '1.00k'])
+  })
+})
+
+describe('buildOpts — time x-axis date format ("01 Jun", not "6/1")', () => {
+  // The x scale is in seconds (opts.ms defaults to 1e-3), so the stamp thresholds
+  // are seconds: a day = 86400, ~a month = 86400*28. uPlot compiles each stamp's
+  // fmtDate template internally; here we compile the raw templates directly to
+  // assert the exact rendered labels.
+  const stampFor = (opts, incrSecs) => opts.axes[0].values.find((r) => r[0] === incrSecs)
+
+  it('renders day-level ticks as "01 Jun", never "6/1"', () => {
+    const opts = buildOpts(fakeUPlot, lineDef, { xTime: true })
+    const fmt = uPlot.fmtDate(stampFor(opts, 86400)[1])
+    expect(fmt(new Date(2024, 5, 1))).toBe('01 Jun') // month index 5 = June
+    expect(fmt(new Date(2024, 11, 9))).toBe('09 Dec')
+  })
+
+  it('rolls the year onto the day label as "01 Jun\\n2024" at a year boundary', () => {
+    const opts = buildOpts(fakeUPlot, lineDef, { xTime: true })
+    // mode 1 concatenates the default ([1]) with the year-rollover template ([2]).
+    const day = stampFor(opts, 86400)
+    const fmt = uPlot.fmtDate(day[1] + day[2])
+    expect(fmt(new Date(2024, 0, 1))).toBe('01 Jan\n2024')
+  })
+
+  it('renders month-level ticks as the short month name', () => {
+    const opts = buildOpts(fakeUPlot, lineDef, { xTime: true })
+    expect(uPlot.fmtDate(stampFor(opts, 86400 * 28)[1])(new Date(2024, 5, 1))).toBe('Jun')
+  })
+
+  it('renders year-level ticks as the 4-digit year', () => {
+    const opts = buildOpts(fakeUPlot, lineDef, { xTime: true })
+    expect(uPlot.fmtDate(stampFor(opts, 86400 * 365)[1])(new Date(2024, 5, 1))).toBe('2024')
+  })
+
+  it('renders hour-level ticks in 24-hour time as "22:00", not "10pm"', () => {
+    const opts = buildOpts(fakeUPlot, lineDef, { xTime: true })
+    const fmt = uPlot.fmtDate(stampFor(opts, 3600)[1])
+    expect(fmt(new Date(2024, 5, 1, 22, 0))).toBe('22:00')
+    expect(fmt(new Date(2024, 5, 1, 9, 0))).toBe('09:00')
+  })
+
+  it('renders minute-level ticks in 24-hour time as "22:05"', () => {
+    const opts = buildOpts(fakeUPlot, lineDef, { xTime: true })
+    expect(uPlot.fmtDate(stampFor(opts, 60)[1])(new Date(2024, 5, 1, 22, 5))).toBe('22:05')
+  })
+
+  it('leaves the height (non-time) x-axis on the numeric formatter', () => {
+    const opts = buildOpts(fakeUPlot, lineDef, { xTime: false })
+    expect(opts.axes[0].values(null, [1000, 12000])).toEqual(['1.00k', '12.0k'])
   })
 })
 
