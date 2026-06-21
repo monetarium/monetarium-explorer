@@ -265,7 +265,6 @@ export default class extends Controller {
     globalEventBus.on('NIGHT_MODE', this.processNightMode)
     this._onBlock = ({ detail: blockData }) => {
       hashrate = blockData.extra.hash_rate
-      this.setAllValues(this.actualHashRateTargets, digitformat(hashrate, 8))
       this.calculate()
     }
     globalEventBus.on('BLOCK_RECEIVED', this._onBlock)
