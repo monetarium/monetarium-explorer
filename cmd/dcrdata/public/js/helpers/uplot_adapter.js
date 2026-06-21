@@ -13,6 +13,15 @@ const LOG_DISTR = 3 // uPlot scale.distr: 1 = linear, 3 = log
 // next to the data — so titles are bumped to 16px for legibility.
 const AXIS_LABEL_FONT = '600 16px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif'
 
+// Gap between the rotated y-axis title and its tick values. uPlot centers the label at
+// the values' outer edge, so the default (0) leaves the 16px title touching wide ticks
+// (e.g. "0.0035" on the Fees chart). A positive gap pushes the title clear.
+const AXIS_LABEL_GAP = 8
+// Width of the rotated y-axis title band. uPlot's default (30px) is sized for its 12px
+// label; the 16px AXIS_LABEL_FONT plus AXIS_LABEL_GAP needs a wider band, else the
+// gapped title clips at the canvas edge. Sized to hold the gap + label with margin.
+const AXIS_LABEL_SIZE = 44
+
 // Integer-only tick increments (1/2/5 × 10ⁿ) for count axes like "Active Miners",
 // which must never show fractional ticks. Constrains uPlot's auto-stepper to integers.
 const INT_INCRS = (() => {
@@ -255,6 +264,8 @@ export function buildOpts(UPlot, def, opts = {}) {
         scale: scale,
         label: a.label,
         labelFont: AXIS_LABEL_FONT,
+        labelSize: AXIS_LABEL_SIZE,
+        labelGap: AXIS_LABEL_GAP,
         stroke: axisColor,
         grid: { stroke: scale === 'y' ? c.grid : 'transparent' },
         side: scale === 'y2' ? 1 : 3 // 3 = left, 1 = right

@@ -190,6 +190,21 @@ describe('buildOpts — options', () => {
     expect(opts.axes[1].labelFont).toContain('16px')
   })
 
+  it('gaps the y-axis title off its tick values so they do not overlap', () => {
+    const opts = buildOpts(fakeUPlot, lineDef, {})
+    // uPlot centers the label at the values' outer edge, so with the default
+    // labelGap (0) the title touches wide ticks like "0.0035". A positive gap
+    // pushes it clear; labelSize must stay wide enough to hold the shifted label.
+    expect(opts.axes[1].labelGap).toBeGreaterThan(0)
+    expect(opts.axes[1].labelSize).toBeGreaterThan(30)
+  })
+
+  it('gaps the title off the tick values on the right (y2) axis too', () => {
+    const opts = buildOpts(fakeUPlot, dualAxisDef, {})
+    const y2 = opts.axes.find((a) => a.scale === 'y2')
+    expect(y2.labelGap).toBeGreaterThan(0)
+  })
+
   it('renders integer-only ticks for an intTicks axis', () => {
     const def = {
       ...dualAxisDef,
