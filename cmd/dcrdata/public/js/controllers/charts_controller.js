@@ -9,7 +9,7 @@ import globalEventBus from '../services/event_bus_service'
 import { darkEnabled } from '../services/theme_service'
 import { createChart } from '../helpers/uplot_adapter'
 import { createRanger } from '../helpers/uplot_ranger'
-import { getDefinition } from '../charts/registry'
+import { getDefinition, coinTypeFromName, isCoinSupplyName, isSKAFeeName } from '../charts/registry'
 import '../charts/definitions/index' // side-effect: register all definitions
 
 export default class extends Controller {
@@ -283,7 +283,11 @@ export default class extends Controller {
       return this.pendingCreate
     }
     this.handle.setData(cols)
-    if (this.ranger) this.ranger.setData([cols[0], cols[1]])
+    if (this.ranger) {
+      this.ranger.setData([cols[0], cols[1]])
+      const avg = this.rangerAverage(cols, renderDef.name)
+      this.ranger.setAverage(avg.value, avg.label)
+    }
     this.applyZoom()
   }
 
@@ -296,10 +300,16 @@ export default class extends Controller {
       this.ranger = null
     }
     if (!this.hasRangerViewTarget) return
+    const g = (this.handle && this.measureGutters(this.handle.uplot)) || { left: 0, right: 0 }
+    const avg = this.rangerAverage(cols, renderDef.name)
     this.ranger = await createRanger(this.rangerViewTarget, renderDef, {
       dark: darkEnabled(),
       width: this.rangerViewTarget.clientWidth || this.chartsViewTarget.clientWidth || 800,
       xTime: xTime,
+      leftGutter: g.left,
+      rightGutter: g.right,
+      avgValue: avg.value,
+      avgLabel: avg.label,
       onSelect: (min, max) => this.onRangerSelect(min, max)
     })
     this.ranger.setData([cols[0], cols[1]])
@@ -328,7 +338,44 @@ export default class extends Controller {
   }
 
   buildHooks() {
-    return { setCursor: [(u) => this.renderLegend(u)] }
+    return {
+      setCursor: [(u) => this.renderLegend(u)],
+      // On every main-chart draw, mirror its plot-box insets onto the strip so the two stay
+      // aligned through zoom, scale toggle, and single↔dual-axis chart switches.
+      draw: [(u) => this.syncRangerGutters(u)]
+    }
+  }
+
+  // The main chart's plot-box insets in CSS px: the gap between the uPlot root and its
+  // over(lay) element on each side. Used to size the strip's reserve axes so its plot area
+  // lines up under the main chart's. Returns null if the geometry isn't available yet.
+  measureGutters(u) {
+    if (!u || !u.over || !u.root) return null
+    const root = u.root.getBoundingClientRect()
+    const over = u.over.getBoundingClientRect()
+    return { left: over.left - root.left, right: root.right - over.right }
+  }
+
+  syncRangerGutters(u) {
+    if (!this.ranger) return
+    const g = this.measureGutters(u)
+    if (g) this.ranger.setGutters(g.left, g.right)
+  }
+
+  // SKA-denominated charts: coin-supply/{n≥1} and fees/{n≥1}. Their strip values are lossy
+  // Number() columns, so a printed average would be a lossy SKA display value.
+  isSkaChart(name) {
+    return isSKAFeeName(name) || (isCoinSupplyName(name) && coinTypeFromName(name) >= 1)
+  }
+
+  // Average of the strip's primary column, for the single avg tick. Suppressed (null) on SKA
+  // charts to keep the precision firewall intact — no float-derived SKA value reaches a label.
+  rangerAverage(cols, name) {
+    if (this.isSkaChart(name)) return { value: null, label: '' }
+    const ys = (cols[1] || []).filter((v) => v != null && isFinite(v))
+    if (!ys.length) return { value: null, label: '' }
+    const mean = ys.reduce((a, b) => a + b, 0) / ys.length
+    return { value: mean, label: humanize.threeSigFigs(mean) }
   }
 
   renderLegend(u) {
