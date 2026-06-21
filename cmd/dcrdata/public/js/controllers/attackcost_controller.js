@@ -265,7 +265,7 @@ export default class extends Controller {
     globalEventBus.on('NIGHT_MODE', this.processNightMode)
     this._onBlock = ({ detail: blockData }) => {
       hashrate = blockData.extra.hash_rate
-      this.setAllValues(this.actualHashRateTargets, digitformat(hashrate, 4))
+      this.setAllValues(this.actualHashRateTargets, digitformat(hashrate, 8))
       this.calculate()
     }
     globalEventBus.on('BLOCK_RECEIVED', this._onBlock)
@@ -546,7 +546,7 @@ export default class extends Controller {
     const devicePronounStr = deviceCount > 1 ? 'them' : 'it'
     const deviceSuffixStr = deviceCount > 1 ? 's' : ''
     this.ticketPoolSizeLabelTarget.innerHTML = digitformat(tpSize, 2)
-    this.setAllValues(this.actualHashRateTargets, digitformat(hashrate, 4))
+    this.setAllValues(this.actualHashRateTargets, digitformat(hashrate, 8))
     this.exchangeRateTarget.value = digitformat(varPrice, 2)
     this.setAllInputs(this.targetPosTargets, digitformat(parseFloat(this.targetPosTarget.value), 2))
     this.ticketPriceTarget.innerHTML = digitformat(tpPrice, 4)
