@@ -546,7 +546,7 @@ export default class extends Controller {
     const deviceSuffixStr = deviceCount > 1 ? 's' : ''
     this.ticketPoolSizeLabelTarget.innerHTML = digitformat(tpSize, 2)
     this.setAllValues(this.actualHashRateTargets, digitformat(hashrate, 8))
-    this.exchangeRateTarget.value = digitformat(varPrice, 2)
+    this.exchangeRateTarget.value = digitformat(varPrice, 2, true)
     this.setAllInputs(this.targetPosTargets, digitformat(parseFloat(this.targetPosTarget.value), 2))
     this.ticketPriceTarget.innerHTML = digitformat(tpPrice, 4)
     this.setAllValues(this.targetHashRateTargets, digitformat(this.targetHashRate, 8))
