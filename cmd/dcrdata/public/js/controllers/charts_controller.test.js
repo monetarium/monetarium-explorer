@@ -555,6 +555,22 @@ describe('ChartsController on-plot tooltip', () => {
     over.dispatchEvent(touchEvent('touchend'))
     expect(tt.classList.contains('d-hide')).toBe(true)
   })
+
+  it('stays in scroll for the rest of the gesture once vertical-classified (terminal state)', async () => {
+    const c = makeController()
+    await c.connect()
+    const { over, u } = scrubFixture(c)
+    over.dispatchEvent(touchEvent('touchstart', 100, 100))
+    over.dispatchEvent(touchEvent('touchmove', 106, 140)) // dx=6, dy=40 -> classified scroll
+    expect(u.setCursor).not.toHaveBeenCalled()
+    // A later strongly-horizontal move in the SAME gesture must NOT start scrubbing — the
+    // scroll classification is terminal until touchend. If the handler re-classified every
+    // move, this would scrub.
+    const move = touchEvent('touchmove', 300, 142)
+    over.dispatchEvent(move)
+    expect(u.setCursor).not.toHaveBeenCalled()
+    expect(move.defaultPrevented).toBe(false)
+  })
 })
 
 describe('ChartsController viewport fit', () => {
