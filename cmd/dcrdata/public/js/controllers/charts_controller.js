@@ -7,7 +7,7 @@ import Zoom from '../helpers/zoom_helper'
 import { animationFrame } from '../helpers/animation_helper' // eslint-disable-line no-unused-vars
 import globalEventBus from '../services/event_bus_service'
 import { darkEnabled } from '../services/theme_service'
-import { createChart } from '../helpers/uplot_adapter'
+import { createChart, resolveSeriesColor } from '../helpers/uplot_adapter'
 import { createRanger } from '../helpers/uplot_ranger'
 import { getDefinition } from '../charts/registry'
 import '../charts/definitions/index' // side-effect: register all definitions
@@ -94,9 +94,11 @@ export default class extends Controller {
     const lm = this.legendMarkerTarget
     lm.remove()
     lm.removeAttribute('data-charts-target')
-    this.legendMarker = () => {
+    this.legendMarker = (color) => {
       const node = document.createElement('div')
-      node.appendChild(lm.cloneNode())
+      const marker = lm.cloneNode()
+      if (color) marker.style.borderBottomColor = color
+      node.appendChild(marker)
       return node.innerHTML
     }
     const le = this.legendEntryTarget
@@ -465,7 +467,12 @@ export default class extends Controller {
       const value = u.data[i + 1][idx]
       const datum = { idx: idx, payload: this.payload, value: value }
       const text = def.formatValue(i, datum, settings)
-      this.legendElement.appendChild(this.legendEntry(`${this.legendMarker()} ${s.label}: ${text}`))
+      // Color the marker line with the same resolver the adapter uses for the series stroke,
+      // so the tooltip swatch matches the on-chart line color.
+      const color = resolveSeriesColor(s, i, darkEnabled())
+      this.legendElement.appendChild(
+        this.legendEntry(`${this.legendMarker(color)} ${s.label}: ${text}`)
+      )
     })
 
     // Optional extra non-series lines (e.g. stake-participation).

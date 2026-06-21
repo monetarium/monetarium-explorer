@@ -80,7 +80,8 @@ const fakeHandle = {
 
 vi.mock('../helpers/uplot_adapter', () => ({
   createChart: vi.fn().mockResolvedValue(fakeHandle),
-  createSyncKey: (n) => `mon-chart-sync:${n}`
+  createSyncKey: (n) => `mon-chart-sync:${n}`,
+  resolveSeriesColor: vi.fn(() => 'rgb(45, 179, 94)')
 }))
 
 const fakeRanger = {
@@ -398,6 +399,39 @@ describe('ChartsController legend', () => {
     const u = { cursor: { idx: null }, data: [[1000]] }
     c.renderLegend(u)
     expect(c.labelsTarget.classList.add).toHaveBeenCalledWith('d-hide')
+  })
+
+  it('legendMarker colors the marker line with the given color, and omits it when none is given', async () => {
+    const c = makeController()
+    await c.connect()
+    expect(c.legendMarker('rgb(224, 49, 49)')).toContain('border-bottom-color')
+    expect(c.legendMarker()).not.toContain('border-bottom-color')
+  })
+
+  it('renderLegend colors each series marker with its resolved series stroke color', async () => {
+    const { resolveSeriesColor } = await import('../helpers/uplot_adapter')
+    const c = makeController()
+    const appended = []
+    c.labelsTarget = {
+      classList: { add: vi.fn(), remove: vi.fn() },
+      appendChild: (node) => appended.push(node.innerHTML),
+      replaceChildren: () => (appended.length = 0)
+    }
+    await c.connect()
+    const series = [{ label: 'Price', colorIndex: 2 }]
+    c.currentDef = { name: 'demo', series: series, formatValue: (i, d) => `${d.value}` }
+    c.payload = {}
+    c.settings.axis = 'time'
+    c.renderLegend({
+      cursor: { idx: 1 },
+      data: [
+        [1000, 2000],
+        [10, 20]
+      ]
+    })
+    // marker color comes from the SAME resolver the adapter uses for the line stroke
+    expect(resolveSeriesColor).toHaveBeenCalledWith(series[0], 0, false)
+    expect(appended.some((h) => h.includes('border-bottom-color'))).toBe(true)
   })
 })
 
