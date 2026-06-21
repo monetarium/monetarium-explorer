@@ -493,6 +493,68 @@ describe('ChartsController on-plot tooltip', () => {
     expect(c.legendElement.style.left).toBe('62px') // 50 + 12 pad, no flip (fits in 500)
     expect(c.legendElement.style.top).toBe('42px') // 30 + 12 pad, no flip (fits in 400)
   })
+
+  // Build a synthetic touch event with a single-touch list. jsdom lacks a TouchEvent
+  // constructor, so we hang `touches` on a plain cancelable Event — the handler only reads
+  // e.touches[0].clientX/Y and calls e.preventDefault().
+  function touchEvent(type, x, y) {
+    const e = new Event(type, { bubbles: true, cancelable: true }) // eslint-disable-line no-undef
+    e.touches = x == null ? [] : [{ clientX: x, clientY: y }]
+    return e
+  }
+
+  function scrubFixture(c) {
+    const over = document.createElement('div')
+    over.getBoundingClientRect = () => ({ left: 0, top: 0, width: 500, height: 400 })
+    const u = { over: over, cursor: {}, setCursor: vi.fn() }
+    c.installTooltip(u)
+    return { over, u }
+  }
+
+  it('a horizontal touch scrub drives the cursor and prevents default', async () => {
+    const c = makeController()
+    await c.connect()
+    const { over, u } = scrubFixture(c)
+    over.dispatchEvent(touchEvent('touchstart', 100, 100))
+    const move = touchEvent('touchmove', 132, 106) // dx=32, dy=6 -> scrub
+    over.dispatchEvent(move)
+    expect(u.setCursor).toHaveBeenCalledWith({ left: 132, top: 106 })
+    expect(move.defaultPrevented).toBe(true)
+  })
+
+  it('a vertical touch drag yields to page scroll (no cursor, no preventDefault)', async () => {
+    const c = makeController()
+    await c.connect()
+    const { over, u } = scrubFixture(c)
+    over.dispatchEvent(touchEvent('touchstart', 100, 100))
+    const move = touchEvent('touchmove', 106, 140) // dx=6, dy=40 -> scroll
+    over.dispatchEvent(move)
+    expect(u.setCursor).not.toHaveBeenCalled()
+    expect(move.defaultPrevented).toBe(false)
+  })
+
+  it('clamps the cursor to the overlay box when the finger leaves the chart', async () => {
+    const c = makeController()
+    await c.connect()
+    const { over, u } = scrubFixture(c)
+    over.dispatchEvent(touchEvent('touchstart', 100, 100))
+    over.dispatchEvent(touchEvent('touchmove', 140, 100)) // lock to scrub
+    u.setCursor.mockClear()
+    over.dispatchEvent(touchEvent('touchmove', 999, 999)) // off the 500x400 overlay
+    expect(u.setCursor).toHaveBeenCalledWith({ left: 500, top: 400 })
+  })
+
+  it('hides the tooltip on touchend after a scrub', async () => {
+    const c = makeController()
+    await c.connect()
+    const { over } = scrubFixture(c)
+    const tt = over.querySelector('.chart-tooltip')
+    over.dispatchEvent(touchEvent('touchstart', 100, 100))
+    over.dispatchEvent(touchEvent('touchmove', 140, 100)) // scrub
+    tt.classList.remove('d-hide') // simulate renderLegend having shown it
+    over.dispatchEvent(touchEvent('touchend'))
+    expect(tt.classList.contains('d-hide')).toBe(true)
+  })
 })
 
 describe('ChartsController viewport fit', () => {

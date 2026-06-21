@@ -636,6 +636,12 @@ body.darkBG {
   width: 100% !important;
 }
 
+/* Touch: a vertical swipe scrolls the page; a horizontal drag is delivered to the scrub
+   handler (charts_controller installTouchScrub). The JS directional lock is the fallback. */
+.chartview .u-over {
+  touch-action: pan-y;
+}
+
 /* uPlot axis/label legibility in dark mode (structural colors come from
    chart_theme via canvas strokes; these cover the DOM-rendered axis labels). */
 .u-legend {

@@ -9,6 +9,7 @@ import globalEventBus from '../services/event_bus_service'
 import { darkEnabled } from '../services/theme_service'
 import { createChart, resolveSeriesColor } from '../helpers/uplot_adapter'
 import { createRanger } from '../helpers/uplot_ranger'
+import { classifyGesture } from '../helpers/touch_gesture'
 import { getDefinition } from '../charts/registry'
 import '../charts/definitions/index' // side-effect: register all definitions
 
@@ -22,6 +23,10 @@ const BELOW_CHART_RESERVE = 140
 const BELOW_CHART_GAP = 32
 // Readability floor — below this the chart stops shrinking and the page scrolls instead.
 const CHART_MIN_HEIGHT = 320
+
+// Horizontal travel (CSS px) a touch must exceed before it locks into a scrub rather than a
+// vertical page scroll. Mirrors the touch-action: pan-y split with a JS fallback.
+const SCRUB_THRESHOLD = 8
 
 // Trailing debounce so a window drag-resize coalesces into one setSize.
 function debounce(fn, ms) {
@@ -437,6 +442,57 @@ export default class extends Controller {
     u.over.addEventListener('mouseleave', () => {
       if (!u.cursor || !u.cursor._lock) tt.classList.add('d-hide')
     })
+    this.installTouchScrub(u, tt)
+  }
+
+  // Touch parity for the desktop hover tooltip. A horizontal finger drag scrubs the cursor
+  // (driving the same setCursor -> renderLegend path as the mouse); a vertical drag yields
+  // to page scroll (touch-action: pan-y handles it, this is the JS fallback). The gesture is
+  // a three-state machine: pending -> scrub | scroll, terminal until touchend/touchcancel.
+  installTouchScrub(u, tt) {
+    let startX = 0
+    let startY = 0
+    let state = 'pending'
+
+    u.over.addEventListener(
+      'touchstart',
+      (e) => {
+        const t = e.touches && e.touches[0]
+        if (!t) return
+        startX = t.clientX
+        startY = t.clientY
+        state = 'pending'
+      },
+      { passive: true }
+    )
+
+    u.over.addEventListener(
+      'touchmove',
+      (e) => {
+        const t = e.touches && e.touches[0]
+        if (!t) return
+        if (state === 'pending') {
+          state = classifyGesture(t.clientX - startX, t.clientY - startY, SCRUB_THRESHOLD)
+        }
+        if (state !== 'scrub') return // pending (below threshold) or scroll -> let the page scroll
+        e.preventDefault()
+        const rect = u.over.getBoundingClientRect()
+        const left = Math.max(0, Math.min(t.clientX - rect.left, rect.width))
+        const top = Math.max(0, Math.min(t.clientY - rect.top, rect.height))
+        u.setCursor({ left: left, top: top })
+      },
+      { passive: false }
+    )
+
+    const end = () => {
+      if (state === 'scrub') {
+        tt.classList.add('d-hide')
+        if (u.cursor) u.cursor.idx = null
+      }
+      state = 'pending'
+    }
+    u.over.addEventListener('touchend', end)
+    u.over.addEventListener('touchcancel', end)
   }
 
   // Place the on-plot tooltip near the cursor, flipping the offset to keep the box inside
