@@ -103,7 +103,8 @@ vi.mock('../helpers/chart_helper', () => ({
 const {
   default: ChartsController,
   sanitizeLogValueRange,
-  clampLogFloor
+  clampLogFloor,
+  missedVotesFunc
 } = await import('./charts_controller.js')
 
 function makeController() {
@@ -350,6 +351,33 @@ describe('ChartsController coin-supply SKA log floor', () => {
   })
 })
 
+describe('missedVotesFunc log-scale guard', () => {
+  it('clamps zero values to 1 on log scale', () => {
+    const data = { t: [1000, 2000, 3000], missed: [0, 2, 0] }
+    const result = missedVotesFunc(data, true)
+    expect(result[0][1]).toBe(1)
+    expect(result[1][1]).toBe(2)
+    expect(result[2][1]).toBe(1)
+  })
+
+  it('passes through values unchanged on linear scale', () => {
+    const data = { t: [1000, 2000, 3000], missed: [0, 2, 0] }
+    const result = missedVotesFunc(data, false)
+    expect(result[0][1]).toBe(0)
+    expect(result[1][1]).toBe(2)
+    expect(result[2][1]).toBe(0)
+  })
+
+  it('handles height axis data on log scale', () => {
+    const data = { missed: [0, 5, 0, 3], window: 144, offset: 256 }
+    const result = missedVotesFunc(data, true)
+    expect(result[0][1]).toBe(1)
+    expect(result[1][1]).toBe(5)
+    expect(result[2][1]).toBe(1)
+    expect(result[3][1]).toBe(3)
+  })
+})
+
 describe('ChartsController plotGraph log-axis guard', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -371,6 +399,19 @@ describe('ChartsController plotGraph log-axis guard', () => {
     const gOptions = call[0]
     expect(gOptions.logscale).toBe(true)
     expect(gOptions.axes.y.valueRange).toEqual([null, null])
+  })
+
+  it('stashes raw missed-votes data for the legend formatter', async () => {
+    const c = makeController()
+    await c.connect()
+    c.settings.scale = 'log'
+    c.settings.axis = 'time'
+    c.settings.bin = 'window'
+    c.chartsView.updateOptions.mockClear()
+
+    c.plotGraph('missed-votes', { t: [1000, 2000], missed: [0, 2] })
+
+    expect(c._missedVotesRaw).toEqual([0, 2])
   })
 
   it('preserves the hashrate y2 floor in log scale (y2 stays linear)', async () => {
