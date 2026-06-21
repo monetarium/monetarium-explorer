@@ -399,6 +399,65 @@ describe('ChartsController legend', () => {
   })
 })
 
+describe('ChartsController on-plot tooltip', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('installTooltip creates a tooltip in u.over and retargets the legend element', async () => {
+    const c = makeController()
+    await c.connect()
+    const over = document.createElement('div')
+    c.installTooltip({ over: over, cursor: {} })
+    const tt = over.querySelector('.chart-tooltip')
+    expect(tt).not.toBeNull()
+    expect(c.legendElement).toBe(tt)
+  })
+
+  it('the tooltip shows on cursor enter and hides on leave', async () => {
+    const c = makeController()
+    await c.connect()
+    const over = document.createElement('div')
+    c.installTooltip({ over: over, cursor: {} })
+    const tt = over.querySelector('.chart-tooltip')
+    over.dispatchEvent(new Event('mouseenter')) // eslint-disable-line no-undef
+    expect(tt.classList.contains('d-hide')).toBe(false)
+    over.dispatchEvent(new Event('mouseleave')) // eslint-disable-line no-undef
+    expect(tt.classList.contains('d-hide')).toBe(true)
+  })
+
+  it('renderLegend positions the tooltip near the cursor inside the overlay', async () => {
+    const c = makeController()
+    await c.connect()
+    const over = document.createElement('div')
+    Object.defineProperty(over, 'clientWidth', { value: 500, configurable: true })
+    Object.defineProperty(over, 'clientHeight', { value: 400, configurable: true })
+    c.installTooltip({ over: over, cursor: {} })
+    // legendElement is now a real <div>, so its real appendChild needs real nodes — the
+    // makeController stub clones fake nodes. Override the entry generator for this test.
+    c.legendEntry = (s) => {
+      const d = document.createElement('div')
+      d.textContent = s
+      return d
+    }
+    c.currentDef = {
+      name: 'demo',
+      series: [{ label: 'Price' }],
+      formatValue: (i, d) => `${d.value}`
+    }
+    c.payload = {}
+    c.settings.axis = 'time'
+    c.renderLegend({
+      over: over,
+      cursor: { idx: 1, left: 50, top: 30 },
+      data: [
+        [1000, 2000],
+        [10, 20]
+      ]
+    })
+    expect(c.legendElement.style.left).toBe('62px') // 50 + 12 pad, no flip (fits in 500)
+    expect(c.legendElement.style.top).toBe('42px') // 30 + 12 pad, no flip (fits in 400)
+  })
+})
+
 describe('ChartsController hashrate chart', () => {
   beforeEach(() => {
     vi.clearAllMocks()

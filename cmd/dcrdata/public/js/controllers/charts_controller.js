@@ -332,6 +332,8 @@ export default class extends Controller {
 
   buildHooks() {
     return {
+      // Create the on-plot hover tooltip once the chart is in the DOM.
+      ready: [(u) => this.installTooltip(u)],
       setCursor: [(u) => this.renderLegend(u)],
       // On every main-chart draw, mirror its plot-box insets onto the strip so the two stay
       // aligned through zoom, scale toggle, and single↔dual-axis chart switches.
@@ -353,6 +355,38 @@ export default class extends Controller {
     if (!this.ranger) return
     const g = this.measureGutters(u)
     if (g) this.ranger.setGutters(g.left, g.right)
+  }
+
+  // Create the hover tooltip inside the plot overlay (follows uPlot demos/tooltips.html):
+  // a div appended to u.over, shown on cursor-enter and hidden on cursor-leave (kept up
+  // during a locked drag). renderLegend fills + positions it. Reassigns this.legendElement
+  // so the existing legend content path renders into the on-plot tooltip instead of the
+  // hidden seed holder.
+  installTooltip(u) {
+    if (!u || !u.over) return
+    const tt = document.createElement('div')
+    tt.className = 'chart-tooltip d-hide'
+    u.over.appendChild(tt)
+    this.legendElement = tt
+    u.over.addEventListener('mouseenter', () => tt.classList.remove('d-hide'))
+    u.over.addEventListener('mouseleave', () => {
+      if (!u.cursor || !u.cursor._lock) tt.classList.add('d-hide')
+    })
+  }
+
+  // Place the on-plot tooltip near the cursor, flipping the offset to keep the box inside
+  // the overlay. No-op for the hidden seed holder (no u.over) so the content-only legend
+  // tests stay valid.
+  positionTooltip(u) {
+    const tt = this.legendElement
+    if (!u.over || !tt || !tt.style) return
+    const pad = 12
+    let left = u.cursor.left + pad
+    let top = u.cursor.top + pad
+    if (left + tt.offsetWidth > u.over.clientWidth) left = u.cursor.left - tt.offsetWidth - pad
+    if (top + tt.offsetHeight > u.over.clientHeight) top = u.cursor.top - tt.offsetHeight - pad
+    tt.style.left = `${Math.max(0, left)}px`
+    tt.style.top = `${Math.max(0, top)}px`
   }
 
   renderLegend(u) {
@@ -390,6 +424,8 @@ export default class extends Controller {
         this.legendElement.appendChild(this.legendEntry(`${this.legendMarker()} ${line}`))
       })
     }
+
+    this.positionTooltip(u)
   }
 
   applyControlVisibility(def, selection) {
