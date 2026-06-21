@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 const mockReplace = vi.fn()
 let restoreSettings = null
@@ -792,5 +792,41 @@ describe('ChartsController ranger gutters & average', () => {
     expect(typeof hooks.draw[0]).toBe('function')
     hooks.draw[0](u)
     expect(fakeRanger.setGutters).toHaveBeenCalledWith(40, 20)
+  })
+})
+
+describe('ChartsController resize hook', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  afterEach(() => {
+    Object.defineProperty(window, 'innerHeight', { value: 768, configurable: true })
+  })
+
+  it('resizeChartToViewport pushes the container width and computed height to the handle', async () => {
+    const c = makeController()
+    c.chartsViewTarget.getBoundingClientRect = () => ({ top: 200 })
+    Object.defineProperty(window, 'innerHeight', { value: 1000, configurable: true })
+    await c.connect()
+    fakeHandle.resize.mockClear()
+    c.resizeChartToViewport()
+    expect(fakeHandle.resize).toHaveBeenCalledWith(800, 660) // width 800, 1000-200-140
+  })
+
+  it('does nothing when there is no chart handle', () => {
+    const c = makeController()
+    c.handle = null
+    expect(() => c.resizeChartToViewport()).not.toThrow()
+  })
+
+  it('connect registers a window resize listener and disconnect removes the same one', async () => {
+    const c = makeController()
+    const addSpy = vi.spyOn(window, 'addEventListener')
+    const removeSpy = vi.spyOn(window, 'removeEventListener')
+    await c.connect()
+    expect(addSpy).toHaveBeenCalledWith('resize', expect.any(Function))
+    c.disconnect()
+    expect(removeSpy).toHaveBeenCalledWith('resize', c.onWindowResize)
+    addSpy.mockRestore()
+    removeSpy.mockRestore()
   })
 })

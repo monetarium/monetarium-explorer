@@ -20,6 +20,15 @@ const BELOW_CHART_RESERVE = 140
 // Readability floor — below this the chart stops shrinking and the page scrolls instead.
 const CHART_MIN_HEIGHT = 320
 
+// Trailing debounce so a window drag-resize coalesces into one setSize.
+function debounce(fn, ms) {
+  let t = null
+  return (...args) => {
+    if (t) clearTimeout(t)
+    t = setTimeout(() => fn(...args), ms)
+  }
+}
+
 export default class extends Controller {
   static get targets() {
     return [
@@ -99,6 +108,9 @@ export default class extends Controller {
     this.processNightMode = () => this.redrawTheme()
     globalEventBus.on('NIGHT_MODE', this.processNightMode)
 
+    this.onWindowResize = debounce(() => this.resizeChartToViewport(), 150)
+    window.addEventListener('resize', this.onWindowResize)
+
     this.chartSelectTarget.value = this.settings.chart
 
     // Restore the control bar's active state from the persisted URL so a bookmark
@@ -116,6 +128,7 @@ export default class extends Controller {
   }
 
   disconnect() {
+    window.removeEventListener('resize', this.onWindowResize)
     globalEventBus.off('NIGHT_MODE', this.processNightMode)
     if (this.handle) {
       this.handle.destroy()
@@ -345,6 +358,15 @@ export default class extends Controller {
     const top = this.chartsViewTarget.getBoundingClientRect().top
     const avail = window.innerHeight - top - BELOW_CHART_RESERVE
     return Math.max(CHART_MIN_HEIGHT, Math.round(avail))
+  }
+
+  // Re-fit the chart to the viewport after a window resize. Reads the live container width
+  // and the computed available height and pushes both to uPlot via the existing resize().
+  // The draw hook then re-aligns the ranger.
+  resizeChartToViewport() {
+    if (!this.handle) return
+    const width = this.chartsViewTarget.clientWidth || 800
+    this.handle.resize(width, this.computeChartHeight())
   }
 
   buildHooks() {
