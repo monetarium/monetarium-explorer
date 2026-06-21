@@ -691,3 +691,28 @@ body.darkBG .chartview .u-axis {
     right: -4px;
   }
 }
+
+// On-plot hover tooltip (replaces the external legend band). Lives inside .u-over.
+.chart-tooltip {
+  position: absolute;
+  z-index: 10;
+  pointer-events: none;
+  padding: 4px 10px;
+  font-size: 14px;
+  line-height: 1.35;
+  white-space: nowrap;
+  background: rgb(236 236 236 / 92%);
+  border-radius: 3px;
+}
+
+body.darkBG .chart-tooltip {
+  color: #c4cbd2;
+  background: rgb(43 43 43 / 92%);
+}
+
+// The legend used to float in a 40px gap reserved by .container.main's padding-bottom
+// (layout.scss, global). With the legend on the plot, reclaim that gap on the charts page
+// only — do not touch the shared rule.
+[data-controller="charts"] .container.main {
+  padding-bottom: 8px;
+}
