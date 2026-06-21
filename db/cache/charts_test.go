@@ -813,4 +813,32 @@ func TestChartTipOverride(t *testing.T) {
 			t.Errorf("last price: got %d, want 99 (cache invalidated after SetTip)", got)
 		}
 	})
+
+	t.Run("cache_invalidated_on_partial_window_change", func(t *testing.T) {
+		charts := chartWithWindows(ctx)
+		charts.PartialWindow = PartialWindow{Height: 220, Time: 2500, Price: 10, Diff: 1.0, StakeCount: 3}
+		// Tip TicketPrice is 0 so the override does not fire; the partial
+		// window's own price is what we test.
+		charts.SetTip(ChartTip{TicketPrice: 0, Difficulty: 0})
+
+		// Populate cache with partial window price 10
+		charts.Chart(TicketPrice, string(WindowBin), string(TimeAxis), string(DefaultInterval))
+
+		// Change partial window — cache must be invalidated
+		charts.SetPartialWindow(PartialWindow{Height: 221, Time: 2600, Price: 99, Diff: 9.9, StakeCount: 7})
+
+		data, err := charts.Chart(TicketPrice, string(WindowBin), string(TimeAxis), string(DefaultInterval))
+		if err != nil {
+			t.Fatalf("ticketPriceChart: %v", err)
+		}
+		resp := decodeChart(t, data)
+		prices := resp[priceKey].([]interface{})
+		if got := uint64(lastFloat(prices)); got != 99 {
+			t.Errorf("last price: got %d, want 99 (cache invalidated after SetPartialWindow)", got)
+		}
+		counts := resp[countKey].([]interface{})
+		if got := uint64(lastFloat(counts)); got != 7 {
+			t.Errorf("last count: got %d, want 7 (cache invalidated after SetPartialWindow)", got)
+		}
+	})
 }
