@@ -1,6 +1,4 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import humanize from '../helpers/humanize_helper'
-import { isSKAFeeName } from '../charts/registry'
 
 const mockReplace = vi.fn()
 let restoreSettings = null
@@ -90,7 +88,6 @@ const fakeRanger = {
   setData: vi.fn(),
   setSelection: vi.fn(),
   setGutters: vi.fn(),
-  setAverage: vi.fn(),
   setDark: vi.fn(),
   destroy: vi.fn()
 }
@@ -128,9 +125,9 @@ vi.mock('../charts/registry', () => ({
     ],
     formatValue: (_i, d) => String(d.value)
   })),
-  coinTypeFromName: vi.fn(() => 0),
-  isCoinSupplyName: vi.fn(() => false),
-  isSKAFeeName: vi.fn(() => false)
+  coinTypeFromName: () => 0,
+  isCoinSupplyName: () => false,
+  isSKAFeeName: () => false
 }))
 
 vi.mock('../helpers/zoom_helper', () => {
@@ -717,26 +714,5 @@ describe('ChartsController ranger gutters & average', () => {
     expect(typeof hooks.draw[0]).toBe('function')
     hooks.draw[0](u)
     expect(fakeRanger.setGutters).toHaveBeenCalledWith(40, 20)
-  })
-
-  it('feeds the ranger a VAR average (mean of the primary column)', async () => {
-    const c = makeController()
-    await c.connect() // ticket-price; toColumns → [[1,2],[10,20]] ⇒ mean 15
-    expect(capturedRangerOpts.avgValue).toBe(15)
-    expect(capturedRangerOpts.avgLabel).toBe(humanize.threeSigFigs(15))
-  })
-
-  it('suppresses the average (null) on a SKA chart', () => {
-    const c = makeController()
-    isSKAFeeName.mockReturnValue(true) // treat the chart as SKA-denominated
-    const avg = c.rangerAverage(
-      [
-        [1, 2],
-        [10, 20]
-      ],
-      'fees/2'
-    )
-    expect(avg).toEqual({ value: null, label: '' })
-    isSKAFeeName.mockReturnValue(false)
   })
 })

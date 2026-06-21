@@ -3,7 +3,7 @@
 // onSelect(min,max) callback and is repositioned by the controller via setSelection().
 // Port of uPlot's zoom-ranger-grips demo (mouse events; desktop).
 
-import { chartColors, fillForStroke } from './chart_theme'
+import { fillForStroke } from './chart_theme'
 import { resolveSeriesColor, loadUPlot } from './uplot_adapter'
 
 /* global requestAnimationFrame */
@@ -13,7 +13,7 @@ export const BOUNDARY_RIGHT = 1
 export const BOUNDARY_BOTH = 2
 
 const RANGER_HEIGHT = 80
-const RANGER_AXIS_FONT = '11px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif'
+const RANGER_VPAD = 6 // top/bottom plot padding (px); left/right mirror the main chart's gutters
 
 /**
  * Clamp a dragged selection [newLft,newRgt] (CSS px) against the plot width. Pure.
@@ -43,15 +43,16 @@ export function clampBoundary(newLft, newRgt, boundary, maxRgt) {
 }
 
 /**
- * uPlot options for the overview strip. Pure (no DOM, no instance). The strip mirrors the
- * main chart's plot box: its x-axis is hidden (the main chart's x-axis sits directly above),
- * and its left/right y-axes reserve exactly the main chart's gutters via `size` getters. The
- * left y-axis also renders a single tick at the series average (suppressed when avg is null).
+ * uPlot options for the overview strip. Pure (no DOM, no instance). The strip has no axes —
+ * its x-axis would duplicate the main chart's (which sits directly above), and it carries no
+ * y-axis. To still line up under the main chart, its left/right plot insets are reserved with
+ * `padding` mirroring the main chart's measured gutters (getter-driven so updates need no
+ * rebuild). The x-value domains differ when zoomed (the strip is always full-extent); only
+ * the plot-area pixels are aligned.
  * @param {{paths:object}} UPlot
  * @param {object} def  ChartDefinition (only series[0] + its color is used)
  * @param {{dark?:boolean, width?:number, height?:number, xTime?:boolean, hooks?:object,
- *          getLeftGutter?:()=>number, getRightGutter?:()=>number,
- *          getAvg?:()=>(number|null), getAvgLabel?:()=>string}} [opts]
+ *          getLeftGutter?:()=>number, getRightGutter?:()=>number}} [opts]
  */
 export function buildRangerOpts(UPlot, def, opts = {}) {
   const {
@@ -61,47 +62,10 @@ export function buildRangerOpts(UPlot, def, opts = {}) {
     xTime = true,
     hooks,
     getLeftGutter = () => 0,
-    getRightGutter = () => 0,
-    getAvg = () => null,
-    getAvgLabel = () => ''
+    getRightGutter = () => 0
   } = opts
-  const c = chartColors(dark)
   const primary = def.series[0]
   const stroke = resolveSeriesColor(primary, 0, dark)
-
-  // Left y-axis: reserves the main chart's left gutter (via size) and shows one tick at the
-  // series average. Right y-axis: reserves the main chart's right gutter (dual-axis charts)
-  // with no visible content. Both are getter-driven so live updates need no rebuild.
-  const leftAxis = {
-    scale: 'y',
-    side: 3,
-    show: true,
-    stroke: c.axis,
-    grid: { show: false },
-    ticks: { show: true, size: 3, stroke: c.axis },
-    gap: 4,
-    font: RANGER_AXIS_FONT,
-    size: () => Math.max(0, Math.round(getLeftGutter())),
-    splits: () => {
-      const a = getAvg()
-      return a == null ? [] : [a]
-    },
-    values: () => {
-      const a = getAvg()
-      return a == null ? [] : [getAvgLabel()]
-    }
-  }
-  const rightAxis = {
-    scale: 'y',
-    side: 1,
-    show: true,
-    stroke: 'transparent',
-    grid: { show: false },
-    ticks: { show: false },
-    size: () => Math.max(0, Math.round(getRightGutter())),
-    splits: () => [],
-    values: () => []
-  }
 
   const out = {
     width: width,
@@ -114,7 +78,15 @@ export function buildRangerOpts(UPlot, def, opts = {}) {
     },
     legend: { show: false },
     scales: { x: { time: xTime } },
-    axes: [{ show: false }, leftAxis, rightAxis], // x hidden; left avg tick; right reserve
+    axes: [{ show: false }, { show: false }], // no x or y axis on the strip
+    // [top, right, bottom, left] — left/right mirror the main chart's gutters so the plot
+    // area lines up under it; top/bottom give the series a little breathing room.
+    padding: [
+      RANGER_VPAD,
+      () => Math.max(0, Math.round(getRightGutter())),
+      RANGER_VPAD,
+      () => Math.max(0, Math.round(getLeftGutter()))
+    ],
     series: [
       {},
       {
@@ -210,12 +182,10 @@ function installGrips(UPlot, u, onSelect) {
 export async function createRanger(el, def, opts = {}) {
   const UPlot = await loadUPlot()
   const onSelect = typeof opts.onSelect === 'function' ? opts.onSelect : null
-  // Mutable gutter/average state, read live by the axis getters below so updates need no
-  // rebuild — setGutters/setAverage mutate these and trigger a relayout/redraw.
+  // Mutable gutter state, read live by the padding getters below so updates need no rebuild —
+  // setGutters mutates these and triggers a relayout.
   let leftGutter = opts.leftGutter ?? 0
   let rightGutter = opts.rightGutter ?? 0
-  let avgValue = opts.avgValue ?? null
-  let avgLabel = opts.avgLabel || ''
   let state = { ...opts }
   let destroyed = false
 
@@ -228,9 +198,7 @@ export async function createRanger(el, def, opts = {}) {
   }
   const getters = {
     getLeftGutter: () => leftGutter,
-    getRightGutter: () => rightGutter,
-    getAvg: () => avgValue,
-    getAvgLabel: () => avgLabel
+    getRightGutter: () => rightGutter
   }
   const hooks = {
     ready: [(u) => installGrips(UPlot, u, onSelect)],
@@ -269,16 +237,10 @@ export async function createRanger(el, def, opts = {}) {
       if (Math.abs(left - leftGutter) < 0.5 && Math.abs(right - rightGutter) < 0.5) return
       leftGutter = left
       rightGutter = right
-      // setSize (not redraw) so uPlot re-runs axis-size convergence AND repositions the axis
-      // DOM. Use the live dimensions so a future resize path can't be fought with stale ones.
+      // setSize (not redraw) so uPlot re-runs its layout convergence and re-evaluates the
+      // padding getters. Use the live dimensions so a future resize path can't be fought with
+      // stale ones.
       uplot.setSize({ width: uplot.width, height: uplot.height })
-    },
-    // Update the single average tick on the left y-axis (value=null suppresses it, e.g. SKA).
-    setAverage(value, label) {
-      if (destroyed) return
-      avgValue = value == null ? null : value
-      avgLabel = label || ''
-      uplot.redraw(false, true)
     },
     setDark(dark) {
       if (destroyed) return
