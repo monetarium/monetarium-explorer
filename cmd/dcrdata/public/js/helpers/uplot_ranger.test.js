@@ -30,6 +30,8 @@ vi.mock('./module_helper', () => {
         this.select = { ...this.select, ...o }
         this._lastFire = fire
       })
+      this.redraw = vi.fn()
+      this.setSize = vi.fn()
       this.destroy = vi.fn()
       const ready = (opts.hooks && opts.hooks.ready) || []
       ready.forEach((fn) => fn(this))
@@ -88,11 +90,30 @@ describe('buildRangerOpts', () => {
     expect(o.series[1].paths).toBe('LINE')
   })
 
-  it('hides the y-axis and keeps a visible x-axis', () => {
+  it('hides the strip x-axis (no labels) and adds left + right y-axes', () => {
     const o = buildRangerOpts(fakeUPlot, def, {})
-    expect(o.axes).toHaveLength(2)
-    expect(o.axes[1].show).toBe(false) // y hidden
-    expect(o.axes[0].show).not.toBe(false) // x shown
+    expect(o.axes).toHaveLength(3)
+    expect(o.axes[0].show).toBe(false) // x-axis hidden (main chart's sits above)
+    expect(o.axes[1].side).toBe(3) // left y-axis
+    expect(o.axes[2].side).toBe(1) // right y-axis
+  })
+
+  it('pins each y-axis size to the gutter getters', () => {
+    const o = buildRangerOpts(fakeUPlot, def, { getLeftGutter: () => 47, getRightGutter: () => 31 })
+    expect(o.axes[1].size()).toBe(47)
+    expect(o.axes[2].size()).toBe(31)
+  })
+
+  it('renders a single average tick on the left y-axis, none when avg is null', () => {
+    const withAvg = buildRangerOpts(fakeUPlot, def, {
+      getAvg: () => 12.5,
+      getAvgLabel: () => '12.5'
+    })
+    expect(withAvg.axes[1].splits()).toEqual([12.5])
+    expect(withAvg.axes[1].values()).toEqual(['12.5'])
+    const noAvg = buildRangerOpts(fakeUPlot, def, { getAvg: () => null })
+    expect(noAvg.axes[1].splits()).toEqual([])
+    expect(noAvg.axes[1].values()).toEqual([])
   })
 })
 
@@ -174,6 +195,46 @@ describe('createRanger grip drag', () => {
     document.dispatchEvent(new MouseEvent('mousemove', { clientX: 250, bubbles: true }))
     expect(onSelect).not.toHaveBeenCalled()
     vi.unstubAllGlobals()
+  })
+})
+
+describe('createRanger.setGutters', () => {
+  it('relayouts when the gutters change and no-ops when unchanged', async () => {
+    const h = await createRanger(document.createElement('div'), rangerDef, {})
+    h.uplot.setSize.mockClear()
+    h.setGutters(40, 20)
+    expect(h.uplot.opts.axes[1].size()).toBe(40) // left gutter applied live
+    expect(h.uplot.opts.axes[2].size()).toBe(20) // right gutter applied live
+    expect(h.uplot.setSize).toHaveBeenCalledTimes(1)
+    h.setGutters(40, 20) // unchanged → no relayout
+    expect(h.uplot.setSize).toHaveBeenCalledTimes(1)
+    h.setGutters(55, 20) // changed
+    expect(h.uplot.setSize).toHaveBeenCalledTimes(2)
+  })
+
+  it('no-ops after destroy', async () => {
+    const h = await createRanger(document.createElement('div'), rangerDef, {})
+    h.destroy()
+    h.uplot.setSize.mockClear()
+    h.setGutters(99, 99)
+    expect(h.uplot.setSize).not.toHaveBeenCalled()
+  })
+})
+
+describe('createRanger.setAverage', () => {
+  it('updates the avg tick and redraws', async () => {
+    const h = await createRanger(document.createElement('div'), rangerDef, {})
+    h.uplot.redraw.mockClear()
+    h.setAverage(50.5, '50.5')
+    expect(h.uplot.opts.axes[1].splits()).toEqual([50.5])
+    expect(h.uplot.opts.axes[1].values()).toEqual(['50.5'])
+    expect(h.uplot.redraw).toHaveBeenCalled()
+  })
+
+  it('a null average clears the tick', async () => {
+    const h = await createRanger(document.createElement('div'), rangerDef, {})
+    h.setAverage(null, '')
+    expect(h.uplot.opts.axes[1].splits()).toEqual([])
   })
 })
 
