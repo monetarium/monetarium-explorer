@@ -74,7 +74,12 @@ export function buildRangerOpts(UPlot, def, opts = {}) {
       x: false,
       y: false,
       points: { show: false },
-      drag: { setScale: false, setSelect: true, x: true, y: false }
+      drag: { setScale: false, setSelect: true, x: true, y: false },
+      // Disable uPlot's built-in double-click. Its dblClick handler runs autoScaleX +
+      // hideSelect, and hideSelect collapses the strip's persistent selection window to
+      // zero width (left:0; width:0). Returning a falsy listener makes uPlot's onMouse skip
+      // attaching the handler (deep-merged, so mousedown/move/up — the drag-paint — survive).
+      bind: { dblclick: () => null }
     },
     legend: { show: false },
     scales: { x: { time: xTime } },

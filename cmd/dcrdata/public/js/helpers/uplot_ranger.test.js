@@ -105,6 +105,14 @@ describe('buildRangerOpts', () => {
     expect(o.padding[3]()).toBe(47) // left inset mirrors the main chart's left gutter
     expect(o.padding[1]()).toBe(31) // right inset mirrors the main chart's right gutter
   })
+
+  it('disables uPlot dblclick so a double-click never collapses the persistent window', () => {
+    const o = buildRangerOpts(fakeUPlot, def, {})
+    // uPlot's onMouse skips binding when the bind returns falsy, so its dblclick handler
+    // (autoScaleX + hideSelect, which would wipe our selection rectangle) is never attached.
+    expect(typeof o.cursor.bind.dblclick).toBe('function')
+    expect(o.cursor.bind.dblclick({}, {}, () => {})).toBeNull()
+  })
 })
 
 describe('clampBoundary', () => {
