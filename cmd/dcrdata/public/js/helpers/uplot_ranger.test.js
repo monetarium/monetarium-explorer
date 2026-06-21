@@ -221,3 +221,29 @@ describe('createRanger.destroy', () => {
     expect(inst.setSelect).not.toHaveBeenCalled()
   })
 })
+
+describe('createRanger.setWidth', () => {
+  it('calls setSize with the new width and the current height when the width changes', async () => {
+    const h = await createRanger(document.createElement('div'), rangerDef, {})
+    h.uplot.setSize.mockClear()
+    const currentHeight = h.uplot.height // FakeUPlot defaults to 80
+    h.setWidth(1200)
+    expect(h.uplot.setSize).toHaveBeenCalledWith({ width: 1200, height: currentHeight })
+  })
+
+  it('is a no-op when the width is unchanged (within 0.5 px)', async () => {
+    const h = await createRanger(document.createElement('div'), rangerDef, {})
+    h.uplot.setSize.mockClear()
+    // FakeUPlot initialises width = opts.width || 800
+    h.setWidth(800) // same as current width → should not relayout
+    expect(h.uplot.setSize).not.toHaveBeenCalled()
+  })
+
+  it('is a no-op after destroy', async () => {
+    const h = await createRanger(document.createElement('div'), rangerDef, {})
+    h.destroy()
+    h.uplot.setSize.mockClear()
+    h.setWidth(1200)
+    expect(h.uplot.setSize).not.toHaveBeenCalled()
+  })
+})

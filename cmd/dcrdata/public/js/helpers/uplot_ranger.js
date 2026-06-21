@@ -229,6 +229,14 @@ export async function createRanger(el, def, opts = {}) {
       const height = uplot.bbox.height / (UPlot.pxRatio || 1)
       uplot.setSelect({ left: left, top: 0, width: right - left, height: height }, false)
     },
+    // Re-pixel the strip to a new container width (window resize). A pure width change does not
+    // trip setGutters' epsilon guard, so the controller drives this explicitly; the caller
+    // re-applies the selection afterward (it is pixel-based and invalid at the new width).
+    setWidth(width) {
+      if (destroyed) return
+      if (!(width > 0) || Math.abs(width - uplot.width) < 0.5) return
+      uplot.setSize({ width: width, height: uplot.height })
+    },
     // Mirror the main chart's left/right plot insets onto the strip. The axis `size` getters
     // read these, so a relayout (setSize re-runs uPlot's axis-size convergence; redraw alone
     // would not) applies them. Epsilon-guarded to avoid a relayout on sub-pixel jitter.

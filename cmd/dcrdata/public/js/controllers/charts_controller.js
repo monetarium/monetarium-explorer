@@ -362,11 +362,19 @@ export default class extends Controller {
 
   // Re-fit the chart to the viewport after a window resize. Reads the live container width
   // and the computed available height and pushes both to uPlot via the existing resize().
-  // The draw hook then re-aligns the ranger.
+  // Also re-pixels the ranger strip (its width path is setGutters, which is epsilon-guarded
+  // and never fires on a pure-width change) and re-applies the selection (pixel-based).
   resizeChartToViewport() {
     if (!this.handle) return
     const width = this.chartsViewTarget.clientWidth || 800
     this.handle.resize(width, this.computeChartHeight())
+    if (!this.ranger) return
+    this.ranger.setWidth(this.rangerViewTarget.clientWidth || width)
+    // The strip's selection rectangle is pixel-based, so a width change invalidates it. Re-apply
+    // it at the new width from the main chart's current x-range (setSelection uses fire=false, so
+    // this cannot loop back through onRangerSelect).
+    const sx = this.handle.uplot.scales.x
+    if (sx && sx.min != null && sx.max != null) this.ranger.setSelection(sx.min, sx.max)
   }
 
   buildHooks() {

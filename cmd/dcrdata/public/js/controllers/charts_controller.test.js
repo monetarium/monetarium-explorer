@@ -88,6 +88,7 @@ const fakeRanger = {
   setData: vi.fn(),
   setSelection: vi.fn(),
   setGutters: vi.fn(),
+  setWidth: vi.fn(),
   setDark: vi.fn(),
   destroy: vi.fn()
 }
@@ -462,6 +463,10 @@ describe('ChartsController on-plot tooltip', () => {
 describe('ChartsController viewport fit', () => {
   beforeEach(() => vi.clearAllMocks())
 
+  afterEach(() => {
+    Object.defineProperty(window, 'innerHeight', { value: 768, configurable: true })
+  })
+
   it('computeChartHeight fills the viewport below the chart top, reserving below-chart chrome', () => {
     const c = makeController()
     c.chartsViewTarget.getBoundingClientRect = () => ({ top: 200 })
@@ -808,8 +813,16 @@ describe('ChartsController resize hook', () => {
     Object.defineProperty(window, 'innerHeight', { value: 1000, configurable: true })
     await c.connect()
     fakeHandle.resize.mockClear()
+    fakeRanger.setWidth.mockClear()
+    fakeRanger.setSelection.mockClear()
+    // Give the main chart a known x-range so we can assert setSelection is re-applied.
+    fakeHandle.uplot.scales.x = { min: 5, max: 9 }
     c.resizeChartToViewport()
     expect(fakeHandle.resize).toHaveBeenCalledWith(800, 660) // width 800, 1000-200-140
+    // ranger strip must be re-pixelled to the rangerViewTarget.clientWidth (800 from makeController)
+    expect(fakeRanger.setWidth).toHaveBeenCalledWith(800)
+    // selection rectangle is pixel-based → must be re-applied at the new width
+    expect(fakeRanger.setSelection).toHaveBeenCalledWith(5, 9)
   })
 
   it('does nothing when there is no chart handle', () => {
