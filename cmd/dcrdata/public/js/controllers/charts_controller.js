@@ -349,9 +349,10 @@ function circulationFunc(chartData) {
   return { data }
 }
 
-function missedVotesFunc(data) {
-  if (data.t) return zipWindowTvY(data.t, data.missed)
-  return zipWindowHvY(data.missed, data.window, 1, data.offset * data.window)
+export function missedVotesFunc(data, isLog) {
+  const ys = data.missed.map((v) => clampLogFloor(v, isLog, 1))
+  if (data.t) return zipWindowTvY(data.t, ys)
+  return zipWindowHvY(ys, data.window, 1, data.offset * data.window)
 }
 
 function mapDygraphOptions(data, labelsVal, isDrawPoint, yLabel, labelsMG, labelsMG2) {
@@ -863,7 +864,7 @@ export default class extends Controller {
         break
 
       case 'missed-votes':
-        d = missedVotesFunc(data)
+        d = missedVotesFunc(data, isLog)
         assign(
           gOptions,
           mapDygraphOptions(

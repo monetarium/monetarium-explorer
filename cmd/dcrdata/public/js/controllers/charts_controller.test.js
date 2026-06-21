@@ -103,7 +103,8 @@ vi.mock('../helpers/chart_helper', () => ({
 const {
   default: ChartsController,
   sanitizeLogValueRange,
-  clampLogFloor
+  clampLogFloor,
+  missedVotesFunc
 } = await import('./charts_controller.js')
 
 function makeController() {
@@ -347,6 +348,33 @@ describe('ChartsController coin-supply SKA log floor', () => {
   it('keeps the exact SKA atom strings for the legend (clamp is line-only)', async () => {
     const { c } = await plotSka('log')
     expect(c._skaSupplyRaw).toEqual(['0', '0', '5000000000000000000000000'])
+  })
+})
+
+describe('missedVotesFunc log-scale guard', () => {
+  it('clamps zero values to 1 on log scale', () => {
+    const data = { t: [1000, 2000, 3000], missed: [0, 2, 0] }
+    const result = missedVotesFunc(data, true)
+    expect(result[0][1]).toBe(1)
+    expect(result[1][1]).toBe(2)
+    expect(result[2][1]).toBe(1)
+  })
+
+  it('passes through values unchanged on linear scale', () => {
+    const data = { t: [1000, 2000, 3000], missed: [0, 2, 0] }
+    const result = missedVotesFunc(data, false)
+    expect(result[0][1]).toBe(0)
+    expect(result[1][1]).toBe(2)
+    expect(result[2][1]).toBe(0)
+  })
+
+  it('handles height axis data on log scale', () => {
+    const data = { missed: [0, 5, 0, 3], window: 144, offset: 256 }
+    const result = missedVotesFunc(data, true)
+    expect(result[0][1]).toBe(1)
+    expect(result[1][1]).toBe(5)
+    expect(result[2][1]).toBe(1)
+    expect(result[3][1]).toBe(3)
   })
 })
 
