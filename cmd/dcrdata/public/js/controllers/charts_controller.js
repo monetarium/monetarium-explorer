@@ -864,6 +864,7 @@ export default class extends Controller {
         break
 
       case 'missed-votes':
+        this._missedVotesRaw = data.missed
         d = missedVotesFunc(data, isLog)
         assign(
           gOptions,
@@ -876,6 +877,11 @@ export default class extends Controller {
             false
           )
         )
+        yFormatter = (div, data, i) => {
+          const raw = this._missedVotesRaw && this._missedVotesRaw[i]
+          const display = raw != null ? raw.toString() : data.series[0].y.toString()
+          addLegendEntryFmt(div, data.series[0], () => display)
+        }
         break
       default:
         console.warn(`plotGraph: unknown chart "${chartName}"`)

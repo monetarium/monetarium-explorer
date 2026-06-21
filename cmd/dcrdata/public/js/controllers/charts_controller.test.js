@@ -401,6 +401,19 @@ describe('ChartsController plotGraph log-axis guard', () => {
     expect(gOptions.axes.y.valueRange).toEqual([null, null])
   })
 
+  it('stashes raw missed-votes data for the legend formatter', async () => {
+    const c = makeController()
+    await c.connect()
+    c.settings.scale = 'log'
+    c.settings.axis = 'time'
+    c.settings.bin = 'window'
+    c.chartsView.updateOptions.mockClear()
+
+    c.plotGraph('missed-votes', { t: [1000, 2000], missed: [0, 2] })
+
+    expect(c._missedVotesRaw).toEqual([0, 2])
+  })
+
   it('preserves the hashrate y2 floor in log scale (y2 stays linear)', async () => {
     const c = makeController()
     await c.connect()
