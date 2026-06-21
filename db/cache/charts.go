@@ -586,8 +586,8 @@ type ChartData struct {
 	SKAFeesMtx  sync.RWMutex
 	MinerRanges []MinerRange
 	// PartialWindow holds accumulated data for the current incomplete
-	// difficulty window. Must only be written via SetPartialWindow() to
-	// synchronise with chart makers that read it under tipMtx.
+	// difficulty window, tracked by the DB layer for resumability.
+	// Must only be written via SetPartialWindow().
 	PartialWindow PartialWindow
 	Tip           ChartTip
 	tipMtx        sync.RWMutex
@@ -898,24 +898,21 @@ func (charts *ChartData) SetTip(tip ChartTip) {
 }
 
 // SetPartialWindow stores accumulated data for the current (incomplete)
-// difficulty window. Chart makers append this as an extra data point when
-// the tip is not at a window boundary.
+// difficulty window, used to track DB-level state between refreshes.
 func (charts *ChartData) SetPartialWindow(pw PartialWindow) {
 	charts.tipMtx.Lock()
 	defer charts.tipMtx.Unlock()
 	charts.PartialWindow = pw
-	charts.invalidateTipCharts()
 }
 
 // invalidateTipCharts removes cached chart data for charts that depend on
-// Tip or PartialWindow. This must be called after updating those fields so
-// the next Chart() request re-runs the maker with fresh values, rather than
-// serving stale cached data whose cacheID hasn't changed yet (window/ day
-// bins only update cacheID at boundaries, not on every block).
+// Tip. Called from SetTip() so the next Chart() request re-runs the maker
+// with fresh values rather than serving stale cached data whose cacheID
+// hasn't changed yet (window/day bins only update cacheID at boundaries).
 func (charts *ChartData) invalidateTipCharts() {
 	charts.cacheMtx.Lock()
 	defer charts.cacheMtx.Unlock()
-	// Window-binned charts that use PartialWindow and Tip
+	// Window-binned charts that use Tip
 	for _, chartID := range []string{TicketPrice, POWDifficulty} {
 		for _, axis := range []axisType{TimeAxis, HeightAxis} {
 			delete(charts.cache, cacheKey(chartID, WindowBin, axis, DefaultInterval))
@@ -1821,30 +1818,24 @@ func powDifficultyChart(charts *ChartData, _ binLevel, axis axisType, _ interval
 	seed := chartResponse{windowKey: charts.DiffInterval}
 
 	charts.tipMtx.RLock()
-	pw := charts.PartialWindow
 	tip := charts.Tip
 	charts.tipMtx.RUnlock()
+
+	diffData := charts.Windows.PowDiff
+	if tip.Difficulty > 0 && len(diffData) > 0 {
+		diffData = append(ChartFloats(nil), diffData...)
+		diffData[len(diffData)-1] = tip.Difficulty
+	}
 
 	switch axis {
 	case HeightAxis:
 		return encode(lengtherMap{
-			diffKey: charts.Windows.PowDiff,
+			diffKey: diffData,
 		}, seed)
 	default:
-		diffData := charts.Windows.PowDiff
-		timeData := charts.Windows.Time
-		if pw.Height > 0 {
-			diffData = append(diffData[:len(diffData):len(diffData)], pw.Diff)
-			timeData = append(timeData[:len(timeData):len(timeData)], pw.Time)
-			// Override the partial window's diff with the current RPC value
-			// so it matches the home page.
-			if tip.Difficulty > 0 {
-				diffData[len(diffData)-1] = tip.Difficulty
-			}
-		}
 		return encode(lengtherMap{
+			timeKey: charts.Windows.Time,
 			diffKey: diffData,
-			timeKey: timeData,
 		}, seed)
 	}
 }
@@ -1854,32 +1845,25 @@ func ticketPriceChart(charts *ChartData, _ binLevel, axis axisType, _ intervalTy
 	seed := chartResponse{windowKey: charts.DiffInterval}
 
 	charts.tipMtx.RLock()
-	pw := charts.PartialWindow
 	tip := charts.Tip
 	charts.tipMtx.RUnlock()
+
+	priceData := charts.Windows.TicketPrice
+	countData := charts.Windows.StakeCount
+	if tip.TicketPrice > 0 && len(priceData) > 0 {
+		priceData = append(ChartUints(nil), priceData...)
+		priceData[len(priceData)-1] = tip.TicketPrice
+	}
 
 	switch axis {
 	case HeightAxis:
 		return encode(lengtherMap{
-			priceKey: charts.Windows.TicketPrice,
-			countKey: charts.Windows.StakeCount,
+			priceKey: priceData,
+			countKey: countData,
 		}, seed)
 	default:
-		priceData := charts.Windows.TicketPrice
-		countData := charts.Windows.StakeCount
-		timeData := charts.Windows.Time
-		if pw.Height > 0 {
-			priceData = append(priceData[:len(priceData):len(priceData)], pw.Price)
-			countData = append(countData[:len(countData):len(countData)], pw.StakeCount)
-			timeData = append(timeData[:len(timeData):len(timeData)], pw.Time)
-			// Override the partial window's price with the current RPC value
-			// so the chart matches the home page (CurrentStakeDifficulty).
-			if tip.TicketPrice > 0 {
-				priceData[len(priceData)-1] = tip.TicketPrice
-			}
-		}
 		return encode(lengtherMap{
-			timeKey:  timeData,
+			timeKey:  charts.Windows.Time,
 			priceKey: priceData,
 			countKey: countData,
 		}, seed)
