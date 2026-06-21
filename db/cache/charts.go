@@ -484,16 +484,6 @@ func newWindowSet(size int) *windowSet {
 	}
 }
 
-// PartialWindow holds data for an incomplete difficulty window, tracked by
-// the DB layer for resumability across restarts.
-type PartialWindow struct {
-	Height     uint64
-	Time       uint64
-	Price      uint64
-	Diff       float64
-	StakeCount uint64
-}
-
 // ChartTip holds current live (RPC) values pushed from explorer.Store().
 // Chart makers use these to override the last data point so the chart's
 // final value matches what the home page displays.
