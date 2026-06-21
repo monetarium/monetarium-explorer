@@ -877,22 +877,41 @@ describe('ChartsController resize hook', () => {
     Object.defineProperty(window, 'innerHeight', { value: 768, configurable: true })
   })
 
-  it('resizeChartToViewport pushes the container width and computed height to the handle', async () => {
+  it('re-fits the chart when the viewport WIDTH changes (desktop drag-resize / orientation)', async () => {
     const c = makeController()
     c.chartsViewTarget.getBoundingClientRect = () => ({ top: 200 })
     Object.defineProperty(window, 'innerHeight', { value: 1000, configurable: true })
-    await c.connect()
+    await c.connect() // chart created at clientWidth 800 → seeds lastWidth = 800
     fakeHandle.resize.mockClear()
     fakeRanger.setWidth.mockClear()
     fakeRanger.setSelection.mockClear()
     // Give the main chart a known x-range so we can assert setSelection is re-applied.
     fakeHandle.uplot.scales.x = { min: 5, max: 9 }
+    // The width actually changes (window drag / orientation flip), unlike a scroll.
+    c.chartsViewTarget.clientWidth = 900
+    c.rangerViewTarget.clientWidth = 900
     c.resizeChartToViewport()
-    expect(fakeHandle.resize).toHaveBeenCalledWith(800, 628) // width 800, 1000-200-140-32
-    // ranger strip must be re-pixelled to the rangerViewTarget.clientWidth (800 from makeController)
-    expect(fakeRanger.setWidth).toHaveBeenCalledWith(800)
+    expect(fakeHandle.resize).toHaveBeenCalledWith(900, 628) // new width, 1000-200-140-32
+    // ranger strip must be re-pixelled to the rangerViewTarget.clientWidth
+    expect(fakeRanger.setWidth).toHaveBeenCalledWith(900)
     // selection rectangle is pixel-based → must be re-applied at the new width
     expect(fakeRanger.setSelection).toHaveBeenCalledWith(5, 9)
+  })
+
+  it('ignores a height-only resize so a mobile toolbar collapse during scroll cannot rescale the chart', async () => {
+    const c = makeController()
+    c.chartsViewTarget.getBoundingClientRect = () => ({ top: 200 })
+    Object.defineProperty(window, 'innerHeight', { value: 1000, configurable: true })
+    await c.connect() // chart created at clientWidth 800 → seeds lastWidth = 800
+    fakeHandle.resize.mockClear()
+    fakeRanger.setWidth.mockClear()
+    fakeRanger.setSelection.mockClear()
+    // Mobile scroll: the URL/toolbar collapses, innerHeight grows, width is untouched.
+    Object.defineProperty(window, 'innerHeight', { value: 1100, configurable: true })
+    c.resizeChartToViewport()
+    expect(fakeHandle.resize).not.toHaveBeenCalled()
+    expect(fakeRanger.setWidth).not.toHaveBeenCalled()
+    expect(fakeRanger.setSelection).not.toHaveBeenCalled()
   })
 
   it('does nothing when there is no chart handle', () => {

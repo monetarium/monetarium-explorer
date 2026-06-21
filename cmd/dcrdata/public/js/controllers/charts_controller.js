@@ -88,6 +88,7 @@ export default class extends Controller {
     this.selectedChartName = null
     this.zoomGuard = false
     this.ranger = null
+    this.lastWidth = null // viewport width the chart was last sized to (resize guard)
 
     // Legend element generators (cloned from the template nodes).
     this.legendElement = this.labelsTarget
@@ -286,9 +287,10 @@ export default class extends Controller {
     ) {
       if (this.handle) this.handle.destroy()
       // create synchronously-awaited handle
+      const width = this.chartsViewTarget.clientWidth || 800
       this.pendingCreate = createChart(this.chartsViewTarget, renderDef, {
         dark: darkEnabled(),
-        width: this.chartsViewTarget.clientWidth || 800,
+        width: width,
         height: this.computeChartHeight(),
         scaleType: this.settings.scale === 'log' ? 'log' : 'linear',
         xTime: xTime,
@@ -296,6 +298,9 @@ export default class extends Controller {
         onRangeChange: (min, max) => this.onChartRangeChange(min, max)
       }).then(async (h) => {
         this.handle = h
+        // Seed the resize-guard baseline so the first mobile scroll (height-only) is a
+        // no-op — see resizeChartToViewport.
+        this.lastWidth = width
         this.renderedName = renderDef.name
         this.renderedXTime = xTime
         this.renderedSeriesCount = renderDef.series.length
@@ -372,6 +377,14 @@ export default class extends Controller {
   resizeChartToViewport() {
     if (!this.handle) return
     const width = this.chartsViewTarget.clientWidth || 800
+    // Mobile browsers fire `resize` when the URL/toolbar collapses or re-expands during
+    // scroll — a HEIGHT-only viewport change (innerWidth is untouched). Re-fitting then
+    // would make the chart jump on every scroll. Desktop drag-resize and mobile
+    // orientation changes both move the WIDTH, so gate the re-fit on a width change and
+    // ignore height-only churn. (computeChartHeight reads window.innerHeight, which is
+    // exactly the value mobile scroll perturbs.)
+    if (width === this.lastWidth) return
+    this.lastWidth = width
     this.handle.resize(width, this.computeChartHeight())
     if (!this.ranger) return
     this.ranger.setWidth(this.rangerViewTarget.clientWidth || width)
