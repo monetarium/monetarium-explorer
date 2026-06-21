@@ -72,6 +72,7 @@ const fakeHandle = {
   setData: vi.fn(),
   setScaleType: vi.fn(),
   setMode: vi.fn(),
+  setDark: vi.fn(),
   setVisibility: vi.fn(),
   setXRange: vi.fn(),
   resize: vi.fn(),
@@ -785,19 +786,18 @@ describe('ChartsController ranger strip', () => {
     expect(fakeRanger.setSelection).toHaveBeenCalled()
   })
 
-  it('forwards a dark-mode flip to the ranger and re-applies the full-extent selection', async () => {
+  it('forwards a dark-mode flip to both charts and re-applies the main chart x-range to the ranger', async () => {
     const c = makeController()
     await c.connect()
+    fakeHandle.setDark.mockClear()
     fakeRanger.setDark.mockClear()
     fakeRanger.setSelection.mockClear()
-    fakeRanger.uplot = {
-      data: [
-        [1000, 2000, 3000],
-        [10, 20, 30]
-      ]
-    }
+    // The ranger selection now mirrors the main chart's (zoom-preserving) x-range, not the
+    // ranger's own full extent — give the main chart a known range to assert against.
+    fakeHandle.uplot.scales.x = { min: 1000, max: 3000 }
     c.redrawTheme()
-    expect(fakeRanger.setDark).toHaveBeenCalled()
+    expect(fakeHandle.setDark).toHaveBeenCalledWith(false) // recolor the main chart (no reload)
+    expect(fakeRanger.setDark).toHaveBeenCalledWith(false)
     expect(fakeRanger.setSelection).toHaveBeenCalledWith(1000, 3000)
   })
 })

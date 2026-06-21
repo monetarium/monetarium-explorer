@@ -358,6 +358,24 @@ describe('createChart / ChartHandle', () => {
     expect(first.destroy).not.toHaveBeenCalled()
   })
 
+  it('setDark rebuilds with the new theme colors and destroys the old instance', async () => {
+    const handle = await createChart(el, handleDef, { dark: false })
+    const first = handle.uplot
+    expect(first.opts.axes[0].stroke).toBe('#2d2d2d') // light-theme axis color
+    handle.setDark(true)
+    expect(first.destroy).toHaveBeenCalled()
+    expect(handle.uplot).not.toBe(first)
+    expect(handle.uplot.opts.axes[0].stroke).toBe('#b6b6b6') // dark-theme axis color
+  })
+
+  it('setDark is a no-op when already at the requested theme', async () => {
+    const handle = await createChart(el, handleDef, { dark: true })
+    const first = handle.uplot
+    handle.setDark(true)
+    expect(handle.uplot).toBe(first) // no rebuild
+    expect(first.destroy).not.toHaveBeenCalled()
+  })
+
   it('marks the handle inert if a rebuild construction throws (no dead-instance reuse)', async () => {
     const handle = await createChart(el, handleDef, {})
     const FakeUPlot = await getDefault()

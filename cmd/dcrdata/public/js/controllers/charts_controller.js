@@ -571,14 +571,17 @@ export default class extends Controller {
   }
 
   redrawTheme() {
-    if (this.handle) this.handle.setData(this.handle.uplot.data) // cheap redraw; colors flow via chart_theme on next rebuild
+    const dark = darkEnabled()
+    // uPlot bakes the theme colors in at construction, so each chart must rebuild to recolor.
+    // setDark preserves the main chart's current x-range (zoom), so the view is unchanged.
+    if (this.handle) this.handle.setDark(dark)
     if (this.ranger) {
-      this.ranger.setDark(darkEnabled())
-      // setDark rebuilds the strip's uPlot fresh (no selection); re-apply the selection to
-      // the full extent so the rectangle doesn't vanish on a night-mode toggle (matches the
-      // main chart, which setData autoscales back to full extent on the same redraw).
-      const xs = this.ranger.uplot.data[0]
-      if (xs && xs.length) this.ranger.setSelection(xs[0], xs[xs.length - 1])
+      this.ranger.setDark(dark)
+      // setDark rebuilds the strip's uPlot fresh (no selection); re-apply the selection from
+      // the main chart's current x-range so the rectangle survives the toggle and stays in
+      // step with the (zoom-preserving) main chart.
+      const sx = this.handle && this.handle.uplot.scales.x
+      if (sx && sx.min != null && sx.max != null) this.ranger.setSelection(sx.min, sx.max)
     }
   }
 

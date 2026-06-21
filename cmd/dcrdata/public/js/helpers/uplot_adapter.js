@@ -335,6 +335,7 @@ export async function loadUPlot() {
  * @property {object} uplot              live uPlot instance (escape hatch)
  * @property {(columns:number[][])=>void} setData
  * @property {(type:('linear'|'log'))=>void} setScaleType
+ * @property {(dark:boolean)=>void} setDark   recolor for a theme switch (rebuilds)
  * @property {(mode:('line'|'stepped'))=>void} setMode
  * @property {(map:Object<string,boolean>)=>void} setVisibility
  * @property {(width:number, height:number)=>void} resize
@@ -443,6 +444,15 @@ export async function createChart(el, def, opts = {}) {
       if (destroyed) return
       if ((state.scaleType || 'linear') === type) return // already there — skip the rebuild
       state = { ...state, scaleType: type }
+      rebuild()
+    },
+    // uPlot bakes the theme colors (axis/grid/labels, series strokes/fills) into the opts
+    // at construction, so a light<->dark switch needs a rebuild — there is no live recolor.
+    // rebuild() preserves the data, visibility, and x-range, so the current zoom survives.
+    setDark(dark) {
+      if (destroyed) return
+      if (!!state.dark === !!dark) return // already there — skip the rebuild
+      state = { ...state, dark: dark }
       rebuild()
     },
     setMode(mode) {
