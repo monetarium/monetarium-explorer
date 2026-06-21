@@ -157,7 +157,15 @@ describe('createRanger.setSelection', () => {
 })
 
 describe('createRanger grip drag', () => {
-  it('a right-grip drag moves only the right edge and calls onSelect with converted bounds', async () => {
+  // jsdom has no PointerEvent constructor; a MouseEvent carries clientX and we hang
+  // pointerId on it so the capture path runs. setPointerCapture is stubbed per-grip.
+  function pointer(type, clientX) {
+    const e = new MouseEvent(type, { clientX: clientX, bubbles: true })
+    e.pointerId = 1
+    return e
+  }
+
+  it('a right-grip pointer drag moves only the right edge and converts the bounds', async () => {
     vi.stubGlobal('requestAnimationFrame', (fn) => {
       fn()
       return 1
@@ -169,17 +177,19 @@ describe('createRanger grip drag', () => {
     const sel = h.uplot.root.querySelector('.u-select')
     const grip = sel.querySelector('.u-grip-r')
     expect(grip).toBeTruthy()
+    grip.setPointerCapture = vi.fn()
 
-    grip.dispatchEvent(new MouseEvent('mousedown', { clientX: 300, bubbles: true }))
-    document.dispatchEvent(new MouseEvent('mousemove', { clientX: 350, bubbles: true }))
-    document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }))
+    grip.dispatchEvent(pointer('pointerdown', 300))
+    expect(grip.setPointerCapture).toHaveBeenCalledWith(1)
+    document.dispatchEvent(pointer('pointermove', 350))
+    document.dispatchEvent(new MouseEvent('pointerup', { bubbles: true }))
 
     expect(onSelect).toHaveBeenCalled()
     expect(onSelect.mock.calls.at(-1)).toEqual([100, 350])
     vi.unstubAllGlobals()
   })
 
-  it('stops listening after mouseup (no further onSelect)', async () => {
+  it('stops listening after pointerup (no further onSelect)', async () => {
     vi.stubGlobal('requestAnimationFrame', (fn) => {
       fn()
       return 1
@@ -188,10 +198,11 @@ describe('createRanger grip drag', () => {
     const h = await createRanger(document.createElement('div'), rangerDef, { onSelect })
     h.setSelection(100, 300)
     const sel = h.uplot.root.querySelector('.u-select')
-    sel.dispatchEvent(new MouseEvent('mousedown', { clientX: 200, bubbles: true }))
-    document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }))
+    sel.setPointerCapture = vi.fn()
+    sel.dispatchEvent(pointer('pointerdown', 200))
+    document.dispatchEvent(new MouseEvent('pointerup', { bubbles: true }))
     onSelect.mockClear()
-    document.dispatchEvent(new MouseEvent('mousemove', { clientX: 250, bubbles: true }))
+    document.dispatchEvent(pointer('pointermove', 250))
     expect(onSelect).not.toHaveBeenCalled()
     vi.unstubAllGlobals()
   })

@@ -670,6 +670,7 @@ body.darkBG .chartview .u-axis {
   .u-select {
     pointer-events: all;
     cursor: grab;
+    touch-action: none; // a drag here pans the window; never let it scroll the page
     background: rgb(41 112 255 / 14%);
     border-left: 1px solid rgb(41 112 255 / 55%);
     border-right: 1px solid rgb(41 112 255 / 55%);
@@ -679,7 +680,9 @@ body.darkBG .chartview .u-axis {
     }
   }
 
-  // Edge resize handles.
+  // Edge resize handles. The visible bar stays 8px; a transparent ::before extends the
+  // touch hit area to ~44px (the recommended tap target) without changing the look or the
+  // inline theme tint (paintSelection sets the host background only).
   .u-grip-l,
   .u-grip-r {
     position: absolute;
@@ -688,6 +691,18 @@ body.darkBG .chartview .u-axis {
     height: 100%;
     background: rgb(41 112 255 / 55%);
     cursor: ew-resize;
+    touch-action: none; // a drag here resizes the window; never let it scroll the page
+  }
+
+  .u-grip-l::before,
+  .u-grip-r::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 50%;
+    width: 44px;
+    transform: translateX(-50%);
   }
 
   .u-grip-l {

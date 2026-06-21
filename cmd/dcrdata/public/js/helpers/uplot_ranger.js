@@ -1,7 +1,7 @@
 // Overview "ranger" strip for /charts: a short uPlot of the full data extent with a
 // drag-to-select rectangle plus two resize grips. Drives the main chart's x-range via an
 // onSelect(min,max) callback and is repositioned by the controller via setSelection().
-// Port of uPlot's zoom-ranger-grips demo (mouse events; desktop).
+// Port of uPlot's zoom-ranger-grips demo, on Pointer Events so it works for mouse and touch.
 
 import { fillForStroke, hexToRgba } from './chart_theme'
 import { resolveSeriesColor, loadUPlot } from './uplot_adapter'
@@ -165,25 +165,36 @@ function installGrips(UPlot, u, onSelect, stroke) {
       if (onSelect) onSelect(u.posToVal(left, 'x'), u.posToVal(left + width, 'x'))
     })
 
-  const bind = (e, boundary) => {
+  // Pointer Events unify mouse + touch + pen in one path. setPointerCapture keeps the drag
+  // alive when the pointer leaves the grip (mouse off-element, or a touch sliding past the
+  // strip); the captured pointer's move/up events still bubble to document, so the listeners
+  // stay there (works in real browsers via bubbling and in jsdom where dispatch targets
+  // document directly). Guarded: jsdom has no setPointerCapture. clampBoundary, stopPropagation
+  // and the debounce are unchanged from the mouse version.
+  const bind = (e, boundary, target) => {
     x0 = e.clientX
     lft0 = u.select.left
     rgt0 = lft0 + u.select.width
+    if (e.pointerId != null && typeof target.setPointerCapture === 'function') {
+      target.setPointerCapture(e.pointerId)
+    }
     const onMove = moveFor(boundary)
     const onUp = () => {
-      document.removeEventListener('mousemove', onMove)
-      document.removeEventListener('mouseup', onUp)
+      document.removeEventListener('pointermove', onMove)
+      document.removeEventListener('pointerup', onUp)
+      document.removeEventListener('pointercancel', onUp)
     }
-    document.addEventListener('mousemove', onMove)
-    document.addEventListener('mouseup', onUp)
+    document.addEventListener('pointermove', onMove)
+    document.addEventListener('pointerup', onUp)
+    document.addEventListener('pointercancel', onUp)
     e.stopPropagation() // keep uPlot's own drag-select from also firing
   }
 
-  sel.addEventListener('mousedown', (e) => bind(e, BOUNDARY_BOTH))
+  sel.addEventListener('pointerdown', (e) => bind(e, BOUNDARY_BOTH, sel))
   const gripL = placeDiv(sel, 'u-grip-l')
   const gripR = placeDiv(sel, 'u-grip-r')
-  gripL.addEventListener('mousedown', (e) => bind(e, BOUNDARY_LEFT))
-  gripR.addEventListener('mousedown', (e) => bind(e, BOUNDARY_RIGHT))
+  gripL.addEventListener('pointerdown', (e) => bind(e, BOUNDARY_LEFT, gripL))
+  gripR.addEventListener('pointerdown', (e) => bind(e, BOUNDARY_RIGHT, gripR))
   paintSelection(sel, gripL, gripR, stroke)
 }
 
