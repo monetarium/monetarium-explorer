@@ -455,11 +455,11 @@ export default class extends Controller {
     } else {
       this.preserveTargetPow = false
     }
-    this.setAllValues(this.internalHashTargets, `${digitformat(this.targetHashRate, 4)} Ph/s `)
+    this.setAllValues(this.internalHashTargets, `${digitformat(this.targetHashRate, 8)} Ph/s `)
     switch (this.settings.attack_type) {
       case externalAttackType:
-        this.setAllValues(this.newHashRateTargets, digitformat(this.targetHashRate + hashrate, 4))
-        this.setAllValues(this.additionalHashRateTargets, digitformat(this.targetHashRate, 4))
+        this.setAllValues(this.newHashRateTargets, digitformat(this.targetHashRate + hashrate, 8))
+        this.setAllValues(this.additionalHashRateTargets, digitformat(this.targetHashRate, 8))
         this.projectedPriceDivTarget.style.display = 'block'
         this.internalAttackTextTarget.classList.add('d-none')
         this.internalAttackPosTextTarget.classList.add('d-none')
@@ -550,8 +550,8 @@ export default class extends Controller {
     this.exchangeRateTarget.value = digitformat(varPrice, 2)
     this.setAllInputs(this.targetPosTargets, digitformat(parseFloat(this.targetPosTarget.value), 2))
     this.ticketPriceTarget.innerHTML = digitformat(tpPrice, 4)
-    this.setAllValues(this.targetHashRateTargets, digitformat(this.targetHashRate, 4))
-    this.setAllValues(this.additionalHashRateTargets, digitformat(this.targetHashRate, 4))
+    this.setAllValues(this.targetHashRateTargets, digitformat(this.targetHashRate, 8))
+    this.setAllValues(this.additionalHashRateTargets, digitformat(this.targetHashRate, 8))
     this.durationUnitTarget.innerHTML = hourStr
     this.setAllValues(this.durationLongDescTargets, timeHourStr)
     this.setAllValues(this.countDeviceTargets, digitformat(deviceCount))
