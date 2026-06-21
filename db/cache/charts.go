@@ -894,6 +894,7 @@ func (charts *ChartData) SetTip(tip ChartTip) {
 	charts.tipMtx.Lock()
 	defer charts.tipMtx.Unlock()
 	charts.Tip = tip
+	charts.invalidateTipCharts()
 }
 
 // SetPartialWindow stores accumulated data for the current (incomplete)
@@ -903,6 +904,29 @@ func (charts *ChartData) SetPartialWindow(pw PartialWindow) {
 	charts.tipMtx.Lock()
 	defer charts.tipMtx.Unlock()
 	charts.PartialWindow = pw
+	charts.invalidateTipCharts()
+}
+
+// invalidateTipCharts removes cached chart data for charts that depend on
+// Tip or PartialWindow. This must be called after updating those fields so
+// the next Chart() request re-runs the maker with fresh values, rather than
+// serving stale cached data whose cacheID hasn't changed yet (window/ day
+// bins only update cacheID at boundaries, not on every block).
+func (charts *ChartData) invalidateTipCharts() {
+	charts.cacheMtx.Lock()
+	defer charts.cacheMtx.Unlock()
+	// Window-binned charts that use PartialWindow and Tip
+	for _, chartID := range []string{TicketPrice, POWDifficulty} {
+		for _, axis := range []axisType{TimeAxis, HeightAxis} {
+			delete(charts.cache, cacheKey(chartID, WindowBin, axis, DefaultInterval))
+		}
+	}
+	// Block/day-binned staked-coins chart that uses Tip
+	for _, bin := range []binLevel{BlockBin, DayBin} {
+		for _, axis := range []axisType{TimeAxis, HeightAxis} {
+			delete(charts.cache, cacheKey(PercentStaked, bin, axis, DefaultInterval))
+		}
+	}
 }
 
 // TriggerUpdate triggers (*ChartData).Update.

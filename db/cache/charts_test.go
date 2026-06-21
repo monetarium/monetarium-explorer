@@ -791,4 +791,26 @@ func TestChartTipOverride(t *testing.T) {
 			})
 		}
 	})
+
+	t.Run("cache_invalidated_on_tip_change", func(t *testing.T) {
+		charts := chartWithWindows(ctx)
+		charts.PartialWindow = PartialWindow{Height: 220, Time: 2500, Price: 999, Diff: 999.0}
+		charts.SetTip(ChartTip{TicketPrice: 10, Difficulty: 1.0})
+
+		// Populate cache with tip value 10
+		charts.Chart(TicketPrice, string(WindowBin), string(TimeAxis), string(DefaultInterval))
+
+		// Change tip to 99 — cache must be invalidated so next call re-runs
+		charts.SetTip(ChartTip{TicketPrice: 99, Difficulty: 9.9})
+
+		data, err := charts.Chart(TicketPrice, string(WindowBin), string(TimeAxis), string(DefaultInterval))
+		if err != nil {
+			t.Fatalf("ticketPriceChart: %v", err)
+		}
+		resp := decodeChart(t, data)
+		prices := resp[priceKey].([]interface{})
+		if got := uint64(lastFloat(prices)); got != 99 {
+			t.Errorf("last price: got %d, want 99 (cache invalidated after SetTip)", got)
+		}
+	})
 }
