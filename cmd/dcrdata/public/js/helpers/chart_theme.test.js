@@ -6,7 +6,8 @@ import {
   seriesStroke,
   seriesFill,
   chartColors,
-  seriesColorByKey
+  seriesColorByKey,
+  hexToRgba
 } from './chart_theme'
 
 describe('colorForIndex', () => {
@@ -35,6 +36,14 @@ describe('seriesFill', () => {
   it('returns a translucent rgba of the palette color, stronger (more opaque) in dark mode', () => {
     expect(seriesFill(0, false)).toBe('rgba(41, 112, 255, 0.12)')
     expect(seriesFill(0, true)).toBe('rgba(41, 112, 255, 0.18)')
+  })
+})
+
+describe('hexToRgba', () => {
+  it('converts a #rrggbb hex to an rgba() string at the given alpha', () => {
+    expect(hexToRgba('#2970ff', 0.55)).toBe('rgba(41, 112, 255, 0.55)')
+    expect(hexToRgba('#2dd8a3', 0.14)).toBe('rgba(45, 216, 163, 0.14)')
+    expect(hexToRgba('#000000', 1)).toBe('rgba(0, 0, 0, 1)')
   })
 })
 

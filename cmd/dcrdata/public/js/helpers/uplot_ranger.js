@@ -3,7 +3,7 @@
 // onSelect(min,max) callback and is repositioned by the controller via setSelection().
 // Port of uPlot's zoom-ranger-grips demo (mouse events; desktop).
 
-import { fillForStroke } from './chart_theme'
+import { fillForStroke, hexToRgba } from './chart_theme'
 import { resolveSeriesColor, loadUPlot } from './uplot_adapter'
 
 /* global requestAnimationFrame */
@@ -120,10 +120,24 @@ function placeDiv(parent, cls) {
   return el
 }
 
+// Tint the selection rectangle + grips to match the strip's primary line color (`stroke`), so
+// they recolor with the theme on rebuild. Hex-only — a non-hex stroke leaves the SCSS default
+// (blue) in place. The fill keeps the SCSS opacities (0.14 body, 0.55 edges/grips).
+function paintSelection(sel, gripL, gripR, stroke) {
+  if (typeof stroke !== 'string' || stroke[0] !== '#') return
+  const edge = hexToRgba(stroke, 0.55)
+  sel.style.background = hexToRgba(stroke, 0.14)
+  sel.style.borderLeftColor = edge
+  sel.style.borderRightColor = edge
+  gripL.style.background = edge
+  gripR.style.background = edge
+}
+
 // Wire the drag handlers onto the freshly-built selection rectangle. The grip move
 // repositions the rectangle itself (setSelect with fire=false, so it never echoes back to
-// onSelect) and then calls onSelect(min,max) to drive the main chart.
-function installGrips(UPlot, u, onSelect) {
+// onSelect) and then calls onSelect(min,max) to drive the main chart. `stroke` tints the
+// rectangle/grips to the strip's line color so they track the theme.
+function installGrips(UPlot, u, onSelect, stroke) {
   const sel = u.root.querySelector('.u-select')
   if (!sel) return
   const pxRatio = UPlot.pxRatio || 1
@@ -166,8 +180,11 @@ function installGrips(UPlot, u, onSelect) {
   }
 
   sel.addEventListener('mousedown', (e) => bind(e, BOUNDARY_BOTH))
-  placeDiv(sel, 'u-grip-l').addEventListener('mousedown', (e) => bind(e, BOUNDARY_LEFT))
-  placeDiv(sel, 'u-grip-r').addEventListener('mousedown', (e) => bind(e, BOUNDARY_RIGHT))
+  const gripL = placeDiv(sel, 'u-grip-l')
+  const gripR = placeDiv(sel, 'u-grip-r')
+  gripL.addEventListener('mousedown', (e) => bind(e, BOUNDARY_LEFT))
+  gripR.addEventListener('mousedown', (e) => bind(e, BOUNDARY_RIGHT))
+  paintSelection(sel, gripL, gripR, stroke)
 }
 
 /**
@@ -200,8 +217,11 @@ export async function createRanger(el, def, opts = {}) {
     getLeftGutter: () => leftGutter,
     getRightGutter: () => rightGutter
   }
+  // `state` is reassigned by setDark, and this closure reads it at hook-fire time, so a rebuild
+  // re-tints the selection to the strip's current (theme-resolved) primary line color.
+  const primary = def.series[0]
   const hooks = {
-    ready: [(u) => installGrips(UPlot, u, onSelect)],
+    ready: [(u) => installGrips(UPlot, u, onSelect, resolveSeriesColor(primary, 0, state.dark))],
     setSelect: [onNativeSelect]
   }
 

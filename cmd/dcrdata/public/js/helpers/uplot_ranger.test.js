@@ -136,6 +136,15 @@ const rangerDef = {
   series: [{ label: 'Difficulty', scale: 'y', kind: 'line', colorIndex: 0 }]
 }
 
+// A def whose primary series uses a theme-aware named color (light #2970ff, dark #2dd8a3),
+// so the selection tint visibly differs between themes.
+const colorKeyDef = {
+  name: 'ticket-price',
+  label: 'Ticket Price',
+  axes: [{ label: 'Price', scale: 'y' }],
+  series: [{ label: 'Price', scale: 'y', kind: 'line', colorKey: 'tickets-price' }]
+}
+
 describe('createRanger.setSelection', () => {
   it('repositions the rectangle WITHOUT firing the setSelect hook (fire=false)', async () => {
     const h = await createRanger(document.createElement('div'), rangerDef, {})
@@ -219,6 +228,29 @@ describe('createRanger.destroy', () => {
     expect(inst.destroy).toHaveBeenCalled()
     h.setSelection(1, 2) // no throw, no-op
     expect(inst.setSelect).not.toHaveBeenCalled()
+  })
+})
+
+describe('createRanger selection tint', () => {
+  it('tints the selection rectangle and grips with the primary line color', async () => {
+    const h = await createRanger(document.createElement('div'), rangerDef, { dark: false })
+    const sel = h.uplot.root.querySelector('.u-select')
+    const gl = sel.querySelector('.u-grip-l')
+    const gr = sel.querySelector('.u-grip-r')
+    expect(sel.style.background).toBe('rgba(41, 112, 255, 0.14)') // palette[0] #2970FF @ 0.14
+    expect(sel.style.borderLeftColor).toBe('rgba(41, 112, 255, 0.55)')
+    expect(sel.style.borderRightColor).toBe('rgba(41, 112, 255, 0.55)')
+    expect(gl.style.background).toBe('rgba(41, 112, 255, 0.55)')
+    expect(gr.style.background).toBe('rgba(41, 112, 255, 0.55)')
+  })
+
+  it('re-tints to the new theme line color on a dark-mode rebuild', async () => {
+    const h = await createRanger(document.createElement('div'), colorKeyDef, { dark: false })
+    let gl = h.uplot.root.querySelector('.u-select .u-grip-l')
+    expect(gl.style.background).toBe('rgba(41, 112, 255, 0.55)') // light tickets-price #2970ff
+    h.setDark(true)
+    gl = h.uplot.root.querySelector('.u-select .u-grip-l') // rebuilt instance, fresh grips
+    expect(gl.style.background).toBe('rgba(45, 216, 163, 0.55)') // dark tickets-price #2dd8a3
   })
 })
 

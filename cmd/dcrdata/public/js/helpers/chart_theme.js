@@ -67,7 +67,7 @@ export function chartColors(dark) {
       }
 }
 
-function hexToRgba(hex, alpha) {
+export function hexToRgba(hex, alpha) {
   const n = parseInt(hex.slice(1), 16)
   const r = (n >> 16) & 255
   const g = (n >> 8) & 255

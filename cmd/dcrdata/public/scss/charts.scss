@@ -658,7 +658,9 @@ body.darkBG .chartview .u-axis {
   width: 96%;
   margin: 0.35rem 2% 0;
 
-  // The drag-to-pan selection window.
+  // The drag-to-pan selection window. These blue values are the light-theme fallback;
+  // uplot_ranger.js (paintSelection) overrides the colors inline to match the strip's
+  // current primary line color, so the selection + grips track the theme.
   .u-select {
     pointer-events: all;
     cursor: grab;
