@@ -572,16 +572,30 @@ export default class extends Controller {
 
   redrawTheme() {
     const dark = darkEnabled()
+    // Capture the main chart's visible x-range BEFORE rebuilding. uPlot commits scale values on
+    // a microtask, so reading scales.x synchronously right after a rebuild yields stale nulls;
+    // read it now, while the live instance's scale is still committed.
+    const sx = this.handle && this.handle.uplot.scales.x
+    const range = sx && sx.min != null && sx.max != null ? [sx.min, sx.max] : null
     // uPlot bakes the theme colors in at construction, so each chart must rebuild to recolor.
-    // setDark preserves the main chart's current x-range (zoom), so the view is unchanged.
+    // setDark preserves the main chart's current x-range (zoom), so the captured range still holds.
     if (this.handle) this.handle.setDark(dark)
     if (this.ranger) {
       this.ranger.setDark(dark)
-      // setDark rebuilds the strip's uPlot fresh (no selection); re-apply the selection from
-      // the main chart's current x-range so the rectangle survives the toggle and stays in
-      // step with the (zoom-preserving) main chart.
-      const sx = this.handle && this.handle.uplot.scales.x
-      if (sx && sx.min != null && sx.max != null) this.ranger.setSelection(sx.min, sx.max)
+      // setDark rebuilds the strip's uPlot fresh (no selection); re-apply it so the rectangle
+      // survives the toggle. The rebuild commits its scales/layout on a microtask, so its
+      // valToPos (used by setSelection) is not ready synchronously — defer to a later microtask
+      // (FIFO: uPlot's commit, queued during setDark, runs first) or the rectangle collapses to
+      // zero width. Prefer the captured main-chart range (keeps the two in step); fall back to
+      // the strip's own full extent so the rectangle can never vanish.
+      queueMicrotask(() => {
+        if (!this.ranger) return
+        if (range) this.ranger.setSelection(range[0], range[1])
+        else {
+          const xs = this.ranger.uplot.data[0]
+          if (xs && xs.length) this.ranger.setSelection(xs[0], xs[xs.length - 1])
+        }
+      })
     }
   }
 

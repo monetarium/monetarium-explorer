@@ -786,19 +786,55 @@ describe('ChartsController ranger strip', () => {
     expect(fakeRanger.setSelection).toHaveBeenCalled()
   })
 
-  it('forwards a dark-mode flip to both charts and re-applies the main chart x-range to the ranger', async () => {
+  it('forwards a dark-mode flip to both charts and re-applies the captured x-range to the ranger', async () => {
     const c = makeController()
     await c.connect()
     fakeHandle.setDark.mockClear()
     fakeRanger.setDark.mockClear()
     fakeRanger.setSelection.mockClear()
-    // The ranger selection now mirrors the main chart's (zoom-preserving) x-range, not the
-    // ranger's own full extent — give the main chart a known range to assert against.
+    // The main chart has a committed x-range now...
     fakeHandle.uplot.scales.x = { min: 1000, max: 3000 }
+    // ...but uPlot commits scale values on a microtask, so the rebuild inside setDark leaves
+    // scales.x reading null synchronously. Model that, so the test fails if redrawTheme reads
+    // the range AFTER the rebuild (null) instead of capturing it BEFORE.
+    fakeHandle.setDark.mockImplementationOnce(() => {
+      fakeHandle.uplot.scales.x = { min: null, max: null }
+    })
     c.redrawTheme()
+    await Promise.resolve() // let the deferred ranger selection run (see deferral test below)
     expect(fakeHandle.setDark).toHaveBeenCalledWith(false) // recolor the main chart (no reload)
     expect(fakeRanger.setDark).toHaveBeenCalledWith(false)
+    expect(fakeRanger.setSelection).toHaveBeenCalledWith(1000, 3000) // captured before the rebuild
+  })
+
+  it('defers the ranger selection until after the rebuild commits (avoids a zero-width collapse)', async () => {
+    const c = makeController()
+    await c.connect()
+    fakeRanger.setSelection.mockClear()
+    fakeHandle.uplot.scales.x = { min: 1000, max: 3000 }
+    c.redrawTheme()
+    // uPlot commits the rebuilt strip's scales on a microtask; setSelection must wait for it,
+    // else valToPos returns NaN and the selection rectangle (and its grips) collapse to zero width.
+    expect(fakeRanger.setSelection).not.toHaveBeenCalled()
+    await Promise.resolve()
     expect(fakeRanger.setSelection).toHaveBeenCalledWith(1000, 3000)
+  })
+
+  it('falls back to the strip full extent when the main chart has no committed range', async () => {
+    const c = makeController()
+    await c.connect()
+    fakeRanger.setSelection.mockClear()
+    fakeHandle.uplot.scales.x = { min: null, max: null } // never zoomed / not yet committed
+    fakeRanger.uplot = {
+      data: [
+        [5, 6, 7],
+        [1, 2, 3]
+      ]
+    }
+    c.redrawTheme()
+    await Promise.resolve() // selection is deferred to a microtask
+    // The rectangle must never vanish — fall back to the strip's own full extent.
+    expect(fakeRanger.setSelection).toHaveBeenCalledWith(5, 7)
   })
 })
 
