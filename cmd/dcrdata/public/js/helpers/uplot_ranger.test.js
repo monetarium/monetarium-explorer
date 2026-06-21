@@ -17,6 +17,8 @@ vi.mock('./module_helper', () => {
     constructor(opts, data) {
       this.opts = opts
       this.data = data
+      this.width = opts.width || 800
+      this.height = opts.height || 80
       this.root = document.createElement('div')
       const sel = document.createElement('div')
       sel.className = 'u-select'

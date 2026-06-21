@@ -210,13 +210,11 @@ function installGrips(UPlot, u, onSelect) {
 export async function createRanger(el, def, opts = {}) {
   const UPlot = await loadUPlot()
   const onSelect = typeof opts.onSelect === 'function' ? opts.onSelect : null
-  const curWidth = opts.width || 800
-  const curHeight = opts.height || RANGER_HEIGHT
   // Mutable gutter/average state, read live by the axis getters below so updates need no
   // rebuild — setGutters/setAverage mutate these and trigger a relayout/redraw.
-  let leftGutter = opts.leftGutter || 0
-  let rightGutter = opts.rightGutter || 0
-  let avgValue = opts.avgValue == null ? null : opts.avgValue
+  let leftGutter = opts.leftGutter ?? 0
+  let rightGutter = opts.rightGutter ?? 0
+  let avgValue = opts.avgValue ?? null
   let avgLabel = opts.avgLabel || ''
   let state = { ...opts }
   let destroyed = false
@@ -271,7 +269,9 @@ export async function createRanger(el, def, opts = {}) {
       if (Math.abs(left - leftGutter) < 0.5 && Math.abs(right - rightGutter) < 0.5) return
       leftGutter = left
       rightGutter = right
-      uplot.setSize({ width: curWidth, height: curHeight })
+      // setSize (not redraw) so uPlot re-runs axis-size convergence AND repositions the axis
+      // DOM. Use the live dimensions so a future resize path can't be fought with stale ones.
+      uplot.setSize({ width: uplot.width, height: uplot.height })
     },
     // Update the single average tick on the left y-axis (value=null suppresses it, e.g. SKA).
     setAverage(value, label) {
