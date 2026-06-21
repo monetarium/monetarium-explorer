@@ -487,7 +487,9 @@ export default class extends Controller {
     const end = () => {
       if (state === 'scrub') {
         tt.classList.add('d-hide')
-        if (u.cursor) u.cursor.idx = null
+        // Reset uPlot's cursor off-plot so the crosshair doesn't freeze at the last scrub
+        // position — touch has no uPlot mouseleave to do this, unlike desktop.
+        u.setCursor({ left: -10, top: -10 })
       }
       state = 'pending'
     }

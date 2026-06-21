@@ -547,13 +547,14 @@ describe('ChartsController on-plot tooltip', () => {
   it('hides the tooltip on touchend after a scrub', async () => {
     const c = makeController()
     await c.connect()
-    const { over } = scrubFixture(c)
+    const { over, u } = scrubFixture(c)
     const tt = over.querySelector('.chart-tooltip')
     over.dispatchEvent(touchEvent('touchstart', 100, 100))
     over.dispatchEvent(touchEvent('touchmove', 140, 100)) // scrub
     tt.classList.remove('d-hide') // simulate renderLegend having shown it
     over.dispatchEvent(touchEvent('touchend'))
     expect(tt.classList.contains('d-hide')).toBe(true)
+    expect(u.setCursor).toHaveBeenLastCalledWith({ left: -10, top: -10 })
   })
 
   it('stays in scroll for the rest of the gesture once vertical-classified (terminal state)', async () => {
