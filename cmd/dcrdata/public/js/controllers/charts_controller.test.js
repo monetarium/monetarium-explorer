@@ -218,6 +218,7 @@ function makeController() {
     classList: { add: vi.fn(), remove: vi.fn() },
     clientWidth: 800,
     clientHeight: 400,
+    getBoundingClientRect: () => ({ top: 0 }),
     listeners: {},
     addEventListener: vi.fn(function (type, fn) {
       this.listeners[type] = fn
@@ -455,6 +456,24 @@ describe('ChartsController on-plot tooltip', () => {
     })
     expect(c.legendElement.style.left).toBe('62px') // 50 + 12 pad, no flip (fits in 500)
     expect(c.legendElement.style.top).toBe('42px') // 30 + 12 pad, no flip (fits in 400)
+  })
+})
+
+describe('ChartsController viewport fit', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('computeChartHeight fills the viewport below the chart top, reserving below-chart chrome', () => {
+    const c = makeController()
+    c.chartsViewTarget.getBoundingClientRect = () => ({ top: 200 })
+    Object.defineProperty(window, 'innerHeight', { value: 1000, configurable: true })
+    expect(c.computeChartHeight()).toBe(660) // 1000 - 200 - 140
+  })
+
+  it('computeChartHeight clamps to the 320px readability floor on short viewports', () => {
+    const c = makeController()
+    c.chartsViewTarget.getBoundingClientRect = () => ({ top: 200 })
+    Object.defineProperty(window, 'innerHeight', { value: 500, configurable: true })
+    expect(c.computeChartHeight()).toBe(320) // 500 - 200 - 140 = 160 -> floored to 320
   })
 })
 

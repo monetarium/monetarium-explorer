@@ -12,6 +12,14 @@ import { createRanger } from '../helpers/uplot_ranger'
 import { getDefinition } from '../charts/registry'
 import '../charts/definitions/index' // side-effect: register all definitions
 
+// Below-chart chrome that must stay above the fold: the ranger strip (~86px) plus the
+// Time/Blocks axis row (~46px). Both are fixed-height bands (independent of viewport width),
+// so a constant is exact enough; the chart's measured top offset absorbs the variable
+// controls height (1 vs 2 rows).
+const BELOW_CHART_RESERVE = 140
+// Readability floor — below this the chart stops shrinking and the page scrolls instead.
+const CHART_MIN_HEIGHT = 320
+
 export default class extends Controller {
   static get targets() {
     return [
@@ -263,7 +271,7 @@ export default class extends Controller {
       this.pendingCreate = createChart(this.chartsViewTarget, renderDef, {
         dark: darkEnabled(),
         width: this.chartsViewTarget.clientWidth || 800,
-        height: this.chartsViewTarget.clientHeight || 400,
+        height: this.computeChartHeight(),
         scaleType: this.settings.scale === 'log' ? 'log' : 'linear',
         xTime: xTime,
         hooks: this.buildHooks(),
@@ -328,6 +336,15 @@ export default class extends Controller {
 
   settingsForDef() {
     return { tps: this.tps, windowSize: this.windowSize }
+  }
+
+  // The chart's height = the viewport minus its top offset (which already includes the
+  // controls, however tall they wrapped) minus the fixed below-chart chrome, floored for
+  // readability. Used at chart creation and by the window-resize hook.
+  computeChartHeight() {
+    const top = this.chartsViewTarget.getBoundingClientRect().top
+    const avail = window.innerHeight - top - BELOW_CHART_RESERVE
+    return Math.max(CHART_MIN_HEIGHT, Math.round(avail))
   }
 
   buildHooks() {
