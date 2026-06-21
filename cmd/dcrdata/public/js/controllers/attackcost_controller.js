@@ -187,7 +187,7 @@ export default class extends Controller {
     this.query.update(this.settings)
 
     height = parseInt(this.data.get('height'))
-    hashrate = parseInt(this.data.get('hashrate'))
+    hashrate = parseFloat(this.data.get('hashrate'))
     varPrice = defaultExchangeRate
     tpPrice = parseFloat(this.data.get('ticketPrice'))
     tpValue = parseFloat(this.data.get('ticketPoolValue'))
@@ -263,10 +263,17 @@ export default class extends Controller {
       this.chartsView.updateOptions(nightModeOptions(params.nightMode))
     }
     globalEventBus.on('NIGHT_MODE', this.processNightMode)
+    this._onBlock = ({ detail: blockData }) => {
+      hashrate = blockData.extra.hash_rate
+      this.setAllValues(this.actualHashRateTargets, digitformat(hashrate, 4))
+      this.calculate()
+    }
+    globalEventBus.on('BLOCK_RECEIVED', this._onBlock)
   }
 
   disconnect() {
     globalEventBus.off('NIGHT_MODE', this.processNightMode)
+    globalEventBus.off('BLOCK_RECEIVED', this._onBlock)
     if (this.chartsView !== undefined) {
       this.chartsView.destroy()
     }
