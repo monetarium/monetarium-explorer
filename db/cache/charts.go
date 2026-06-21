@@ -196,7 +196,12 @@ const (
 // of the charts cache on next start so the corrected query reruns over every
 // block. No database resync or backfill is needed — transactions.fees was
 // always stored correctly.
-var cacheVersion = semver.NewSemver(6, 4, 0)
+//
+// 6.5.0: windowSet adds Height field for window start heights and
+// stakeCountVersion for live stake count cache invalidation.
+// appendWindowStats now emits window data at window start with live
+// stake count updates per block.
+var cacheVersion = semver.NewSemver(6, 5, 0)
 
 // versionedCacheData defines the cache data contents to be written into a .gob file.
 type versionedCacheData struct {
@@ -443,12 +448,14 @@ func newDaySet(size int) *zoomSet {
 // 144 blocks on mainnet. stakeValid defines the number windows before the
 // stake validation height.
 type windowSet struct {
-	cacheID     uint64
-	Time        ChartUints
-	PowDiff     ChartFloats
-	TicketPrice ChartUints
-	StakeCount  ChartUints
-	MissedVotes ChartUints
+	cacheID           uint64
+	Time              ChartUints
+	Height            ChartUints
+	PowDiff           ChartFloats
+	TicketPrice       ChartUints
+	StakeCount        ChartUints
+	MissedVotes       ChartUints
+	StakeCountVersion uint32
 }
 
 // Snip truncates the windowSet to a provided length.
@@ -458,6 +465,7 @@ func (set *windowSet) Snip(length int) {
 	}
 
 	set.Time = set.Time.snip(length)
+	set.Height = set.Height.snip(length)
 	set.PowDiff = set.PowDiff.snip(length)
 	set.TicketPrice = set.TicketPrice.snip(length)
 	set.StakeCount = set.StakeCount.snip(length)
@@ -468,6 +476,7 @@ func (set *windowSet) Snip(length int) {
 func newWindowSet(size int) *windowSet {
 	return &windowSet{
 		Time:        newChartUints(size),
+		Height:      newChartUints(size),
 		PowDiff:     newChartFloats(size),
 		TicketPrice: newChartUints(size),
 		StakeCount:  newChartUints(size),
@@ -475,10 +484,8 @@ func newWindowSet(size int) *windowSet {
 	}
 }
 
-// PartialWindow holds data for an incomplete difficulty window. When the
-// latest block is not at a window boundary (e.g. block 500 of a 144-block
-// window), the accumulated values are stored here so chart makers can append
-// them as the last data point and match the home page's current value.
+// PartialWindow holds data for an incomplete difficulty window, tracked by
+// the DB layer for resumability across restarts.
 type PartialWindow struct {
 	Height     uint64
 	Time       uint64
@@ -585,12 +592,8 @@ type ChartData struct {
 	// SKAFeesMtx must be held when reading or mutating SKAFees.
 	SKAFeesMtx  sync.RWMutex
 	MinerRanges []MinerRange
-	// PartialWindow holds accumulated data for the current incomplete
-	// difficulty window, tracked by the DB layer for resumability.
-	// Must only be written via SetPartialWindow().
-	PartialWindow PartialWindow
-	Tip           ChartTip
-	tipMtx        sync.RWMutex
+	Tip         ChartTip
+	tipMtx      sync.RWMutex
 }
 
 // ValidateLengths checks that the length of all arguments is equal.
@@ -741,7 +744,9 @@ func (charts *ChartData) Lengthen() error {
 	}
 	// For blocks and windows, the cacheID is the last timestamp.
 	charts.Blocks.cacheID = blocks.Time[len(blocks.Time)-1]
-	charts.Windows.cacheID = windows.Time[len(windows.Time)-1]
+	// For windows, combine last timestamp with StakeCountVersion to
+	// invalidate cache when live stake count updates.
+	charts.Windows.cacheID = (windows.Time[len(windows.Time)-1] << 32) | uint64(windows.StakeCountVersion)
 	return nil
 }
 
@@ -895,14 +900,6 @@ func (charts *ChartData) SetTip(tip ChartTip) {
 	defer charts.tipMtx.Unlock()
 	charts.Tip = tip
 	charts.invalidateTipCharts()
-}
-
-// SetPartialWindow stores accumulated data for the current (incomplete)
-// difficulty window, used to track DB-level state between refreshes.
-func (charts *ChartData) SetPartialWindow(pw PartialWindow) {
-	charts.tipMtx.Lock()
-	defer charts.tipMtx.Unlock()
-	charts.PartialWindow = pw
 }
 
 // invalidateTipCharts removes cached chart data for charts that depend on
