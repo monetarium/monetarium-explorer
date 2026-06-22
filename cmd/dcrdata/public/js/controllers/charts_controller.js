@@ -1,374 +1,40 @@
 /* global Turbolinks */
 import { Controller } from '@hotwired/stimulus'
-import dompurify from 'dompurify'
-import { assign, map, merge } from 'lodash-es'
-import { animationFrame } from '../helpers/animation_helper'
-import { isEqual } from '../helpers/chart_helper'
 import { requestJSON } from '../helpers/http'
 import humanize from '../helpers/humanize_helper'
-import { getDefault } from '../helpers/module_helper'
-import { renderCoinType, splitSkaAtomsNoTrailing } from '../helpers/ska_helper'
 import TurboQuery from '../helpers/turbolinks_helper'
 import Zoom from '../helpers/zoom_helper'
+import { animationFrame } from '../helpers/animation_helper' // eslint-disable-line no-unused-vars
 import globalEventBus from '../services/event_bus_service'
 import { darkEnabled } from '../services/theme_service'
+import { createChart, resolveSeriesColor } from '../helpers/uplot_adapter'
+import { createRanger } from '../helpers/uplot_ranger'
+import { classifyGesture } from '../helpers/touch_gesture'
+import { getDefinition } from '../charts/registry'
+import '../charts/definitions/index' // side-effect: register all definitions
 
-let selectedChart
-let Dygraph // lazy loaded on connect
+// Below-chart chrome that must stay above the fold: the ranger strip (~86px) plus the
+// Time/Blocks axis row (~46px). Both are fixed-height bands (independent of viewport width),
+// so a constant is exact enough; the chart's measured top offset absorbs the variable
+// controls height (1 vs 2 rows).
+const BELOW_CHART_RESERVE = 140
+// Breathing room kept below the Time/Blocks row, within the viewport, so it isn't flush against
+// the fold.
+const BELOW_CHART_GAP = 32
+// Readability floor — below this the chart stops shrinking and the page scrolls instead.
+const CHART_MIN_HEIGHT = 320
 
-const atomsToVAR = 1e-8
-const windowScales = ['ticket-price', 'pow-difficulty', 'missed-votes']
-const hybridScales = ['privacy-participation']
-const lineScales = ['ticket-price', 'privacy-participation']
-const modeScales = ['ticket-price', 'hashrate']
-const multiYAxisChart = ['ticket-price', 'privacy-participation', 'hashrate']
-// index 0 represents y1 and 1 represents y2 axes.
-const yValueRanges = { 'ticket-price': [1] }
-const chainworkUnits = ['H', 'kH', 'MH', 'GH', 'TH', 'PH', 'EH', 'ZH', 'YH']
-const hashrateUnits = ['H/s', 'kH/s', 'MH/s', 'GH/s', 'TH/s', 'PH/s', 'EH/s']
-let ticketPoolSizeTarget, windowSize, avgBlockTime
-let rawCoinSupply, rawPoolValue
-let yFormatter, legendEntry, legendMarker, legendElement
+// Horizontal travel (CSS px) a touch must exceed before it locks into a scrub rather than a
+// vertical page scroll. Mirrors the touch-action: pan-y split with a JS fallback.
+const SCRUB_THRESHOLD = 8
 
-function usesWindowUnits(chart) {
-  return windowScales.indexOf(chart) > -1
-}
-
-function usesHybridUnits(chart) {
-  return hybridScales.indexOf(chart) > -1
-}
-
-function isScaleDisabled(chart) {
-  return lineScales.indexOf(chart) > -1
-}
-
-function isModeEnabled(chart) {
-  return modeScales.includes(chart)
-}
-
-// sanitizeLogValueRange collapses a non-positive lower bound to null when the
-// chart is rendered in log scale. Dygraphs computes a log axis with log10(min);
-// a floor of 0 (or negative) yields -Infinity and breaks the whole axis.
-// Returning null lets Dygraphs auto-range from the positive data instead.
-// Apply to the primary y-axis only — the global `logscale` option never
-// log-scales y2, so a y2 floor of 0 is valid and must be left alone.
-export function sanitizeLogValueRange(valueRange, isLog) {
-  if (!isLog || !Array.isArray(valueRange)) return valueRange
-  const [lo, hi] = valueRange
-  if (lo != null && lo <= 0) return [null, hi]
-  return valueRange
-}
-
-// clampLogFloor raises a plotted line value up to `floor` when in log scale. A
-// cumulative-supply series is 0 until a single mint then a near-constant
-// plateau; on a log axis the 0s cannot plot and Dygraphs auto-ranges onto the
-// clustered plateau, collapsing the axis. Flooring the 0/sub-floor points at 1
-// whole coin makes the plotted minimum 1, so the axis spans orders of magnitude
-// and the pre-mint period draws as a baseline. Render-only: the exact
-// big.Int-derived value still drives the legend/tooltip; only the (already
-// lossy) float line position is floored. Applied to the SKA supply line only —
-// the VAR supply legend reads the plotted value, so flooring it would misreport
-// pre-genesis 0s, and VAR supply spans decades and never collapses anyway.
-export function clampLogFloor(value, isLog, floor = 1) {
-  if (!isLog) return value
-  return value < floor ? floor : value
-}
-
-function hasMultipleVisibility(chart) {
-  return multiYAxisChart.indexOf(chart) > -1
-}
-
-function intComma(amount) {
-  if (!amount) return ''
-  return amount.toLocaleString(undefined, { maximumFractionDigits: 0 })
-}
-
-function skaCoinTypeFromChart(name) {
-  if (typeof name !== 'string' || !name.startsWith('coin-supply/')) return 0
-  const n = parseInt(name.slice('coin-supply/'.length), 10)
-  return Number.isInteger(n) && n >= 1 && n <= 255 ? n : 0
-}
-
-function isSKASupplyChart(name) {
-  return skaCoinTypeFromChart(name) > 0
-}
-
-function isCoinSupplyChart(name) {
-  return name === 'coin-supply' || (typeof name === 'string' && name.startsWith('coin-supply/'))
-}
-
-function isSKAFeeChart(name) {
-  return typeof name === 'string' && /^fees\/[1-9]\d*$/.test(name)
-}
-
-function formatSkaAtomsExact(atomStr) {
-  const p = splitSkaAtomsNoTrailing(atomStr, true, 0)
-  return p.rest ? `${p.intPart}.${p.rest}` : p.intPart
-}
-
-function axesToRestoreYRange(chartName, origYRange, newYRange) {
-  const axesIndexes = yValueRanges[chartName]
-  if (
-    !Array.isArray(origYRange) ||
-    !Array.isArray(newYRange) ||
-    origYRange.length !== newYRange.length ||
-    !axesIndexes
-  ) {
-    return
+// Trailing debounce so a window drag-resize coalesces into one setSize.
+function debounce(fn, ms) {
+  let t = null
+  return (...args) => {
+    if (t) clearTimeout(t)
+    t = setTimeout(() => fn(...args), ms)
   }
-
-  let axes
-  for (let i = 0; i < axesIndexes.length; i++) {
-    const index = axesIndexes[i]
-    if (newYRange.length <= index) continue
-    if (!isEqual(origYRange[index], newYRange[index])) {
-      if (!axes) axes = {}
-      if (index === 0) {
-        axes = Object.assign(axes, { y1: { valueRange: origYRange[index] } })
-      } else if (index === 1) {
-        axes = Object.assign(axes, { y2: { valueRange: origYRange[index] } })
-      }
-    }
-  }
-  return axes
-}
-
-function withBigUnits(v, units) {
-  const i = v === 0 ? 0 : Math.max(0, Math.min(Math.floor(Math.log10(v) / 3), units.length - 1))
-  return `${(v / Math.pow(1000, i)).toFixed(3)} ${units[i]}`
-}
-
-function unitPrefix(value) {
-  if (value <= 0) return ''
-  const i = Math.max(0, Math.min(Math.floor(Math.log10(value) / 3), 8))
-  return ['', 'k', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y'][i]
-}
-
-function addLegendEntryFmt(div, series, fmt) {
-  div.appendChild(legendEntry(`${series.dashHTML} ${series.labelHTML}: ${fmt(series.y)}`))
-}
-
-function addLegendEntry(div, series) {
-  div.appendChild(legendEntry(`${series.dashHTML} ${series.labelHTML}: ${series.yHTML}`))
-}
-
-function defaultYFormatter(div, data) {
-  addLegendEntry(div, data.series[0])
-}
-
-function customYFormatter(fmt) {
-  return (div, data) => addLegendEntryFmt(div, data.series[0], fmt)
-}
-
-function legendFormatter(data) {
-  if (data.x == null) return legendElement.classList.add('d-hide')
-  legendElement.classList.remove('d-hide')
-  const div = document.createElement('div')
-  let xHTML = data.xHTML
-  if (data.dygraph.getLabels()[0] === 'Date') {
-    xHTML = humanize.date(data.x, false, selectedChart !== 'ticket-price')
-  }
-  div.appendChild(legendEntry(`${data.dygraph.getLabels()[0]}: ${xHTML}`))
-  yFormatter(div, data, data.dygraph.getOption('legendIndex'))
-  dompurify.sanitize(div, { IN_PLACE: true, FORBID_TAGS: ['svg', 'math'] })
-  return div.innerHTML
-}
-
-function hashrateYFormatter(div, data) {
-  const visibility = data.dygraph.getOption('visibility')
-  data.series.forEach((series, i) => {
-    if (visibility && visibility[i] === false) return
-    const fmt = i === 0 ? (y) => withBigUnits(y, hashrateUnits) : (y) => Math.round(y).toString()
-    addLegendEntryFmt(div, series, fmt)
-  })
-}
-
-function nightModeOptions(nightModeOn) {
-  if (nightModeOn) {
-    return {
-      rangeSelectorAlpha: 0.3,
-      gridLineColor: '#596D81',
-      colors: ['#2DD8A3', '#2970FF', '#FFC84E']
-    }
-  }
-  return {
-    rangeSelectorAlpha: 0.4,
-    gridLineColor: '#C4CBD2',
-    colors: ['#2970FF', '#006600', '#FF0090']
-  }
-}
-
-function zipWindowHvYZ(ys, zs, winSize, yMult, zMult, offset) {
-  yMult = yMult || 1
-  zMult = zMult || 1
-  offset = offset || 0
-  return ys.map((y, i) => {
-    return [i * winSize + offset, y * yMult, zs[i] * zMult]
-  })
-}
-
-function zipWindowHvY(ys, winSize, yMult, offset) {
-  yMult = yMult || 1
-  offset = offset || 0
-  return ys.map((y, i) => {
-    return [i * winSize + offset, y * yMult]
-  })
-}
-
-function zipWindowTvYZ(times, ys, zs, yMult, zMult) {
-  yMult = yMult || 1
-  zMult = zMult || 1
-  return times.map((t, i) => {
-    return [new Date(t * 1000), ys[i] * yMult, zs[i] * zMult]
-  })
-}
-
-function zipWindowTvY(times, ys, yMult) {
-  yMult = yMult || 1
-  return times.map((t, i) => {
-    return [new Date(t * 1000), ys[i] * yMult]
-  })
-}
-
-function zipTvY(times, ys, yMult) {
-  yMult = yMult || 1
-  return times.map((t, i) => {
-    return [new Date(t * 1000), ys[i] * yMult]
-  })
-}
-
-function zipIvY(ys, yMult, offset) {
-  yMult = yMult || 1
-  offset = offset || 1 // TODO: check for why offset is set to a default value of 1 when genesis block has a height of 0
-  return ys.map((y, i) => {
-    return [offset + i, y * yMult]
-  })
-}
-
-function zipHvY(heights, ys, yMult, offset) {
-  yMult = yMult || 1
-  offset = offset || 1
-  return ys.map((y, i) => {
-    return [offset + heights[i], y * yMult]
-  })
-}
-
-function zip2D(data, ys, yMult, offset) {
-  yMult = yMult || 1
-  if (data.axis === 'height') {
-    if (data.bin === 'block') return zipIvY(ys, yMult)
-    return zipHvY(data.h, ys, yMult, offset)
-  }
-  return zipTvY(data.t, ys, yMult)
-}
-
-function anonymitySetFunc(data) {
-  let d
-  let start = -1
-  let end = 0
-  if (data.axis === 'height') {
-    if (data.bin === 'block') {
-      d = data.anonymitySet.map((y, i) => {
-        if (start === -1 && y > 0) {
-          start = i
-        }
-        end = i
-        return [i, y * atomsToVAR]
-      })
-    } else {
-      d = data.anonymitySet.map((y, i) => {
-        if (start === -1 && y > 0) {
-          start = i
-        }
-        end = data.h[i]
-        return [data.h[i], y * atomsToVAR]
-      })
-    }
-  } else {
-    d = data.t.map((t, i) => {
-      if (start === -1 && data.anonymitySet[i] > 0) {
-        start = t * 1000
-      }
-      end = t * 1000
-      return [new Date(t * 1000), data.anonymitySet[i] * atomsToVAR]
-    })
-  }
-  return { data: d, limits: [start, end] }
-}
-
-function ticketPriceFunc(data) {
-  if (data.t) return zipWindowTvYZ(data.t, data.price, data.count, atomsToVAR)
-  if (data.h) return data.h.map((h, i) => [h, data.price[i] * atomsToVAR, data.count[i]])
-  return zipWindowHvYZ(data.price, data.count, data.window, atomsToVAR)
-}
-
-function poolSizeFunc(data) {
-  let out = []
-  if (data.axis === 'height') {
-    if (data.bin === 'block') out = zipIvY(data.count)
-    else out = zipHvY(data.h, data.count)
-  } else {
-    out = zipTvY(data.t, data.count)
-  }
-  out.forEach((pt) => pt.push(null))
-  if (out.length) {
-    out[0][2] = ticketPoolSizeTarget
-    out[out.length - 1][2] = ticketPoolSizeTarget
-  }
-  return out
-}
-
-function percentStakedFunc(data) {
-  rawCoinSupply = data.circulation.map((v) => v * atomsToVAR)
-  rawPoolValue = data.poolval.map((v) => v * atomsToVAR)
-  const ys = rawPoolValue.map((v, i) => [(v / rawCoinSupply[i]) * 100])
-  if (data.axis === 'height') {
-    if (data.bin === 'block') return zipIvY(ys)
-    return zipHvY(data.h, ys)
-  }
-  return zipTvY(data.t, ys)
-}
-
-function powDiffFunc(data) {
-  if (data.t) return zipWindowTvY(data.t, data.diff)
-  if (data.h) return data.h.map((h, i) => [h, data.diff[i]])
-  return zipWindowHvY(data.diff, data.window)
-}
-
-function circulationFunc(chartData) {
-  const heights = chartData.h
-  const times = chartData.t
-  const supplies = chartData.supply
-  const isHeightAxis = chartData.axis === 'height'
-  let xFunc
-  if (chartData.bin === 'day') {
-    xFunc = isHeightAxis ? (i) => heights[i] : (i) => new Date(times[i] * 1000)
-  } else {
-    xFunc = isHeightAxis ? (i) => i : (i) => new Date(times[i] * 1000)
-  }
-
-  const data = map(supplies, (n, i) => [xFunc(i), n * atomsToVAR])
-  return { data }
-}
-
-export function missedVotesFunc(data, isLog) {
-  const ys = data.missed.map((v) => clampLogFloor(v, isLog, 1))
-  if (data.t) return zipWindowTvY(data.t, ys)
-  return zipWindowHvY(ys, data.window, 1, data.offset * data.window)
-}
-
-function mapDygraphOptions(data, labelsVal, isDrawPoint, yLabel, labelsMG, labelsMG2) {
-  return merge(
-    {
-      file: data,
-      labels: labelsVal,
-      drawPoints: isDrawPoint,
-      ylabel: yLabel,
-      labelsKMB: labelsMG2 && labelsMG ? false : labelsMG,
-      labelsKMG2: labelsMG2 && labelsMG ? false : labelsMG2
-    },
-    nightModeOptions(darkEnabled())
-  )
 }
 
 export default class extends Controller {
@@ -397,34 +63,16 @@ export default class extends Controller {
       'modeOption',
       'intervalSelector',
       'intervalOption',
-      'rawDataURL'
+      'rawDataURL',
+      'rangerView'
     ]
   }
 
   async connect() {
     this.query = new TurboQuery()
-    ticketPoolSizeTarget = parseInt(this.data.get('tps'))
-    windowSize = parseInt(this.data.get('windowSize'))
-    avgBlockTime = parseInt(this.data.get('blockTime')) * 1000
-    legendElement = this.labelsTarget
-
-    // Prepare the legend element generators.
-    const lm = this.legendMarkerTarget
-    lm.remove()
-    lm.removeAttribute('data-charts-target')
-    legendMarker = () => {
-      const node = document.createElement('div')
-      node.appendChild(lm.cloneNode())
-      return node.innerHTML
-    }
-    const le = this.legendEntryTarget
-    le.remove()
-    le.removeAttribute('data-charts-target')
-    legendEntry = (s) => {
-      const node = le.cloneNode()
-      node.innerHTML = s
-      return node
-    }
+    this.tps = parseInt(this.data.get('tps'))
+    this.windowSize = parseInt(this.data.get('windowSize'))
+    this.avgBlockTime = parseInt(this.data.get('blockTime')) * 1000
 
     this.settings = TurboQuery.nullTemplate([
       'chart',
@@ -438,475 +86,151 @@ export default class extends Controller {
     this.settings.mode = this.data.get('mode')
     this.query.update(this.settings)
     this.settings.chart = this.settings.chart || 'ticket-price'
-    this.zoomCallback = this._zoomCallback.bind(this)
-    this.drawCallback = this._drawCallback.bind(this)
-    this.limits = null
-    this.lastZoom = null
-    this.visibility = []
-    if (this.settings.visibility) {
-      this.settings.visibility.split('-', -1).forEach((s) => {
-        this.visibility.push(s === 'true')
-      })
+
+    this.handle = null
+    this.currentDef = null
+    this.payload = null
+    this.selectedChartName = null
+    this.zoomGuard = false
+    this.ranger = null
+    this.lastWidth = null // viewport width the chart was last sized to (resize guard)
+    // Monotonic selection counter. selectChart() bumps it on entry and captures the
+    // value; after each await it bails if a newer selection has superseded it. Prevents
+    // a stale fetch from clobbering this.payload and stops two overlapping createChart
+    // calls from orphaning a uPlot instance in the shared chart element.
+    this.fetchGeneration = 0
+
+    // Legend element generators (cloned from the template nodes).
+    this.legendElement = this.labelsTarget
+    const lm = this.legendMarkerTarget
+    lm.remove()
+    lm.removeAttribute('data-charts-target')
+    this.legendMarker = (color) => {
+      const node = document.createElement('div')
+      const marker = lm.cloneNode()
+      if (color) marker.style.borderBottomColor = color
+      node.appendChild(marker)
+      return node.innerHTML
     }
-    Dygraph = await getDefault(
-      import(/* webpackChunkName: "dygraphs" */ '../vendor/dygraphs.min.js')
-    )
-    this.drawInitialGraph()
-    this.processNightMode = (params) => {
-      const opts = nightModeOptions(params.nightMode)
-      if (selectedChart === 'hashrate') {
-        // axis: 'y2' omitted — Dygraphs updateOptions recursive-merges, existing binding survives
-        opts.series = {
-          'Active Miners': { color: params.nightMode ? '#2970ff' : '#c60' }
-        }
-      }
-      this.chartsView.updateOptions(opts)
+    const le = this.legendEntryTarget
+    le.remove()
+    le.removeAttribute('data-charts-target')
+    this.legendEntry = (s) => {
+      const node = le.cloneNode()
+      node.innerHTML = s
+      return node
     }
+
+    this.processNightMode = () => this.redrawTheme()
     globalEventBus.on('NIGHT_MODE', this.processNightMode)
+
+    this.onWindowResize = debounce(() => this.resizeChartToViewport(), 150)
+    window.addEventListener('resize', this.onWindowResize)
+
+    this.chartSelectTarget.value = this.settings.chart
+
+    // Restore the control bar's active state from the persisted URL so a bookmark
+    // (e.g. ?bin=block&axis=height&scale=log&zoom=month&mode=stepped&interval=day)
+    // drives the same controls the legacy controller restored on load.
+    if (this.settings.zoom) this.setActiveOptionBtn(this.settings.zoom, this.zoomOptionTargets)
+    if (this.settings.scale) this.setActiveOptionBtn(this.settings.scale, this.scaleTypeTargets)
+    if (this.settings.bin) this.setActiveOptionBtn(this.settings.bin, this.binSizeTargets)
+    if (this.settings.axis) this.setActiveOptionBtn(this.settings.axis, this.axisOptionTargets)
+    if (this.settings.mode) this.setActiveOptionBtn(this.settings.mode, this.modeOptionTargets)
+    if (this.settings.interval) {
+      this.setActiveOptionBtn(this.settings.interval, this.intervalOptionTargets)
+    }
+    await this.selectChart()
   }
 
   disconnect() {
+    window.removeEventListener('resize', this.onWindowResize)
     globalEventBus.off('NIGHT_MODE', this.processNightMode)
-    if (this.chartsView !== undefined) {
-      this.chartsView.destroy()
+    if (this.handle) {
+      this.handle.destroy()
+      this.handle = null
     }
-    selectedChart = null
+    if (this.ranger) {
+      this.ranger.destroy()
+      this.ranger = null
+    }
   }
 
-  drawInitialGraph() {
-    const options = {
-      axes: { y: { axisLabelWidth: 70 }, y2: { axisLabelWidth: 70 } },
-      labels: ['Date', 'Ticket Price', 'Tickets Bought'],
-      digitsAfterDecimal: 8,
-      showRangeSelector: true,
-      rangeSelectorPlotFillColor: '#8997A5',
-      rangeSelectorAlpha: 0.4,
-      rangeSelectorHeight: 40,
-      drawPoints: true,
-      pointSize: 0.25,
-      legend: 'always',
-      labelsSeparateLines: true,
-      labelsDiv: legendElement,
-      legendFormatter: legendFormatter,
-      highlightCircleSize: 4,
-      ylabel: 'Ticket Price',
-      y2label: 'Tickets Bought',
-      labelsUTC: true
-    }
-
-    this.chartsView = new Dygraph(
-      this.chartsViewTarget,
-      [
-        [1, 1, 5],
-        [2, 5, 11]
-      ],
-      options
-    )
-    this.chartSelectTarget.value = this.settings.chart
-
-    if (this.settings.axis) this.setAxis(this.settings.axis) // set first
-    if (this.settings.scale === 'log') this.setScale(this.settings.scale)
-    if (this.settings.zoom) this.setZoom(this.settings.zoom)
-    this.setBin(this.settings.bin ? this.settings.bin : 'block')
-    this.setMode(this.settings.mode ? this.settings.mode : 'smooth')
-
-    const ogLegendGenerator = Dygraph.Plugins.Legend.generateLegendHTML
-    Dygraph.Plugins.Legend.generateLegendHTML = (g, x, pts, w, row) => {
-      g.updateOptions({ legendIndex: row }, true)
-      return ogLegendGenerator(g, x, pts, w, row)
-    }
-    this.selectChart()
+  // Called by the adapter on a user-driven main-chart x-range change (drag-zoom or
+  // double-click reset). Persist with preset-snapping (existing behavior) and reflect the
+  // new window in the overview strip.
+  onChartRangeChange(min, max) {
+    this.persistRange(min, max, true)
+    if (this.ranger) this.ranger.setSelection(min, max)
   }
 
-  plotGraph(chartName, data) {
-    // Cache the render inputs so setScale() can re-plot on a SCALE toggle
-    // without re-fetching. `data` is held by reference and is treated as
-    // read-only — nothing downstream mutates the response or its arrays, and a
-    // scale toggle re-reads it as-is. Keep it that way: an in-place mutation
-    // here would corrupt the next toggle's re-plot.
-    this.rawChartName = chartName
-    this.rawChartData = data
-    let d = []
-    const isLog = this.settings.scale === 'log'
-    const gOptions = {
-      zoomCallback: null,
-      drawCallback: null,
-      logscale: isLog,
-      valueRange: [null, null],
-      visibility: null,
-      y2label: null,
-      stepPlot: this.settings.mode === 'stepped',
-      axes: {},
-      series: null
+  // Called by the overview strip on a grip/body/native-paint drag. Drive the main chart
+  // (silent — setXRange does not re-fire onChartRangeChange) and persist as a CUSTOM range
+  // that clears every preset (snap=false). The strip already shows the new selection.
+  onRangerSelect(min, max) {
+    if (!this.handle) return
+    this.handle.setXRange(min, max)
+    this.persistRange(min, max, false)
+  }
+
+  // Push an x-range to the main chart and mirror it onto the strip. Used by the
+  // programmatic zoom paths (applyZoom / presets / privacy default).
+  setMainXRange(min, max) {
+    if (!this.handle) return
+    this.handle.setXRange(min, max)
+    if (this.ranger) this.ranger.setSelection(min, max)
+  }
+
+  // Persist a visible [min,max] window to the URL + ZOOM control. When snap is true, a
+  // window that lines up with a preset re-highlights it; when false (strip drags), always
+  // store an encoded custom range and clear every preset.
+  persistRange(min, max, snap) {
+    if (!this.handle || !this.payload) return
+    const xs = this.handle.uplot.data[0]
+    if (!xs || !xs.length) return
+    const preset = snap ? this.presetForRange(min, max, xs[0], xs[xs.length - 1]) : null
+    if (preset) {
+      this.settings.zoom = preset
+      this.setActiveOptionBtn(preset, this.zoomOptionTargets)
+    } else {
+      this.settings.zoom = this.encodeRange(min, max)
+      this.setActiveOptionBtn(null, this.zoomOptionTargets)
     }
-    rawPoolValue = []
-    rawCoinSupply = []
-    yFormatter = defaultYFormatter
-    const xlabel = data.t ? 'Date' : 'Block Height'
+    this.query.replace(this.settings)
+  }
 
-    const isSKA = isSKASupplyChart(chartName)
-    const coinType = skaCoinTypeFromChart(chartName)
-    const coinLabel = isSKA ? renderCoinType(coinType) : 'VAR'
-    const switchKey = isCoinSupplyChart(chartName)
-      ? 'coin-supply'
-      : isSKAFeeChart(chartName)
-        ? 'fees'
-        : chartName
-
-    switch (switchKey) {
-      case 'ticket-price': // price graph
-        d = ticketPriceFunc(data)
-        assign(
-          gOptions,
-          mapDygraphOptions(
-            d,
-            [xlabel, 'Price', 'Tickets Bought'],
-            true,
-            'Price (VAR)',
-            true,
-            false
-          )
-        )
-        gOptions.y2label = 'Tickets Bought'
-        gOptions.series = { 'Tickets Bought': { axis: 'y2' } }
-        this.visibility = [this.ticketsPriceTarget.checked, this.ticketsPurchaseTarget.checked]
-        gOptions.visibility = this.visibility
-        gOptions.axes.y2 = {
-          valueRange: [0, windowSize * 20 * 8],
-          axisLabelFormatter: (y) => Math.round(y),
-          ticker: (min, max, _pixels, _opts, _dygraph) => {
-            const span = max - min
-            if (span <= 0) return []
-            const step = Math.pow(10, Math.floor(Math.log10(span / 5)))
-            const ticks = []
-            for (let v = Math.ceil(min / step) * step; v <= max; v += step) {
-              ticks.push({ v: v, label: String(v) })
-            }
-            return ticks
-          }
-        }
-        yFormatter = customYFormatter((y) => `${y.toFixed(8)} VAR`)
-        break
-
-      case 'ticket-pool-size': // pool size graph
-        d = poolSizeFunc(data)
-        assign(
-          gOptions,
-          mapDygraphOptions(
-            d,
-            [xlabel, 'Ticket Pool Size', 'Network Target'],
-            false,
-            'Ticket Pool Size',
-            true,
-            false
-          )
-        )
-        gOptions.series = {
-          'Network Target': {
-            strokePattern: [5, 3],
-            connectSeparatedPoints: true,
-            strokeWidth: 2,
-            color: '#888'
-          }
-        }
-        yFormatter = customYFormatter(
-          (y) =>
-            `${intComma(y)} tickets &nbsp;&nbsp; (network target ${intComma(ticketPoolSizeTarget)})`
-        )
-        break
-
-      case 'stake-participation':
-        d = percentStakedFunc(data)
-        assign(
-          gOptions,
-          mapDygraphOptions(
-            d,
-            [xlabel, 'Stake Participation'],
-            true,
-            'Stake Participation (%)',
-            true,
-            false
-          )
-        )
-        yFormatter = (div, data, i) => {
-          addLegendEntryFmt(div, data.series[0], (y) => `${y.toFixed(4)}%`)
-          div.appendChild(
-            legendEntry(`${legendMarker()} Ticket Pool Value: ${intComma(rawPoolValue[i])} VAR`)
-          )
-          div.appendChild(
-            legendEntry(`${legendMarker()} Coin Supply: ${intComma(rawCoinSupply[i])} VAR`)
-          )
-        }
-        break
-
-      case 'ticket-pool-value': // pool value graph
-        d = zip2D(data, data.poolval, atomsToVAR)
-        assign(
-          gOptions,
-          mapDygraphOptions(
-            d,
-            [xlabel, 'Ticket Pool Value'],
-            true,
-            'Ticket Pool Value (VAR)',
-            true,
-            false
-          )
-        )
-        yFormatter = customYFormatter((y) => `${intComma(y)} VAR`)
-        break
-
-      case 'block-size': // block size graph
-        d = zip2D(data, data.size)
-        assign(
-          gOptions,
-          mapDygraphOptions(d, [xlabel, 'Block Size'], false, 'Block Size', true, false)
-        )
-        break
-
-      case 'blockchain-size': // blockchain size graph
-        d = zip2D(data, data.size)
-        assign(
-          gOptions,
-          mapDygraphOptions(d, [xlabel, 'Blockchain Size'], true, 'Blockchain Size', false, true)
-        )
-        break
-
-      case 'tx-count': // tx per block graph
-        d = zip2D(data, data.count)
-        assign(
-          gOptions,
-          mapDygraphOptions(
-            d,
-            [xlabel, 'Number of Transactions'],
-            false,
-            '# of Transactions',
-            false,
-            false
-          )
-        )
-        break
-
-      case 'pow-difficulty': // difficulty graph
-        d = powDiffFunc(data)
-        assign(
-          gOptions,
-          mapDygraphOptions(d, [xlabel, 'Difficulty'], true, 'Difficulty', true, false)
-        )
-        break
-
-      case 'coin-supply':
-        if (isSKA) {
-          this._skaSupplyRaw = data.supply
-          // Floor is applied after the atoms->coins conversion, so it is 1
-          // whole coin (not 1 atom). A genuine sub-1-coin supply (1..1e18 atoms)
-          // would also clamp to 1 on the log line — never a real state for a
-          // cumulative SKA supply, and the exact value still shows in the legend.
-          const ys = data.supply.map((s) => clampLogFloor(Number(s) * 1e-18, isLog))
-          d = zip2D(data, ys)
-          assign(
-            gOptions,
-            mapDygraphOptions(
-              d,
-              [xlabel, 'Coin Supply'],
-              true,
-              `Coin Supply (${coinLabel})`,
-              true,
-              false
-            )
-          )
-          yFormatter = (div, data, i) => {
-            const raw = this._skaSupplyRaw && this._skaSupplyRaw[i]
-            const exact = raw != null ? formatSkaAtomsExact(raw) : data.series[0].y.toString()
-            div.appendChild(
-              legendEntry(
-                `${data.series[0].dashHTML} ${data.series[0].labelHTML}: ${exact} ${coinLabel}`
-              )
-            )
-          }
-          break
-        }
-        d = circulationFunc(data)
-        assign(
-          gOptions,
-          mapDygraphOptions(d.data, [xlabel, 'Coin Supply'], true, 'Coin Supply (VAR)', true, false)
-        )
-        yFormatter = (div, data, _i) => {
-          addLegendEntryFmt(div, data.series[0], (y) => `${intComma(y)} VAR`)
-        }
-        break
-
-      case 'fees': // block fee graph
-        if (isSKAFeeChart(chartName)) {
-          const coinType = parseInt(chartName.split('/')[1], 10)
-          const coinLabel = renderCoinType(coinType)
-          this._skaFeeRaw = data.fees
-          const ys = data.fees.map((s) => Number(s) * 1e-18)
-          d = zip2D(data, ys)
-          assign(
-            gOptions,
-            mapDygraphOptions(
-              d,
-              [xlabel, 'Total Fee'],
-              false,
-              `Total Fee (${coinLabel})`,
-              true,
-              false
-            )
-          )
-          yFormatter = (div, data, i) => {
-            const raw = this._skaFeeRaw && this._skaFeeRaw[i]
-            const exact = raw != null ? formatSkaAtomsExact(raw) : data.series[0].y.toString()
-            div.appendChild(
-              legendEntry(
-                `${data.series[0].dashHTML} ${data.series[0].labelHTML}: ${exact} ${coinLabel}`
-              )
-            )
-          }
-          break
-        }
-        d = zip2D(data, data.fees, atomsToVAR)
-        assign(
-          gOptions,
-          mapDygraphOptions(d, [xlabel, 'Total Fee'], false, 'Total Fee (VAR)', true, false)
-        )
-        break
-
-      case 'privacy-participation': {
-        // anonymity set graph
-        d = anonymitySetFunc(data)
-        this.customLimits = d.limits
-        const label = 'Mix Rate'
-        assign(
-          gOptions,
-          mapDygraphOptions(d.data, [xlabel, label], false, `${label} (VAR)`, true, false)
-        )
-
-        yFormatter = (div, data, _i) => {
-          addLegendEntryFmt(div, data.series[0], (y) => (y > 0 ? intComma(y) : '0 VAR'))
-        }
-        break
+  // Map a visible [min,max] window back to a ZOOM preset key, or null for a custom
+  // range. Presets are trailing windows ending at the latest datum, so a match needs
+  // both the right span and an end at dataMax. Full extent maps to 'all'. Reuses
+  // zoomSpan so the comparison works in plot units for both time and height axes.
+  presetForRange(min, max, dataMin, dataMax) {
+    const fullSpan = dataMax - dataMin
+    if (!(fullSpan > 0)) return 'all'
+    const tol = fullSpan * 0.005 // 0.5% slack for pixel-rounded drag edges
+    if (Math.abs(min - dataMin) <= tol && Math.abs(max - dataMax) <= tol) return 'all'
+    if (Math.abs(max - dataMax) <= tol) {
+      for (const key of ['day', 'week', 'month', 'year']) {
+        const span = this.zoomSpan(key)
+        if (span != null && Math.abs(max - min - span) <= tol) return key
       }
-      case 'duration-btw-blocks': // Duration between blocks graph
-        d = zip2D(data, data.duration, 1, 1)
-        assign(
-          gOptions,
-          mapDygraphOptions(
-            d,
-            [xlabel, 'Duration Between Blocks'],
-            false,
-            'Duration Between Blocks (seconds)',
-            false,
-            false
-          )
-        )
-        // Anchor the Y-axis floor at 0 (durations are non-negative) but leave the
-        // top unbounded, so genuine large gaps still render at full height and
-        // zoomed-in views keep an honest baseline. The genesis pre-launch gap is
-        // corrected server-side (NormalizeGenesisBlockTime), so the previous
-        // 99th-percentile outlier clamp is no longer needed.
-        gOptions.axes.y = { valueRange: [0, null] }
-        break
-
-      case 'chainwork': // Total chainwork over time
-        d = zip2D(data, data.work)
-        {
-          const max = data.work.length ? data.work.reduce((a, b) => Math.max(a, b), 0) : 0
-          const p = unitPrefix(max)
-          const label = p ? `Cumulative Chainwork (${p}H)` : 'Cumulative Chainwork (H)'
-          assign(gOptions, mapDygraphOptions(d, [xlabel, label], false, label, true, false))
-        }
-        gOptions.axes.y = { valueRange: [null, null] }
-        yFormatter = customYFormatter((y) => withBigUnits(y, chainworkUnits))
-        break
-
-      case 'hashrate': // Network hashrate over time
-        if (data.active_miners && data.active_miners.length) {
-          d = zip2D(data, data.rate, 1, data.offset)
-          const miners = zip2D(data, data.active_miners, 1, data.offset)
-          d = d.map((pt, i) => [pt[0], pt[1], miners[i][1]])
-          {
-            const max = data.rate.length ? data.rate.reduce((a, b) => Math.max(a, b), 0) : 0
-            const p = unitPrefix(max)
-            const label = p ? `Network Hashrate (${p}H/s)` : 'Network Hashrate (H/s)'
-            assign(
-              gOptions,
-              mapDygraphOptions(d, [xlabel, 'Hashrate', 'Active Miners'], false, label, true, false)
-            )
-          }
-          gOptions.y2label = 'Active Miners'
-          gOptions.series = {
-            'Active Miners': { axis: 'y2', color: darkEnabled() ? '#2970ff' : '#c60' }
-          }
-          this.visibility = [this.hashrateRateTarget.checked, this.hashrateMinersTarget.checked]
-          gOptions.visibility = this.visibility
-          gOptions.axes.y = { valueRange: [null, null] }
-          gOptions.axes.y2 = {
-            valueRange: [0, null],
-            axisLabelFormatter: (y) => Math.round(y),
-            ticker: (min, max, _pixels, _opts, _dygraph) => {
-              const ticks = []
-              for (let i = Math.ceil(min); i <= Math.floor(max); i++) {
-                ticks.push({ v: i, label: String(i) })
-              }
-              return ticks
-            }
-          }
-          yFormatter = hashrateYFormatter
-        } else {
-          d = zip2D(data, data.rate, 1, data.offset)
-          {
-            const max = data.rate.length ? data.rate.reduce((a, b) => Math.max(a, b), 0) : 0
-            const p = unitPrefix(max)
-            const label = p ? `Network Hashrate (${p}H/s)` : 'Network Hashrate (H/s)'
-            assign(gOptions, mapDygraphOptions(d, [xlabel, label], false, label, true, false))
-          }
-          gOptions.axes.y = { valueRange: [null, null] }
-          yFormatter = hashrateYFormatter
-        }
-        break
-
-      case 'missed-votes':
-        this._missedVotesRaw = data.missed
-        d = missedVotesFunc(data, isLog)
-        assign(
-          gOptions,
-          mapDygraphOptions(
-            d,
-            [xlabel, 'Missed Votes'],
-            false,
-            'Missed Votes per Window',
-            true,
-            false
-          )
-        )
-        yFormatter = (div, data, i) => {
-          const raw = this._missedVotesRaw && this._missedVotesRaw[i]
-          const display = raw != null ? raw.toString() : data.series[0].y.toString()
-          addLegendEntryFmt(div, data.series[0], () => display)
-        }
-        break
-      default:
-        console.warn(`plotGraph: unknown chart "${chartName}"`)
-        break
     }
+    return null
+  }
 
-    const baseURL = `${this.query.url.protocol}//${this.query.url.host}`
-    this.rawDataURLTarget.textContent = `${baseURL}/api/chart/${chartName}?axis=${this.settings.axis}&bin=${this.settings.bin}&interval=${this.settings.interval}`
+  // Encode a visible x-range into the persisted zoom string. Base-36, and in ms for
+  // time charts (plot x is seconds) so the format matches legacy ?zoom=<start>-<end>
+  // bookmarks. min/max are in plot x-units.
+  encodeRange(min, max) {
+    const toMs = this.settings.axis === 'time' ? 1000 : 1
+    return Zoom.encode(Math.round(min * toMs), Math.round(max * toMs))
+  }
 
-    // Log axes cannot place values <= 0: Dygraphs computes the axis with
-    // log10(min), so a valueRange floor of 0 (or negative) yields -Infinity and
-    // breaks the plot. Collapse any non-positive primary-y floor to null so the
-    // axis auto-ranges from the positive data. Only y1 is log-scaled by the
-    // global `logscale` option, so never touch y2 (it stays linear).
-    gOptions.valueRange = sanitizeLogValueRange(gOptions.valueRange, isLog)
-    if (gOptions.axes && gOptions.axes.y) {
-      gOptions.axes.y.valueRange = sanitizeLogValueRange(gOptions.axes.y.valueRange, isLog)
-    }
-
-    this.chartsView.plotter_.clear()
-    this.chartsView.updateOptions(gOptions, false)
-    if (yValueRanges[chartName]) this.supportedYRange = this.chartsView.yAxisRanges()
-    this.validateZoom()
+  // Decode a persisted zoom string back into plot x-units, or null if it isn't a range.
+  decodeRange(encoded) {
+    const z = Zoom.decode(encoded)
+    if (!z || typeof z !== 'object' || z.start == null || z.end == null) return null
+    const fromMs = this.settings.axis === 'time' ? 1000 : 1
+    return { min: z.start / fromMs, max: z.end / fromMs }
   }
 
   async selectChart() {
@@ -915,152 +239,511 @@ export default class extends Controller {
       Turbolinks.visit('/hashrate-shares')
       return
     }
-    this.customLimits = null
+
+    const def = getDefinition(selection)
+    if (!def) {
+      console.warn(`selectChart: unknown chart "${selection}"`)
+      return
+    }
+
+    // Claim this selection. Any await below re-checks the counter and bails if a newer
+    // selectChart() has run in the meantime, so a slow fetch or createChart can't apply
+    // its result over the chart the user actually has selected now.
+    const gen = ++this.fetchGeneration
+
     this.chartWrapperTarget.classList.add('loading')
-    if (isScaleDisabled(selection)) {
-      this.scaleSelectorTarget.classList.add('d-hide')
-      this.vSelectorTarget.classList.remove('d-hide')
-    } else {
-      this.scaleSelectorTarget.classList.remove('d-hide')
+    this.applyControlVisibility(def, selection)
+
+    const axisChanged = this.settings.axis !== this.selectedAxis()
+    const binChanged = this.settings.bin !== this.selectedBin()
+    const needFetch =
+      this.selectedChartName !== selection || binChanged || axisChanged || !this.payload
+
+    if (needFetch) {
+      const url = this.buildURL(def, selection)
+      const payload = await requestJSON(url)
+      if (gen !== this.fetchGeneration) return // superseded mid-fetch; don't clobber payload
+      this.payload = payload
+      this.selectedChartName = selection
     }
-    if (isModeEnabled(selection)) {
-      this.modeSelectorTarget.classList.remove('d-hide')
+    await this.renderChart(def)
+    if (gen !== this.fetchGeneration) return // superseded during createChart
+    const base = `${this.query.url.protocol}//${this.query.url.host}`
+    this.rawDataURLTarget.textContent = `${base}/api/chart/${selection}?axis=${this.settings.axis}&bin=${this.settings.bin}&interval=${this.settings.interval}`
+    this.query.replace(this.settings)
+    this.chartWrapperTarget.classList.remove('loading')
+  }
+
+  buildURL(def, selection) {
+    // Window-unit charts force bin=window (unless hybrid); others use the selected bin.
+    if (def.controls.windowUnits && !def.controls.hybrid) {
+      this.settings.bin = 'window'
     } else {
-      this.modeSelectorTarget.classList.add('d-hide')
+      this.settings.bin = this.selectedBin() || 'block'
     }
-    if (hasMultipleVisibility(selection)) {
+    this.settings.axis = this.selectedAxis() || 'time'
+    if (!this.settings.interval) this.settings.interval = 'week'
+    return (
+      `/api/chart/${selection}` +
+      `?bin=${this.settings.bin}&axis=${this.settings.axis}&interval=${this.settings.interval}`
+    )
+  }
+
+  async renderChart(def) {
+    // Captured here (not as a param) so the createChart().then below can tell whether a
+    // newer selectChart() landed while it was in flight. Without this, two overlapping
+    // creations both resolve and assign this.handle; the first-resolved uPlot root is then
+    // orphaned in the shared element (its canvas + listeners stay, destroy() never runs).
+    const gen = this.fetchGeneration
+    // hashrate w/o active_miners → drop the y2 miners series/axis.
+    const renderDef = this.resolveRenderDef(def)
+    this.currentDef = renderDef
+
+    const cols = renderDef.toColumns(this.payload, this.settingsForDef())
+    const xTime = this.settings.axis === 'time'
+
+    if (
+      !this.handle ||
+      this.renderedName !== renderDef.name ||
+      this.renderedXTime !== xTime ||
+      this.renderedSeriesCount !== renderDef.series.length
+    ) {
+      if (this.handle) this.handle.destroy()
+      // Null it during the async createChart gap: applyZoom()/resizeChartToViewport()
+      // guard on `this.handle`, so a resize landing here must see null rather than a
+      // torn-down instance whose stale data could be applied to the incoming chart.
+      this.handle = null
+      // create synchronously-awaited handle
+      const width = this.chartsViewTarget.clientWidth || 800
+      this.pendingCreate = createChart(this.chartsViewTarget, renderDef, {
+        dark: darkEnabled(),
+        width: width,
+        height: this.computeChartHeight(),
+        scaleType: this.settings.scale === 'log' ? 'log' : 'linear',
+        xTime: xTime,
+        hooks: this.buildHooks(),
+        onRangeChange: (min, max) => this.onChartRangeChange(min, max)
+      }).then(async (h) => {
+        // Superseded while createChart was awaiting: tear this instance down instead of
+        // adopting it, so it isn't left orphaned in the element under the newer chart.
+        if (gen !== this.fetchGeneration) {
+          h.destroy()
+          return null
+        }
+        this.handle = h
+        // Seed the resize-guard baseline so the first mobile scroll (height-only) is a
+        // no-op — see resizeChartToViewport.
+        this.lastWidth = width
+        this.renderedName = renderDef.name
+        this.renderedXTime = xTime
+        this.renderedSeriesCount = renderDef.series.length
+        h.setData(cols)
+        if (this.settings.mode === 'stepped') h.setMode('stepped')
+        await this.recreateRanger(renderDef, cols, xTime)
+        this.applyZoom()
+        this.setVisibilityFromSettings()
+        return h
+      })
+      return this.pendingCreate
+    }
+    this.handle.setData(cols)
+    if (this.ranger) this.ranger.setData([cols[0], cols[1]])
+    this.applyZoom()
+  }
+
+  // (Re)build the overview strip for the current chart. The strip always shows the full
+  // extent of the primary series; it is recreated whenever the main chart is, so its
+  // primary color and x-axis type stay in step.
+  async recreateRanger(renderDef, cols, xTime) {
+    if (this.ranger) {
+      this.ranger.destroy()
+      this.ranger = null
+    }
+    if (!this.hasRangerViewTarget) return
+    const g = (this.handle && this.measureGutters(this.handle.uplot)) || { left: 0, right: 0 }
+    this.ranger = await createRanger(this.rangerViewTarget, renderDef, {
+      dark: darkEnabled(),
+      width: this.rangerViewTarget.clientWidth || this.chartsViewTarget.clientWidth || 800,
+      xTime: xTime,
+      leftGutter: g.left,
+      rightGutter: g.right,
+      onSelect: (min, max) => this.onRangerSelect(min, max)
+    })
+    this.ranger.setData([cols[0], cols[1]])
+  }
+
+  // chainwork/hashrate set a dynamic axis label; hashrate may drop its y2 series.
+  resolveRenderDef(def) {
+    let d = def
+    if (typeof def.axisLabel === 'function' && this.payload) {
+      d = {
+        ...d,
+        axes: d.axes.map((a, i) => (i === 0 ? { ...a, label: def.axisLabel(this.payload) } : a))
+      }
+    }
+    if (
+      def.name === 'hashrate' &&
+      !(this.payload && this.payload.active_miners && this.payload.active_miners.length)
+    ) {
+      d = { ...d, axes: [d.axes[0]], series: [d.series[0]] }
+    }
+    return d
+  }
+
+  settingsForDef() {
+    return { tps: this.tps, windowSize: this.windowSize }
+  }
+
+  // The chart's height = the viewport minus its top offset (which already includes the
+  // controls, however tall they wrapped) minus the fixed below-chart chrome, floored for
+  // readability. Used at chart creation and by the window-resize hook.
+  //
+  // Two non-obvious measurements, both proven against a mobile orientation flip:
+  //  - Viewport height comes from documentElement.clientHeight, NOT window.innerHeight. During a
+  //    landscape->portrait rotation the browser briefly fires `resize` with a bogus, much larger
+  //    innerHeight (visualViewport.height is just as wrong); our debounced hook latches onto it and
+  //    sizes the chart taller than the screen, where it sticks (no later width change re-fits it).
+  //    clientHeight (the layout viewport) stays correct all the way through the rotation.
+  //  - `top` adds scrollY so it is the chart's offset from the top of the *document*, not the
+  //    viewport (getBoundingClientRect().top is scroll-relative). Without it, a re-fit while the
+  //    page is scrolled reads a smaller top and over-computes the height.
+  computeChartHeight() {
+    const viewportH = document.documentElement.clientHeight
+    const top = this.chartsViewTarget.getBoundingClientRect().top + window.scrollY
+    const avail = viewportH - top - BELOW_CHART_RESERVE - BELOW_CHART_GAP
+    return Math.max(CHART_MIN_HEIGHT, Math.round(avail))
+  }
+
+  // Re-fit the chart to the viewport after a window resize. Reads the live container width
+  // and the computed available height and pushes both to uPlot via the existing resize().
+  // Also re-pixels the ranger strip (its width path is setGutters, which is epsilon-guarded
+  // and never fires on a pure-width change) and re-applies the selection (pixel-based).
+  resizeChartToViewport() {
+    if (!this.handle) return
+    const width = this.chartsViewTarget.clientWidth || 800
+    // Mobile browsers fire `resize` when the URL/toolbar collapses or re-expands during
+    // scroll — a HEIGHT-only viewport change (innerWidth is untouched). Re-fitting then
+    // would make the chart jump on every scroll. Desktop drag-resize and mobile
+    // orientation changes both move the WIDTH, so gate the re-fit on a width change and
+    // ignore height-only churn. (computeChartHeight reads documentElement.clientHeight, which
+    // can change on mobile toolbar collapse/expand.)
+    if (width === this.lastWidth) return
+    this.lastWidth = width
+    this.handle.resize(width, this.computeChartHeight())
+    if (!this.ranger) return
+    this.ranger.setWidth(this.rangerViewTarget.clientWidth || width)
+    // The strip's selection rectangle is pixel-based, so a width change invalidates it. Re-apply
+    // it at the new width from the main chart's current x-range (setSelection uses fire=false, so
+    // this cannot loop back through onRangerSelect).
+    //
+    // Defer to a microtask. uPlot batches its own resize work onto a microtask (commit ->
+    // microTask(_commit)); that commit rescales any visible selection by plotWidCss/_plotWidCss,
+    // and on a widening resize (e.g. a portrait->landscape orientation flip) the baseline is still
+    // the OLD, narrower width — so a selection written synchronously here gets multiplied a moment
+    // later and shoots past the strip's right edge. Queuing after uPlot's commit (microtasks are
+    // FIFO) lets the baseline refresh first, so our write lands last on a settled layout. Mirrors
+    // the deferral in redrawTheme.
+    const sx = this.handle.uplot.scales.x
+    if (sx && sx.min != null && sx.max != null) {
+      const min = sx.min
+      const max = sx.max
+      queueMicrotask(() => {
+        if (this.ranger) this.ranger.setSelection(min, max)
+      })
+    }
+  }
+
+  buildHooks() {
+    return {
+      // Create the on-plot hover tooltip once the chart is in the DOM.
+      ready: [(u) => this.installTooltip(u)],
+      setCursor: [(u) => this.renderLegend(u)],
+      // On every main-chart draw, mirror its plot-box insets onto the strip so the two stay
+      // aligned through zoom, scale toggle, and single↔dual-axis chart switches.
+      draw: [(u) => this.syncRangerGutters(u)]
+    }
+  }
+
+  // The main chart's plot-box insets in CSS px: the gap between the uPlot root and its
+  // over(lay) element on each side. Used to size the strip's reserve axes so its plot area
+  // lines up under the main chart's. Returns null if the geometry isn't available yet.
+  measureGutters(u) {
+    if (!u || !u.over || !u.root) return null
+    const root = u.root.getBoundingClientRect()
+    const over = u.over.getBoundingClientRect()
+    return { left: over.left - root.left, right: root.right - over.right }
+  }
+
+  syncRangerGutters(u) {
+    if (!this.ranger) return
+    const g = this.measureGutters(u)
+    if (g) this.ranger.setGutters(g.left, g.right)
+  }
+
+  // Create the hover tooltip inside the plot overlay (follows uPlot demos/tooltips.html):
+  // a div appended to u.over, shown on cursor-enter and hidden on cursor-leave (kept up
+  // during a locked drag). renderLegend fills + positions it. Reassigns this.legendElement
+  // so the existing legend content path renders into the on-plot tooltip instead of the
+  // hidden seed holder.
+  installTooltip(u) {
+    if (!u || !u.over) return
+    const tt = document.createElement('div')
+    tt.className = 'chart-tooltip d-hide'
+    u.over.appendChild(tt)
+    this.legendElement = tt
+    u.over.addEventListener('mouseenter', () => tt.classList.remove('d-hide'))
+    u.over.addEventListener('mouseleave', () => {
+      if (!u.cursor || !u.cursor._lock) tt.classList.add('d-hide')
+    })
+    this.installTouchScrub(u, tt)
+  }
+
+  // Touch parity for the desktop hover tooltip. A horizontal finger drag scrubs the cursor
+  // (driving the same setCursor -> renderLegend path as the mouse); a vertical drag yields
+  // to page scroll (touch-action: pan-y handles it, this is the JS fallback). The gesture is
+  // a three-state machine: pending -> scrub | scroll, terminal until touchend/touchcancel.
+  installTouchScrub(u, tt) {
+    let startX = 0
+    let startY = 0
+    let state = 'pending'
+    this.touchActive = false
+
+    u.over.addEventListener(
+      'touchstart',
+      (e) => {
+        const t = e.touches && e.touches[0]
+        if (!t) return
+        startX = t.clientX
+        startY = t.clientY
+        state = 'pending'
+      },
+      { passive: true }
+    )
+
+    u.over.addEventListener(
+      'touchmove',
+      (e) => {
+        const t = e.touches && e.touches[0]
+        if (!t) return
+        if (state === 'pending') {
+          state = classifyGesture(t.clientX - startX, t.clientY - startY, SCRUB_THRESHOLD)
+        }
+        if (state !== 'scrub') return // pending (below threshold) or scroll -> let the page scroll
+        this.touchActive = true // positionTooltip places the box up-left of the finger, not under it
+        e.preventDefault()
+        const rect = u.over.getBoundingClientRect()
+        const left = Math.max(0, Math.min(t.clientX - rect.left, rect.width))
+        const top = Math.max(0, Math.min(t.clientY - rect.top, rect.height))
+        u.setCursor({ left: left, top: top })
+      },
+      { passive: false }
+    )
+
+    const end = () => {
+      if (state === 'scrub') {
+        tt.classList.add('d-hide')
+        // Reset uPlot's cursor off-plot so the crosshair doesn't freeze at the last scrub
+        // position — touch has no uPlot mouseleave to do this, unlike desktop.
+        u.setCursor({ left: -10, top: -10 })
+      }
+      state = 'pending'
+      this.touchActive = false
+    }
+    u.over.addEventListener('touchend', end)
+    u.over.addEventListener('touchcancel', end)
+  }
+
+  // Place the on-plot tooltip near the cursor, flipping the offset to keep the box inside
+  // the overlay. No-op for the hidden seed holder (no u.over) so the content-only legend
+  // tests stay valid.
+  positionTooltip(u) {
+    const tt = this.legendElement
+    if (!u.over || !tt || !tt.style) return
+    const pad = 12
+    if (this.touchActive) {
+      // On touch the cursor IS the fingertip, so the mouse's bottom-right offset would land
+      // the box under the finger/hand. Prefer the top-left quadrant (the clearest spot — the
+      // hand obscures below and to the right), flipping to the opposite side only when the
+      // preferred side has no room, then clamping inside the overlay.
+      const w = tt.offsetWidth
+      const h = tt.offsetHeight
+      // Left of the finger; flip right only at the left edge.
+      let left = u.cursor.left - w - pad
+      if (left < 0) left = u.cursor.left + pad
+      left = Math.max(0, Math.min(left, u.over.clientWidth - w))
+      // Above the finger; flip below only at the top edge.
+      let top = u.cursor.top - h - pad
+      if (top < 0) top = u.cursor.top + pad
+      top = Math.max(0, Math.min(top, u.over.clientHeight - h))
+      tt.style.left = `${left}px`
+      tt.style.top = `${top}px`
+      return
+    }
+    // Mouse: prefer bottom-right of the cursor, flip on edge overflow.
+    let left = u.cursor.left + pad
+    let top = u.cursor.top + pad
+    if (left + tt.offsetWidth > u.over.clientWidth) left = u.cursor.left - tt.offsetWidth - pad
+    if (top + tt.offsetHeight > u.over.clientHeight) top = u.cursor.top - tt.offsetHeight - pad
+    tt.style.left = `${Math.max(0, left)}px`
+    tt.style.top = `${Math.max(0, top)}px`
+  }
+
+  renderLegend(u) {
+    const idx = u.cursor.idx
+    if (idx == null) {
+      this.legendElement.classList.add('d-hide')
+      return
+    }
+    this.legendElement.classList.remove('d-hide')
+    this.legendElement.replaceChildren()
+
+    // X label.
+    const x = u.data[0][idx]
+    const xLabel = this.settings.axis === 'time' ? 'Date' : 'Block Height'
+    const xText =
+      this.settings.axis === 'time'
+        ? humanize.date(x * 1000, false, this.settings.chart !== 'ticket-price')
+        : String(x)
+    this.legendElement.appendChild(this.legendEntry(`${xLabel}: ${xText}`))
+
+    // One entry per series at the cursor index.
+    const def = this.currentDef
+    const settings = this.settingsForDef()
+    def.series.forEach((s, i) => {
+      if (u.series && u.series[i + 1] && u.series[i + 1].show === false) return
+      const value = u.data[i + 1][idx]
+      const datum = { idx: idx, payload: this.payload, value: value }
+      const text = def.formatValue(i, datum, settings)
+      // Color the marker line with the same resolver the adapter uses for the series stroke,
+      // so the tooltip swatch matches the on-chart line color.
+      const color = resolveSeriesColor(s, i, darkEnabled())
+      this.legendElement.appendChild(
+        this.legendEntry(`${this.legendMarker(color)} ${s.label}: ${text}`)
+      )
+    })
+
+    // Optional extra non-series lines (e.g. stake-participation).
+    if (typeof def.legendExtra === 'function') {
+      def.legendExtra({ idx: idx, payload: this.payload }, settings).forEach((line) => {
+        this.legendElement.appendChild(this.legendEntry(`${this.legendMarker()} ${line}`))
+      })
+    }
+
+    this.positionTooltip(u)
+  }
+
+  applyControlVisibility(def, selection) {
+    const c = def.controls
+    this.toggle(this.scaleSelectorTarget, c.scale)
+    this.toggle(this.modeSelectorTarget, c.mode)
+    this.toggle(this.intervalSelectorTarget, c.interval)
+    // BIN hidden for window-unit charts (unless hybrid).
+    this.toggle(this.binSelectorTarget, !(c.windowUnits && !c.hybrid))
+    if (c.visibility) {
       this.vSelectorTarget.classList.remove('d-hide')
       this.updateVSelector(selection)
     } else {
       this.vSelectorTarget.classList.add('d-hide')
     }
     if (selection === 'hashrate') {
-      this.intervalSelectorTarget.classList.remove('d-hide')
       this.chartsViewTarget.classList.add('chart-hashrate')
     } else {
-      this.intervalSelectorTarget.classList.add('d-hide')
       this.chartsViewTarget.classList.remove('chart-hashrate')
     }
-    if (
-      selectedChart !== selection ||
-      this.settings.bin !== this.selectedBin() ||
-      this.settings.axis !== this.selectedAxis()
-    ) {
-      let url = `/api/chart/${selection}`
-      if (usesWindowUnits(selection) && !usesHybridUnits(selection)) {
-        this.binSelectorTarget.classList.add('d-hide')
-        this.settings.bin = 'window'
-      } else {
-        this.binSelectorTarget.classList.remove('d-hide')
-        this.settings.bin = this.selectedBin()
-        this.binSizeTargets.forEach((el) => {
-          if (el.dataset.option !== 'window') return
-          if (usesHybridUnits(selection)) {
-            el.classList.remove('d-hide')
-          } else {
-            el.classList.add('d-hide')
-            if (this.settings.bin === 'window') {
-              this.settings.bin = 'day'
-              this.setActiveOptionBtn(this.settings.bin, this.binSizeTargets)
-            }
-          }
-        })
-      }
-      url += `?bin=${this.settings.bin}`
-
-      this.settings.axis = this.selectedAxis()
-      if (!this.settings.axis) this.settings.axis = 'time' // Set the default.
-      url += `&axis=${this.settings.axis}`
-      if (!this.settings.interval) this.settings.interval = 'week'
-      url += `&interval=${this.settings.interval}`
-      this.setActiveOptionBtn(this.settings.interval, this.intervalOptionTargets)
-      this.setActiveOptionBtn(this.settings.axis, this.axisOptionTargets)
-      const chartResponse = await requestJSON(url)
-      selectedChart = selection
-      this.plotGraph(selection, chartResponse)
-      this.query.replace(this.settings)
-    } else {
-      this.chartWrapperTarget.classList.remove('loading')
-    }
   }
 
-  async validateZoom() {
-    await animationFrame()
-    this.chartWrapperTarget.classList.add('loading')
-    await animationFrame()
-    let oldLimits = this.limits || this.chartsView.xAxisExtremes()
-    this.limits = this.chartsView.xAxisExtremes()
-    const selected = this.selectedZoom()
-    if (selected && !(selectedChart === 'privacy-participation' && selected === 'all')) {
-      this.lastZoom = Zoom.validate(
-        selected,
-        this.limits,
-        this.isTimeAxis() ? avgBlockTime : 1,
-        this.isTimeAxis() ? 1 : avgBlockTime
-      )
-    } else {
-      // if this is for the privacy-participation chart, then zoom to the beginning of the record
-      if (selectedChart === 'privacy-participation') {
-        this.limits = oldLimits = this.customLimits
-        this.settings.zoom = Zoom.object(this.limits[0], this.limits[1])
-      }
-      this.lastZoom = Zoom.project(this.settings.zoom, oldLimits, this.limits)
+  toggle(el, show) {
+    if (show) el.classList.remove('d-hide')
+    else el.classList.add('d-hide')
+  }
+
+  applyZoom() {
+    if (!this.handle || !this.payload) return
+    const xs = this.handle.uplot.data[0]
+    if (!xs || !xs.length) return
+    const dataMin = xs[0]
+    const dataMax = xs[xs.length - 1]
+
+    // privacy-participation defaults to the start of the record.
+    if (
+      this.settings.chart === 'privacy-participation' &&
+      this.currentDef.limits &&
+      !this.settings.zoom
+    ) {
+      const [start] = this.currentDef.limits(this.payload)
+      const startX = this.settings.axis === 'time' ? start / 1000 : start
+      this.zoomGuard = true
+      this.setMainXRange(startX, dataMax)
+      this.zoomGuard = false
+      return
     }
-    if (this.lastZoom) {
-      this.chartsView.updateOptions({
-        dateWindow: [this.lastZoom.start, this.lastZoom.end]
+
+    // Arbitrary persisted range (e.g. "mq4z4efo-mq7k6k1g") — restore it directly,
+    // clamped to the available data. Falls through to the preset logic if invalid.
+    const zoom = this.settings.zoom
+    if (zoom && zoom.indexOf('-') !== -1) {
+      const r = this.decodeRange(zoom)
+      if (r) {
+        const lo = Math.max(dataMin, r.min)
+        const hi = Math.min(dataMax, r.max)
+        if (hi > lo) {
+          this.zoomGuard = true
+          this.setMainXRange(lo, hi)
+          this.zoomGuard = false
+          return
+        }
+      }
+    }
+
+    const preset = this.settings.zoom
+    let min = dataMin
+    const max = dataMax
+    const span = this.zoomSpan(preset)
+    if (span != null) min = Math.max(dataMin, dataMax - span)
+    this.zoomGuard = true
+    this.setMainXRange(min, max)
+    this.zoomGuard = false
+  }
+
+  // Span (in plot x-units) for a preset key, or null for 'all'/unknown.
+  zoomSpan(preset) {
+    // Zoom.mapValue returns the span in milliseconds (0 for 'all', undefined for unknown).
+    const ms = Zoom.mapValue(preset)
+    if (!ms) return null // 'all' (0) or unknown preset
+    const seconds = ms / 1000
+    if (this.settings.axis === 'time') return seconds
+    // height axis: convert seconds → blocks via the average block time.
+    const blockSeconds = this.avgBlockTime / 1000
+    return blockSeconds > 0 ? seconds / blockSeconds : null
+  }
+
+  redrawTheme() {
+    const dark = darkEnabled()
+    // Capture the main chart's visible x-range BEFORE rebuilding. uPlot commits scale values on
+    // a microtask, so reading scales.x synchronously right after a rebuild yields stale nulls;
+    // read it now, while the live instance's scale is still committed.
+    const sx = this.handle && this.handle.uplot.scales.x
+    const range = sx && sx.min != null && sx.max != null ? [sx.min, sx.max] : null
+    // uPlot bakes the theme colors in at construction, so each chart must rebuild to recolor.
+    // setDark preserves the main chart's current x-range (zoom), so the captured range still holds.
+    if (this.handle) this.handle.setDark(dark)
+    if (this.ranger) {
+      this.ranger.setDark(dark)
+      // setDark rebuilds the strip's uPlot fresh (no selection); re-apply it so the rectangle
+      // survives the toggle. The rebuild commits its scales/layout on a microtask, so its
+      // valToPos (used by setSelection) is not ready synchronously — defer to a later microtask
+      // (FIFO: uPlot's commit, queued during setDark, runs first) or the rectangle collapses to
+      // zero width. Prefer the captured main-chart range (keeps the two in step); fall back to
+      // the strip's own full extent so the rectangle can never vanish.
+      queueMicrotask(() => {
+        if (!this.ranger) return
+        if (range) this.ranger.setSelection(range[0], range[1])
+        else {
+          const xs = this.ranger.uplot.data[0]
+          if (xs && xs.length) this.ranger.setSelection(xs[0], xs[xs.length - 1])
+        }
       })
     }
-    if (selected !== this.settings.zoom) {
-      this._zoomCallback(this.lastZoom.start, this.lastZoom.end)
-    }
-    await animationFrame()
-    this.chartWrapperTarget.classList.remove('loading')
-    this.chartsView.updateOptions({
-      zoomCallback: this.zoomCallback,
-      drawCallback: this.drawCallback
-    })
-  }
-
-  _zoomCallback(start, end) {
-    this.lastZoom = Zoom.object(start, end)
-    this.settings.zoom = Zoom.encode(this.lastZoom)
-    this.query.replace(this.settings)
-    const ex = this.chartsView.xAxisExtremes()
-    const option = Zoom.mapKey(this.settings.zoom, ex, this.isTimeAxis() ? 1 : avgBlockTime)
-    this.setActiveOptionBtn(option, this.zoomOptionTargets)
-    const axesData = axesToRestoreYRange(
-      this.settings.chart,
-      this.supportedYRange,
-      this.chartsView.yAxisRanges()
-    )
-    if (axesData) this.chartsView.updateOptions({ axes: axesData })
-  }
-
-  isTimeAxis() {
-    return this.selectedAxis() === 'time'
-  }
-
-  _drawCallback(graph, first) {
-    if (first) return
-    const [start, end] = this.chartsView.xAxisRange()
-    if (start === end) return
-    if (this.lastZoom.start === start) return // only handle slide event.
-    this._zoomCallback(start, end)
-  }
-
-  setZoom(e) {
-    const target = e.srcElement || e.target
-    let option
-    if (!target) {
-      const ex = this.chartsView.xAxisExtremes()
-      option = Zoom.mapKey(e, ex, this.isTimeAxis() ? 1 : avgBlockTime)
-    } else {
-      option = target.dataset.option
-    }
-    this.setActiveOptionBtn(option, this.zoomOptionTargets)
-    if (!target) return // Exit if running for the first time
-    this.validateZoom()
   }
 
   async setBin(e) {
@@ -1068,10 +751,9 @@ export default class extends Controller {
     const option = target ? target.dataset.option : e
     if (!option) return
     this.setActiveOptionBtn(option, this.binSizeTargets)
-    // hide vSelector
     this.updateVSelector()
-    if (!target) return // Exit if running for the first time.
-    selectedChart = null // Force fetch
+    if (!target) return
+    this.selectedChartName = null // force fetch
     await this.selectChart()
   }
 
@@ -1080,17 +762,9 @@ export default class extends Controller {
     const option = target ? target.dataset.option : e
     if (!option) return
     this.setActiveOptionBtn(option, this.scaleTypeTargets)
-    if (!target) return // Exit if running for the first time.
+    if (!target) return
+    if (this.handle) this.handle.setScaleType(option === 'log' ? 'log' : 'linear')
     this.settings.scale = option
-    if (this.chartsView && this.rawChartData) {
-      // Re-plot from the cached response so axis options (incl. the log-safety
-      // guard in plotGraph) are recomputed for the new scale. Flipping only
-      // `logscale` would leave a stale valueRange floor that breaks the log
-      // axis (e.g. duration-btw-blocks' [0, null]). No network request.
-      this.plotGraph(this.rawChartName, this.rawChartData)
-    } else if (this.chartsView) {
-      this.chartsView.updateOptions({ logscale: option === 'log' })
-    }
     this.query.replace(this.settings)
   }
 
@@ -1099,10 +773,8 @@ export default class extends Controller {
     const option = target ? target.dataset.option : e
     if (!option) return
     this.setActiveOptionBtn(option, this.modeOptionTargets)
-    if (!target) return // Exit if running for the first time.
-    if (this.chartsView) {
-      this.chartsView.updateOptions({ stepPlot: option === 'stepped' })
-    }
+    if (!target) return
+    if (this.handle) this.handle.setMode(option === 'stepped' ? 'stepped' : 'line')
     this.settings.mode = option
     this.query.replace(this.settings)
   }
@@ -1112,9 +784,9 @@ export default class extends Controller {
     const option = target ? target.dataset.option : e
     if (!option) return
     this.setActiveOptionBtn(option, this.intervalOptionTargets)
-    if (!target) return // Exit if running for the first time.
+    if (!target) return
     this.settings.interval = option
-    selectedChart = null // Force re-fetch
+    this.selectedChartName = null // force re-fetch
     await this.selectChart()
   }
 
@@ -1123,22 +795,29 @@ export default class extends Controller {
     const option = target ? target.dataset.option : e
     if (!option) return
     this.setActiveOptionBtn(option, this.axisOptionTargets)
-    if (!target) return // Exit if running for the first time.
+    if (!target) return
     this.settings.axis = null
+    this.selectedChartName = null // force fetch (x-units change)
     await this.selectChart()
   }
 
+  setZoom(e) {
+    const target = e.srcElement || e.target
+    const option = target ? target.dataset.option : e
+    if (!option) return
+    this.setActiveOptionBtn(option, this.zoomOptionTargets)
+    if (!target) return
+    this.settings.zoom = option
+    this.applyZoom()
+    this.query.replace(this.settings)
+  }
+
   updateVSelector(chart) {
-    if (!chart) {
-      chart = this.chartSelectTarget.value
-    }
-    const that = this
+    if (!chart) chart = this.chartSelectTarget.value
     let showWrapper = false
     this.vSelectorItemTargets.forEach((el) => {
       let show = el.dataset.charts.indexOf(chart) > -1
-      if (el.dataset.bin && el.dataset.bin.indexOf(that.selectedBin()) === -1) {
-        show = false
-      }
+      if (el.dataset.bin && el.dataset.bin.indexOf(this.selectedBin()) === -1) show = false
       if (show) {
         el.classList.remove('d-hide')
         showWrapper = true
@@ -1146,35 +825,33 @@ export default class extends Controller {
         el.classList.add('d-hide')
       }
     })
-    if (showWrapper) {
-      this.vSelectorTarget.classList.remove('d-hide')
-    } else {
-      this.vSelectorTarget.classList.add('d-hide')
-    }
+    this.toggle(this.vSelectorTarget, showWrapper)
     this.setVisibilityFromSettings()
   }
 
   setVisibilityFromSettings() {
+    const vis = this.parsedVisibility()
     switch (this.chartSelectTarget.value) {
       case 'ticket-price':
-        if (this.visibility.length !== 2) {
-          this.visibility = [true, this.ticketsPurchaseTarget.checked]
-        }
-        this.ticketsPriceTarget.checked = this.visibility[0]
-        this.ticketsPurchaseTarget.checked = this.visibility[1]
+        this.ticketsPriceTarget.checked = vis[0] ?? true
+        this.ticketsPurchaseTarget.checked = vis[1] ?? this.ticketsPurchaseTarget.checked
+        this.applyVisibilityToHandle(
+          ['Price', 'Tickets Bought'],
+          [this.ticketsPriceTarget.checked, this.ticketsPurchaseTarget.checked]
+        )
         break
       case 'hashrate':
-        if (this.visibility.length !== 2) {
-          this.visibility = [true, this.hashrateMinersTarget.checked]
-        }
-        this.hashrateRateTarget.checked = this.visibility[0]
-        this.hashrateMinersTarget.checked = this.visibility[1]
+        this.hashrateRateTarget.checked = vis[0] ?? true
+        this.hashrateMinersTarget.checked = vis[1] ?? this.hashrateMinersTarget.checked
+        this.applyVisibilityToHandle(
+          ['Hashrate', 'Active Miners'],
+          [this.hashrateRateTarget.checked, this.hashrateMinersTarget.checked]
+        )
         break
       default:
         return
     }
-    this.settings.visibility = this.visibility.join('-')
-    this.query.replace(this.settings)
+    this.persistVisibility()
   }
 
   setVisibility(e) {
@@ -1184,20 +861,45 @@ export default class extends Controller {
           e.currentTarget.checked = true
           return
         }
-        this.visibility = [this.ticketsPriceTarget.checked, this.ticketsPurchaseTarget.checked]
+        this.applyVisibilityToHandle(
+          ['Price', 'Tickets Bought'],
+          [this.ticketsPriceTarget.checked, this.ticketsPurchaseTarget.checked]
+        )
         break
       case 'hashrate':
         if (!this.hashrateRateTarget.checked && !this.hashrateMinersTarget.checked) {
           e.currentTarget.checked = true
           return
         }
-        this.visibility = [this.hashrateRateTarget.checked, this.hashrateMinersTarget.checked]
+        this.applyVisibilityToHandle(
+          ['Hashrate', 'Active Miners'],
+          [this.hashrateRateTarget.checked, this.hashrateMinersTarget.checked]
+        )
         break
       default:
         return
     }
-    this.chartsView.updateOptions({ visibility: this.visibility })
-    this.settings.visibility = this.visibility.join('-')
+    this.persistVisibility()
+  }
+
+  applyVisibilityToHandle(labels, states) {
+    if (!this.handle) return
+    const map = {}
+    labels.forEach((label, i) => (map[label] = states[i]))
+    this.handle.setVisibility(map)
+  }
+
+  parsedVisibility() {
+    if (!this.settings.visibility) return []
+    return this.settings.visibility.split('-').map((s) => s === 'true')
+  }
+
+  persistVisibility() {
+    const states =
+      this.chartSelectTarget.value === 'hashrate'
+        ? [this.hashrateRateTarget.checked, this.hashrateMinersTarget.checked]
+        : [this.ticketsPriceTarget.checked, this.ticketsPurchaseTarget.checked]
+    this.settings.visibility = states.join('-')
     this.query.replace(this.settings)
   }
 

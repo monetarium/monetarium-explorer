@@ -86,13 +86,13 @@
                     <div class="chart-control-label">BIN</div>
                     <div class="chart-control">
                         <ul class="nav nav-pills">
-                            <li class="nav-item nav-link active"
+                            <li class="nav-item nav-link"
                                 data-charts-target="binSize"
                                 data-action="click->charts#setBin"
                                 data-option="day">
                                 Day
                             </li>
-                            <li class="nav-item nav-link"
+                            <li class="nav-item nav-link active"
                                 data-charts-target="binSize"
                                 data-action="click->charts#setBin"
                                 data-option="block">
@@ -181,8 +181,8 @@
                             <li class="nav-item nav-link active"
                                 data-charts-target="modeOption"
                                 data-action="click->charts#setMode"
-                                data-option="smooth">
-                                Smooth
+                                data-option="line">
+                                Line
                             </li>
                             <li class="nav-item nav-link"
                                 data-charts-target="modeOption"
@@ -215,6 +215,7 @@
                 class="chartview"
                 data-charts-target="chartsView">
             </div>
+            <div data-charts-target="rangerView" class="chart-ranger"></div>
             <div class="d-flex flex-wrap justify-content-center align-items-center mb-1 mt-1">
                 <div class="chart-control chart-control-wrapper">
                     <ul class="nav nav-pills">
@@ -249,10 +250,8 @@
                     </div>
                 </div>
             </div>
-            <div class="d-flex justify-content-center legend-wrapper">
-                <div class="legend d-flex align-items-center" data-charts-target="labels">
-                  <div class="pe-3" data-charts-target="legendEntry"><div class="dygraph-legend-line" data-charts-target="legendMarker"></div></div>
-                </div>
+            <div class="d-hide" data-charts-target="labels">
+                <div class="pe-3" data-charts-target="legendEntry"><div class="dygraph-legend-line" data-charts-target="legendMarker"></div></div>
             </div>
         </div>
 

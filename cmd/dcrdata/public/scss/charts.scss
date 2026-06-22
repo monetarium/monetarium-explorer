@@ -241,8 +241,8 @@
 
 .chartview {
   width: 96%;
-  min-height: 73vh;
   margin: 0 2%;
+  position: relative; /* required for uPlot overlay positioning (PR 1) */
 }
 
 .chartview .dygraph-ylabel {
@@ -356,7 +356,7 @@ body.darkBG .chartview .dygraph-y2label {
 .legend {
   background: #ececec;
   padding: 5px 10px 5px 20px;
-  font-size: 14px;
+  font-size: 16px;
 }
 
 .darkBG .dygraph-axis-label {
@@ -460,7 +460,7 @@ body.darkBG .customcheck input:checked ~ .coin-supply {
 }
 
 body.darkBG .customcheck input:checked ~ .tickets-bought {
-  background-color: #2970ff;
+  background-color: #4dabf7;
 }
 
 .customcheck input:checked ~ .hashrate-rate {
@@ -476,7 +476,7 @@ body.darkBG .customcheck input:checked ~ .hashrate-rate {
 }
 
 body.darkBG .customcheck input:checked ~ .hashrate-miners {
-  background-color: #2970ff;
+  background-color: #4dabf7;
 }
 
 .checkmark::after {
@@ -628,4 +628,113 @@ body.darkBG {
 
 .tp-outputs-align {
   width: inherit;
+}
+
+/* uPlot chart surface (PR 1). Dygraphs sizing/margin rules above are removed in PR 7. */
+.chartview .uplot,
+.chartview .u-wrap {
+  width: 100% !important;
+}
+
+/* Touch: a vertical swipe scrolls the page; a horizontal drag is delivered to the scrub
+   handler (charts_controller installTouchScrub). The JS directional lock is the fallback. */
+.chartview .u-over {
+  touch-action: pan-y;
+}
+
+/* uPlot axis/label legibility in dark mode (structural colors come from
+   chart_theme via canvas strokes; these cover the DOM-rendered axis labels). */
+.u-legend {
+  display: none; /* the shell renders its own fixed legend below the chart */
+}
+
+.chart-ranger .u-axis {
+  pointer-events: none;
+}
+
+body.darkBG .chartview .u-axis {
+  color: #c8c8c8;
+}
+
+.chart-ranger {
+  position: relative;
+
+  // Must match `.chartview`'s horizontal box (width + side margins) so the strip's plot area
+  // lines up under the main chart's — each uPlot is sized to its own container's clientWidth.
+  width: 96%;
+  margin: 0.35rem 2% 0;
+
+  // The drag-to-pan selection window. These blue values are the light-theme fallback;
+  // uplot_ranger.js (paintSelection) overrides the colors inline to match the strip's
+  // current primary line color, so the selection + grips track the theme.
+  .u-select {
+    pointer-events: all;
+    cursor: grab;
+    touch-action: none; // a drag here pans the window; never let it scroll the page
+    background: rgb(41 112 255 / 14%);
+    border-left: 1px solid rgb(41 112 255 / 55%);
+    border-right: 1px solid rgb(41 112 255 / 55%);
+
+    &:active {
+      cursor: grabbing;
+    }
+  }
+
+  // Edge resize handles. The visible bar stays 8px; a transparent ::before extends the
+  // touch hit area to ~44px (the recommended tap target) without changing the look or the
+  // inline theme tint (paintSelection sets the host background only).
+  .u-grip-l,
+  .u-grip-r {
+    position: absolute;
+    top: 0;
+    width: 8px;
+    height: 100%;
+    background: rgb(41 112 255 / 55%);
+    cursor: ew-resize;
+    touch-action: none; // a drag here resizes the window; never let it scroll the page
+  }
+
+  .u-grip-l::before,
+  .u-grip-r::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 50%;
+    width: 44px;
+    transform: translateX(-50%);
+  }
+
+  .u-grip-l {
+    left: -4px;
+  }
+
+  .u-grip-r {
+    right: -4px;
+  }
+}
+
+// On-plot hover tooltip (replaces the external legend band). Lives inside .u-over.
+.chart-tooltip {
+  position: absolute;
+  z-index: 10;
+  pointer-events: none;
+  padding: 4px 10px;
+  font-size: 14px;
+  line-height: 1.35;
+  white-space: nowrap;
+  background: rgb(236 236 236 / 92%);
+  border-radius: 3px;
+}
+
+body.darkBG .chart-tooltip {
+  color: #c4cbd2;
+  background: rgb(43 43 43 / 92%);
+}
+
+// The legend used to float in a 40px gap reserved by .container.main's padding-bottom
+// (layout.scss, global). With the legend on the plot, reclaim that gap on the charts page
+// only — do not touch the shared rule.
+[data-controller="charts"] .container.main {
+  padding-bottom: 8px;
 }
