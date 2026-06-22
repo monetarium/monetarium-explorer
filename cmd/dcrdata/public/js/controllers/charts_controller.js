@@ -369,9 +369,20 @@ export default class extends Controller {
   // The chart's height = the viewport minus its top offset (which already includes the
   // controls, however tall they wrapped) minus the fixed below-chart chrome, floored for
   // readability. Used at chart creation and by the window-resize hook.
+  //
+  // Two non-obvious measurements, both proven against a mobile orientation flip:
+  //  - Viewport height comes from documentElement.clientHeight, NOT window.innerHeight. During a
+  //    landscape->portrait rotation the browser briefly fires `resize` with a bogus, much larger
+  //    innerHeight (visualViewport.height is just as wrong); our debounced hook latches onto it and
+  //    sizes the chart taller than the screen, where it sticks (no later width change re-fits it).
+  //    clientHeight (the layout viewport) stays correct all the way through the rotation.
+  //  - `top` adds scrollY so it is the chart's offset from the top of the *document*, not the
+  //    viewport (getBoundingClientRect().top is scroll-relative). Without it, a re-fit while the
+  //    page is scrolled reads a smaller top and over-computes the height.
   computeChartHeight() {
-    const top = this.chartsViewTarget.getBoundingClientRect().top
-    const avail = window.innerHeight - top - BELOW_CHART_RESERVE - BELOW_CHART_GAP
+    const viewportH = document.documentElement.clientHeight
+    const top = this.chartsViewTarget.getBoundingClientRect().top + window.scrollY
+    const avail = viewportH - top - BELOW_CHART_RESERVE - BELOW_CHART_GAP
     return Math.max(CHART_MIN_HEIGHT, Math.round(avail))
   }
 
@@ -386,8 +397,8 @@ export default class extends Controller {
     // scroll — a HEIGHT-only viewport change (innerWidth is untouched). Re-fitting then
     // would make the chart jump on every scroll. Desktop drag-resize and mobile
     // orientation changes both move the WIDTH, so gate the re-fit on a width change and
-    // ignore height-only churn. (computeChartHeight reads window.innerHeight, which is
-    // exactly the value mobile scroll perturbs.)
+    // ignore height-only churn. (computeChartHeight reads documentElement.clientHeight, which
+    // can change on mobile toolbar collapse/expand.)
     if (width === this.lastWidth) return
     this.lastWidth = width
     this.handle.resize(width, this.computeChartHeight())
@@ -396,8 +407,22 @@ export default class extends Controller {
     // The strip's selection rectangle is pixel-based, so a width change invalidates it. Re-apply
     // it at the new width from the main chart's current x-range (setSelection uses fire=false, so
     // this cannot loop back through onRangerSelect).
+    //
+    // Defer to a microtask. uPlot batches its own resize work onto a microtask (commit ->
+    // microTask(_commit)); that commit rescales any visible selection by plotWidCss/_plotWidCss,
+    // and on a widening resize (e.g. a portrait->landscape orientation flip) the baseline is still
+    // the OLD, narrower width — so a selection written synchronously here gets multiplied a moment
+    // later and shoots past the strip's right edge. Queuing after uPlot's commit (microtasks are
+    // FIFO) lets the baseline refresh first, so our write lands last on a settled layout. Mirrors
+    // the deferral in redrawTheme.
     const sx = this.handle.uplot.scales.x
-    if (sx && sx.min != null && sx.max != null) this.ranger.setSelection(sx.min, sx.max)
+    if (sx && sx.min != null && sx.max != null) {
+      const min = sx.min
+      const max = sx.max
+      queueMicrotask(() => {
+        if (this.ranger) this.ranger.setSelection(min, max)
+      })
+    }
   }
 
   buildHooks() {

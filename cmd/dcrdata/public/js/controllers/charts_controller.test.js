@@ -575,23 +575,54 @@ describe('ChartsController on-plot tooltip', () => {
 })
 
 describe('ChartsController viewport fit', () => {
+  // computeChartHeight reads documentElement.clientHeight (the layout viewport), not innerHeight.
+  const setViewportHeight = (h) =>
+    Object.defineProperty(document.documentElement, 'clientHeight', {
+      value: h,
+      configurable: true
+    })
+
   beforeEach(() => vi.clearAllMocks())
 
   afterEach(() => {
+    setViewportHeight(0)
     Object.defineProperty(window, 'innerHeight', { value: 768, configurable: true })
+    Object.defineProperty(window, 'scrollY', { value: 0, configurable: true })
   })
 
   it('computeChartHeight fills the viewport below the chart top, reserving below-chart chrome', () => {
     const c = makeController()
     c.chartsViewTarget.getBoundingClientRect = () => ({ top: 200 })
-    Object.defineProperty(window, 'innerHeight', { value: 1000, configurable: true })
+    setViewportHeight(1000)
     expect(c.computeChartHeight()).toBe(628) // 1000 - 200 - 140 - 32
+  })
+
+  it('computeChartHeight is scroll-independent (uses the document-absolute chart top)', () => {
+    const c = makeController()
+    setViewportHeight(1000)
+    // Page scrolled 150px: getBoundingClientRect().top drops by 150, but scrollY climbs by 150,
+    // so the document-absolute top (200) — and therefore the height — must be unchanged. Without
+    // the scrollY term this would over-compute to 778 and the chart would render much too tall.
+    c.chartsViewTarget.getBoundingClientRect = () => ({ top: 50 })
+    Object.defineProperty(window, 'scrollY', { value: 150, configurable: true })
+    expect(c.computeChartHeight()).toBe(628) // 1000 - (50 + 150) - 140 - 32
+  })
+
+  it('computeChartHeight ignores a transient bogus innerHeight during an orientation flip', () => {
+    const c = makeController()
+    c.chartsViewTarget.getBoundingClientRect = () => ({ top: 200 })
+    // A landscape->portrait rotation briefly reports innerHeight far larger than the real viewport.
+    // The layout viewport (documentElement.clientHeight) stays correct; the height must follow it,
+    // else the chart renders taller than the screen and stays stuck there.
+    setViewportHeight(1000)
+    Object.defineProperty(window, 'innerHeight', { value: 1952, configurable: true })
+    expect(c.computeChartHeight()).toBe(628) // 1000 - 200 - 140 - 32, NOT 1952-based (1580)
   })
 
   it('computeChartHeight clamps to the 320px readability floor on short viewports', () => {
     const c = makeController()
     c.chartsViewTarget.getBoundingClientRect = () => ({ top: 200 })
-    Object.defineProperty(window, 'innerHeight', { value: 500, configurable: true })
+    setViewportHeight(500)
     expect(c.computeChartHeight()).toBe(320) // 500 - 200 - 140 - 32 = 128 -> floored to 320
   })
 })
@@ -950,16 +981,24 @@ describe('ChartsController ranger gutters & average', () => {
 })
 
 describe('ChartsController resize hook', () => {
+  // computeChartHeight reads documentElement.clientHeight (the layout viewport), not innerHeight.
+  const setViewportHeight = (h) =>
+    Object.defineProperty(document.documentElement, 'clientHeight', {
+      value: h,
+      configurable: true
+    })
+
   beforeEach(() => vi.clearAllMocks())
 
   afterEach(() => {
+    setViewportHeight(0)
     Object.defineProperty(window, 'innerHeight', { value: 768, configurable: true })
   })
 
   it('re-fits the chart when the viewport WIDTH changes (desktop drag-resize / orientation)', async () => {
     const c = makeController()
     c.chartsViewTarget.getBoundingClientRect = () => ({ top: 200 })
-    Object.defineProperty(window, 'innerHeight', { value: 1000, configurable: true })
+    setViewportHeight(1000)
     await c.connect() // chart created at clientWidth 800 → seeds lastWidth = 800
     fakeHandle.resize.mockClear()
     fakeRanger.setWidth.mockClear()
@@ -974,6 +1013,28 @@ describe('ChartsController resize hook', () => {
     // ranger strip must be re-pixelled to the rangerViewTarget.clientWidth
     expect(fakeRanger.setWidth).toHaveBeenCalledWith(900)
     // selection rectangle is pixel-based → must be re-applied at the new width
+    await Promise.resolve() // selection is deferred to a microtask (see orientation-flip test below)
+    expect(fakeRanger.setSelection).toHaveBeenCalledWith(5, 9)
+  })
+
+  it('defers the ranger selection past uPlot’s resize commit (no portrait→landscape balloon)', async () => {
+    const c = makeController()
+    c.chartsViewTarget.getBoundingClientRect = () => ({ top: 200 })
+    setViewportHeight(1000)
+    await c.connect()
+    fakeRanger.setWidth.mockClear()
+    fakeRanger.setSelection.mockClear()
+    fakeHandle.uplot.scales.x = { min: 5, max: 9 }
+    c.chartsViewTarget.clientWidth = 900
+    c.rangerViewTarget.clientWidth = 900
+    c.resizeChartToViewport()
+    // The strip is re-pixelled synchronously, but the selection must NOT be written yet: uPlot
+    // rescales a visible selection on its own deferred (microtask) resize commit against the OLD
+    // width, so a synchronous write here would be ballooned past the strip's right edge on a
+    // widening (orientation) flip. It must land after that commit instead.
+    expect(fakeRanger.setWidth).toHaveBeenCalledWith(900)
+    expect(fakeRanger.setSelection).not.toHaveBeenCalled()
+    await Promise.resolve()
     expect(fakeRanger.setSelection).toHaveBeenCalledWith(5, 9)
   })
 
