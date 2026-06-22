@@ -187,7 +187,7 @@ export default class extends Controller {
     this.query.update(this.settings)
 
     height = parseInt(this.data.get('height'))
-    hashrate = parseInt(this.data.get('hashrate'))
+    hashrate = parseFloat(this.data.get('hashrate'))
     varPrice = defaultExchangeRate
     tpPrice = parseFloat(this.data.get('ticketPrice'))
     tpValue = parseFloat(this.data.get('ticketPoolValue'))
@@ -263,10 +263,16 @@ export default class extends Controller {
       this.chartsView.updateOptions(nightModeOptions(params.nightMode))
     }
     globalEventBus.on('NIGHT_MODE', this.processNightMode)
+    this._onBlock = ({ detail: blockData }) => {
+      hashrate = blockData.extra.hash_rate
+      this.calculate()
+    }
+    globalEventBus.on('BLOCK_RECEIVED', this._onBlock)
   }
 
   disconnect() {
     globalEventBus.off('NIGHT_MODE', this.processNightMode)
+    globalEventBus.off('BLOCK_RECEIVED', this._onBlock)
     if (this.chartsView !== undefined) {
       this.chartsView.destroy()
     }
@@ -448,11 +454,11 @@ export default class extends Controller {
     } else {
       this.preserveTargetPow = false
     }
-    this.setAllValues(this.internalHashTargets, `${digitformat(this.targetHashRate, 4)} Ph/s `)
+    this.setAllValues(this.internalHashTargets, `${digitformat(this.targetHashRate, 8)} Ph/s `)
     switch (this.settings.attack_type) {
       case externalAttackType:
-        this.setAllValues(this.newHashRateTargets, digitformat(this.targetHashRate + hashrate, 4))
-        this.setAllValues(this.additionalHashRateTargets, digitformat(this.targetHashRate, 4))
+        this.setAllValues(this.newHashRateTargets, digitformat(this.targetHashRate + hashrate, 8))
+        this.setAllValues(this.additionalHashRateTargets, digitformat(this.targetHashRate, 8))
         this.projectedPriceDivTarget.style.display = 'block'
         this.internalAttackTextTarget.classList.add('d-none')
         this.internalAttackPosTextTarget.classList.add('d-none')
@@ -539,12 +545,12 @@ export default class extends Controller {
     const devicePronounStr = deviceCount > 1 ? 'them' : 'it'
     const deviceSuffixStr = deviceCount > 1 ? 's' : ''
     this.ticketPoolSizeLabelTarget.innerHTML = digitformat(tpSize, 2)
-    this.setAllValues(this.actualHashRateTargets, digitformat(hashrate, 4))
-    this.exchangeRateTarget.value = digitformat(varPrice, 2)
+    this.setAllValues(this.actualHashRateTargets, digitformat(hashrate, 8))
+    this.exchangeRateTarget.value = digitformat(varPrice, 2, true)
     this.setAllInputs(this.targetPosTargets, digitformat(parseFloat(this.targetPosTarget.value), 2))
     this.ticketPriceTarget.innerHTML = digitformat(tpPrice, 4)
-    this.setAllValues(this.targetHashRateTargets, digitformat(this.targetHashRate, 4))
-    this.setAllValues(this.additionalHashRateTargets, digitformat(this.targetHashRate, 4))
+    this.setAllValues(this.targetHashRateTargets, digitformat(this.targetHashRate, 8))
+    this.setAllValues(this.additionalHashRateTargets, digitformat(this.targetHashRate, 8))
     this.durationUnitTarget.innerHTML = hourStr
     this.setAllValues(this.durationLongDescTargets, timeHourStr)
     this.setAllValues(this.countDeviceTargets, digitformat(deviceCount))
