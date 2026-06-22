@@ -107,8 +107,8 @@ function pathsFor(UPlot, kind) {
 
 export function resolveSeriesColor(s, i, dark) {
   if (s.color) return s.color
-  if (s.colorKey) return seriesColorByKey(s.colorKey, dark) || seriesStroke(s.colorIndex ?? i)
-  return seriesStroke(s.colorIndex ?? i)
+  if (s.colorKey) return seriesColorByKey(s.colorKey, dark) || seriesStroke(s.colorIndex ?? i, dark)
+  return seriesStroke(s.colorIndex ?? i, dark)
 }
 
 /**

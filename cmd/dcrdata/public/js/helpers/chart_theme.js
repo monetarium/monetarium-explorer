@@ -33,12 +33,23 @@ export const PALETTE = [
 
 export const OTHERS_COLOR = '#adb5bd'
 
-export function colorForIndex(i) {
-  return PALETTE[i % PALETTE.length]
+// Index 0 is the page's PRIMARY series color, not a fixed swatch. On the dark chart
+// canvas the light-mode blue (#2970FF) sits at ~2.4:1 — below the 3:1 floor for
+// graphical objects — so dark mode swaps to the same mint the named series
+// (tickets-price, hashrate-rate) already use, keeping every primary line consistent and
+// legible. Only index 0 is theme-aware; every other index returns its fixed PALETTE
+// entry regardless of `dark`. `dark` defaults to false so theme-agnostic callers (the
+// hashrate-shares pie, which calls colorForIndex(i) with no argument) are unaffected.
+const PRIMARY = { light: PALETTE[0], dark: '#2DD8A3' }
+
+export function colorForIndex(i, dark = false) {
+  const idx = i % PALETTE.length
+  if (idx === 0) return dark ? PRIMARY.dark : PRIMARY.light
+  return PALETTE[idx]
 }
 
-export function seriesStroke(i) {
-  return colorForIndex(i)
+export function seriesStroke(i, dark = false) {
+  return colorForIndex(i, dark)
 }
 
 // Translucent fill for area/bar series; slightly stronger in dark mode to stay visible.

@@ -16,6 +16,21 @@ describe('colorForIndex', () => {
     expect(colorForIndex(1)).toBe('#E03131')
     expect(colorForIndex(PALETTE.length)).toBe('#2970FF') // wraps
   })
+
+  it('swaps index 0 to mint in dark mode (the primary series color)', () => {
+    expect(colorForIndex(0, true)).toBe('#2DD8A3')
+    expect(colorForIndex(0, false)).toBe('#2970FF')
+  })
+
+  it('defaults to the light value so theme-agnostic callers (the pie) are unaffected', () => {
+    expect(colorForIndex(0)).toBe('#2970FF')
+  })
+
+  it('is theme-agnostic for every index except 0', () => {
+    for (let i = 1; i < PALETTE.length; i++) {
+      expect(colorForIndex(i, true)).toBe(colorForIndex(i, false))
+    }
+  })
 })
 
 describe('palette constants', () => {
@@ -29,6 +44,10 @@ describe('seriesStroke', () => {
   it('returns the palette color for the series index', () => {
     expect(seriesStroke(0)).toBe('#2970FF')
     expect(seriesStroke(1)).toBe('#E03131')
+  })
+
+  it('returns the dark primary for index 0 in dark mode', () => {
+    expect(seriesStroke(0, true)).toBe('#2DD8A3')
   })
 })
 

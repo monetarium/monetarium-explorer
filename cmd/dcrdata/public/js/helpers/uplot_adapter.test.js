@@ -798,3 +798,36 @@ describe('buildOpts — explicit color, dash, spanGaps', () => {
     expect(yAxis.stroke).toBe('#2d2d2d')
   })
 })
+
+describe('buildOpts — colorIndex 0 is theme-aware (primary series)', () => {
+  it('keeps the index-0 line blue in light mode', () => {
+    const opts = buildOpts(fakeUPlot, lineDef, { dark: false })
+    expect(opts.series[1].stroke).toBe('#2970FF')
+  })
+
+  it('swaps the index-0 line to mint in dark mode', () => {
+    const opts = buildOpts(fakeUPlot, lineDef, { dark: true })
+    expect(opts.series[1].stroke).toBe('#2DD8A3')
+  })
+
+  it('matches the y-axis stroke to the dark primary series color', () => {
+    const opts = buildOpts(fakeUPlot, lineDef, { dark: true })
+    const yAxis = opts.axes.find((a) => a.scale === 'y')
+    expect(yAxis.stroke).toBe('#2DD8A3')
+  })
+
+  it('colors the index-0 area fill from the dark primary', () => {
+    const areaDef = { ...lineDef, series: [{ label: 'Difficulty', scale: 'y', kind: 'area' }] }
+    const opts = buildOpts(fakeUPlot, areaDef, { dark: true })
+    expect(opts.series[1].fill).toBe('rgba(45, 216, 163, 0.18)') // mint @ dark alpha
+  })
+
+  it('leaves a colorKey series unaffected by the dark threading (still SERIES_COLORS mint)', () => {
+    const colorKeyDef = {
+      ...lineDef,
+      series: [{ label: 'Price', scale: 'y', kind: 'line', colorKey: 'tickets-price' }]
+    }
+    const opts = buildOpts(fakeUPlot, colorKeyDef, { dark: true })
+    expect(opts.series[1].stroke).toBe('#2dd8a3') // from SERIES_COLORS, not colorForIndex
+  })
+})
