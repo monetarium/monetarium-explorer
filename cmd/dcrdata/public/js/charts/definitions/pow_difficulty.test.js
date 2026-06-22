@@ -30,3 +30,20 @@ describe('powDifficulty.toColumns', () => {
 describe('powDifficulty.controls', () => {
   it('is a window-unit chart', () => expect(powDifficulty.controls.windowUnits).toBe(true))
 })
+
+describe('powDifficulty.formatValue', () => {
+  it('keeps decimals (does not round to an integer)', () => {
+    expect(powDifficulty.formatValue(0, { value: 3.5 })).toBe('3.5')
+    expect(powDifficulty.formatValue(0, { value: 1.23456789 })).toBe('1.23456789')
+  })
+  it('groups thousands without introducing float artifacts', () => {
+    expect(powDifficulty.formatValue(0, { value: 16307.420422 })).toBe('16,307.420422')
+  })
+  it('renders a whole number cleanly', () => {
+    expect(powDifficulty.formatValue(0, { value: 7000 })).toBe('7,000')
+  })
+  it('blanks a non-finite (log-scale-nulled) point', () => {
+    expect(powDifficulty.formatValue(0, { value: null })).toBe('')
+    expect(powDifficulty.formatValue(0, { value: NaN })).toBe('')
+  })
+})

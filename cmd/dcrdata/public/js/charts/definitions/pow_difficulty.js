@@ -1,5 +1,4 @@
 import { register } from '../registry'
-import { intComma } from '../format'
 
 export const powDifficulty = {
   name: 'pow-difficulty',
@@ -25,7 +24,14 @@ export const powDifficulty = {
     return [xs, raw.diff.slice()]
   },
   formatValue: (seriesIdx, datum) => {
-    return intComma(datum.value)
+    // Difficulty is a float64 — keep its full precision in the tooltip. intComma's
+    // maximumFractionDigits:0 would round it (e.g. 3.5 -> "4"), losing the decimals
+    // the legacy Dygraphs default formatter preserved. maximumFractionDigits:20 groups
+    // thousands but never rounds, and formats from the double's shortest round-trip
+    // decimal so it introduces no float artifacts. Mirror intComma's non-finite guard
+    // so a log-scale-nulled point still reads blank rather than "NaN".
+    if (!Number.isFinite(datum.value)) return ''
+    return datum.value.toLocaleString(undefined, { maximumFractionDigits: 20 })
   }
 }
 
