@@ -336,6 +336,25 @@ describe('createChart / ChartHandle', () => {
     expect(handle.uplot.opts.scales.y.distr).toBe(3)
   })
 
+  it('preserves the chart data across a rebuild (scale toggle must not drop it)', async () => {
+    // rebuild() reads uplot.data, destroys the old instance, and reconstructs with
+    // that array. Guards the carry-over invariant behind PR-0 review finding #1: a
+    // refactor that seeded [[]] or a uPlot upgrade whose destroy() mutated the data
+    // would surface here rather than as a blank chart after a scale/mode toggle.
+    const handle = await createChart(el, handleDef, {})
+    const cols = [
+      [1, 2, 3],
+      [10, 20, 30]
+    ]
+    handle.setData(cols)
+    const before = handle.uplot
+    handle.setScaleType('log') // forces a destroy + reconstruct
+    expect(handle.uplot).not.toBe(before) // genuinely a fresh instance...
+    expect(handle.uplot.data).toEqual(cols) // ...carrying the same data forward
+    handle.setScaleType('linear') // a second rebuild
+    expect(handle.uplot.data).toEqual(cols) // still intact
+  })
+
   it('setMode swaps line<->stepped paths via rebuild', async () => {
     const handle = await createChart(el, handleDef, {})
     handle.setMode('stepped')
