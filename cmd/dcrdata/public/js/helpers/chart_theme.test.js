@@ -87,6 +87,12 @@ describe('seriesColorByKey', () => {
   it('returns the light color for tickets-bought', () => {
     expect(seriesColorByKey('tickets-bought', false)).toBe('#006666')
   })
+  it('returns the lighter-blue dark secondary for tickets-bought (legible on the dark canvas)', () => {
+    expect(seriesColorByKey('tickets-bought', true)).toBe('#4dabf7')
+  })
+  it('returns the lighter-blue dark secondary for hashrate-miners (legible on the dark canvas)', () => {
+    expect(seriesColorByKey('hashrate-miners', true)).toBe('#4dabf7')
+  })
   it('returns null for an unknown key', () => {
     expect(seriesColorByKey('unknown', false)).toBeNull()
   })

@@ -87,11 +87,15 @@ export function hexToRgba(hex, alpha) {
 }
 
 // Named series colors — MUST match the VISIBILITY checkmark colors in charts.scss.
+// Secondary (y2) series use a LIGHTER blue in dark mode (#4dabf7, ~4.3:1 on the dark
+// canvas) rather than #2970ff (~2.4:1) — the same low-contrast blue the primary series
+// was moved off of. Kept blue (not a warm hue) so the green primary / blue secondary
+// pairing stays colorblind-safe.
 const SERIES_COLORS = {
   'tickets-price': { light: '#2970ff', dark: '#2dd8a3' },
-  'tickets-bought': { light: '#006666', dark: '#2970ff' },
+  'tickets-bought': { light: '#006666', dark: '#4dabf7' },
   'hashrate-rate': { light: '#2970ff', dark: '#2dd8a3' },
-  'hashrate-miners': { light: '#cc6600', dark: '#2970ff' }
+  'hashrate-miners': { light: '#cc6600', dark: '#4dabf7' }
 }
 export function seriesColorByKey(key, dark) {
   const c = SERIES_COLORS[key]
