@@ -1110,21 +1110,6 @@ func (charts *ChartData) NewAtomsTip() int32 {
 	return int32(len(charts.Blocks.NewAtoms)) - 1
 }
 
-// TicketPriceTip is the height of the TicketPrice data.
-// Under start-of-window semantics, len = N means the Nth window started at
-// block (N-1)*windowSize. This returns the last block before that window,
-// so a caller re-scanning from the current window start processes all
-// mid-window blocks.
-func (charts *ChartData) TicketPriceTip() int32 {
-	charts.mtx.RLock()
-	defer charts.mtx.RUnlock()
-	n := len(charts.Windows.TicketPrice)
-	if n == 0 {
-		return -1
-	}
-	return int32(n-1)*charts.DiffInterval - 1
-}
-
 // SKASupplyExists checks if SKA supply data exists for the given coin type.
 func (charts *ChartData) SKASupplyExists(coinType uint8) bool {
 	if charts == nil {
@@ -1845,8 +1830,37 @@ func powDifficultyChart(charts *ChartData, _ binLevel, axis axisType, _ interval
 
 	timeData, heightData, diffData, _, _ := filterGenesisWindow(charts.Windows)
 	if tip.Difficulty > 0 && len(diffData) > 0 {
-		diffData = append(ChartFloats(nil), diffData...)
-		diffData[len(diffData)-1] = tip.Difficulty
+		sameWindow := true
+		appendLive := false
+		if tip.Height > 0 && len(heightData) > 0 {
+			tipWindow := int32(tip.Height) / charts.DiffInterval
+			lastWindow := int32(heightData[len(heightData)-1]) / charts.DiffInterval
+			if tipWindow > lastWindow {
+				sameWindow = false
+				appendLive = true
+			} else if tipWindow < lastWindow {
+				sameWindow = false
+			}
+		}
+		if sameWindow {
+			diffData = append(ChartFloats(nil), diffData...)
+			diffData[len(diffData)-1] = tip.Difficulty
+		} else if appendLive {
+			diffData = append(ChartFloats(nil), diffData...)
+			timeData = append(ChartUints(nil), timeData...)
+			heightData = append(ChartUints(nil), heightData...)
+			diffData = append(diffData, tip.Difficulty)
+			heightData = append(heightData, tip.Height)
+			var liveTime uint64
+			if len(timeData) >= 2 {
+				liveTime = timeData[len(timeData)-1] + (timeData[len(timeData)-1] - timeData[len(timeData)-2])
+			} else if tip.Time > 0 {
+				liveTime = tip.Time
+			} else {
+				liveTime = timeData[len(timeData)-2]
+			}
+			timeData = append(timeData, liveTime)
+		}
 	}
 
 	switch axis {
@@ -1874,10 +1888,45 @@ func ticketPriceChart(charts *ChartData, _ binLevel, axis axisType, _ intervalTy
 	tip := charts.Tip
 	charts.tipMtx.RUnlock()
 
-	timeData, _, _, priceData, countData := filterGenesisWindow(charts.Windows)
+	timeData, heightData, _, priceData, countData := filterGenesisWindow(charts.Windows)
+
+	// Override the last stored window's price with the tip when both
+	// are in the same window (DB has caught up to the tip). If the tip
+	// is in a NEWER window (DB lag), append a live data point instead
+	// so the last stored window's price isn't corrupted.
 	if tip.TicketPrice > 0 && len(priceData) > 0 {
-		priceData = append(ChartUints(nil), priceData...)
-		priceData[len(priceData)-1] = tip.TicketPrice
+		sameWindow := true
+		appendLive := false
+		if tip.Height > 0 && len(heightData) > 0 {
+			tipWindow := int32(tip.Height) / charts.DiffInterval
+			lastWindow := int32(heightData[len(heightData)-1]) / charts.DiffInterval
+			if tipWindow > lastWindow {
+				sameWindow = false
+				appendLive = true
+			} else if tipWindow < lastWindow {
+				sameWindow = false
+			}
+		}
+		if sameWindow {
+			priceData = append(ChartUints(nil), priceData...)
+			priceData[len(priceData)-1] = tip.TicketPrice
+		} else if appendLive {
+			// Copy all arrays before appending to avoid mutating originals.
+			priceData = append(ChartUints(nil), priceData...)
+			countData = append(ChartUints(nil), countData...)
+			timeData = append(ChartUints(nil), timeData...)
+			priceData = append(priceData, tip.TicketPrice)
+			countData = append(countData, countData[len(countData)-1])
+			var liveTime uint64
+			if len(timeData) >= 2 {
+				liveTime = timeData[len(timeData)-1] + (timeData[len(timeData)-1] - timeData[len(timeData)-2])
+			} else if tip.Time > 0 {
+				liveTime = tip.Time
+			} else {
+				liveTime = timeData[len(timeData)-2]
+			}
+			timeData = append(timeData, liveTime)
+		}
 	}
 
 	switch axis {
