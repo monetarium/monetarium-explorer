@@ -30,6 +30,7 @@ export const ticketPrice = {
     return [xs, raw.price.map((p) => p * ATOMS_TO_VAR), raw.count.slice()]
   },
   formatValue: (seriesIdx, datum) => {
+    if (datum.value == null || !isFinite(datum.value)) return 'n/a'
     if (seriesIdx === 0) return `${datum.value.toFixed(8)} VAR`
     return Math.round(datum.value).toString()
   }

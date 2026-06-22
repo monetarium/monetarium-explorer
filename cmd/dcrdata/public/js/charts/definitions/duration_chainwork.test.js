@@ -15,6 +15,9 @@ describe('durationBtwBlocks.toColumns', () => {
   it('formats seconds plainly', () => {
     expect(durationBtwBlocks.formatValue(0, { value: 42 }, {})).toBe('42')
   })
+  it('null value renders n/a instead of throwing', () => {
+    expect(durationBtwBlocks.formatValue(0, { value: null }, {})).toBe('n/a')
+  })
 })
 
 describe('chainwork', () => {
@@ -30,6 +33,10 @@ describe('chainwork', () => {
   })
   it('legend uses big units', () => {
     expect(chainwork.formatValue(0, { value: 1500 }, {})).toBe('1.500 kH')
+  })
+  it('renders a real 0 as 0.000 H but null as n/a', () => {
+    expect(chainwork.formatValue(0, { value: 0 }, {})).toBe('0.000 H')
+    expect(chainwork.formatValue(0, { value: null }, {})).toBe('n/a')
   })
   it('renders as a filled area (cumulative)', () => {
     expect(chainwork.series[0].kind).toBe('area')

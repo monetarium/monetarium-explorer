@@ -23,6 +23,7 @@ export const durationBtwBlocks = {
     return [xColumn(raw, raw.duration.length, 1), raw.duration.slice()]
   },
   formatValue: (seriesIdx, datum) => {
+    if (datum.value == null || !isFinite(datum.value)) return 'n/a'
     return datum.value.toLocaleString('en-US', { maximumFractionDigits: 0 })
   }
 }
@@ -43,6 +44,7 @@ export const chainwork = {
     return p ? `Cumulative Chainwork (${p}H)` : 'Cumulative Chainwork (H)'
   },
   formatValue: (seriesIdx, datum) => {
+    if (datum.value == null || !isFinite(datum.value)) return 'n/a'
     return withBigUnits(datum.value, CHAINWORK_UNITS)
   }
 }

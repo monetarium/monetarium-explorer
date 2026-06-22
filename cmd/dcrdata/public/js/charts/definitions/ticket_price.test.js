@@ -29,6 +29,10 @@ describe('ticketPrice.formatValue', () => {
   it('series 1 (Tickets Bought) renders a rounded integer', () => {
     expect(ticketPrice.formatValue(1, { ...datum, value: 42 }, {})).toBe('42')
   })
+  it('null value renders n/a instead of throwing (both series)', () => {
+    expect(ticketPrice.formatValue(0, { ...datum, value: null }, {})).toBe('n/a')
+    expect(ticketPrice.formatValue(1, { ...datum, value: null }, {})).toBe('n/a')
+  })
 })
 
 describe('ticketPrice.controls', () => {
