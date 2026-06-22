@@ -298,6 +298,7 @@ function anonymitySetFunc(data) {
 
 function ticketPriceFunc(data) {
   if (data.t) return zipWindowTvYZ(data.t, data.price, data.count, atomsToVAR)
+  if (data.h) return data.h.map((h, i) => [h, data.price[i] * atomsToVAR, data.count[i]])
   return zipWindowHvYZ(data.price, data.count, data.window, atomsToVAR)
 }
 

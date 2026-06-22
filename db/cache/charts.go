@@ -1846,16 +1846,25 @@ func powDifficultyChart(charts *ChartData, _ binLevel, axis axisType, _ interval
 			diffData = append(ChartFloats(nil), diffData...)
 			diffData[len(diffData)-1] = tip.Difficulty
 		} else if appendLive {
+			windowStartHeight := uint64(int32(tip.Height) / charts.DiffInterval * charts.DiffInterval)
 			diffData = append(ChartFloats(nil), diffData...)
 			timeData = append(ChartUints(nil), timeData...)
 			heightData = append(ChartUints(nil), heightData...)
 			diffData = append(diffData, tip.Difficulty)
-			heightData = append(heightData, tip.Height)
+			heightData = append(heightData, windowStartHeight)
+			// Use the first block's time of the current window for a real
+			// window-start timestamp. Search backwards through blocks data
+			// (window start is near the tip). Fall back to projection from
+			// the last completed window's duration if the block isn't synced yet.
 			var liveTime uint64
-			if len(timeData) >= 2 {
+			for i := len(charts.Blocks.Height) - 1; i >= 0; i-- {
+				if charts.Blocks.Height[i] == windowStartHeight && i < len(charts.Blocks.Time) {
+					liveTime = charts.Blocks.Time[i]
+					break
+				}
+			}
+			if liveTime == 0 && len(timeData) >= 2 {
 				liveTime = timeData[len(timeData)-1] + (timeData[len(timeData)-1] - timeData[len(timeData)-2])
-			} else if tip.Time > 0 {
-				liveTime = tip.Time
 			}
 			timeData = append(timeData, liveTime)
 		}
@@ -1909,17 +1918,28 @@ func ticketPriceChart(charts *ChartData, _ binLevel, axis axisType, _ intervalTy
 			priceData = append(ChartUints(nil), priceData...)
 			priceData[len(priceData)-1] = tip.TicketPrice
 		} else if appendLive {
+			windowStartHeight := uint64(int32(tip.Height) / charts.DiffInterval * charts.DiffInterval)
 			// Copy all arrays before appending to avoid mutating originals.
 			priceData = append(ChartUints(nil), priceData...)
 			countData = append(ChartUints(nil), countData...)
+			heightData = append(ChartUints(nil), heightData...)
 			timeData = append(ChartUints(nil), timeData...)
 			priceData = append(priceData, tip.TicketPrice)
 			countData = append(countData, countData[len(countData)-1])
+			heightData = append(heightData, windowStartHeight)
+			// Use the first block's time of the current window for a real
+			// window-start timestamp. Search backwards through blocks data
+			// (window start is near the tip). Fall back to projection from
+			// the last completed window's duration if the block isn't synced yet.
 			var liveTime uint64
-			if len(timeData) >= 2 {
+			for i := len(charts.Blocks.Height) - 1; i >= 0; i-- {
+				if charts.Blocks.Height[i] == windowStartHeight && i < len(charts.Blocks.Time) {
+					liveTime = charts.Blocks.Time[i]
+					break
+				}
+			}
+			if liveTime == 0 && len(timeData) >= 2 {
 				liveTime = timeData[len(timeData)-1] + (timeData[len(timeData)-1] - timeData[len(timeData)-2])
-			} else if tip.Time > 0 {
-				liveTime = tip.Time
 			}
 			timeData = append(timeData, liveTime)
 		}
@@ -1927,10 +1947,11 @@ func ticketPriceChart(charts *ChartData, _ binLevel, axis axisType, _ intervalTy
 
 	switch axis {
 	case HeightAxis:
-		return encode(lengtherMap{
-			priceKey: priceData,
-			countKey: countData,
-		}, seed)
+		m := lengtherMap{priceKey: priceData, countKey: countData}
+		if len(heightData) > 0 {
+			m[heightKey] = heightData
+		}
+		return encode(m, seed)
 	default:
 		return encode(lengtherMap{
 			timeKey:  timeData,
