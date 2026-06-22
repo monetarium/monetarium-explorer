@@ -759,14 +759,21 @@ func (charts *ChartData) ReorgHandler(reorg *txhelpers.ReorgData) error {
 	}
 	log.Debugf("ChartData.ReorgHandler snipping days height to %d", daysLen)
 	charts.Days.Snip(daysLen)
-	// Drop the last window (old behavior for compatibility).
-	// With start-of-window semantics this should be improved to only
-	// drop windows after the reorg boundary, but tests expect this.
-	windowsLen := len(charts.Windows.Time)
-	if windowsLen > 0 {
-		windowsLen--
-		log.Debugf("ChartData.ReorgHandler snipping windows to height to %d", windowsLen)
-		charts.Windows.Snip(windowsLen)
+	// Snip windows whose start height exceeds the common ancestor.
+	// Under start-of-window semantics, a window whose first block is
+	// strictly after the common ancestor may contain reorged blocks
+	// and must be re-synced. Windows at or before the ancestor are
+	// kept (their data is still valid).
+	keepWindows := len(charts.Windows.Height)
+	for i, h := range charts.Windows.Height {
+		if int(h) > commonAncestorHeight {
+			keepWindows = i
+			break
+		}
+	}
+	if keepWindows < len(charts.Windows.Time) {
+		log.Debugf("ChartData.ReorgHandler snipping windows to height to %d", keepWindows)
+		charts.Windows.Snip(keepWindows)
 	}
 	charts.mtx.Unlock()
 	return nil

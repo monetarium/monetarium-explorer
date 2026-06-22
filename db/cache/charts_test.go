@@ -220,7 +220,9 @@ func TestChartsCache(t *testing.T) {
 
 	t.Run("Reorg", func(t *testing.T) {
 		// This should cause the blocks to truncate to length 2, the days to
-		// drop to length 1, and the windows to drop to length 0.
+		// drop to length 1, and the windows to drop to length 1 (the window
+		// at height 0 starts before the common ancestor at height 1, so it
+		// is kept — it does not contain reorged blocks).
 		h, err := chainhash.NewHash([]byte("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"))
 		if err != nil {
 			t.Fatalf("chainhash.Hash error: %v", err)
@@ -254,8 +256,8 @@ func TestChartsCache(t *testing.T) {
 		if len(charts.Days.Time) != 1 {
 			t.Fatalf("days length %d after reorg test. expected 1", len(charts.Days.Time))
 		}
-		if len(charts.Windows.Time) != 0 {
-			t.Fatalf("windows length %d after reorg test. expected 0", len(charts.Windows.Time))
+		if len(charts.Windows.Time) != 1 {
+			t.Fatalf("windows length %d after reorg test. expected 1", len(charts.Windows.Time))
 		}
 	})
 
@@ -348,18 +350,21 @@ func TestChartReorg(t *testing.T) {
 		if charts.Days.Time.Length() != newDayLen {
 			t.Errorf("unexpected days length %d", charts.Days.Time.Length())
 		}
-		// Reorg snips last window
+		// Snip windows whose start height exceeds the common ancestor.
+		// Under start-of-window semantics, a window whose first block is
+		// strictly after the common ancestor may contain reorged blocks
+		// and must be re-synced.
 		if charts.Windows.Time.Length() != newWindowLen {
 			t.Errorf("unexpected windows length %d", charts.Windows.Time.Length())
 		}
 	}
 	// Test replacing the entire chain.
 	resetCharts()
-	testReorg(2, 3, 0, 1, 2)
+	testReorg(2, 3, 0, 1, 0)
 
 	// All but one block.
 	resetCharts()
-	testReorg(2, 2, 1, 1, 2)
+	testReorg(2, 2, 1, 1, 0)
 }
 
 func TestSKASupplyData_ExactPrecision(t *testing.T) {
