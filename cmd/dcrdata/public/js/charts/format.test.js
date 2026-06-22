@@ -13,9 +13,15 @@ describe('intComma', () => {
   it('formats with thousands separators and no fraction', () => {
     expect(intComma(1234567)).toBe('1,234,567')
   })
-  it('returns empty string for falsy/zero (matches legacy)', () => {
-    expect(intComma(0)).toBe('')
+  it('renders an explicit "0" for a real zero (not a blank)', () => {
+    expect(intComma(0)).toBe('0')
+  })
+  it('returns "" only for an absent/non-finite value (null, undefined, NaN)', () => {
+    // null is how a log-scale series carries a geometry-nulled point (e.g. missed-votes);
+    // it must read as "no value", distinct from a real 0.
     expect(intComma(null)).toBe('')
+    expect(intComma(undefined)).toBe('')
+    expect(intComma(NaN)).toBe('')
   })
 })
 

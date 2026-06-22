@@ -30,9 +30,8 @@ export const missedVotes = {
   },
   formatValue: (seriesIdx, datum) => {
     // Read the raw count from the payload, never the plotted value (nulled for zeros
-    // above). intComma renders '' for 0, so show an explicit '0' for zero windows.
-    const v = datum.payload.missed[datum.idx]
-    return v > 0 ? intComma(v) : '0'
+    // above so intComma(datum.value) would blank them). intComma renders a real 0 as '0'.
+    return intComma(datum.payload.missed[datum.idx])
   }
 }
 

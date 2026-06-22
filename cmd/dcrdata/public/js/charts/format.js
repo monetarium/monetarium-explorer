@@ -8,7 +8,10 @@ export const CHAINWORK_UNITS = ['H', 'kH', 'MH', 'GH', 'TH', 'PH', 'EH', 'ZH', '
 export const HASHRATE_UNITS = ['H/s', 'kH/s', 'MH/s', 'GH/s', 'TH/s', 'PH/s', 'EH/s']
 
 export function intComma(amount) {
-  if (!amount) return ''
+  // Blank only for an absent/non-finite value (null, undefined, NaN) — a geometry-nulled
+  // point (e.g. a log-scale zero a series drops) reads as "no value". A real 0 must render
+  // as "0", not blank: the legacy `if (!amount)` collapsed both, blanking zero counts.
+  if (!Number.isFinite(amount)) return ''
   return amount.toLocaleString(undefined, { maximumFractionDigits: 0 })
 }
 
