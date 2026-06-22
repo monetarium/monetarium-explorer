@@ -291,6 +291,10 @@ export default class extends Controller {
       this.renderedSeriesCount !== renderDef.series.length
     ) {
       if (this.handle) this.handle.destroy()
+      // Null it during the async createChart gap: applyZoom()/resizeChartToViewport()
+      // guard on `this.handle`, so a resize landing here must see null rather than a
+      // torn-down instance whose stale data could be applied to the incoming chart.
+      this.handle = null
       // create synchronously-awaited handle
       const width = this.chartsViewTarget.clientWidth || 800
       this.pendingCreate = createChart(this.chartsViewTarget, renderDef, {

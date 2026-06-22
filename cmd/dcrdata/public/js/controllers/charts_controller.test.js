@@ -873,6 +873,46 @@ describe('ChartsController control handlers', () => {
     // createChart must have been called again because series count went from 1 to 2
     expect(createChart.mock.calls.length).toBeGreaterThan(callsAfterConnect)
   })
+
+  it('nulls the handle in the destroy->recreate gap (no stale handle reachable async)', async () => {
+    const c = makeController()
+    await c.connect()
+    expect(c.handle).toBe(fakeHandle) // initial handle exists after connect
+
+    const twoPart = {
+      name: 'hashrate',
+      label: 'hashrate',
+      controls: {
+        bin: true,
+        scale: true,
+        mode: true,
+        zoom: true,
+        visibility: null,
+        interval: false,
+        windowUnits: false,
+        hybrid: false
+      },
+      axes: [{ label: 'hashrate', scale: 'y' }],
+      series: [
+        { label: 'Hashrate', scale: 'y', kind: 'line', colorIndex: 0 },
+        { label: 'Active Miners', scale: 'y2', kind: 'line', colorIndex: 1 }
+      ],
+      toColumns: () => [
+        [1, 2],
+        [10, 20],
+        [5, 8]
+      ],
+      formatValue: (_i, d) => String(d.value)
+    }
+    c.payload = {}
+    const p = c.renderChart(twoPart) // rebuild path — do NOT await
+    // Between destroy() and the createChart().then resolving, the old handle is gone:
+    // applyZoom()/resizeChartToViewport() guard on `this.handle`, so it must read null,
+    // not a torn-down instance whose stale data could reach the new chart.
+    expect(c.handle).toBeNull()
+    await p
+    expect(c.handle).toBe(fakeHandle) // restored once createChart resolves
+  })
 })
 
 describe('ChartsController ranger strip', () => {
