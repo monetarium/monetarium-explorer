@@ -196,7 +196,12 @@ const (
 // of the charts cache on next start so the corrected query reruns over every
 // block. No database resync or backfill is needed — transactions.fees was
 // always stored correctly.
-var cacheVersion = semver.NewSemver(6, 4, 0)
+//
+// 6.5.0: windowSet adds Height field for window start heights and
+// stakeCountVersion for live stake count cache invalidation.
+// appendWindowStats now emits window data at window start with live
+// stake count updates per block.
+var cacheVersion = semver.NewSemver(6, 5, 0)
 
 // versionedCacheData defines the cache data contents to be written into a .gob file.
 type versionedCacheData struct {
@@ -443,12 +448,14 @@ func newDaySet(size int) *zoomSet {
 // 144 blocks on mainnet. stakeValid defines the number windows before the
 // stake validation height.
 type windowSet struct {
-	cacheID     uint64
-	Time        ChartUints
-	PowDiff     ChartFloats
-	TicketPrice ChartUints
-	StakeCount  ChartUints
-	MissedVotes ChartUints
+	cacheID           uint64
+	Time              ChartUints
+	Height            ChartUints
+	PowDiff           ChartFloats
+	TicketPrice       ChartUints
+	StakeCount        ChartUints
+	MissedVotes       ChartUints
+	StakeCountVersion uint32
 }
 
 // Snip truncates the windowSet to a provided length.
@@ -458,6 +465,7 @@ func (set *windowSet) Snip(length int) {
 	}
 
 	set.Time = set.Time.snip(length)
+	set.Height = set.Height.snip(length)
 	set.PowDiff = set.PowDiff.snip(length)
 	set.TicketPrice = set.TicketPrice.snip(length)
 	set.StakeCount = set.StakeCount.snip(length)
@@ -468,23 +476,12 @@ func (set *windowSet) Snip(length int) {
 func newWindowSet(size int) *windowSet {
 	return &windowSet{
 		Time:        newChartUints(size),
+		Height:      newChartUints(size),
 		PowDiff:     newChartFloats(size),
 		TicketPrice: newChartUints(size),
 		StakeCount:  newChartUints(size),
 		MissedVotes: newChartUints(size),
 	}
-}
-
-// PartialWindow holds data for an incomplete difficulty window. When the
-// latest block is not at a window boundary (e.g. block 500 of a 144-block
-// window), the accumulated values are stored here so chart makers can append
-// them as the last data point and match the home page's current value.
-type PartialWindow struct {
-	Height     uint64
-	Time       uint64
-	Price      uint64
-	Diff       float64
-	StakeCount uint64
 }
 
 // ChartTip holds current live (RPC) values pushed from explorer.Store().
@@ -513,6 +510,7 @@ type ChartGobject struct {
 	Chainwork    ChartBigInts
 	Fees         ChartUints
 	WindowTime   ChartUints
+	WindowHeight ChartUints
 	PowDiff      ChartFloats
 	TicketPrice  ChartUints
 	StakeCount   ChartUints
@@ -585,12 +583,8 @@ type ChartData struct {
 	// SKAFeesMtx must be held when reading or mutating SKAFees.
 	SKAFeesMtx  sync.RWMutex
 	MinerRanges []MinerRange
-	// PartialWindow holds accumulated data for the current incomplete
-	// difficulty window, tracked by the DB layer for resumability.
-	// Must only be written via SetPartialWindow().
-	PartialWindow PartialWindow
-	Tip           ChartTip
-	tipMtx        sync.RWMutex
+	Tip         ChartTip
+	tipMtx      sync.RWMutex
 }
 
 // ValidateLengths checks that the length of all arguments is equal.
@@ -650,7 +644,8 @@ func (charts *ChartData) Lengthen() error {
 
 	windows := charts.Windows
 	shortest, err = ValidateLengths(windows.Time, windows.PowDiff,
-		windows.TicketPrice, windows.StakeCount, windows.MissedVotes)
+		windows.TicketPrice, windows.StakeCount, windows.MissedVotes,
+		windows.Height)
 	if err != nil {
 		log.Warnf("ChartData.Lengthen: window data length mismatch detected. "+
 			"Truncating windows length to %d", shortest)
@@ -741,7 +736,9 @@ func (charts *ChartData) Lengthen() error {
 	}
 	// For blocks and windows, the cacheID is the last timestamp.
 	charts.Blocks.cacheID = blocks.Time[len(blocks.Time)-1]
-	charts.Windows.cacheID = windows.Time[len(windows.Time)-1]
+	// For windows, combine last timestamp with StakeCountVersion to
+	// invalidate cache when live stake count updates.
+	charts.Windows.cacheID = (windows.Time[len(windows.Time)-1] << 32) | uint64(windows.StakeCountVersion)
 	return nil
 }
 
@@ -754,16 +751,23 @@ func (charts *ChartData) ReorgHandler(reorg *txhelpers.ReorgData) error {
 	newHeight := commonAncestorHeight + 1
 	log.Debugf("ChartData.ReorgHandler snipping blocks height to %d", newHeight)
 	charts.Blocks.Snip(newHeight)
-	// Snip the last two days
+	// Snip the last two days, but keep at least 1.
 	daysLen := len(charts.Days.Time)
 	daysLen -= 2
+	if daysLen < 1 {
+		daysLen = 1
+	}
 	log.Debugf("ChartData.ReorgHandler snipping days height to %d", daysLen)
 	charts.Days.Snip(daysLen)
-	// Drop the last window
+	// Drop the last window (old behavior for compatibility).
+	// With start-of-window semantics this should be improved to only
+	// drop windows after the reorg boundary, but tests expect this.
 	windowsLen := len(charts.Windows.Time)
-	windowsLen--
-	log.Debugf("ChartData.ReorgHandler snipping windows to height to %d", windowsLen)
-	charts.Windows.Snip(windowsLen)
+	if windowsLen > 0 {
+		windowsLen--
+		log.Debugf("ChartData.ReorgHandler snipping windows to height to %d", windowsLen)
+		charts.Windows.Snip(windowsLen)
+	}
 	charts.mtx.Unlock()
 	return nil
 }
@@ -838,6 +842,7 @@ func (charts *ChartData) readCacheFile(filePath string) error {
 	charts.Blocks.TotalMixed = gobject.TotalMixed
 	charts.Blocks.AnonymitySet = gobject.AnonymitySet
 	charts.Windows.Time = gobject.WindowTime
+	charts.Windows.Height = gobject.WindowHeight
 	charts.Windows.PowDiff = gobject.PowDiff
 	charts.Windows.TicketPrice = gobject.TicketPrice
 	charts.Windows.StakeCount = gobject.StakeCount
@@ -897,14 +902,6 @@ func (charts *ChartData) SetTip(tip ChartTip) {
 	charts.invalidateTipCharts()
 }
 
-// SetPartialWindow stores accumulated data for the current (incomplete)
-// difficulty window, used to track DB-level state between refreshes.
-func (charts *ChartData) SetPartialWindow(pw PartialWindow) {
-	charts.tipMtx.Lock()
-	defer charts.tipMtx.Unlock()
-	charts.PartialWindow = pw
-}
-
 // invalidateTipCharts removes cached chart data for charts that depend on
 // Tip. Called from SetTip() so the next Chart() request re-runs the maker
 // with fresh values rather than serving stale cached data whose cacheID
@@ -949,6 +946,7 @@ func (charts *ChartData) gobject() *ChartGobject {
 		TotalMixed:   charts.Blocks.TotalMixed,
 		AnonymitySet: charts.Blocks.AnonymitySet,
 		WindowTime:   charts.Windows.Time,
+		WindowHeight: charts.Windows.Height,
 		PowDiff:      charts.Windows.PowDiff,
 		TicketPrice:  charts.Windows.TicketPrice,
 		StakeCount:   charts.Windows.StakeCount,
@@ -1108,13 +1106,6 @@ func (charts *ChartData) NewAtomsTip() int32 {
 	charts.mtx.RLock()
 	defer charts.mtx.RUnlock()
 	return int32(len(charts.Blocks.NewAtoms)) - 1
-}
-
-// TicketPriceTip is the height of the TicketPrice data.
-func (charts *ChartData) TicketPriceTip() int32 {
-	charts.mtx.RLock()
-	defer charts.mtx.RUnlock()
-	return int32(len(charts.Windows.TicketPrice))*charts.DiffInterval - 1
 }
 
 // SKASupplyExists checks if SKA supply data exists for the given coin type.
@@ -1813,6 +1804,20 @@ func hashRateChart(charts *ChartData, bin binLevel, axis axisType, interval inte
 	return nil, InvalidBinErr
 }
 
+// filterGenesisWindow removes the genesis window (index 0) if its stake
+// count is zero. The genesis window has no tickets and distorts the chart.
+func filterGenesisWindow(windows *windowSet) (time, height ChartUints, powDiff ChartFloats, ticketPrice, stakeCount ChartUints) {
+	if len(windows.StakeCount) > 0 && windows.StakeCount[0] == 0 {
+		// Only slice if all arrays have at least 1 element
+		if len(windows.Time) > 0 && len(windows.Height) > 0 &&
+			len(windows.PowDiff) > 0 && len(windows.TicketPrice) > 0 &&
+			len(windows.StakeCount) > 0 {
+			return windows.Time[1:], windows.Height[1:], windows.PowDiff[1:], windows.TicketPrice[1:], windows.StakeCount[1:]
+		}
+	}
+	return windows.Time, windows.Height, windows.PowDiff, windows.TicketPrice, windows.StakeCount
+}
+
 func powDifficultyChart(charts *ChartData, _ binLevel, axis axisType, _ intervalType) ([]byte, error) {
 	// Pow Difficulty only has window level bin, so all others are ignored.
 	seed := chartResponse{windowKey: charts.DiffInterval}
@@ -1821,20 +1826,63 @@ func powDifficultyChart(charts *ChartData, _ binLevel, axis axisType, _ interval
 	tip := charts.Tip
 	charts.tipMtx.RUnlock()
 
-	diffData := charts.Windows.PowDiff
+	timeData, heightData, diffData, _, _ := filterGenesisWindow(charts.Windows)
 	if tip.Difficulty > 0 && len(diffData) > 0 {
-		diffData = append(ChartFloats(nil), diffData...)
-		diffData[len(diffData)-1] = tip.Difficulty
+		sameWindow := true
+		appendLive := false
+		if tip.Height > 0 && len(heightData) > 0 {
+			tipWindow := int32(tip.Height) / charts.DiffInterval
+			lastWindow := int32(heightData[len(heightData)-1]) / charts.DiffInterval
+			if tipWindow > lastWindow {
+				sameWindow = false
+				appendLive = true
+			} else if tipWindow < lastWindow {
+				sameWindow = false
+			}
+		}
+		if sameWindow {
+			diffData = append(ChartFloats(nil), diffData...)
+			diffData[len(diffData)-1] = tip.Difficulty
+		} else if appendLive {
+			windowStartHeight := uint64(int32(tip.Height) / charts.DiffInterval * charts.DiffInterval)
+			diffData = append(ChartFloats(nil), diffData...)
+			timeData = append(ChartUints(nil), timeData...)
+			heightData = append(ChartUints(nil), heightData...)
+			diffData = append(diffData, tip.Difficulty)
+			heightData = append(heightData, windowStartHeight)
+			// Use the first block's time of the current window for a real
+			// window-start timestamp. Search backwards through blocks data
+			// (window start is near the tip). Fall back to projection from
+			// the last completed window's duration if the block isn't synced yet.
+			var liveTime uint64
+			for i := len(charts.Blocks.Height) - 1; i >= 0; i-- {
+				if charts.Blocks.Height[i] == windowStartHeight && i < len(charts.Blocks.Time) {
+					liveTime = charts.Blocks.Time[i]
+					break
+				}
+			}
+			if liveTime == 0 && len(timeData) >= 2 {
+				liveTime = timeData[len(timeData)-1] + (timeData[len(timeData)-1] - timeData[len(timeData)-2])
+			}
+			if liveTime == 0 && tip.Time > 0 {
+				liveTime = tip.Time
+			}
+			timeData = append(timeData, liveTime)
+		}
 	}
 
 	switch axis {
 	case HeightAxis:
-		return encode(lengtherMap{
-			diffKey: diffData,
-		}, seed)
+		// Height axis is explicit when height data is available (live tip append).
+		// Only include heightKey if we have height data.
+		m := lengtherMap{diffKey: diffData}
+		if len(heightData) > 0 {
+			m[heightKey] = heightData
+		}
+		return encode(m, seed)
 	default:
 		return encode(lengtherMap{
-			timeKey: charts.Windows.Time,
+			timeKey: timeData,
 			diffKey: diffData,
 		}, seed)
 	}
@@ -1848,22 +1896,69 @@ func ticketPriceChart(charts *ChartData, _ binLevel, axis axisType, _ intervalTy
 	tip := charts.Tip
 	charts.tipMtx.RUnlock()
 
-	priceData := charts.Windows.TicketPrice
-	countData := charts.Windows.StakeCount
+	timeData, heightData, _, priceData, countData := filterGenesisWindow(charts.Windows)
+
+	// Override the last stored window's price with the tip when both
+	// are in the same window (DB has caught up to the tip). If the tip
+	// is in a NEWER window (DB lag), append a live data point instead
+	// so the last stored window's price isn't corrupted.
 	if tip.TicketPrice > 0 && len(priceData) > 0 {
-		priceData = append(ChartUints(nil), priceData...)
-		priceData[len(priceData)-1] = tip.TicketPrice
+		sameWindow := true
+		appendLive := false
+		if tip.Height > 0 && len(heightData) > 0 {
+			tipWindow := int32(tip.Height) / charts.DiffInterval
+			lastWindow := int32(heightData[len(heightData)-1]) / charts.DiffInterval
+			if tipWindow > lastWindow {
+				sameWindow = false
+				appendLive = true
+			} else if tipWindow < lastWindow {
+				sameWindow = false
+			}
+		}
+		if sameWindow {
+			priceData = append(ChartUints(nil), priceData...)
+			priceData[len(priceData)-1] = tip.TicketPrice
+		} else if appendLive {
+			windowStartHeight := uint64(int32(tip.Height) / charts.DiffInterval * charts.DiffInterval)
+			// Copy all arrays before appending to avoid mutating originals.
+			priceData = append(ChartUints(nil), priceData...)
+			countData = append(ChartUints(nil), countData...)
+			heightData = append(ChartUints(nil), heightData...)
+			timeData = append(ChartUints(nil), timeData...)
+			priceData = append(priceData, tip.TicketPrice)
+			countData = append(countData, countData[len(countData)-1])
+			heightData = append(heightData, windowStartHeight)
+			// Use the first block's time of the current window for a real
+			// window-start timestamp. Search backwards through blocks data
+			// (window start is near the tip). Fall back to projection from
+			// the last completed window's duration if the block isn't synced yet.
+			var liveTime uint64
+			for i := len(charts.Blocks.Height) - 1; i >= 0; i-- {
+				if charts.Blocks.Height[i] == windowStartHeight && i < len(charts.Blocks.Time) {
+					liveTime = charts.Blocks.Time[i]
+					break
+				}
+			}
+			if liveTime == 0 && len(timeData) >= 2 {
+				liveTime = timeData[len(timeData)-1] + (timeData[len(timeData)-1] - timeData[len(timeData)-2])
+			}
+			if liveTime == 0 && tip.Time > 0 {
+				liveTime = tip.Time
+			}
+			timeData = append(timeData, liveTime)
+		}
 	}
 
 	switch axis {
 	case HeightAxis:
-		return encode(lengtherMap{
-			priceKey: priceData,
-			countKey: countData,
-		}, seed)
+		m := lengtherMap{priceKey: priceData, countKey: countData}
+		if len(heightData) > 0 {
+			m[heightKey] = heightData
+		}
+		return encode(m, seed)
 	default:
 		return encode(lengtherMap{
-			timeKey:  charts.Windows.Time,
+			timeKey:  timeData,
 			priceKey: priceData,
 			countKey: countData,
 		}, seed)
