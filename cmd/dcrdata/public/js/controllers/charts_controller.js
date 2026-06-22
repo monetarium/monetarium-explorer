@@ -298,6 +298,7 @@ function anonymitySetFunc(data) {
 
 function ticketPriceFunc(data) {
   if (data.t) return zipWindowTvYZ(data.t, data.price, data.count, atomsToVAR)
+  if (data.h) return data.h.map((h, i) => [h, data.price[i] * atomsToVAR, data.count[i]])
   return zipWindowHvYZ(data.price, data.count, data.window, atomsToVAR)
 }
 
@@ -330,6 +331,7 @@ function percentStakedFunc(data) {
 
 function powDiffFunc(data) {
   if (data.t) return zipWindowTvY(data.t, data.diff)
+  if (data.h) return data.h.map((h, i) => [h, data.diff[i]])
   return zipWindowHvY(data.diff, data.window)
 }
 
