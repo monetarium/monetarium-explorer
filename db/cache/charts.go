@@ -1864,13 +1864,16 @@ func powDifficultyChart(charts *ChartData, _ binLevel, axis axisType, _ interval
 			if liveTime == 0 && len(timeData) >= 2 {
 				liveTime = timeData[len(timeData)-1] + (timeData[len(timeData)-1] - timeData[len(timeData)-2])
 			}
+			if liveTime == 0 && tip.Time > 0 {
+				liveTime = tip.Time
+			}
 			timeData = append(timeData, liveTime)
 		}
 	}
 
 	switch axis {
 	case HeightAxis:
-		// Height axis is implicit (array index) for window charts.
+		// Height axis is explicit when height data is available (live tip append).
 		// Only include heightKey if we have height data.
 		m := lengtherMap{diffKey: diffData}
 		if len(heightData) > 0 {
@@ -1938,6 +1941,9 @@ func ticketPriceChart(charts *ChartData, _ binLevel, axis axisType, _ intervalTy
 			}
 			if liveTime == 0 && len(timeData) >= 2 {
 				liveTime = timeData[len(timeData)-1] + (timeData[len(timeData)-1] - timeData[len(timeData)-2])
+			}
+			if liveTime == 0 && tip.Time > 0 {
+				liveTime = tip.Time
 			}
 			timeData = append(timeData, liveTime)
 		}
