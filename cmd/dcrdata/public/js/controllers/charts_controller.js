@@ -331,6 +331,7 @@ function percentStakedFunc(data) {
 
 function powDiffFunc(data) {
   if (data.t) return zipWindowTvY(data.t, data.diff)
+  if (data.h) return data.h.map((h, i) => [h, data.diff[i]])
   return zipWindowHvY(data.diff, data.window)
 }
 
