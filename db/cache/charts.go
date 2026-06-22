@@ -753,14 +753,12 @@ func (charts *ChartData) ReorgHandler(reorg *txhelpers.ReorgData) error {
 	charts.Blocks.Snip(newHeight)
 	// Snip the last two days, but keep at least 1.
 	daysLen := len(charts.Days.Time)
-	log.Debugf("ReorgHandler: daysLen before snip = %d", daysLen)
 	daysLen -= 2
 	if daysLen < 1 {
 		daysLen = 1
 	}
 	log.Debugf("ChartData.ReorgHandler snipping days height to %d", daysLen)
 	charts.Days.Snip(daysLen)
-	log.Debugf("ReorgHandler: daysLen after snip = %d", len(charts.Days.Time))
 	// Drop the last window (old behavior for compatibility).
 	// With start-of-window semantics this should be improved to only
 	// drop windows after the reorg boundary, but tests expect this.
