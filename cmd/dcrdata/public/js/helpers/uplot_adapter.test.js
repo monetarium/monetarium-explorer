@@ -186,6 +186,17 @@ describe('buildOpts — options', () => {
     expect(lo).toBeGreaterThan(0)
   })
 
+  it('pins the log y-axis bottom to a series logFloor so floored values hide on the baseline', () => {
+    const def = {
+      ...lineDef,
+      series: [{ label: 'Coin Supply', scale: 'y', kind: 'area', logFloor: 1 }]
+    }
+    const opts = buildOpts(fakeUPlot, def, { scaleType: 'log' })
+    const [lo, hi] = opts.scales.y.range(null, 1, 1e9)
+    expect(lo).toBe(1)
+    expect(hi).toBeGreaterThan(1e9)
+  })
+
   it('sets a 16px axis label font on the y axis', () => {
     const opts = buildOpts(fakeUPlot, lineDef, {})
     expect(opts.axes[1].labelFont).toContain('16px')
@@ -254,6 +265,34 @@ describe('logRange', () => {
     expect(logRange(-5, 100).every((v) => v > 0 && isFinite(v))).toBe(true)
     expect(logRange(null, null).every((v) => v > 0 && isFinite(v))).toBe(true)
     expect(logRange(Infinity, Infinity).every((v) => v > 0 && isFinite(v))).toBe(true)
+  })
+
+  it('pins the lower bound exactly to a positive floor (no padding below it)', () => {
+    // The floored values (e.g. SKA coin-supply leading zeros raised to 1) must rest on
+    // the baseline, not float above it — so the axis bottom IS the floor, with no pad.
+    const [lo, hi] = logRange(1, 1e9, 1)
+    expect(lo).toBe(1)
+    expect(hi).toBeGreaterThan(1e9) // the top still gets a little headroom
+  })
+
+  it('keeps a finite range when the floored series is flat at the floor', () => {
+    const [lo, hi] = logRange(1, 1, 1)
+    expect(lo).toBe(1)
+    expect(hi).toBeGreaterThan(1)
+  })
+
+  it('ignores a non-positive or absent floor (pads below the data as usual)', () => {
+    expect(logRange(5000, 5125, 0)[0]).toBeLessThan(5000)
+    expect(logRange(5000, 5125, null)[0]).toBeLessThan(5000)
+    expect(logRange(5000, 5125)[0]).toBeLessThan(5000)
+  })
+
+  it('hugs tightly (does not pin) when the visible data is all above the floor', () => {
+    // Zoomed into the plateau, no floored values are in view, so the floor must not
+    // strand the data near the top — hug it the way an unfloored series would.
+    const [lo, hi] = logRange(5000, 5125, 1)
+    expect(lo).toBeGreaterThan(4000)
+    expect(hi / lo).toBeLessThan(1.1)
   })
 })
 

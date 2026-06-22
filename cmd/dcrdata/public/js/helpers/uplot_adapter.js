@@ -117,21 +117,32 @@ export function resolveSeriesColor(s, i, dark) {
  * window) as a flat line floating in empty space. Instead we hug the visible data,
  * padding by just 5% of the visible log span so the data fills the plot. Guards keep
  * both bounds strictly positive (log needs > 0) and finite.
+ *
+ * When `floor` is a positive number AND the visible data reaches down to it, the lower
+ * bound is pinned exactly to `floor` with no padding below — used by series that floor
+ * sub-`floor` plot values up to it (SKA coin-supply, applyLogFloors). Pinning the axis
+ * bottom to the same floor parks those floored points on the baseline (a zero-height
+ * area) instead of floating them as a visible plateau above it. When every visible point
+ * is above the floor (e.g. zoomed into the plateau), there is nothing to hide, so the
+ * range hugs the data normally. The top always gets its usual headroom.
  * @param {number} dataMin
  * @param {number} dataMax
+ * @param {number} [floor]  positive lower bound to pin the axis to when data reaches it
  * @returns {[number, number]}
  */
-export function logRange(dataMin, dataMax) {
+export function logRange(dataMin, dataMax, floor) {
   let lo = dataMin
   let hi = dataMax
   if (hi == null || !isFinite(hi) || hi <= 0) hi = lo != null && isFinite(lo) && lo > 0 ? lo : 10
   if (lo == null || !isFinite(lo) || lo <= 0) lo = hi / 10
   if (lo > hi) [lo, hi] = [hi, lo]
-  const lLo = Math.log10(lo)
+  // Pin only when the visible data actually reaches the floor (floored points sit at it).
+  const pinned = floor != null && isFinite(floor) && floor > 0 && lo <= floor
+  const lLo = Math.log10(pinned ? floor : lo)
   const lHi = Math.log10(hi)
   const span = lHi - lLo
   const pad = span > 0 ? span * 0.05 : 0.02 // 0.02-decade fallback for a perfectly flat series
-  return [Math.pow(10, lLo - pad), Math.pow(10, lHi + pad)]
+  return [pinned ? floor : Math.pow(10, lLo - pad), Math.pow(10, lHi + pad)]
 }
 
 /**
@@ -238,8 +249,15 @@ export function buildOpts(UPlot, def, opts = {}) {
   const scales = { x: { time: xTime } }
   scales.y = { distr: isLog ? LOG_DISTR : LINEAR_DISTR }
   if (isLog) {
-    // Hug the data tightly instead of letting uPlot snap out to whole decades.
-    scales.y.range = (u, dataMin, dataMax) => logRange(dataMin, dataMax)
+    // Hug the data tightly instead of letting uPlot snap out to whole decades. If a
+    // series declares a logFloor (e.g. SKA coin-supply floors leading zeros at 1 whole
+    // coin), pin the axis bottom to the smallest such floor so the floored values rest
+    // on the baseline rather than floating as a visible plateau above it.
+    const floor = def.series.reduce(
+      (m, s) => (s && s.logFloor != null ? (m == null ? s.logFloor : Math.min(m, s.logFloor)) : m),
+      null
+    )
+    scales.y.range = (u, dataMin, dataMax) => logRange(dataMin, dataMax, floor)
   } else if (def.yMin != null) {
     const yMin = def.yMin
     scales.y.range = (u, dataMin, dataMax) => [yMin, dataMax]
