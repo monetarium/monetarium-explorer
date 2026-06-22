@@ -763,7 +763,10 @@ func (charts *ChartData) ReorgHandler(reorg *txhelpers.ReorgData) error {
 	// Under start-of-window semantics, a window whose first block is
 	// strictly after the common ancestor may contain reorged blocks
 	// and must be re-synced. Windows at or before the ancestor are
-	// kept (their data is still valid).
+	// kept (their data is still valid). Safety: after snipping,
+	// appendWindowStats recomputes StakeCount for windows kept near the
+	// boundary because retrieveWindowStats sets the DB cursor to
+	// lastWindowHeight-1, which re-fetches all blocks in that window.
 	keepWindows := len(charts.Windows.Height)
 	for i, h := range charts.Windows.Height {
 		if int(h) > commonAncestorHeight {
@@ -771,7 +774,7 @@ func (charts *ChartData) ReorgHandler(reorg *txhelpers.ReorgData) error {
 			break
 		}
 	}
-	if keepWindows < len(charts.Windows.Time) {
+	if keepWindows < len(charts.Windows.Height) {
 		log.Debugf("ChartData.ReorgHandler snipping windows to height to %d", keepWindows)
 		charts.Windows.Snip(keepWindows)
 	}
