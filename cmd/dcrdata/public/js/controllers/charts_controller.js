@@ -478,6 +478,7 @@ export default class extends Controller {
     let startX = 0
     let startY = 0
     let state = 'pending'
+    this.touchActive = false
 
     u.over.addEventListener(
       'touchstart',
@@ -500,6 +501,7 @@ export default class extends Controller {
           state = classifyGesture(t.clientX - startX, t.clientY - startY, SCRUB_THRESHOLD)
         }
         if (state !== 'scrub') return // pending (below threshold) or scroll -> let the page scroll
+        this.touchActive = true // positionTooltip places the box up-left of the finger, not under it
         e.preventDefault()
         const rect = u.over.getBoundingClientRect()
         const left = Math.max(0, Math.min(t.clientX - rect.left, rect.width))
@@ -517,6 +519,7 @@ export default class extends Controller {
         u.setCursor({ left: -10, top: -10 })
       }
       state = 'pending'
+      this.touchActive = false
     }
     u.over.addEventListener('touchend', end)
     u.over.addEventListener('touchcancel', end)
@@ -529,6 +532,26 @@ export default class extends Controller {
     const tt = this.legendElement
     if (!u.over || !tt || !tt.style) return
     const pad = 12
+    if (this.touchActive) {
+      // On touch the cursor IS the fingertip, so the mouse's bottom-right offset would land
+      // the box under the finger/hand. Prefer the top-left quadrant (the clearest spot — the
+      // hand obscures below and to the right), flipping to the opposite side only when the
+      // preferred side has no room, then clamping inside the overlay.
+      const w = tt.offsetWidth
+      const h = tt.offsetHeight
+      // Left of the finger; flip right only at the left edge.
+      let left = u.cursor.left - w - pad
+      if (left < 0) left = u.cursor.left + pad
+      left = Math.max(0, Math.min(left, u.over.clientWidth - w))
+      // Above the finger; flip below only at the top edge.
+      let top = u.cursor.top - h - pad
+      if (top < 0) top = u.cursor.top + pad
+      top = Math.max(0, Math.min(top, u.over.clientHeight - h))
+      tt.style.left = `${left}px`
+      tt.style.top = `${top}px`
+      return
+    }
+    // Mouse: prefer bottom-right of the cursor, flip on edge overflow.
     let left = u.cursor.left + pad
     let top = u.cursor.top + pad
     if (left + tt.offsetWidth > u.over.clientWidth) left = u.cursor.left - tt.offsetWidth - pad

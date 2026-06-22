@@ -572,6 +572,64 @@ describe('ChartsController on-plot tooltip', () => {
     expect(u.setCursor).not.toHaveBeenCalled()
     expect(move.defaultPrevented).toBe(false)
   })
+
+  // Touch tooltip placement. On touch the cursor IS the fingertip, so the box sits above and
+  // to the left of the touch point (the clearest quadrant — the finger/hand obscures below and
+  // to the right). jsdom does no layout, so the overlay's client size and the tooltip's offset
+  // size must be defined explicitly to exercise the placement and edge flips.
+  function placedFixture(c, boxW, boxH) {
+    const over = document.createElement('div')
+    Object.defineProperty(over, 'clientWidth', { value: 500, configurable: true })
+    Object.defineProperty(over, 'clientHeight', { value: 400, configurable: true })
+    c.installTooltip({ over: over, cursor: {} })
+    Object.defineProperty(c.legendElement, 'offsetWidth', { value: boxW, configurable: true })
+    Object.defineProperty(c.legendElement, 'offsetHeight', { value: boxH, configurable: true })
+    return over
+  }
+
+  it('marks touch input active during a scrub and clears it on touchend', async () => {
+    const c = makeController()
+    await c.connect()
+    const { over } = scrubFixture(c)
+    expect(c.touchActive).toBe(false)
+    over.dispatchEvent(touchEvent('touchstart', 100, 100))
+    over.dispatchEvent(touchEvent('touchmove', 140, 100)) // lock to scrub
+    expect(c.touchActive).toBe(true)
+    over.dispatchEvent(touchEvent('touchend'))
+    expect(c.touchActive).toBe(false)
+  })
+
+  it('places the touch tooltip above and to the left of the touch point', async () => {
+    const c = makeController()
+    await c.connect()
+    const over = placedFixture(c, 100, 40)
+    c.touchActive = true
+    c.positionTooltip({ over: over, cursor: { left: 250, top: 200 } })
+    expect(c.legendElement.style.left).toBe('138px') // 250 - 100 - 12 pad, left of the finger
+    expect(c.legendElement.style.top).toBe('148px') // 200 - 40 - 12 pad, above the finger
+  })
+
+  it('drops the touch tooltip below the finger at the top edge', async () => {
+    const c = makeController()
+    await c.connect()
+    const over = placedFixture(c, 100, 40)
+    c.touchActive = true
+    c.positionTooltip({ over: over, cursor: { left: 250, top: 20 } })
+    // Above (20 - 40 - 12 = -32) clips the top, so flip below: 20 + 12.
+    expect(c.legendElement.style.top).toBe('32px')
+    expect(c.legendElement.style.left).toBe('138px') // still left of the finger: 250 - 100 - 12
+  })
+
+  it('flips the touch tooltip to the right of the finger at the left edge', async () => {
+    const c = makeController()
+    await c.connect()
+    const over = placedFixture(c, 100, 40)
+    c.touchActive = true
+    c.positionTooltip({ over: over, cursor: { left: 480, top: 200 } })
+    expect(c.legendElement.style.left).toBe('368px') // room on the left: 480 - 100 - 12, no flip
+    c.positionTooltip({ over: over, cursor: { left: 10, top: 200 } })
+    expect(c.legendElement.style.left).toBe('22px') // left of 10 underflows; flip right to 10 + 12
+  })
 })
 
 describe('ChartsController viewport fit', () => {
