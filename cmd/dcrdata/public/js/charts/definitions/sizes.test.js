@@ -23,6 +23,16 @@ describe('sizes toColumns', () => {
   })
 })
 
+describe('sizes series kinds', () => {
+  it('blockchain-size renders as a filled area (cumulative)', () => {
+    expect(blockchainSize.series[0].kind).toBe('area')
+  })
+  it('block-size and tx-count stay line (per-bucket, not cumulative)', () => {
+    expect(blockSize.series[0].kind).toBe('line')
+    expect(txCount.series[0].kind).toBe('line')
+  })
+})
+
 describe('sizes formatValue', () => {
   it('formats with thousands separators', () => {
     expect(blockSize.formatValue(0, { value: 12345 }, {})).toBe('12,345')

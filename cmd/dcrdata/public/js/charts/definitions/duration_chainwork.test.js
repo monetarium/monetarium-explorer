@@ -31,4 +31,13 @@ describe('chainwork', () => {
   it('legend uses big units', () => {
     expect(chainwork.formatValue(0, { value: 1500 }, {})).toBe('1.500 kH')
   })
+  it('renders as a filled area (cumulative)', () => {
+    expect(chainwork.series[0].kind).toBe('area')
+  })
+})
+
+describe('durationBtwBlocks series kind', () => {
+  it('stays line (per-block interval, not cumulative)', () => {
+    expect(durationBtwBlocks.series[0].kind).toBe('line')
+  })
 })

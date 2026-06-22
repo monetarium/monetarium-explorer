@@ -35,7 +35,7 @@ export const blockchainSize = {
   label: 'Blockchain Size',
   controls: { ...baseControls },
   axes: [{ label: 'Blockchain Size', scale: 'y' }],
-  series: [{ label: 'Blockchain Size', scale: 'y', kind: 'line', colorIndex: 0 }],
+  series: [{ label: 'Blockchain Size', scale: 'y', kind: 'area', colorIndex: 0 }],
   toColumns: (raw) => {
     return [xColumn(raw, raw.size.length), raw.size.slice()]
   },

@@ -733,17 +733,17 @@ describe('ChartsController control handlers', () => {
     expect(mockReplace).toHaveBeenCalledWith(expect.objectContaining({ scale: 'log' }))
   })
 
-  it('setMode maps smooth to line on the handle and persists mode', async () => {
+  it('setMode maps the line option to a line on the handle and persists mode', async () => {
     const c = makeController()
     await c.connect()
     const modeOpt = {
       classList: { contains: () => false, add: vi.fn(), remove: vi.fn() },
-      dataset: { option: 'smooth' }
+      dataset: { option: 'line' }
     }
     c.modeOptionTargets = [modeOpt]
     c.setMode({ target: modeOpt })
     expect(fakeHandle.setMode).toHaveBeenCalledWith('line')
-    expect(mockReplace).toHaveBeenCalledWith(expect.objectContaining({ mode: 'smooth' }))
+    expect(mockReplace).toHaveBeenCalledWith(expect.objectContaining({ mode: 'line' }))
   })
 
   // The adapter calls onChartRangeChange on user drag-zoom / double-click reset.

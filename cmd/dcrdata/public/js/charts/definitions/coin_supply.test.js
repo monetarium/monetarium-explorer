@@ -14,6 +14,9 @@ describe('coin-supply VAR (coinType 0)', () => {
   it('formatValue renders VAR integer', () => {
     expect(def.formatValue(0, { idx: 0, payload: { supply: [5] }, value: 5 }, {})).toBe('5 VAR')
   })
+  it('renders as a filled area (cumulative supply)', () => {
+    expect(def.series[0].kind).toBe('area')
+  })
 })
 
 describe('coin-supply SKA (coinType 2) — precision firewall', () => {

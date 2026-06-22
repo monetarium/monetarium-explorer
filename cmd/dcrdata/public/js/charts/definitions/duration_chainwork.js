@@ -32,7 +32,7 @@ export const chainwork = {
   label: 'Total Work',
   controls: { ...baseControls },
   axes: [{ label: 'Cumulative Chainwork (H)', scale: 'y' }],
-  series: [{ label: 'Cumulative Chainwork', scale: 'y', kind: 'line', colorIndex: 0 }],
+  series: [{ label: 'Cumulative Chainwork', scale: 'y', kind: 'area', colorIndex: 0 }],
   toColumns: (raw) => {
     return [xColumn(raw, raw.work.length), raw.work.slice()]
   },
