@@ -26,6 +26,11 @@ export const ticketPrice = {
     if (raw.t) {
       return [raw.t.slice(), raw.price.map((p) => p * ATOMS_TO_VAR), raw.count.slice()]
     }
+    // An explicit per-point height array (e.g. the live-tip point appended at a
+    // window start) takes precedence over deriving height from the window index.
+    if (raw.h) {
+      return [raw.h.slice(), raw.price.map((p) => p * ATOMS_TO_VAR), raw.count.slice()]
+    }
     const xs = raw.price.map((_, i) => i * raw.window)
     return [xs, raw.price.map((p) => p * ATOMS_TO_VAR), raw.count.slice()]
   },

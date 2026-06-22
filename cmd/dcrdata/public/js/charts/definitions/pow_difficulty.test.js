@@ -16,6 +16,15 @@ describe('powDifficulty.toColumns', () => {
       [5, 6, 7]
     ])
   })
+  it('height axis: explicit h takes precedence over window index', () => {
+    // The live-tip point is appended at a window start that need not equal
+    // i*window (last height 290, not 288), so h must win over the derivation.
+    const raw = { diff: [5, 6, 7], h: [0, 144, 290], window: 144 }
+    expect(powDifficulty.toColumns(raw, {})).toEqual([
+      [0, 144, 290],
+      [5, 6, 7]
+    ])
+  })
 })
 
 describe('powDifficulty.controls', () => {

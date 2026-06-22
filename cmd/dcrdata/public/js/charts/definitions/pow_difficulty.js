@@ -18,6 +18,9 @@ export const powDifficulty = {
   series: [{ label: 'Difficulty', scale: 'y', kind: 'line', colorIndex: 0 }],
   toColumns: (raw) => {
     if (raw.t) return [raw.t.slice(), raw.diff.slice()]
+    // An explicit per-point height array (e.g. the live-tip point appended at a
+    // window start) takes precedence over deriving height from the window index.
+    if (raw.h) return [raw.h.slice(), raw.diff.slice()]
     const xs = raw.diff.map((_, i) => i * raw.window)
     return [xs, raw.diff.slice()]
   },

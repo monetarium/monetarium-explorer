@@ -18,6 +18,16 @@ describe('ticketPrice.toColumns', () => {
       [1, 2]
     ])
   })
+  it('height axis: explicit h takes precedence over window index', () => {
+    // The live-tip point is appended at a window start that need not equal
+    // i*window (last height 290, not 144), so h must win over the derivation.
+    const raw = { price: [100000000, 200000000], count: [1, 2], h: [0, 290], window: 144 }
+    expect(ticketPrice.toColumns(raw, {})).toEqual([
+      [0, 290],
+      [1, 2],
+      [1, 2]
+    ])
+  })
 })
 
 describe('ticketPrice.formatValue', () => {
