@@ -354,9 +354,34 @@ export async function loadUPlot() {
  *   reset) — never for programmatic setData/setXRange/rebuild.
  * @returns {Promise<ChartHandle>}
  */
+/**
+ * On a log scale, raise each series' sub-`logFloor` plot values up to its floor so the
+ * line stays plottable (log10(0) = -Inf) and the log axis does not collapse onto the
+ * floor (the SKA coin-supply zeros-then-plateau case). Off log, or when no series
+ * declares a floor, the columns are returned unchanged (same reference). Null is
+ * preserved (a geometry-nulled point stays a gap). Never mutates the input — the exact
+ * value still reaches the tooltip via the raw payload.
+ * @param {Array<Array<number|null>>} columns  [xs, ...ys] (columns[i] -> series[i-1])
+ * @param {Array<{logFloor?:number}>} series
+ * @param {boolean} isLog
+ */
+export function applyLogFloors(columns, series, isLog) {
+  if (!isLog || !columns || !series.some((s) => s && s.logFloor != null)) return columns
+  return columns.map((col, i) => {
+    if (i === 0) return col // x column
+    const floor = series[i - 1] && series[i - 1].logFloor
+    if (floor == null) return col
+    return col.map((v) => (v != null && v < floor ? floor : v))
+  })
+}
+
 export async function createChart(el, def, opts = {}) {
   const UPlot = await loadUPlot()
   let currentDef = def
+  // Last raw [xs, ...ys] from setData. The plotted data is re-derived from it on every
+  // (re)build, so a series logFloor follows the CURRENT scale across a linear<->log toggle
+  // (a toggle reuses stored data without re-running the definition's toColumns).
+  let rawColumns = null
   let xRange = null // { min, max } remembered to survive rebuilds
   let suppressRangeEvent = false // true while WE drive the x-scale (setData/setXRange/rebuild)
   const onRangeChange = typeof opts.onRangeChange === 'function' ? opts.onRangeChange : null
@@ -393,6 +418,9 @@ export async function createChart(el, def, opts = {}) {
     hooks: { ...userHooks, setScale: [...(userHooks.setScale || []), trackXRange] }
   }
 
+  // Plotted data for the current scale, derived from the raw columns (applies any logFloor).
+  const displayData = () => applyLogFloors(rawColumns, currentDef.series, state.scaleType === 'log')
+
   let uplot = new UPlot(buildOpts(UPlot, currentDef, state), [[]], el)
   let destroyed = false
   // Last-known per-series visibility (series label -> show). A fresh uPlot defaults
@@ -413,7 +441,9 @@ export async function createChart(el, def, opts = {}) {
   // via uplot.data (the initial [[]] seed persists if rebuilt before the first
   // setData), and visibility is re-applied since the fresh instance starts all-shown.
   function rebuild() {
-    const data = uplot.data
+    // Re-derive from the raw columns so a scale change re-applies (or drops) the log floor;
+    // fall back to uplot.data if rebuilt before the first setData (the [[]] seed).
+    const data = rawColumns ? displayData() : uplot.data
     uplot.destroy()
     // The old instance is already destroyed here, so it cannot be restored if
     // construction fails. Mark the handle inert (the destroyed-guard makes later
@@ -436,9 +466,10 @@ export async function createChart(el, def, opts = {}) {
     },
     setData(columns) {
       if (destroyed) return
+      rawColumns = columns
       // setData autoscales and fires setScale; suppress so the load isn't mistaken
       // for a user zoom.
-      withProgrammaticScale(() => uplot.setData(columns))
+      withProgrammaticScale(() => uplot.setData(displayData()))
     },
     setScaleType(type) {
       if (destroyed) return

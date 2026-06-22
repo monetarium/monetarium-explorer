@@ -21,7 +21,21 @@ export function coinSupplyDef(coinType) {
       hybrid: false
     },
     axes: [{ label: `Coin Supply (${coinLabel})`, scale: 'y' }],
-    series: [{ label: 'Coin Supply', scale: 'y', kind: 'area', colorIndex: 0 }],
+    // SKA supply is 0 before its mint, then a huge plateau — on a log scale the leading
+    // zeros (log10(0) = -Inf) blow out the axis. Floor the plotted value at 1 whole coin
+    // on log (applied after the atoms->coins conversion in toColumns). A genuine sub-1-coin
+    // supply is never a real cumulative state, and the exact value still shows in the
+    // tooltip (formatValue reads the raw atom string). VAR supply is always > 0, so no
+    // floor. Mirrors the Dygraphs clampLogFloor fix (#499/#507).
+    series: [
+      {
+        label: 'Coin Supply',
+        scale: 'y',
+        kind: 'area',
+        colorIndex: 0,
+        ...(isSKA ? { logFloor: 1 } : {})
+      }
+    ],
     toColumns: (raw) => {
       const ys = isSKA
         ? raw.supply.map((s) => Number(s) * SKA_ATOMS_TO_COIN) // lossy — geometry only

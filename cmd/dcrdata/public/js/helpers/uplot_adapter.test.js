@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import uPlot from 'uplot'
 import {
+  applyLogFloors,
   buildOpts,
   createChart,
   createSyncKey,
@@ -280,6 +281,57 @@ describe('trimTrailingZeros', () => {
   })
 })
 
+describe('applyLogFloors', () => {
+  const floored = [{ label: 'Coin Supply', logFloor: 1 }]
+  it('returns columns unchanged (same ref) on a linear scale', () => {
+    const cols = [
+      [1, 2, 3],
+      [0, 0.5, 5]
+    ]
+    expect(applyLogFloors(cols, floored, false)).toBe(cols)
+  })
+  it('returns columns unchanged when no series declares a floor', () => {
+    const cols = [
+      [1, 2],
+      [0, 5]
+    ]
+    expect(applyLogFloors(cols, [{ label: 'A' }], true)).toBe(cols)
+  })
+  it('raises sub-floor values to the floor on log; x and >=floor values untouched', () => {
+    const cols = [
+      [10, 20, 30, 40],
+      [0, 0.5, 1, 4.5e12]
+    ]
+    expect(applyLogFloors(cols, floored, true)).toEqual([
+      [10, 20, 30, 40],
+      [1, 1, 1, 4.5e12]
+    ])
+  })
+  it('preserves null (a geometry-nulled point stays a gap, not the floor)', () => {
+    expect(
+      applyLogFloors(
+        [
+          [1, 2],
+          [null, 0]
+        ],
+        floored,
+        true
+      )
+    ).toEqual([
+      [1, 2],
+      [null, 1]
+    ])
+  })
+  it('does not mutate the input columns', () => {
+    const cols = [
+      [1, 2],
+      [0, 5]
+    ]
+    applyLogFloors(cols, floored, true)
+    expect(cols[1]).toEqual([0, 5])
+  })
+})
+
 describe('niceLinearTicks', () => {
   it('places evenly-spaced round ticks inside [min, max]', () => {
     const ticks = niceLinearTicks(5105, 5170, 8)
@@ -353,6 +405,29 @@ describe('createChart / ChartHandle', () => {
     expect(handle.uplot.data).toEqual(cols) // ...carrying the same data forward
     handle.setScaleType('linear') // a second rebuild
     expect(handle.uplot.data).toEqual(cols) // still intact
+  })
+
+  it('applies a series logFloor only on log, and re-derives it across a scale toggle', async () => {
+    // The clamp must follow the CURRENT scale through rebuilds — a scale toggle reuses
+    // stored raw data, so a toColumns-time clamp would go stale. The adapter re-derives
+    // from the raw columns on every (re)build.
+    const floorDef = {
+      name: 'coin-supply/1',
+      label: 'SKA1',
+      axes: [{ label: 'SKA1', scale: 'y' }],
+      series: [{ label: 'Coin Supply', scale: 'y', kind: 'line', logFloor: 1 }]
+    }
+    const handle = await createChart(el, floorDef, {}) // defaults to linear
+    const cols = [
+      [1, 2, 3],
+      [0, 0, 5]
+    ]
+    handle.setData(cols)
+    expect(handle.uplot.data[1]).toEqual([0, 0, 5]) // linear: raw, unclamped
+    handle.setScaleType('log')
+    expect(handle.uplot.data[1]).toEqual([1, 1, 5]) // log: zeros raised to the floor
+    handle.setScaleType('linear')
+    expect(handle.uplot.data[1]).toEqual([0, 0, 5]) // back to raw on linear
   })
 
   it('setMode swaps line<->stepped paths via rebuild', async () => {

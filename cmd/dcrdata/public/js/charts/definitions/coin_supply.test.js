@@ -17,6 +17,9 @@ describe('coin-supply VAR (coinType 0)', () => {
   it('renders as a filled area (cumulative supply)', () => {
     expect(def.series[0].kind).toBe('area')
   })
+  it('has no log floor (VAR supply is always > 0)', () => {
+    expect(def.series[0].logFloor).toBeUndefined()
+  })
 })
 
 describe('coin-supply SKA (coinType 2) — precision firewall', () => {
@@ -34,5 +37,8 @@ describe('coin-supply SKA (coinType 2) — precision firewall', () => {
   it('formatValue returns the EXACT 18-decimal string from the raw payload (no Number())', () => {
     const datum = { idx: 0, payload: raw, value: 12345.678 } // value is the lossy plot number
     expect(def.formatValue(0, datum, {})).toBe('12,345.678901234567890123 SKA2')
+  })
+  it('floors the plotted value at 1 whole coin on a log scale (zeros-then-plateau fix)', () => {
+    expect(def.series[0].logFloor).toBe(1)
   })
 })
