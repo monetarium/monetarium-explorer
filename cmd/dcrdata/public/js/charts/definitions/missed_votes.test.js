@@ -16,6 +16,15 @@ describe('missedVotes.toColumns', () => {
       [1, 2, 3]
     ])
   })
+  it('height axis: explicit h takes precedence over window index', () => {
+    // The live-tip point is appended at a window start that need not equal
+    // i*window (last height 290, not 144), so h must win over the derivation.
+    const raw = { missed: [1, 2], h: [0, 290], window: 144, offset: 0 }
+    expect(missedVotes.toColumns(raw, {})).toEqual([
+      [0, 290],
+      [1, 2]
+    ])
+  })
 })
 
 describe('missedVotes.toColumns — zeros are unplottable on a log axis', () => {

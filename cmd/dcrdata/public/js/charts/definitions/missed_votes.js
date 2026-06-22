@@ -24,6 +24,9 @@ export const missedVotes = {
     // tooltip from the untouched payload in formatValue.
     const ys = raw.missed.map((v) => (v > 0 ? v : null))
     if (raw.t) return [raw.t.slice(), ys]
+    // An explicit per-point height array (e.g. the live-tip point appended at a
+    // window start) takes precedence over deriving height from the window index.
+    if (raw.h) return [raw.h.slice(), ys]
     const base = raw.offset * raw.window
     const xs = raw.missed.map((_, i) => i * raw.window + base)
     return [xs, ys]
