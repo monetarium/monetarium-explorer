@@ -3502,7 +3502,11 @@ func appendMinerRanges(charts *cache.ChartData, rows *sql.Rows) error {
 // charts data source from the blocks table. These data is fetched at an
 // interval of chaincfg.Params.StakeDiffWindowSize.
 func retrieveWindowStats(ctx context.Context, db *sql.DB, charts *cache.ChartData) (*sql.Rows, error) {
-	rows, err := db.QueryContext(ctx, internal.SelectBlocksTicketsPrice, charts.TicketPriceTip())
+	var cursor int32 = -1
+	if len(charts.Windows.Height) > 0 {
+		cursor = int32(charts.Windows.Height[len(charts.Windows.Height)-1]) - 1
+	}
+	rows, err := db.QueryContext(ctx, internal.SelectBlocksTicketsPrice, cursor)
 	if err != nil {
 		return nil, err
 	}
@@ -3513,70 +3517,47 @@ func retrieveWindowStats(ctx context.Context, db *sql.DB, charts *cache.ChartDat
 // This is the Appender half of a pair that make up a cache.ChartUpdater.
 // Since tickets count per window cannot be done on the db, windows grouping
 // and tickets count is done here.
+// Window data is emitted at window start (height % windowSize == 0) with live
+// stake count updates per block. Recomputes stake count from all blocks in
+// the current window to be idempotent across restarts and incremental updates.
 func appendWindowStats(charts *cache.ChartData, rows *sql.Rows) error {
 	defer closeRows(rows)
 
 	windows := charts.Windows
 	windowSize := int(charts.DiffInterval)
-	nextWindowHeight := windowSize * (len(windows.TicketPrice) + 1)
+	currentWindowIdx := len(windows.TicketPrice) - 1
 
 	var price, ticketsCount uint64
 	var timestamp time.Time
 	var difficulty float64
-	var lastHeight int
-	var lastWasComplete bool
 	for rows.Next() {
 		var height int
 		var count uint64
 		if err := rows.Scan(&price, &timestamp, &difficulty, &height, &count); err != nil {
 			return err
 		}
-		lastHeight = height
-		ticketsCount += count
 
-		// If that was the last block in the current sdiff window, append the
-		// data, and reset for the next window.
-		fullWindow := height == nextWindowHeight-1 // e.g. mainnet block 143, 287, etc.
-		if fullWindow {
+		windowIdx := height / windowSize
+
+		if windowIdx > currentWindowIdx {
+			// NEW WINDOW: start fresh with first block's data
 			windows.TicketPrice = append(windows.TicketPrice, price)
 			windows.PowDiff = append(windows.PowDiff, difficulty)
 			windows.Time = append(windows.Time, uint64(timestamp.Unix()))
-			windows.StakeCount = append(windows.StakeCount, ticketsCount)
-
-			// Next sdiff window
-			lastWasComplete = true
-			ticketsCount = 0
-			nextWindowHeight += windowSize
-		} else {
-			lastWasComplete = false
-			if height >= nextWindowHeight {
-				return fmt.Errorf("reach height %d before the end of an sdiff window at %d",
-					height, nextWindowHeight)
-			} // else height < nextWindowHeight-1
+			windows.Height = append(windows.Height, uint64(height))
+			windows.StakeCount = append(windows.StakeCount, count)
+			currentWindowIdx = windowIdx
+			ticketsCount = count
+		} else if windowIdx == currentWindowIdx && currentWindowIdx >= 0 {
+			// SAME WINDOW: recompute stake count from all blocks in this window
+			ticketsCount += count
+			windows.StakeCount[currentWindowIdx] = ticketsCount
+			windows.StakeCountVersion++
 		}
 	}
 
 	if err := rows.Err(); err != nil {
 		return err
-	}
-
-	// Save partial window data so chart makers can append it as the last
-	// point, matching the home page's current value.
-	// Only update when rows were actually processed; otherwise keep the
-	// existing partial window (no new data since last refresh).
-	if lastHeight > 0 {
-		if lastWasComplete {
-			// The last row completed a window — no partial remains.
-			charts.SetPartialWindow(cache.PartialWindow{})
-		} else {
-			charts.SetPartialWindow(cache.PartialWindow{
-				Height:     uint64(lastHeight),
-				Time:       uint64(timestamp.Unix()),
-				Price:      price,
-				Diff:       difficulty,
-				StakeCount: ticketsCount,
-			})
-		}
 	}
 
 	return nil
