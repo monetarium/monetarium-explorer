@@ -24,9 +24,10 @@ export const missedVotes = {
     // tooltip from the untouched payload in formatValue.
     const ys = raw.missed.map((v) => (v > 0 ? v : null))
     if (raw.t) return [raw.t.slice(), ys]
-    // An explicit per-point height array (e.g. the live-tip point appended at a
-    // window start) takes precedence over deriving height from the window index.
-    if (raw.h) return [raw.h.slice(), ys]
+    // missedVotesChart never emits an explicit height array: missed votes have no
+    // live-tip source (ChartTip carries no MissedVotes), so every point is a
+    // completed window and its height is derived from the window index. Unlike
+    // ticket-price/pow-difficulty, there is no appended live point to honor here.
     const base = raw.offset * raw.window
     const xs = raw.missed.map((_, i) => i * raw.window + base)
     return [xs, ys]
