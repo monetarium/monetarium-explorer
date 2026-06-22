@@ -1170,3 +1170,99 @@ describe('ChartsController resize hook', () => {
     removeSpy.mockRestore()
   })
 })
+
+describe('ChartsController selection concurrency', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    restoreSettings = null
+    fakeHandle.uplot.data = [[]]
+  })
+
+  // Two-series def whose 1→2 series-count delta forces renderChart down the rebuild
+  // (createChart) branch rather than the in-place setData branch.
+  const twoSeriesDef = {
+    name: 'hashrate',
+    label: 'hashrate',
+    controls: {
+      bin: true,
+      scale: true,
+      mode: true,
+      zoom: true,
+      visibility: null,
+      interval: false,
+      windowUnits: false,
+      hybrid: false
+    },
+    axes: [{ label: 'hashrate', scale: 'y' }],
+    series: [
+      { label: 'Hashrate', scale: 'y', kind: 'line', colorIndex: 0 },
+      { label: 'Active Miners', scale: 'y2', kind: 'line', colorIndex: 1 }
+    ],
+    toColumns: () => [
+      [1, 2],
+      [10, 20],
+      [5, 8]
+    ],
+    formatValue: (_i, d) => String(d.value)
+  }
+
+  it('a fetch resolving after a newer selection does not clobber payload/selection', async () => {
+    const { requestJSON } = await import('../helpers/http')
+    const c = makeController()
+    await c.connect()
+
+    // Hold both fetches open so we can resolve them out of selection order.
+    let resolveA, resolveB
+    requestJSON
+      .mockImplementationOnce(() => new Promise((resolve) => (resolveA = resolve)))
+      .mockImplementationOnce(() => new Promise((resolve) => (resolveB = resolve)))
+
+    c.chartSelectTarget.value = 'chart-A'
+    const pA = c.selectChart() // suspends on fetch A
+    c.chartSelectTarget.value = 'chart-B'
+    const pB = c.selectChart() // suspends on fetch B (now the current selection)
+
+    resolveB({ axis: 'time', bin: 'block', t: [1000, 2000] })
+    await pB
+    expect(c.selectedChartName).toBe('chart-B')
+
+    // A resolves last but is stale: its continuation must bail before touching state.
+    resolveA({ axis: 'time', bin: 'block', t: [9000, 9999] })
+    await pA
+    expect(c.selectedChartName).toBe('chart-B')
+  })
+
+  it('a selection superseded mid-create destroys the orphaned chart instead of adopting it', async () => {
+    const { createChart } = await import('../helpers/uplot_adapter')
+    const c = makeController()
+    await c.connect() // initial chart established; c.handle === fakeHandle
+
+    // Hold the rebuild's createChart open so a newer selection can land mid-flight.
+    let resolveCreate
+    createChart.mockImplementationOnce(() => new Promise((resolve) => (resolveCreate = resolve)))
+
+    c.payload = {}
+    const pending = c.renderChart(twoSeriesDef) // enters rebuild branch; handle nulled
+    expect(c.handle).toBeNull()
+
+    // A newer selectChart() supersedes this render while createChart is still pending.
+    c.fetchGeneration++
+
+    const orphan = { destroy: vi.fn() }
+    resolveCreate(orphan)
+    await pending
+
+    expect(orphan.destroy).toHaveBeenCalled() // torn down, not left in the DOM
+    expect(c.handle).toBeNull() // never adopted as the live handle
+  })
+
+  it('an un-superseded create still adopts its handle (guard is a no-op on the common path)', async () => {
+    const c = makeController()
+    await c.connect()
+
+    c.payload = {}
+    await c.renderChart(twoSeriesDef) // no competing selection
+
+    expect(c.handle).toBe(fakeHandle)
+  })
+})

@@ -94,6 +94,11 @@ export default class extends Controller {
     this.zoomGuard = false
     this.ranger = null
     this.lastWidth = null // viewport width the chart was last sized to (resize guard)
+    // Monotonic selection counter. selectChart() bumps it on entry and captures the
+    // value; after each await it bails if a newer selection has superseded it. Prevents
+    // a stale fetch from clobbering this.payload and stops two overlapping createChart
+    // calls from orphaning a uPlot instance in the shared chart element.
+    this.fetchGeneration = 0
 
     // Legend element generators (cloned from the template nodes).
     this.legendElement = this.labelsTarget
@@ -241,6 +246,11 @@ export default class extends Controller {
       return
     }
 
+    // Claim this selection. Any await below re-checks the counter and bails if a newer
+    // selectChart() has run in the meantime, so a slow fetch or createChart can't apply
+    // its result over the chart the user actually has selected now.
+    const gen = ++this.fetchGeneration
+
     this.chartWrapperTarget.classList.add('loading')
     this.applyControlVisibility(def, selection)
 
@@ -251,10 +261,13 @@ export default class extends Controller {
 
     if (needFetch) {
       const url = this.buildURL(def, selection)
-      this.payload = await requestJSON(url)
+      const payload = await requestJSON(url)
+      if (gen !== this.fetchGeneration) return // superseded mid-fetch; don't clobber payload
+      this.payload = payload
       this.selectedChartName = selection
     }
     await this.renderChart(def)
+    if (gen !== this.fetchGeneration) return // superseded during createChart
     const base = `${this.query.url.protocol}//${this.query.url.host}`
     this.rawDataURLTarget.textContent = `${base}/api/chart/${selection}?axis=${this.settings.axis}&bin=${this.settings.bin}&interval=${this.settings.interval}`
     this.query.replace(this.settings)
@@ -277,6 +290,11 @@ export default class extends Controller {
   }
 
   async renderChart(def) {
+    // Captured here (not as a param) so the createChart().then below can tell whether a
+    // newer selectChart() landed while it was in flight. Without this, two overlapping
+    // creations both resolve and assign this.handle; the first-resolved uPlot root is then
+    // orphaned in the shared element (its canvas + listeners stay, destroy() never runs).
+    const gen = this.fetchGeneration
     // hashrate w/o active_miners → drop the y2 miners series/axis.
     const renderDef = this.resolveRenderDef(def)
     this.currentDef = renderDef
@@ -306,6 +324,12 @@ export default class extends Controller {
         hooks: this.buildHooks(),
         onRangeChange: (min, max) => this.onChartRangeChange(min, max)
       }).then(async (h) => {
+        // Superseded while createChart was awaiting: tear this instance down instead of
+        // adopting it, so it isn't left orphaned in the element under the newer chart.
+        if (gen !== this.fetchGeneration) {
+          h.destroy()
+          return null
+        }
         this.handle = h
         // Seed the resize-guard baseline so the first mobile scroll (height-only) is a
         // no-op — see resizeChartToViewport.
