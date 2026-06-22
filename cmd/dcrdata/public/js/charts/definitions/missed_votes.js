@@ -17,13 +17,22 @@ export const missedVotes = {
   axes: [{ label: 'Missed Votes per Window', scale: 'y' }],
   series: [{ label: 'Missed Votes', scale: 'y', kind: 'bars', colorIndex: 0 }],
   toColumns: (raw) => {
-    if (raw.t) return [raw.t.slice(), raw.missed.slice()]
+    // A 0-missed window is unplottable on a log axis (log10(0) = -Inf, which on a
+    // bar series renders as a stub pinned to the scale floor). Emit null so the bar
+    // is simply omitted — visually identical to a 0-height bar on linear — and uPlot
+    // skips it when autoscaling the log range. The real count is recovered for the
+    // tooltip from the untouched payload in formatValue.
+    const ys = raw.missed.map((v) => (v > 0 ? v : null))
+    if (raw.t) return [raw.t.slice(), ys]
     const base = raw.offset * raw.window
     const xs = raw.missed.map((_, i) => i * raw.window + base)
-    return [xs, raw.missed.slice()]
+    return [xs, ys]
   },
   formatValue: (seriesIdx, datum) => {
-    return intComma(datum.value)
+    // Read the raw count from the payload, never the plotted value (nulled for zeros
+    // above). intComma renders '' for 0, so show an explicit '0' for zero windows.
+    const v = datum.payload.missed[datum.idx]
+    return v > 0 ? intComma(v) : '0'
   }
 }
 
