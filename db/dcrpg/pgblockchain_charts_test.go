@@ -58,8 +58,9 @@ func TestPgCharts(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s blocks length validation error: %v", tag, err)
 		}
-		_, err = cache.ValidateLengths(windows.TicketPrice, windows.PowDiff,
-			windows.Time, windows.StakeCount, windows.MissedVotes)
+	_, err = cache.ValidateLengths(windows.TicketPrice, windows.PowDiff,
+		windows.Time, windows.StakeCount, windows.MissedVotes,
+		windows.Height)
 		if err != nil {
 			t.Fatalf("%s windows length validation error: %v", tag, err)
 		}

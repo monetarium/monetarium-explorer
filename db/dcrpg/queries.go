@@ -3520,7 +3520,7 @@ func appendWindowStats(charts *cache.ChartData, rows *sql.Rows) error {
 
 	windows := charts.Windows
 	windowSize := int(charts.DiffInterval)
-	nextWindowHeight := windowSize * (len(windows.TicketPrice) + 1)
+	nextWindowHeight := windowSize * len(windows.TicketPrice)
 
 	var price, ticketsCount uint64
 	var timestamp time.Time
@@ -3535,12 +3535,6 @@ func appendWindowStats(charts *cache.ChartData, rows *sql.Rows) error {
 		isWindowStart := height%windowSize == 0
 
 		if isWindowStart && height >= nextWindowHeight {
-			// NEW WINDOW: finalize previous window's stake count if accumulated
-			if len(windows.TicketPrice) > 0 && ticketsCount > 0 {
-				windows.StakeCount[len(windows.StakeCount)-1] = ticketsCount
-				windows.StakeCountVersion++
-			}
-
 			// Start new window with first block's data
 			windows.TicketPrice = append(windows.TicketPrice, price)
 			windows.PowDiff = append(windows.PowDiff, difficulty)
@@ -3562,12 +3556,6 @@ func appendWindowStats(charts *cache.ChartData, rows *sql.Rows) error {
 
 	if err := rows.Err(); err != nil {
 		return err
-	}
-
-	// Finalize last window's stake count if incomplete
-	if len(windows.TicketPrice) > 0 && ticketsCount > 0 {
-		windows.StakeCount[len(windows.StakeCount)-1] = ticketsCount
-		windows.StakeCountVersion++
 	}
 
 	return nil

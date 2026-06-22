@@ -510,6 +510,7 @@ type ChartGobject struct {
 	Chainwork    ChartBigInts
 	Fees         ChartUints
 	WindowTime   ChartUints
+	WindowHeight ChartUints
 	PowDiff      ChartFloats
 	TicketPrice  ChartUints
 	StakeCount   ChartUints
@@ -643,7 +644,8 @@ func (charts *ChartData) Lengthen() error {
 
 	windows := charts.Windows
 	shortest, err = ValidateLengths(windows.Time, windows.PowDiff,
-		windows.TicketPrice, windows.StakeCount, windows.MissedVotes)
+		windows.TicketPrice, windows.StakeCount, windows.MissedVotes,
+		windows.Height)
 	if err != nil {
 		log.Warnf("ChartData.Lengthen: window data length mismatch detected. "+
 			"Truncating windows length to %d", shortest)
@@ -833,6 +835,7 @@ func (charts *ChartData) readCacheFile(filePath string) error {
 	charts.Blocks.TotalMixed = gobject.TotalMixed
 	charts.Blocks.AnonymitySet = gobject.AnonymitySet
 	charts.Windows.Time = gobject.WindowTime
+	charts.Windows.Height = gobject.WindowHeight
 	charts.Windows.PowDiff = gobject.PowDiff
 	charts.Windows.TicketPrice = gobject.TicketPrice
 	charts.Windows.StakeCount = gobject.StakeCount
@@ -936,6 +939,7 @@ func (charts *ChartData) gobject() *ChartGobject {
 		TotalMixed:   charts.Blocks.TotalMixed,
 		AnonymitySet: charts.Blocks.AnonymitySet,
 		WindowTime:   charts.Windows.Time,
+		WindowHeight: charts.Windows.Height,
 		PowDiff:      charts.Windows.PowDiff,
 		TicketPrice:  charts.Windows.TicketPrice,
 		StakeCount:   charts.Windows.StakeCount,

@@ -62,6 +62,7 @@ func TestChartsCache(t *testing.T) {
 		charts.Blocks.TotalMixed = append(charts.Blocks.TotalMixed, v)
 		charts.Blocks.AnonymitySet = append(charts.Blocks.AnonymitySet, v)
 		charts.Windows.Time = ChartUints{0}
+		charts.Windows.Height = ChartUints{0}
 		charts.Windows.PowDiff = ChartFloats{0}
 		charts.Windows.TicketPrice = ChartUints{0}
 		charts.Windows.StakeCount = ChartUints{0}
