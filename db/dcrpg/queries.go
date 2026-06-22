@@ -3502,7 +3502,11 @@ func appendMinerRanges(charts *cache.ChartData, rows *sql.Rows) error {
 // charts data source from the blocks table. These data is fetched at an
 // interval of chaincfg.Params.StakeDiffWindowSize.
 func retrieveWindowStats(ctx context.Context, db *sql.DB, charts *cache.ChartData) (*sql.Rows, error) {
-	rows, err := db.QueryContext(ctx, internal.SelectBlocksTicketsPrice, charts.TicketPriceTip())
+	var cursor int32 = -1
+	if len(charts.Windows.Height) > 0 {
+		cursor = int32(charts.Windows.Height[len(charts.Windows.Height)-1]) - 1
+	}
+	rows, err := db.QueryContext(ctx, internal.SelectBlocksTicketsPrice, cursor)
 	if err != nil {
 		return nil, err
 	}
@@ -3514,13 +3518,14 @@ func retrieveWindowStats(ctx context.Context, db *sql.DB, charts *cache.ChartDat
 // Since tickets count per window cannot be done on the db, windows grouping
 // and tickets count is done here.
 // Window data is emitted at window start (height % windowSize == 0) with live
-// stake count updates per block.
+// stake count updates per block. Recomputes stake count from all blocks in
+// the current window to be idempotent across restarts and incremental updates.
 func appendWindowStats(charts *cache.ChartData, rows *sql.Rows) error {
 	defer closeRows(rows)
 
 	windows := charts.Windows
 	windowSize := int(charts.DiffInterval)
-	nextWindowHeight := windowSize * len(windows.TicketPrice)
+	currentWindowIdx := len(windows.TicketPrice) - 1
 
 	var price, ticketsCount uint64
 	var timestamp time.Time
@@ -3532,25 +3537,22 @@ func appendWindowStats(charts *cache.ChartData, rows *sql.Rows) error {
 			return err
 		}
 
-		isWindowStart := height%windowSize == 0
+		windowIdx := height / windowSize
 
-		if isWindowStart && height >= nextWindowHeight {
-			// Start new window with first block's data
+		if windowIdx > currentWindowIdx {
+			// NEW WINDOW: start fresh with first block's data
 			windows.TicketPrice = append(windows.TicketPrice, price)
 			windows.PowDiff = append(windows.PowDiff, difficulty)
 			windows.Time = append(windows.Time, uint64(timestamp.Unix()))
 			windows.Height = append(windows.Height, uint64(height))
 			windows.StakeCount = append(windows.StakeCount, count)
-
-			ticketsCount = 0
-			nextWindowHeight += windowSize
-		} else {
-			// SAME WINDOW: accumulate and update in-place
+			currentWindowIdx = windowIdx
+			ticketsCount = count
+		} else if windowIdx == currentWindowIdx && currentWindowIdx >= 0 {
+			// SAME WINDOW: recompute stake count from all blocks in this window
 			ticketsCount += count
-			if len(windows.StakeCount) > 0 {
-				windows.StakeCount[len(windows.StakeCount)-1] += count
-				windows.StakeCountVersion++
-			}
+			windows.StakeCount[currentWindowIdx] = ticketsCount
+			windows.StakeCountVersion++
 		}
 	}
 

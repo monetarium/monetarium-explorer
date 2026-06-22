@@ -290,6 +290,7 @@ func TestChartReorg(t *testing.T) {
 		charts.Windows = &windowSet{
 			cacheID:     0,
 			Time:        newUints(),
+			Height:      newUints(),
 			PowDiff:     newFloats(),
 			TicketPrice: newUints(),
 			StakeCount:  newUints(),

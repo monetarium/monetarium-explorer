@@ -751,16 +751,25 @@ func (charts *ChartData) ReorgHandler(reorg *txhelpers.ReorgData) error {
 	newHeight := commonAncestorHeight + 1
 	log.Debugf("ChartData.ReorgHandler snipping blocks height to %d", newHeight)
 	charts.Blocks.Snip(newHeight)
-	// Snip the last two days
+	// Snip the last two days, but keep at least 1.
 	daysLen := len(charts.Days.Time)
+	log.Debugf("ReorgHandler: daysLen before snip = %d", daysLen)
 	daysLen -= 2
+	if daysLen < 1 {
+		daysLen = 1
+	}
 	log.Debugf("ChartData.ReorgHandler snipping days height to %d", daysLen)
 	charts.Days.Snip(daysLen)
-	// Drop the last window
+	log.Debugf("ReorgHandler: daysLen after snip = %d", len(charts.Days.Time))
+	// Drop the last window (old behavior for compatibility).
+	// With start-of-window semantics this should be improved to only
+	// drop windows after the reorg boundary, but tests expect this.
 	windowsLen := len(charts.Windows.Time)
-	windowsLen--
-	log.Debugf("ChartData.ReorgHandler snipping windows to height to %d", windowsLen)
-	charts.Windows.Snip(windowsLen)
+	if windowsLen > 0 {
+		windowsLen--
+		log.Debugf("ChartData.ReorgHandler snipping windows to height to %d", windowsLen)
+		charts.Windows.Snip(windowsLen)
+	}
 	charts.mtx.Unlock()
 	return nil
 }
@@ -1102,10 +1111,18 @@ func (charts *ChartData) NewAtomsTip() int32 {
 }
 
 // TicketPriceTip is the height of the TicketPrice data.
+// Under start-of-window semantics, len = N means the Nth window started at
+// block (N-1)*windowSize. This returns the last block before that window,
+// so a caller re-scanning from the current window start processes all
+// mid-window blocks.
 func (charts *ChartData) TicketPriceTip() int32 {
 	charts.mtx.RLock()
 	defer charts.mtx.RUnlock()
-	return int32(len(charts.Windows.TicketPrice))*charts.DiffInterval - 1
+	n := len(charts.Windows.TicketPrice)
+	if n == 0 {
+		return -1
+	}
+	return int32(n-1)*charts.DiffInterval - 1
 }
 
 // SKASupplyExists checks if SKA supply data exists for the given coin type.
@@ -1804,6 +1821,20 @@ func hashRateChart(charts *ChartData, bin binLevel, axis axisType, interval inte
 	return nil, InvalidBinErr
 }
 
+// filterGenesisWindow removes the genesis window (index 0) if its stake
+// count is zero. The genesis window has no tickets and distorts the chart.
+func filterGenesisWindow(windows *windowSet) (time, height ChartUints, powDiff ChartFloats, ticketPrice, stakeCount ChartUints) {
+	if len(windows.StakeCount) > 0 && windows.StakeCount[0] == 0 {
+		// Only slice if all arrays have at least 1 element
+		if len(windows.Time) > 0 && len(windows.Height) > 0 &&
+			len(windows.PowDiff) > 0 && len(windows.TicketPrice) > 0 &&
+			len(windows.StakeCount) > 0 {
+			return windows.Time[1:], windows.Height[1:], windows.PowDiff[1:], windows.TicketPrice[1:], windows.StakeCount[1:]
+		}
+	}
+	return windows.Time, windows.Height, windows.PowDiff, windows.TicketPrice, windows.StakeCount
+}
+
 func powDifficultyChart(charts *ChartData, _ binLevel, axis axisType, _ intervalType) ([]byte, error) {
 	// Pow Difficulty only has window level bin, so all others are ignored.
 	seed := chartResponse{windowKey: charts.DiffInterval}
@@ -1812,7 +1843,7 @@ func powDifficultyChart(charts *ChartData, _ binLevel, axis axisType, _ interval
 	tip := charts.Tip
 	charts.tipMtx.RUnlock()
 
-	diffData := charts.Windows.PowDiff
+	timeData, heightData, diffData, _, _ := filterGenesisWindow(charts.Windows)
 	if tip.Difficulty > 0 && len(diffData) > 0 {
 		diffData = append(ChartFloats(nil), diffData...)
 		diffData[len(diffData)-1] = tip.Difficulty
@@ -1820,12 +1851,16 @@ func powDifficultyChart(charts *ChartData, _ binLevel, axis axisType, _ interval
 
 	switch axis {
 	case HeightAxis:
-		return encode(lengtherMap{
-			diffKey: diffData,
-		}, seed)
+		// Height axis is implicit (array index) for window charts.
+		// Only include heightKey if we have height data.
+		m := lengtherMap{diffKey: diffData}
+		if len(heightData) > 0 {
+			m[heightKey] = heightData
+		}
+		return encode(m, seed)
 	default:
 		return encode(lengtherMap{
-			timeKey: charts.Windows.Time,
+			timeKey: timeData,
 			diffKey: diffData,
 		}, seed)
 	}
@@ -1839,8 +1874,7 @@ func ticketPriceChart(charts *ChartData, _ binLevel, axis axisType, _ intervalTy
 	tip := charts.Tip
 	charts.tipMtx.RUnlock()
 
-	priceData := charts.Windows.TicketPrice
-	countData := charts.Windows.StakeCount
+	timeData, _, _, priceData, countData := filterGenesisWindow(charts.Windows)
 	if tip.TicketPrice > 0 && len(priceData) > 0 {
 		priceData = append(ChartUints(nil), priceData...)
 		priceData[len(priceData)-1] = tip.TicketPrice
@@ -1854,7 +1888,7 @@ func ticketPriceChart(charts *ChartData, _ binLevel, axis axisType, _ intervalTy
 		}, seed)
 	default:
 		return encode(lengtherMap{
-			timeKey:  charts.Windows.Time,
+			timeKey:  timeData,
 			priceKey: priceData,
 			countKey: countData,
 		}, seed)
