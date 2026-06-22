@@ -3,43 +3,14 @@ import { Controller } from '@hotwired/stimulus'
 import { requestJSON } from '../helpers/http'
 import humanize from '../helpers/humanize_helper'
 import TurboQuery from '../helpers/turbolinks_helper'
+import { OTHERS_COLOR, colorForIndex } from '../helpers/chart_theme'
 
 // Pie geometry constants (SVG viewBox is 360x360).
 export const PIE = { cx: 180, cy: 180, r: 165, labelR: 110 }
 
-// Fixed 25-color categorical palette (visually distinct in light and dark themes).
-export const PALETTE = [
-  '#2970FF',
-  '#E03131',
-  '#2DB35E',
-  '#F08C00',
-  '#1098AD',
-  '#7048E8',
-  '#E64980',
-  '#0B7285',
-  '#F59F00',
-  '#495057',
-  '#4263EB',
-  '#74B816',
-  '#D6336C',
-  '#1864AB',
-  '#9C36B5',
-  '#0CA678',
-  '#E8590C',
-  '#3B5BDB',
-  '#66A80F',
-  '#C2255C',
-  '#5C940D',
-  '#A61E4D',
-  '#364FC7',
-  '#087F5B',
-  '#862E9C'
-]
-export const OTHERS_COLOR = '#adb5bd'
-
 // Number of individually-drawn pie slices / individually-listed table rows.
 // Miners ranked beyond this are folded into a single "Others" slice and a single
-// "Others" table row. Matches PALETTE.length so every drawn slice has its own color.
+// "Others" table row. Matches the shared PALETTE length (in chart_theme) so every drawn slice has its own color.
 export const PIE_SLICES = 25
 
 // Minimum slice sweep (radians) for a rank number to fit inside the slice.
@@ -56,10 +27,6 @@ export const ERROR_MESSAGE = 'Could not load hashrate shares. Please try again.'
 
 export function emptyStateMessage(isError) {
   return isError ? ERROR_MESSAGE : EMPTY_MESSAGE
-}
-
-export function colorForIndex(i) {
-  return PALETTE[i % PALETTE.length]
 }
 
 // swatchColor maps a 1-based miner rank to its color: ranks drawn in the pie get

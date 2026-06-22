@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
+import { colorForIndex, OTHERS_COLOR } from '../helpers/chart_theme'
 import {
-  colorForIndex,
   swatchColor,
   sliceLabelFits,
   arcPath,
@@ -10,19 +10,9 @@ import {
   buildCsv,
   EMPTY_MESSAGE,
   ERROR_MESSAGE,
-  OTHERS_COLOR,
   PIE,
-  PIE_SLICES,
-  PALETTE
+  PIE_SLICES
 } from './hashrate_shares_controller'
-
-describe('colorForIndex', () => {
-  it('is deterministic and wraps the palette', () => {
-    expect(colorForIndex(0)).toBe(PALETTE[0])
-    expect(colorForIndex(1)).toBe(PALETTE[1])
-    expect(colorForIndex(PALETTE.length)).toBe(PALETTE[0]) // wraps
-  })
-})
 
 describe('swatchColor', () => {
   it('colors ranks within the pie by their slice color', () => {

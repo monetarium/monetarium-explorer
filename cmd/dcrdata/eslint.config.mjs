@@ -27,6 +27,7 @@ export default [
         clearTimeout: 'readonly',
         setInterval: 'readonly',
         clearInterval: 'readonly',
+        queueMicrotask: 'readonly',
         Promise: 'readonly',
         Blob: 'readonly',
         URL: 'readonly',

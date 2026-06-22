@@ -8,6 +8,7 @@ import ws from './js/services/messagesocket_service'
 import { darkEnabled } from './js/services/theme_service'
 
 import './scss/application.scss'
+import 'uplot/dist/uPlot.min.css'
 
 window.darkEnabled = darkEnabled
 

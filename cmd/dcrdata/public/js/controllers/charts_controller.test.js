@@ -1,7 +1,7 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { requestJSON } from '../helpers/http'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 const mockReplace = vi.fn()
+let restoreSettings = null
 
 vi.mock('@hotwired/stimulus', () => ({
   Controller: class {
@@ -21,7 +21,9 @@ vi.mock('../helpers/turbolinks_helper', () => {
           set: vi.fn(),
           query: {}
         }
-        this.update = vi.fn()
+      }
+      update(target) {
+        if (restoreSettings) Object.assign(target, restoreSettings)
       }
       replace(query) {
         mockReplace(query)
@@ -64,48 +66,117 @@ vi.mock('../services/theme_service', () => ({
   darkEnabled: vi.fn().mockReturnValue(false)
 }))
 
-vi.mock('../helpers/module_helper', () => ({
-  getDefault: vi.fn().mockResolvedValue(
-    class Dygraph {
-      constructor() {
-        this.plotter_ = { clear: vi.fn() }
-        this.updateOptions = vi.fn()
-        this.xAxisExtremes = vi.fn().mockReturnValue([0, 100])
-        this.yAxisRanges = vi.fn().mockReturnValue([0, 100])
-      }
-      static Plugins = {
-        Legend: {
-          generateLegendHTML: vi.fn()
-        }
-      }
-    }
-  )
+// Fake ChartHandle the adapter returns.
+const fakeHandle = {
+  uplot: { setScale: vi.fn(), data: [[]], scales: { x: {} }, cursor: {} },
+  setData: vi.fn(),
+  setScaleType: vi.fn(),
+  setMode: vi.fn(),
+  setDark: vi.fn(),
+  setVisibility: vi.fn(),
+  setXRange: vi.fn(),
+  resize: vi.fn(),
+  destroy: vi.fn()
+}
+
+vi.mock('../helpers/uplot_adapter', () => ({
+  createChart: vi.fn().mockResolvedValue(fakeHandle),
+  createSyncKey: (n) => `mon-chart-sync:${n}`,
+  resolveSeriesColor: vi.fn(() => 'rgb(45, 179, 94)')
 }))
 
-vi.mock('../helpers/zoom_helper', () => ({
-  default: {
-    validate: vi.fn().mockReturnValue({ start: 0, end: 100 }),
-    project: vi.fn().mockReturnValue({ start: 0, end: 100 }),
-    object: vi.fn().mockReturnValue({ start: 0, end: 100 }),
-    encode: vi.fn().mockReturnValue('zoom-string'),
-    mapKey: vi.fn().mockReturnValue('zoom-option')
-  }
+const fakeRanger = {
+  uplot: {},
+  setData: vi.fn(),
+  setSelection: vi.fn(),
+  setGutters: vi.fn(),
+  setWidth: vi.fn(),
+  setDark: vi.fn(),
+  destroy: vi.fn()
+}
+let capturedRangerOpts = null
+vi.mock('../helpers/uplot_ranger', () => ({
+  createRanger: vi.fn((el, def, opts) => {
+    capturedRangerOpts = opts
+    return Promise.resolve(fakeRanger)
+  })
 }))
+
+// Side-effect barrel is a no-op import in tests; stub it.
+vi.mock('../charts/definitions/index', () => ({}))
+
+// Controllable definition resolution.
+vi.mock('../charts/registry', () => ({
+  getDefinition: vi.fn((name) => ({
+    name: name,
+    label: name,
+    controls: {
+      bin: true,
+      scale: true,
+      mode: name === 'ticket-price' || name === 'hashrate',
+      zoom: true,
+      visibility: name === 'hashrate' ? ['Hashrate', 'Active Miners'] : null,
+      interval: name === 'hashrate',
+      windowUnits: name === 'ticket-price',
+      hybrid: false
+    },
+    axes: [{ label: name, scale: 'y' }],
+    series: [{ label: name, scale: 'y', kind: 'line', colorIndex: 0 }],
+    toColumns: () => [
+      [1, 2],
+      [10, 20]
+    ],
+    formatValue: (_i, d) => String(d.value)
+  })),
+  coinTypeFromName: () => 0,
+  isCoinSupplyName: () => false,
+  isSKAFeeName: () => false
+}))
+
+vi.mock('../helpers/zoom_helper', () => {
+  // Real preset spans (ms) so presetForRange/zoomSpan match, plus faithful base-36
+  // encode/decode so the encoded-range round-trip is exercised for real.
+  const zoomMap = { all: 0, year: 3.154e10, month: 2.628e9, week: 6.048e8, day: 8.64e7 }
+  return {
+    default: {
+      validate: vi.fn().mockReturnValue({ start: 0, end: 100 }),
+      project: vi.fn().mockReturnValue({ start: 0, end: 100 }),
+      object: vi.fn().mockReturnValue({ start: 0, end: 100 }),
+      encode: vi.fn((s, e) => `${parseInt(s).toString(36)}-${parseInt(e).toString(36)}`),
+      decode: vi.fn((enc) => {
+        if (typeof enc === 'string' && enc.indexOf('-') !== -1) {
+          const [a, b] = enc.split('-')
+          return { start: parseInt(a, 36), end: parseInt(b, 36) }
+        }
+        return enc
+      }),
+      mapKey: vi.fn().mockReturnValue('zoom-option'),
+      mapValue: vi.fn((key) => zoomMap[key])
+    }
+  }
+})
 
 vi.mock('../helpers/animation_helper', () => ({
   animationFrame: vi.fn().mockResolvedValue()
 }))
 
-vi.mock('../helpers/chart_helper', () => ({
-  isEqual: vi.fn().mockReturnValue(false)
-}))
+const { default: ChartsController } = await import('./charts_controller.js')
 
-const {
-  default: ChartsController,
-  sanitizeLogValueRange,
-  clampLogFloor,
-  missedVotesFunc
-} = await import('./charts_controller.js')
+function optBtn(option, active = false) {
+  let on = active
+  return {
+    dataset: { option },
+    classList: {
+      add: (c) => {
+        if (c === 'active') on = true
+      },
+      remove: (c) => {
+        if (c === 'active') on = false
+      },
+      contains: (c) => c === 'active' && on
+    }
+  }
+}
 
 function makeController() {
   const c = new ChartsController()
@@ -122,23 +193,58 @@ function makeController() {
   c.zoomOptionTargets = []
   c.scaleTypeTargets = []
   c.modeOptionTargets = []
-  c.labelsTarget = { appendChild: vi.fn() }
-  c.legendMarkerTarget = { remove: vi.fn(), removeAttribute: vi.fn() }
-  c.legendEntryTarget = { remove: vi.fn(), removeAttribute: vi.fn() }
+  c.labelsTarget = {
+    classList: { add: vi.fn(), remove: vi.fn() },
+    replaceChildren: vi.fn(),
+    appendChild: vi.fn()
+  }
+  c.legendMarkerTarget = {
+    remove: vi.fn(),
+    removeAttribute: vi.fn(),
+    cloneNode: vi.fn().mockImplementation(() => document.createElement('span'))
+  }
+  c.legendEntryTarget = {
+    remove: vi.fn(),
+    removeAttribute: vi.fn(),
+    cloneNode: vi.fn().mockImplementation(() => {
+      const node = {
+        innerHTML: '',
+        get textContent() {
+          return this.innerHTML
+        }
+      }
+      return node
+    })
+  }
   c.rawDataURLTarget = { textContent: '' }
-  c.chartsViewTarget = { classList: { add: vi.fn(), remove: vi.fn() } }
+  c.chartsViewTarget = {
+    classList: { add: vi.fn(), remove: vi.fn() },
+    clientWidth: 800,
+    clientHeight: 400,
+    getBoundingClientRect: () => ({ top: 0 }),
+    listeners: {},
+    addEventListener: vi.fn(function (type, fn) {
+      this.listeners[type] = fn
+    }),
+    removeEventListener: vi.fn(function (type) {
+      delete this.listeners[type]
+    })
+  }
   c.ticketsPriceTarget = { checked: true }
   c.ticketsPurchaseTarget = { checked: true }
   c.hashrateRateTarget = { checked: true }
   c.hashrateMinersTarget = { checked: true }
   c.intervalSelectorTarget = { classList: { add: vi.fn(), remove: vi.fn() } }
   c.intervalOptionTargets = []
+  c.hasRangerViewTarget = true
+  c.rangerViewTarget = { clientWidth: 800 }
   return c
 }
 
 describe('ChartsController URL persistence', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    restoreSettings = null
   })
 
   it('selectChart persists chart/bin/axis to URL via query.replace', async () => {
@@ -225,6 +331,358 @@ describe('ChartsController URL persistence', () => {
       })
     )
   })
+
+  it('selectChart populates rawDataURLTarget with the chart API URL', async () => {
+    const c = makeController()
+    await c.connect()
+
+    expect(c.rawDataURLTarget.textContent).toContain('/api/chart/')
+    expect(c.rawDataURLTarget.textContent).toContain(c.chartSelectTarget.value)
+  })
+
+  it('connect restores bookmarked bin/axis active state from URL params', async () => {
+    restoreSettings = { chart: 'ticket-pool-size', bin: 'block', axis: 'height' }
+    const c = makeController()
+    c.binSizeTargets = [optBtn('day', true), optBtn('block')]
+    c.axisOptionTargets = [optBtn('time', true), optBtn('height')]
+
+    await c.connect()
+
+    expect(mockReplace).toHaveBeenCalledWith(
+      expect.objectContaining({ bin: 'block', axis: 'height' })
+    )
+  })
+})
+
+describe('ChartsController legend', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('renderLegend writes one entry per series plus the x label', async () => {
+    const c = makeController()
+    // legend element collects appended children's text
+    const appended = []
+    c.labelsTarget = {
+      classList: { add: vi.fn(), remove: vi.fn() },
+      innerHTML: '',
+      appendChild: (node) => appended.push(node.textContent),
+      replaceChildren: () => (appended.length = 0)
+    }
+    await c.connect()
+    c.currentDef = {
+      name: 'demo',
+      series: [{ label: 'Price' }],
+      formatValue: (i, d) => `${d.value} VAR`
+    }
+    c.payload = { t: [1000, 2000], axis: 'time' }
+    c.settings.axis = 'time'
+
+    const u = {
+      cursor: { idx: 1 },
+      data: [
+        [1000, 2000],
+        [10, 20]
+      ]
+    }
+    c.renderLegend(u)
+
+    expect(appended.some((t) => t.includes('Price: 20 VAR'))).toBe(true)
+  })
+
+  it('renderLegend hides the legend when the cursor is off the plot', async () => {
+    const c = makeController()
+    c.labelsTarget = {
+      classList: { add: vi.fn(), remove: vi.fn() },
+      replaceChildren: vi.fn(),
+      appendChild: vi.fn()
+    }
+    await c.connect()
+    c.currentDef = { series: [], formatValue: () => '' }
+    const u = { cursor: { idx: null }, data: [[1000]] }
+    c.renderLegend(u)
+    expect(c.labelsTarget.classList.add).toHaveBeenCalledWith('d-hide')
+  })
+
+  it('legendMarker colors the marker line with the given color, and omits it when none is given', async () => {
+    const c = makeController()
+    await c.connect()
+    expect(c.legendMarker('rgb(224, 49, 49)')).toContain('border-bottom-color')
+    expect(c.legendMarker()).not.toContain('border-bottom-color')
+  })
+
+  it('renderLegend colors each series marker with its resolved series stroke color', async () => {
+    const { resolveSeriesColor } = await import('../helpers/uplot_adapter')
+    const c = makeController()
+    const appended = []
+    c.labelsTarget = {
+      classList: { add: vi.fn(), remove: vi.fn() },
+      appendChild: (node) => appended.push(node.innerHTML),
+      replaceChildren: () => (appended.length = 0)
+    }
+    await c.connect()
+    const series = [{ label: 'Price', colorIndex: 2 }]
+    c.currentDef = { name: 'demo', series: series, formatValue: (i, d) => `${d.value}` }
+    c.payload = {}
+    c.settings.axis = 'time'
+    c.renderLegend({
+      cursor: { idx: 1 },
+      data: [
+        [1000, 2000],
+        [10, 20]
+      ]
+    })
+    // marker color comes from the SAME resolver the adapter uses for the line stroke
+    expect(resolveSeriesColor).toHaveBeenCalledWith(series[0], 0, false)
+    expect(appended.some((h) => h.includes('border-bottom-color'))).toBe(true)
+  })
+})
+
+describe('ChartsController on-plot tooltip', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('installTooltip creates a tooltip in u.over and retargets the legend element', async () => {
+    const c = makeController()
+    await c.connect()
+    const over = document.createElement('div')
+    c.installTooltip({ over: over, cursor: {} })
+    const tt = over.querySelector('.chart-tooltip')
+    expect(tt).not.toBeNull()
+    expect(c.legendElement).toBe(tt)
+  })
+
+  it('the tooltip shows on cursor enter and hides on leave', async () => {
+    const c = makeController()
+    await c.connect()
+    const over = document.createElement('div')
+    c.installTooltip({ over: over, cursor: {} })
+    const tt = over.querySelector('.chart-tooltip')
+    over.dispatchEvent(new Event('mouseenter')) // eslint-disable-line no-undef
+    expect(tt.classList.contains('d-hide')).toBe(false)
+    over.dispatchEvent(new Event('mouseleave')) // eslint-disable-line no-undef
+    expect(tt.classList.contains('d-hide')).toBe(true)
+  })
+
+  it('renderLegend positions the tooltip near the cursor inside the overlay', async () => {
+    const c = makeController()
+    await c.connect()
+    const over = document.createElement('div')
+    Object.defineProperty(over, 'clientWidth', { value: 500, configurable: true })
+    Object.defineProperty(over, 'clientHeight', { value: 400, configurable: true })
+    c.installTooltip({ over: over, cursor: {} })
+    // legendElement is now a real <div>, so its real appendChild needs real nodes — the
+    // makeController stub clones fake nodes. Override the entry generator for this test.
+    c.legendEntry = (s) => {
+      const d = document.createElement('div')
+      d.textContent = s
+      return d
+    }
+    c.currentDef = {
+      name: 'demo',
+      series: [{ label: 'Price' }],
+      formatValue: (i, d) => `${d.value}`
+    }
+    c.payload = {}
+    c.settings.axis = 'time'
+    c.renderLegend({
+      over: over,
+      cursor: { idx: 1, left: 50, top: 30 },
+      data: [
+        [1000, 2000],
+        [10, 20]
+      ]
+    })
+    expect(c.legendElement.style.left).toBe('62px') // 50 + 12 pad, no flip (fits in 500)
+    expect(c.legendElement.style.top).toBe('42px') // 30 + 12 pad, no flip (fits in 400)
+  })
+
+  // Build a synthetic touch event with a single-touch list. jsdom lacks a TouchEvent
+  // constructor, so we hang `touches` on a plain cancelable Event — the handler only reads
+  // e.touches[0].clientX/Y and calls e.preventDefault().
+  function touchEvent(type, x, y) {
+    const e = new Event(type, { bubbles: true, cancelable: true }) // eslint-disable-line no-undef
+    e.touches = x == null ? [] : [{ clientX: x, clientY: y }]
+    return e
+  }
+
+  function scrubFixture(c) {
+    const over = document.createElement('div')
+    over.getBoundingClientRect = () => ({ left: 0, top: 0, width: 500, height: 400 })
+    const u = { over: over, cursor: {}, setCursor: vi.fn() }
+    c.installTooltip(u)
+    return { over, u }
+  }
+
+  it('a horizontal touch scrub drives the cursor and prevents default', async () => {
+    const c = makeController()
+    await c.connect()
+    const { over, u } = scrubFixture(c)
+    over.dispatchEvent(touchEvent('touchstart', 100, 100))
+    const move = touchEvent('touchmove', 132, 106) // dx=32, dy=6 -> scrub
+    over.dispatchEvent(move)
+    expect(u.setCursor).toHaveBeenCalledWith({ left: 132, top: 106 })
+    expect(move.defaultPrevented).toBe(true)
+  })
+
+  it('a vertical touch drag yields to page scroll (no cursor, no preventDefault)', async () => {
+    const c = makeController()
+    await c.connect()
+    const { over, u } = scrubFixture(c)
+    over.dispatchEvent(touchEvent('touchstart', 100, 100))
+    const move = touchEvent('touchmove', 106, 140) // dx=6, dy=40 -> scroll
+    over.dispatchEvent(move)
+    expect(u.setCursor).not.toHaveBeenCalled()
+    expect(move.defaultPrevented).toBe(false)
+  })
+
+  it('clamps the cursor to the overlay box when the finger leaves the chart', async () => {
+    const c = makeController()
+    await c.connect()
+    const { over, u } = scrubFixture(c)
+    over.dispatchEvent(touchEvent('touchstart', 100, 100))
+    over.dispatchEvent(touchEvent('touchmove', 140, 100)) // lock to scrub
+    u.setCursor.mockClear()
+    over.dispatchEvent(touchEvent('touchmove', 999, 999)) // off the 500x400 overlay
+    expect(u.setCursor).toHaveBeenCalledWith({ left: 500, top: 400 })
+  })
+
+  it('hides the tooltip on touchend after a scrub', async () => {
+    const c = makeController()
+    await c.connect()
+    const { over, u } = scrubFixture(c)
+    const tt = over.querySelector('.chart-tooltip')
+    over.dispatchEvent(touchEvent('touchstart', 100, 100))
+    over.dispatchEvent(touchEvent('touchmove', 140, 100)) // scrub
+    tt.classList.remove('d-hide') // simulate renderLegend having shown it
+    over.dispatchEvent(touchEvent('touchend'))
+    expect(tt.classList.contains('d-hide')).toBe(true)
+    expect(u.setCursor).toHaveBeenLastCalledWith({ left: -10, top: -10 })
+  })
+
+  it('stays in scroll for the rest of the gesture once vertical-classified (terminal state)', async () => {
+    const c = makeController()
+    await c.connect()
+    const { over, u } = scrubFixture(c)
+    over.dispatchEvent(touchEvent('touchstart', 100, 100))
+    over.dispatchEvent(touchEvent('touchmove', 106, 140)) // dx=6, dy=40 -> classified scroll
+    expect(u.setCursor).not.toHaveBeenCalled()
+    // A later strongly-horizontal move in the SAME gesture must NOT start scrubbing — the
+    // scroll classification is terminal until touchend. If the handler re-classified every
+    // move, this would scrub.
+    const move = touchEvent('touchmove', 300, 142)
+    over.dispatchEvent(move)
+    expect(u.setCursor).not.toHaveBeenCalled()
+    expect(move.defaultPrevented).toBe(false)
+  })
+
+  // Touch tooltip placement. On touch the cursor IS the fingertip, so the box sits above and
+  // to the left of the touch point (the clearest quadrant — the finger/hand obscures below and
+  // to the right). jsdom does no layout, so the overlay's client size and the tooltip's offset
+  // size must be defined explicitly to exercise the placement and edge flips.
+  function placedFixture(c, boxW, boxH) {
+    const over = document.createElement('div')
+    Object.defineProperty(over, 'clientWidth', { value: 500, configurable: true })
+    Object.defineProperty(over, 'clientHeight', { value: 400, configurable: true })
+    c.installTooltip({ over: over, cursor: {} })
+    Object.defineProperty(c.legendElement, 'offsetWidth', { value: boxW, configurable: true })
+    Object.defineProperty(c.legendElement, 'offsetHeight', { value: boxH, configurable: true })
+    return over
+  }
+
+  it('marks touch input active during a scrub and clears it on touchend', async () => {
+    const c = makeController()
+    await c.connect()
+    const { over } = scrubFixture(c)
+    expect(c.touchActive).toBe(false)
+    over.dispatchEvent(touchEvent('touchstart', 100, 100))
+    over.dispatchEvent(touchEvent('touchmove', 140, 100)) // lock to scrub
+    expect(c.touchActive).toBe(true)
+    over.dispatchEvent(touchEvent('touchend'))
+    expect(c.touchActive).toBe(false)
+  })
+
+  it('places the touch tooltip above and to the left of the touch point', async () => {
+    const c = makeController()
+    await c.connect()
+    const over = placedFixture(c, 100, 40)
+    c.touchActive = true
+    c.positionTooltip({ over: over, cursor: { left: 250, top: 200 } })
+    expect(c.legendElement.style.left).toBe('138px') // 250 - 100 - 12 pad, left of the finger
+    expect(c.legendElement.style.top).toBe('148px') // 200 - 40 - 12 pad, above the finger
+  })
+
+  it('drops the touch tooltip below the finger at the top edge', async () => {
+    const c = makeController()
+    await c.connect()
+    const over = placedFixture(c, 100, 40)
+    c.touchActive = true
+    c.positionTooltip({ over: over, cursor: { left: 250, top: 20 } })
+    // Above (20 - 40 - 12 = -32) clips the top, so flip below: 20 + 12.
+    expect(c.legendElement.style.top).toBe('32px')
+    expect(c.legendElement.style.left).toBe('138px') // still left of the finger: 250 - 100 - 12
+  })
+
+  it('flips the touch tooltip to the right of the finger at the left edge', async () => {
+    const c = makeController()
+    await c.connect()
+    const over = placedFixture(c, 100, 40)
+    c.touchActive = true
+    c.positionTooltip({ over: over, cursor: { left: 480, top: 200 } })
+    expect(c.legendElement.style.left).toBe('368px') // room on the left: 480 - 100 - 12, no flip
+    c.positionTooltip({ over: over, cursor: { left: 10, top: 200 } })
+    expect(c.legendElement.style.left).toBe('22px') // left of 10 underflows; flip right to 10 + 12
+  })
+})
+
+describe('ChartsController viewport fit', () => {
+  // computeChartHeight reads documentElement.clientHeight (the layout viewport), not innerHeight.
+  const setViewportHeight = (h) =>
+    Object.defineProperty(document.documentElement, 'clientHeight', {
+      value: h,
+      configurable: true
+    })
+
+  beforeEach(() => vi.clearAllMocks())
+
+  afterEach(() => {
+    setViewportHeight(0)
+    Object.defineProperty(window, 'innerHeight', { value: 768, configurable: true })
+    Object.defineProperty(window, 'scrollY', { value: 0, configurable: true })
+  })
+
+  it('computeChartHeight fills the viewport below the chart top, reserving below-chart chrome', () => {
+    const c = makeController()
+    c.chartsViewTarget.getBoundingClientRect = () => ({ top: 200 })
+    setViewportHeight(1000)
+    expect(c.computeChartHeight()).toBe(628) // 1000 - 200 - 140 - 32
+  })
+
+  it('computeChartHeight is scroll-independent (uses the document-absolute chart top)', () => {
+    const c = makeController()
+    setViewportHeight(1000)
+    // Page scrolled 150px: getBoundingClientRect().top drops by 150, but scrollY climbs by 150,
+    // so the document-absolute top (200) — and therefore the height — must be unchanged. Without
+    // the scrollY term this would over-compute to 778 and the chart would render much too tall.
+    c.chartsViewTarget.getBoundingClientRect = () => ({ top: 50 })
+    Object.defineProperty(window, 'scrollY', { value: 150, configurable: true })
+    expect(c.computeChartHeight()).toBe(628) // 1000 - (50 + 150) - 140 - 32
+  })
+
+  it('computeChartHeight ignores a transient bogus innerHeight during an orientation flip', () => {
+    const c = makeController()
+    c.chartsViewTarget.getBoundingClientRect = () => ({ top: 200 })
+    // A landscape->portrait rotation briefly reports innerHeight far larger than the real viewport.
+    // The layout viewport (documentElement.clientHeight) stays correct; the height must follow it,
+    // else the chart renders taller than the screen and stays stuck there.
+    setViewportHeight(1000)
+    Object.defineProperty(window, 'innerHeight', { value: 1952, configurable: true })
+    expect(c.computeChartHeight()).toBe(628) // 1000 - 200 - 140 - 32, NOT 1952-based (1580)
+  })
+
+  it('computeChartHeight clamps to the 320px readability floor on short viewports', () => {
+    const c = makeController()
+    c.chartsViewTarget.getBoundingClientRect = () => ({ top: 200 })
+    setViewportHeight(500)
+    expect(c.computeChartHeight()).toBe(320) // 500 - 200 - 140 - 32 = 128 -> floored to 320
+  })
 })
 
 describe('ChartsController hashrate chart', () => {
@@ -257,275 +715,554 @@ describe('ChartsController hashrate chart', () => {
   })
 })
 
-describe('sanitizeLogValueRange', () => {
-  it('collapses a zero floor to null under log scale', () => {
-    expect(sanitizeLogValueRange([0, null], true)).toEqual([null, null])
-  })
-  it('collapses a zero floor but preserves the upper bound under log scale', () => {
-    expect(sanitizeLogValueRange([0, 100], true)).toEqual([null, 100])
-  })
-  it('collapses a negative floor to null under log scale', () => {
-    expect(sanitizeLogValueRange([-5, 100], true)).toEqual([null, 100])
-  })
-  it('preserves a positive floor under log scale', () => {
-    expect(sanitizeLogValueRange([5, 100], true)).toEqual([5, 100])
-  })
-  it('leaves a null floor unchanged under log scale', () => {
-    expect(sanitizeLogValueRange([null, null], true)).toEqual([null, null])
-  })
-  it('does not modify the range in linear scale', () => {
-    expect(sanitizeLogValueRange([0, null], false)).toEqual([0, null])
-  })
-  it('returns non-array input unchanged', () => {
-    expect(sanitizeLogValueRange(undefined, true)).toBe(undefined)
-  })
-  it('returns a null range unchanged (a valid Dygraphs value)', () => {
-    expect(sanitizeLogValueRange(null, true)).toBe(null)
-  })
-})
-
-describe('clampLogFloor', () => {
-  it('raises a zero value to the floor under log scale', () => {
-    expect(clampLogFloor(0, true)).toBe(1)
-  })
-  it('raises a sub-floor positive value to the floor under log scale', () => {
-    expect(clampLogFloor(0.5, true)).toBe(1)
-  })
-  it('leaves a value at the floor unchanged', () => {
-    expect(clampLogFloor(1, true)).toBe(1)
-  })
-  it('leaves a value above the floor unchanged under log scale', () => {
-    expect(clampLogFloor(5000000, true)).toBe(5000000)
-  })
-  it('does not clamp in linear scale', () => {
-    expect(clampLogFloor(0, false)).toBe(0)
-    expect(clampLogFloor(0.5, false)).toBe(0.5)
-  })
-  it('accepts a custom floor', () => {
-    expect(clampLogFloor(3, true, 10)).toBe(10)
-  })
-})
-
-describe('ChartsController coin-supply SKA log floor', () => {
+describe('ChartsController control handlers', () => {
   beforeEach(() => {
     vi.clearAllMocks()
   })
 
-  const skaData = () => ({
-    t: [1000, 2000, 3000],
-    supply: ['0', '0', '5000000000000000000000000']
-  })
-
-  async function plotSka(scale) {
+  it('setScale toggles the handle scale type and persists scale', async () => {
     const c = makeController()
     await c.connect()
-    c.settings.scale = scale
-    c.settings.axis = 'time'
-    c.settings.bin = 'block'
-    c.settings.interval = 'week'
-    c.chartsView.updateOptions.mockClear()
-    c.plotGraph('coin-supply/2', skaData())
-    const call = c.chartsView.updateOptions.mock.calls.find((args) => args[1] === false)
-    expect(call).toBeTruthy()
-    return { c: c, file: call[0].file }
+    const scaleOpt = {
+      classList: { contains: () => false, add: vi.fn(), remove: vi.fn() },
+      dataset: { option: 'log' }
+    }
+    c.scaleTypeTargets = [scaleOpt]
+    await c.setScale({ target: scaleOpt })
+    expect(fakeHandle.setScaleType).toHaveBeenCalledWith('log')
+    expect(mockReplace).toHaveBeenCalledWith(expect.objectContaining({ scale: 'log' }))
+  })
+
+  it('setMode maps the line option to a line on the handle and persists mode', async () => {
+    const c = makeController()
+    await c.connect()
+    const modeOpt = {
+      classList: { contains: () => false, add: vi.fn(), remove: vi.fn() },
+      dataset: { option: 'line' }
+    }
+    c.modeOptionTargets = [modeOpt]
+    c.setMode({ target: modeOpt })
+    expect(fakeHandle.setMode).toHaveBeenCalledWith('line')
+    expect(mockReplace).toHaveBeenCalledWith(expect.objectContaining({ mode: 'line' }))
+  })
+
+  // The adapter calls onChartRangeChange on user drag-zoom / double-click reset.
+  // These tests drive it directly with a known data extent on the fake handle.
+  describe('onChartRangeChange (user drag-zoom / double-click)', () => {
+    const withExtent = (c, min, max) => {
+      fakeHandle.uplot.data = [
+        [min, max],
+        [10, 20]
+      ]
+    }
+
+    it('maps a full-extent range (double-click reset) back to the "all" preset', async () => {
+      restoreSettings = { chart: 'ticket-pool-size', zoom: 'week' }
+      const c = makeController()
+      const allBtn = optBtn('all')
+      const weekBtn = optBtn('week', true)
+      c.zoomOptionTargets = [allBtn, weekBtn]
+      await c.connect()
+      withExtent(c, 1000, 1000000)
+      mockReplace.mockClear()
+
+      c.onChartRangeChange(1000, 1000000)
+
+      expect(c.settings.zoom).toBe('all')
+      expect(allBtn.classList.contains('active')).toBe(true)
+      expect(weekBtn.classList.contains('active')).toBe(false)
+      expect(mockReplace).toHaveBeenCalledWith(expect.objectContaining({ zoom: 'all' }))
+      fakeHandle.uplot.data = [[]]
+    })
+
+    it('snaps a trailing week-wide window back to the "week" preset', async () => {
+      const c = makeController()
+      const allBtn = optBtn('all', true)
+      const weekBtn = optBtn('week')
+      c.zoomOptionTargets = [allBtn, weekBtn]
+      await c.connect()
+      const dataMax = 1000000
+      withExtent(c, 1000, dataMax)
+      mockReplace.mockClear()
+
+      // week = 6.048e8 ms -> 604800 plot-seconds; a window of that span ending at dataMax.
+      c.onChartRangeChange(dataMax - 604800, dataMax)
+
+      expect(c.settings.zoom).toBe('week')
+      expect(weekBtn.classList.contains('active')).toBe(true)
+      fakeHandle.uplot.data = [[]]
+    })
+
+    it('persists a custom window as an encoded range and clears the presets', async () => {
+      const c = makeController()
+      const allBtn = optBtn('all', true)
+      const weekBtn = optBtn('week')
+      c.zoomOptionTargets = [allBtn, weekBtn]
+      await c.connect()
+      withExtent(c, 1000, 1000000)
+      mockReplace.mockClear()
+
+      c.onChartRangeChange(500000, 600000)
+
+      // time axis: plot-seconds -> ms (x1000), base-36 encoded as start-end.
+      const expected = `${(500000000).toString(36)}-${(600000000).toString(36)}`
+      expect(c.settings.zoom).toBe(expected)
+      expect(allBtn.classList.contains('active')).toBe(false)
+      expect(weekBtn.classList.contains('active')).toBe(false)
+      expect(mockReplace).toHaveBeenCalledWith(expect.objectContaining({ zoom: expected }))
+      fakeHandle.uplot.data = [[]]
+    })
+  })
+
+  it('applyZoom restores an encoded range from the URL (clamped to the data)', async () => {
+    const encoded = `${(500000000).toString(36)}-${(600000000).toString(36)}`
+    restoreSettings = { chart: 'ticket-pool-size', zoom: encoded }
+    const c = makeController()
+    await c.connect()
+    fakeHandle.uplot.data = [
+      [1000, 1000000],
+      [10, 20]
+    ]
+    fakeHandle.setXRange.mockClear()
+
+    c.applyZoom()
+
+    // ms -> plot-seconds (/1000), within [1000, 1000000] so applied verbatim.
+    expect(fakeHandle.setXRange).toHaveBeenCalledWith(500000, 600000)
+    fakeHandle.uplot.data = [[]]
+  })
+
+  it('renderChart rebuilds when series count changes', async () => {
+    const { createChart } = await import('../helpers/uplot_adapter')
+    const c = makeController()
+    await c.connect()
+
+    // First render: 1 series (already happened in connect)
+    const callsAfterConnect = createChart.mock.calls.length
+
+    // Simulate hashrate payload with active_miners (2 series) — override resolveRenderDef result
+    // by giving the def 2 series so the guard fires.
+    const twoPart = {
+      name: 'hashrate',
+      label: 'hashrate',
+      controls: {
+        bin: true,
+        scale: true,
+        mode: true,
+        zoom: true,
+        visibility: null,
+        interval: false,
+        windowUnits: false,
+        hybrid: false
+      },
+      axes: [{ label: 'hashrate', scale: 'y' }],
+      series: [
+        { label: 'Hashrate', scale: 'y', kind: 'line', colorIndex: 0 },
+        { label: 'Active Miners', scale: 'y2', kind: 'line', colorIndex: 1 }
+      ],
+      toColumns: () => [
+        [1, 2],
+        [10, 20],
+        [5, 8]
+      ],
+      formatValue: (_i, d) => String(d.value)
+    }
+    c.payload = {}
+    await c.renderChart(twoPart)
+
+    // createChart must have been called again because series count went from 1 to 2
+    expect(createChart.mock.calls.length).toBeGreaterThan(callsAfterConnect)
+  })
+
+  it('nulls the handle in the destroy->recreate gap (no stale handle reachable async)', async () => {
+    const c = makeController()
+    await c.connect()
+    expect(c.handle).toBe(fakeHandle) // initial handle exists after connect
+
+    const twoPart = {
+      name: 'hashrate',
+      label: 'hashrate',
+      controls: {
+        bin: true,
+        scale: true,
+        mode: true,
+        zoom: true,
+        visibility: null,
+        interval: false,
+        windowUnits: false,
+        hybrid: false
+      },
+      axes: [{ label: 'hashrate', scale: 'y' }],
+      series: [
+        { label: 'Hashrate', scale: 'y', kind: 'line', colorIndex: 0 },
+        { label: 'Active Miners', scale: 'y2', kind: 'line', colorIndex: 1 }
+      ],
+      toColumns: () => [
+        [1, 2],
+        [10, 20],
+        [5, 8]
+      ],
+      formatValue: (_i, d) => String(d.value)
+    }
+    c.payload = {}
+    const p = c.renderChart(twoPart) // rebuild path — do NOT await
+    // Between destroy() and the createChart().then resolving, the old handle is gone:
+    // applyZoom()/resizeChartToViewport() guard on `this.handle`, so it must read null,
+    // not a torn-down instance whose stale data could reach the new chart.
+    expect(c.handle).toBeNull()
+    await p
+    expect(c.handle).toBe(fakeHandle) // restored once createChart resolves
+  })
+})
+
+describe('ChartsController ranger strip', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    restoreSettings = null
+    capturedRangerOpts = null
+    fakeHandle.uplot.data = [[]]
+  })
+
+  it('creates the ranger and feeds it the x + primary columns', async () => {
+    const c = makeController()
+    await c.connect()
+    expect(fakeRanger.setData).toHaveBeenCalledWith([
+      [1, 2],
+      [10, 20]
+    ])
+    expect(typeof capturedRangerOpts.onSelect).toBe('function')
+  })
+
+  it('a strip drag persists a CUSTOM range and clears presets, even at a preset-width span', async () => {
+    const c = makeController()
+    const allBtn = optBtn('all', true)
+    const weekBtn = optBtn('week')
+    c.zoomOptionTargets = [allBtn, weekBtn]
+    await c.connect()
+    fakeHandle.uplot.data = [
+      [1000, 1000000],
+      [10, 20]
+    ]
+    mockReplace.mockClear()
+
+    // A trailing week-wide window — onChartRangeChange would snap this to "week", but the
+    // strip path must NOT snap.
+    const dataMax = 1000000
+    capturedRangerOpts.onSelect(dataMax - 604800, dataMax)
+
+    expect(fakeHandle.setXRange).toHaveBeenCalledWith(dataMax - 604800, dataMax)
+    expect(weekBtn.classList.contains('active')).toBe(false)
+    expect(allBtn.classList.contains('active')).toBe(false)
+    const expected = `${((dataMax - 604800) * 1000).toString(36)}-${(dataMax * 1000).toString(36)}`
+    expect(c.settings.zoom).toBe(expected)
+    expect(mockReplace).toHaveBeenCalledWith(expect.objectContaining({ zoom: expected }))
+  })
+
+  it('a main-chart drag-zoom still snaps to a preset AND moves the strip selection', async () => {
+    const c = makeController()
+    const allBtn = optBtn('all', true)
+    const weekBtn = optBtn('week')
+    c.zoomOptionTargets = [allBtn, weekBtn]
+    await c.connect()
+    const dataMax = 1000000
+    fakeHandle.uplot.data = [
+      [1000, dataMax],
+      [10, 20]
+    ]
+    mockReplace.mockClear()
+
+    c.onChartRangeChange(dataMax - 604800, dataMax)
+
+    expect(c.settings.zoom).toBe('week')
+    expect(weekBtn.classList.contains('active')).toBe(true)
+    expect(fakeRanger.setSelection).toHaveBeenCalledWith(dataMax - 604800, dataMax)
+  })
+
+  it('clicking a preset moves the strip selection', async () => {
+    const c = makeController()
+    await c.connect()
+    fakeHandle.uplot.data = [
+      [1000, 1000000],
+      [10, 20]
+    ]
+    const dayBtn = optBtn('day')
+    c.zoomOptionTargets = [dayBtn]
+    fakeRanger.setSelection.mockClear()
+
+    c.setZoom({ target: dayBtn })
+
+    expect(fakeRanger.setSelection).toHaveBeenCalled()
+  })
+
+  it('forwards a dark-mode flip to both charts and re-applies the captured x-range to the ranger', async () => {
+    const c = makeController()
+    await c.connect()
+    fakeHandle.setDark.mockClear()
+    fakeRanger.setDark.mockClear()
+    fakeRanger.setSelection.mockClear()
+    // The main chart has a committed x-range now...
+    fakeHandle.uplot.scales.x = { min: 1000, max: 3000 }
+    // ...but uPlot commits scale values on a microtask, so the rebuild inside setDark leaves
+    // scales.x reading null synchronously. Model that, so the test fails if redrawTheme reads
+    // the range AFTER the rebuild (null) instead of capturing it BEFORE.
+    fakeHandle.setDark.mockImplementationOnce(() => {
+      fakeHandle.uplot.scales.x = { min: null, max: null }
+    })
+    c.redrawTheme()
+    await Promise.resolve() // let the deferred ranger selection run (see deferral test below)
+    expect(fakeHandle.setDark).toHaveBeenCalledWith(false) // recolor the main chart (no reload)
+    expect(fakeRanger.setDark).toHaveBeenCalledWith(false)
+    expect(fakeRanger.setSelection).toHaveBeenCalledWith(1000, 3000) // captured before the rebuild
+  })
+
+  it('defers the ranger selection until after the rebuild commits (avoids a zero-width collapse)', async () => {
+    const c = makeController()
+    await c.connect()
+    fakeRanger.setSelection.mockClear()
+    fakeHandle.uplot.scales.x = { min: 1000, max: 3000 }
+    c.redrawTheme()
+    // uPlot commits the rebuilt strip's scales on a microtask; setSelection must wait for it,
+    // else valToPos returns NaN and the selection rectangle (and its grips) collapse to zero width.
+    expect(fakeRanger.setSelection).not.toHaveBeenCalled()
+    await Promise.resolve()
+    expect(fakeRanger.setSelection).toHaveBeenCalledWith(1000, 3000)
+  })
+
+  it('falls back to the strip full extent when the main chart has no committed range', async () => {
+    const c = makeController()
+    await c.connect()
+    fakeRanger.setSelection.mockClear()
+    fakeHandle.uplot.scales.x = { min: null, max: null } // never zoomed / not yet committed
+    fakeRanger.uplot = {
+      data: [
+        [5, 6, 7],
+        [1, 2, 3]
+      ]
+    }
+    c.redrawTheme()
+    await Promise.resolve() // selection is deferred to a microtask
+    // The rectangle must never vanish — fall back to the strip's own full extent.
+    expect(fakeRanger.setSelection).toHaveBeenCalledWith(5, 7)
+  })
+})
+
+describe('ChartsController ranger gutters & average', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    restoreSettings = null
+    capturedRangerOpts = null
+    fakeHandle.uplot.data = [[]]
+  })
+
+  it('measureGutters returns the over-vs-root plot insets', () => {
+    const c = makeController()
+    const u = {
+      root: { getBoundingClientRect: () => ({ left: 0, right: 500 }) },
+      over: { getBoundingClientRect: () => ({ left: 40, right: 480 }) }
+    }
+    expect(c.measureGutters(u)).toEqual({ left: 40, right: 20 })
+  })
+
+  it('the main-chart draw hook forwards measured gutters to the ranger', async () => {
+    const c = makeController()
+    await c.connect()
+    fakeRanger.setGutters.mockClear()
+    const u = {
+      root: { getBoundingClientRect: () => ({ left: 0, right: 500 }) },
+      over: { getBoundingClientRect: () => ({ left: 40, right: 480 }) }
+    }
+    const hooks = c.buildHooks()
+    expect(typeof hooks.draw[0]).toBe('function')
+    hooks.draw[0](u)
+    expect(fakeRanger.setGutters).toHaveBeenCalledWith(40, 20)
+  })
+})
+
+describe('ChartsController resize hook', () => {
+  // computeChartHeight reads documentElement.clientHeight (the layout viewport), not innerHeight.
+  const setViewportHeight = (h) =>
+    Object.defineProperty(document.documentElement, 'clientHeight', {
+      value: h,
+      configurable: true
+    })
+
+  beforeEach(() => vi.clearAllMocks())
+
+  afterEach(() => {
+    setViewportHeight(0)
+    Object.defineProperty(window, 'innerHeight', { value: 768, configurable: true })
+  })
+
+  it('re-fits the chart when the viewport WIDTH changes (desktop drag-resize / orientation)', async () => {
+    const c = makeController()
+    c.chartsViewTarget.getBoundingClientRect = () => ({ top: 200 })
+    setViewportHeight(1000)
+    await c.connect() // chart created at clientWidth 800 → seeds lastWidth = 800
+    fakeHandle.resize.mockClear()
+    fakeRanger.setWidth.mockClear()
+    fakeRanger.setSelection.mockClear()
+    // Give the main chart a known x-range so we can assert setSelection is re-applied.
+    fakeHandle.uplot.scales.x = { min: 5, max: 9 }
+    // The width actually changes (window drag / orientation flip), unlike a scroll.
+    c.chartsViewTarget.clientWidth = 900
+    c.rangerViewTarget.clientWidth = 900
+    c.resizeChartToViewport()
+    expect(fakeHandle.resize).toHaveBeenCalledWith(900, 628) // new width, 1000-200-140-32
+    // ranger strip must be re-pixelled to the rangerViewTarget.clientWidth
+    expect(fakeRanger.setWidth).toHaveBeenCalledWith(900)
+    // selection rectangle is pixel-based → must be re-applied at the new width
+    await Promise.resolve() // selection is deferred to a microtask (see orientation-flip test below)
+    expect(fakeRanger.setSelection).toHaveBeenCalledWith(5, 9)
+  })
+
+  it('defers the ranger selection past uPlot’s resize commit (no portrait→landscape balloon)', async () => {
+    const c = makeController()
+    c.chartsViewTarget.getBoundingClientRect = () => ({ top: 200 })
+    setViewportHeight(1000)
+    await c.connect()
+    fakeRanger.setWidth.mockClear()
+    fakeRanger.setSelection.mockClear()
+    fakeHandle.uplot.scales.x = { min: 5, max: 9 }
+    c.chartsViewTarget.clientWidth = 900
+    c.rangerViewTarget.clientWidth = 900
+    c.resizeChartToViewport()
+    // The strip is re-pixelled synchronously, but the selection must NOT be written yet: uPlot
+    // rescales a visible selection on its own deferred (microtask) resize commit against the OLD
+    // width, so a synchronous write here would be ballooned past the strip's right edge on a
+    // widening (orientation) flip. It must land after that commit instead.
+    expect(fakeRanger.setWidth).toHaveBeenCalledWith(900)
+    expect(fakeRanger.setSelection).not.toHaveBeenCalled()
+    await Promise.resolve()
+    expect(fakeRanger.setSelection).toHaveBeenCalledWith(5, 9)
+  })
+
+  it('ignores a height-only resize so a mobile toolbar collapse during scroll cannot rescale the chart', async () => {
+    const c = makeController()
+    c.chartsViewTarget.getBoundingClientRect = () => ({ top: 200 })
+    Object.defineProperty(window, 'innerHeight', { value: 1000, configurable: true })
+    await c.connect() // chart created at clientWidth 800 → seeds lastWidth = 800
+    fakeHandle.resize.mockClear()
+    fakeRanger.setWidth.mockClear()
+    fakeRanger.setSelection.mockClear()
+    // Mobile scroll: the URL/toolbar collapses, innerHeight grows, width is untouched.
+    Object.defineProperty(window, 'innerHeight', { value: 1100, configurable: true })
+    c.resizeChartToViewport()
+    expect(fakeHandle.resize).not.toHaveBeenCalled()
+    expect(fakeRanger.setWidth).not.toHaveBeenCalled()
+    expect(fakeRanger.setSelection).not.toHaveBeenCalled()
+  })
+
+  it('does nothing when there is no chart handle', () => {
+    const c = makeController()
+    c.handle = null
+    expect(() => c.resizeChartToViewport()).not.toThrow()
+  })
+
+  it('connect registers a window resize listener and disconnect removes the same one', async () => {
+    const c = makeController()
+    const addSpy = vi.spyOn(window, 'addEventListener')
+    const removeSpy = vi.spyOn(window, 'removeEventListener')
+    await c.connect()
+    expect(addSpy).toHaveBeenCalledWith('resize', expect.any(Function))
+    c.disconnect()
+    expect(removeSpy).toHaveBeenCalledWith('resize', c.onWindowResize)
+    addSpy.mockRestore()
+    removeSpy.mockRestore()
+  })
+})
+
+describe('ChartsController selection concurrency', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    restoreSettings = null
+    fakeHandle.uplot.data = [[]]
+  })
+
+  // Two-series def whose 1→2 series-count delta forces renderChart down the rebuild
+  // (createChart) branch rather than the in-place setData branch.
+  const twoSeriesDef = {
+    name: 'hashrate',
+    label: 'hashrate',
+    controls: {
+      bin: true,
+      scale: true,
+      mode: true,
+      zoom: true,
+      visibility: null,
+      interval: false,
+      windowUnits: false,
+      hybrid: false
+    },
+    axes: [{ label: 'hashrate', scale: 'y' }],
+    series: [
+      { label: 'Hashrate', scale: 'y', kind: 'line', colorIndex: 0 },
+      { label: 'Active Miners', scale: 'y2', kind: 'line', colorIndex: 1 }
+    ],
+    toColumns: () => [
+      [1, 2],
+      [10, 20],
+      [5, 8]
+    ],
+    formatValue: (_i, d) => String(d.value)
   }
 
-  it('clamps zero/pre-mint SKA supply points up to the floor (1) in log scale', async () => {
-    const { file } = await plotSka('log')
-    expect(file[0][1]).toBe(1) // pre-mint 0 clamped to floor
-    expect(file[1][1]).toBe(1)
-    // real value untouched (toBeCloseTo: SKA atoms exceed float precision, so
-    // the line is inherently lossy — exactly why the legend uses raw strings)
-    expect(file[2][1]).toBeCloseTo(5000000, 0)
-  })
-
-  it('does not clamp SKA supply points in linear scale', async () => {
-    const { file } = await plotSka('linear')
-    expect(file[0][1]).toBe(0)
-    expect(file[2][1]).toBeCloseTo(5000000, 0)
-  })
-
-  it('keeps the exact SKA atom strings for the legend (clamp is line-only)', async () => {
-    const { c } = await plotSka('log')
-    expect(c._skaSupplyRaw).toEqual(['0', '0', '5000000000000000000000000'])
-  })
-})
-
-describe('missedVotesFunc log-scale guard', () => {
-  it('clamps zero values to 1 on log scale', () => {
-    const data = { t: [1000, 2000, 3000], missed: [0, 2, 0] }
-    const result = missedVotesFunc(data, true)
-    expect(result[0][1]).toBe(1)
-    expect(result[1][1]).toBe(2)
-    expect(result[2][1]).toBe(1)
-  })
-
-  it('passes through values unchanged on linear scale', () => {
-    const data = { t: [1000, 2000, 3000], missed: [0, 2, 0] }
-    const result = missedVotesFunc(data, false)
-    expect(result[0][1]).toBe(0)
-    expect(result[1][1]).toBe(2)
-    expect(result[2][1]).toBe(0)
-  })
-
-  it('handles height axis data on log scale', () => {
-    const data = { missed: [0, 5, 0, 3], window: 144, offset: 256 }
-    const result = missedVotesFunc(data, true)
-    expect(result[0][1]).toBe(1)
-    expect(result[1][1]).toBe(5)
-    expect(result[2][1]).toBe(1)
-    expect(result[3][1]).toBe(3)
-  })
-})
-
-describe('ChartsController plotGraph log-axis guard', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-  })
-
-  it('collapses the duration y-axis floor to null in log scale', async () => {
+  it('a fetch resolving after a newer selection does not clobber payload/selection', async () => {
+    const { requestJSON } = await import('../helpers/http')
     const c = makeController()
     await c.connect()
-    c.settings.scale = 'log'
-    c.settings.axis = 'time'
-    c.settings.bin = 'block'
-    c.settings.interval = 'week'
-    c.chartsView.updateOptions.mockClear()
 
-    c.plotGraph('duration-btw-blocks', { t: [1000, 2000], duration: [10, 20] })
+    // Hold both fetches open so we can resolve them out of selection order.
+    let resolveA, resolveB
+    requestJSON
+      .mockImplementationOnce(() => new Promise((resolve) => (resolveA = resolve)))
+      .mockImplementationOnce(() => new Promise((resolve) => (resolveB = resolve)))
 
-    const call = c.chartsView.updateOptions.mock.calls.find((args) => args[1] === false)
-    expect(call).toBeTruthy()
-    const gOptions = call[0]
-    expect(gOptions.logscale).toBe(true)
-    expect(gOptions.axes.y.valueRange).toEqual([null, null])
+    c.chartSelectTarget.value = 'chart-A'
+    const pA = c.selectChart() // suspends on fetch A
+    c.chartSelectTarget.value = 'chart-B'
+    const pB = c.selectChart() // suspends on fetch B (now the current selection)
+
+    resolveB({ axis: 'time', bin: 'block', t: [1000, 2000] })
+    await pB
+    expect(c.selectedChartName).toBe('chart-B')
+
+    // A resolves last but is stale: its continuation must bail before touching state.
+    resolveA({ axis: 'time', bin: 'block', t: [9000, 9999] })
+    await pA
+    expect(c.selectedChartName).toBe('chart-B')
   })
 
-  it('stashes raw missed-votes data for the legend formatter', async () => {
+  it('a selection superseded mid-create destroys the orphaned chart instead of adopting it', async () => {
+    const { createChart } = await import('../helpers/uplot_adapter')
+    const c = makeController()
+    await c.connect() // initial chart established; c.handle === fakeHandle
+
+    // Hold the rebuild's createChart open so a newer selection can land mid-flight.
+    let resolveCreate
+    createChart.mockImplementationOnce(() => new Promise((resolve) => (resolveCreate = resolve)))
+
+    c.payload = {}
+    const pending = c.renderChart(twoSeriesDef) // enters rebuild branch; handle nulled
+    expect(c.handle).toBeNull()
+
+    // A newer selectChart() supersedes this render while createChart is still pending.
+    c.fetchGeneration++
+
+    const orphan = { destroy: vi.fn() }
+    resolveCreate(orphan)
+    await pending
+
+    expect(orphan.destroy).toHaveBeenCalled() // torn down, not left in the DOM
+    expect(c.handle).toBeNull() // never adopted as the live handle
+  })
+
+  it('an un-superseded create still adopts its handle (guard is a no-op on the common path)', async () => {
     const c = makeController()
     await c.connect()
-    c.settings.scale = 'log'
-    c.settings.axis = 'time'
-    c.settings.bin = 'window'
-    c.chartsView.updateOptions.mockClear()
 
-    c.plotGraph('missed-votes', { t: [1000, 2000], missed: [0, 2] })
+    c.payload = {}
+    await c.renderChart(twoSeriesDef) // no competing selection
 
-    expect(c._missedVotesRaw).toEqual([0, 2])
-  })
-
-  it('preserves the hashrate y2 floor in log scale (y2 stays linear)', async () => {
-    const c = makeController()
-    await c.connect()
-    c.settings.scale = 'log'
-    c.settings.axis = 'time'
-    c.settings.bin = 'block'
-    c.settings.interval = 'week'
-    c.chartsView.updateOptions.mockClear()
-
-    c.plotGraph('hashrate', {
-      t: [1000, 2000],
-      rate: [100, 200],
-      active_miners: [3, 4],
-      offset: 0
-    })
-
-    const call = c.chartsView.updateOptions.mock.calls.find((args) => args[1] === false)
-    expect(call).toBeTruthy()
-    const gOptions = call[0]
-    expect(gOptions.axes.y.valueRange).toEqual([null, null]) // primary y unbounded
-    expect(gOptions.axes.y2.valueRange).toEqual([0, null]) // y2 floor untouched
-  })
-
-  it('caches the chart name and data for re-plotting', async () => {
-    const c = makeController()
-    await c.connect()
-    c.settings.scale = 'linear'
-    c.settings.axis = 'time'
-    c.settings.bin = 'block'
-    c.settings.interval = 'week'
-    const data = { t: [1000, 2000], duration: [10, 20] }
-
-    c.plotGraph('duration-btw-blocks', data)
-
-    expect(c.rawChartName).toBe('duration-btw-blocks')
-    expect(c.rawChartData).toBe(data)
-  })
-})
-
-describe('ChartsController setScale', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-  })
-
-  it('re-plots from cached data with the new scale applied before plotting', async () => {
-    const c = makeController()
-    await c.connect()
-    c.rawChartName = 'duration-btw-blocks'
-    c.rawChartData = { t: [1000, 2000], duration: [10, 20] }
-    let scaleAtPlot
-    const plotSpy = vi.spyOn(c, 'plotGraph').mockImplementation(() => {
-      scaleAtPlot = c.settings.scale
-    })
-    plotSpy.mockClear()
-
-    c.setScale({ target: { dataset: { option: 'log' } } })
-
-    expect(c.settings.scale).toBe('log')
-    expect(plotSpy).toHaveBeenCalledTimes(1)
-    expect(plotSpy).toHaveBeenCalledWith('duration-btw-blocks', c.rawChartData)
-    expect(scaleAtPlot).toBe('log') // scale set BEFORE plotGraph runs
-  })
-
-  it('does not trigger a network re-fetch on a scale toggle', async () => {
-    const c = makeController()
-    await c.connect()
-    c.rawChartName = 'missed-votes'
-    c.rawChartData = { t: [1000, 2000], missed: [0, 2] }
-    vi.spyOn(c, 'plotGraph').mockImplementation(() => {})
-    vi.mocked(requestJSON).mockClear()
-
-    c.setScale({ target: { dataset: { option: 'log' } } })
-
-    expect(requestJSON).not.toHaveBeenCalled()
-  })
-
-  it('falls back to updateOptions when no chart data is cached', async () => {
-    const c = makeController()
-    await c.connect()
-    c.rawChartData = null
-    c.chartsView.updateOptions.mockClear()
-
-    c.setScale({ target: { dataset: { option: 'log' } } })
-
-    expect(c.chartsView.updateOptions).toHaveBeenCalledWith({ logscale: true })
-  })
-
-  // End-to-end guard: the other setScale tests stub plotGraph, so they verify the
-  // wiring (scale set first, right args, no re-fetch) but not that toggling to log
-  // actually re-applies the log-axis guard. This drives the REAL plotGraph through
-  // a scale toggle and asserts the stale [0, null] floor collapses to [null, null].
-  it('re-applies the log-axis guard through a real re-plot on toggle', async () => {
-    const c = makeController()
-    await c.connect()
-    c.settings.scale = 'linear'
-    c.settings.axis = 'time'
-    c.settings.bin = 'block'
-    c.settings.interval = 'week'
-
-    // Plot once in linear to populate the cache; the floor stays [0, null] here.
-    // Clear first so the find() below matches this plot, not connect()'s.
-    c.chartsView.updateOptions.mockClear()
-    c.plotGraph('duration-btw-blocks', { t: [1000, 2000], duration: [10, 20] })
-    const linearCall = c.chartsView.updateOptions.mock.calls.find((args) => args[1] === false)
-    expect(linearCall[0].axes.y.valueRange).toEqual([0, null])
-
-    c.chartsView.updateOptions.mockClear()
-    c.setScale({ target: { dataset: { option: 'log' } } })
-
-    const logCall = c.chartsView.updateOptions.mock.calls.find((args) => args[1] === false)
-    expect(logCall).toBeTruthy()
-    expect(logCall[0].logscale).toBe(true)
-    expect(logCall[0].axes.y.valueRange).toEqual([null, null]) // guard reapplied
+    expect(c.handle).toBe(fakeHandle)
   })
 })
