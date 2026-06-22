@@ -3560,6 +3560,11 @@ func appendWindowStats(charts *cache.ChartData, rows *sql.Rows) error {
 		return err
 	}
 
+	// Collapse an abnormally large genesis→block-1 gap so the window chart
+	// time axis begins at real network start, matching what appendChartBlocks
+	// does for blocks.Time (see NormalizeGenesisBlockTime).
+	cache.NormalizeGenesisBlockTime(charts.Windows.Time)
+
 	return nil
 }
 
