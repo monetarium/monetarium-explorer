@@ -1856,8 +1856,6 @@ func powDifficultyChart(charts *ChartData, _ binLevel, axis axisType, _ interval
 				liveTime = timeData[len(timeData)-1] + (timeData[len(timeData)-1] - timeData[len(timeData)-2])
 			} else if tip.Time > 0 {
 				liveTime = tip.Time
-			} else {
-				liveTime = timeData[len(timeData)-2]
 			}
 			timeData = append(timeData, liveTime)
 		}
@@ -1922,8 +1920,6 @@ func ticketPriceChart(charts *ChartData, _ binLevel, axis axisType, _ intervalTy
 				liveTime = timeData[len(timeData)-1] + (timeData[len(timeData)-1] - timeData[len(timeData)-2])
 			} else if tip.Time > 0 {
 				liveTime = tip.Time
-			} else {
-				liveTime = timeData[len(timeData)-2]
 			}
 			timeData = append(timeData, liveTime)
 		}
