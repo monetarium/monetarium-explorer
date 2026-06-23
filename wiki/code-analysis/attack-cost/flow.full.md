@@ -81,15 +81,29 @@ monetarium-node RPC ──► blockdata collector ──► explorer.Store() ─
   `defaultDevicePower=1500`, `defaultDevicePrice=1500`.
 - **Transformations:**
   - `connect()`: `parseInt(this.data.get('height'))`,
-    `parseFloat(this.data.get('ticketPrice'))`, `parseInt(this.data.get('coinSupply'))`,
-    etc. The USD/VAR rate is seeded from `defaultExchangeRate` and then overwritten by
-    either the `?price=` URL param or the manual input — never from a server attribute.
-    Device specs are seeded from the `default*` constants and overwritten by URL params
+    `parseFloat(this.data.get('hashrate'))` (**`parseFloat`, not `parseInt`** — hashrates
+    can be in scientific notation on low-hashrate networks, e.g. `1.6e-07`; `parseInt`
+    truncates to `1`), `parseFloat(this.data.get('ticketPrice'))`,
+    `parseInt(this.data.get('coinSupply'))`. The USD/VAR rate is seeded from
+    `defaultExchangeRate` and then overwritten by either the `?price=` URL param or the
+    manual input — never from a server attribute. Device specs are seeded from the
+    `default*` constants and overwritten by URL params
     `device_hashrate`/`device_power`/`device_price` or the manual inputs.
+  - **Live hashrate via `BLOCK_RECEIVED`:** `connect()` subscribes to
+    `globalEventBus.on('BLOCK_RECEIVED', this._onBlock)`. The handler is minimal:
+    `hashrate = blockData.extra.hash_rate; this.calculate()`. No intermediate
+    `setAllValues` call — `calculate()` at line 548 already writes `actualHashRateTargets`
+    with the same value.
   - `rateCalculation(y)`: hybrid PoW/PoS deterrence formula
     `(6x⁵−15x⁴+10x³)/(6y⁵−15y⁴+10y³)`, bit-exact across the Monetarium rework.
   - `calculate()`: device count = `ceil(targetHashRate * 1000 / deviceHashrate)`,
-    electricity, PoS `varNeed`, projected ticket price, totals.
+    electricity, PoS `varNeed`, projected ticket price, totals. Hashrate-derived display
+    values (`actualHashRate`, `targetHashRate`, `additionalHashRate`, `internalHash`,
+    `newHashRate`) all use `digitformat(..., 8)` — 8 decimal places to match VAR
+    precision and avoid rounding sub-0.0001 values to `"0"`.  The exchange-rate
+    field is refreshed as `digitformat(varPrice, 2, true)` — the third arg `noComma=true`
+    suppresses locale thousands-separators; `"1,234.00"` written to a
+    `<input type="number">` silently fails (the setter rejects non-numeric strings).
   - `showPosCostWarning()`: `coinSupply / 100000000` — hardcoded 1e8 divisor
     (8-decimal VAR assumption); if `varNeed > totalVarInCirculation` it flags
     "Attack not possible".
@@ -170,6 +184,10 @@ When modifying this page, check:
 7. Renaming template attributes for cleanliness — the `data.get()` keys and `targets`
    array are an exact, untyped contract; mismatches fail silently or kill the controller.
 8. Upgrading Dygraphs without re-checking the private `doZoomY_` override.
+9. Calling `digitformat(v, n)` (without `noComma=true`) for a value that is written back
+   into a `<input type="number">` — locale-formatting (e.g. `"1,234.00"`) causes the
+   browser's setter to silently reject the value, leaving the input stale. Use
+   `digitformat(v, n, true)` for any `input.value =` assignment.
 
 ## Section 8 — Evidence
 
@@ -180,13 +198,16 @@ When modifying this page, check:
 - `explorer/types/explorertypes.go:911-940` (`HomeInfo`), `:1480-1487` (`TicketPoolInfo`).
 - `blockdata/blockdata.go:208` — `GetCoinSupply`.
 - `cmd/dcrdata/views/attackcost.tmpl` — `data-*` contract at the top of the controller
-  container; manual `Exchange Rate`, `Device Hashrate`, `Device Power`, `Device Price`
-  inputs in the "Adjustable Parameters" / "PoW Attack" blocks.
+  container; manual `Exchange Rate` input (`step="0.01"`, `min="0.01"`, **no `max`**),
+  `Device Hashrate`, `Device Power`, `Device Price` inputs in the "Adjustable Parameters" /
+  "PoW Attack" blocks.
 - `cmd/dcrdata/public/js/controllers/attackcost_controller.js` — module globals
   (`varPrice`, `deviceHashrate`, `devicePower`, `devicePrice`, `coinSupply`, …),
   neutral `default*` constants, `rateCalculation` (formula), `static targets` (Stimulus
-  contract), `connect()` (data parse + URL state), `Dygraph.prototype.doZoomY_` override,
-  `calculate()` (PoW + PoS totals), `showPosCostWarning()` (supply gate).
+  contract), `connect()` (data parse + URL state + `BLOCK_RECEIVED` subscription),
+  `_onBlock` handler (line 266–270: live hashrate update + `calculate()`),
+  `Dygraph.prototype.doZoomY_` override, `calculate()` (PoW + PoS totals, hashrate at
+  8dp, exchange-rate noComma), `showPosCostWarning()` (supply gate).
 
 See also:
 - /wiki/code-analysis/attack-cost/patterns.md (shares-pattern-with: VAR-only legacy snapshot, untyped `data-*`↔Stimulus contract, client-side-only math, manual-only scenario inputs)

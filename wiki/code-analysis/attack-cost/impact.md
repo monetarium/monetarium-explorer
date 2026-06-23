@@ -60,6 +60,22 @@ killing the controller so the page shows static `0`s.
 `Dygraph.prototype.doZoomY_`; a renamed/removed private member silently restores Y-zoom or
 throws on assignment.
 
+## Resolved: hashrate parseInt scientific-notation truncation (historical)
+
+Prior `connect()` used `parseInt(this.data.get('hashrate'))`. JavaScript's `parseInt`
+stops at the first non-digit character, so `parseInt("1.6e-07")` returns `1` instead of
+`1.6e-7`. Low-hashrate networks (e.g. testnet) silently showed hashrate as `1 Ph/s` and
+rendered all hash-power multiplier targets wrong. Fixed: `parseFloat(...)` is now used
+for hashrate.
+
+## Resolved: Exchange-rate locale-comma rejection (historical)
+
+`calculate()` previously wrote `digitformat(varPrice, 2)` to the exchange-rate input.
+For rates ≥ 1000 the locale formatter produced `"1,234.00"`, which the browser's
+number-input setter silently rejects — the displayed value froze. The HTML `max=10000`
+attribute was also masking rates above that ceiling. Both fixed: the `max` attribute is
+removed, and the refresh call is now `digitformat(varPrice, 2, true)` (`noComma=true`).
+
 ## Resolved: Exchange-bot price silently zero (historical)
 
 Prior version of this handler seeded the USD/VAR rate from `exp.xcBot.Conversion(1.0)`
