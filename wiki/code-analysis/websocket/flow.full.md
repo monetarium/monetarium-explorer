@@ -209,7 +209,8 @@ feature controller re-requests its state on `reconnect`.
     otherwise it piggybacks on that controller's request, because `forward()`
     delivers every `getlatestblocksResp` to all registered handlers.
   - `mining_controller.js`: reads `(extra.cblock_subsidy || extra.subsidy).pow`
-    from the `newblock` WS push for vote-scaled PoW subsidy display.
+    from the `newblock` WS push for vote-scaled PoW subsidy display; also reads
+    `ex.reward_idx` and `ex.reward_remaining` (reward window position and countdown string).
 
 ## Section 4 — Cross-Layer Dependencies
 
@@ -257,7 +258,10 @@ feature controller re-requests its state on `reconnect`.
   the transport guarantees nothing. *See* [/wiki/core/constraints.md](../../core/constraints.md) C1.
 - **C2 (dual pipeline).** Explorer `/ws` and pubsub `/ps` emit the same logical
   events; real-time vs static (DB/API) paths must change symmetrically. The
-  `CBlockSubsidy` field is populated in both `explorer.go` and `pubsubhub.go`.
+  `CBlockSubsidy`, `WindowRemaining`, and `RewardRemaining` fields are all populated
+  symmetrically in both `explorer.go` and `pubsubhub.go` — `RemainingWindowText`
+  (`explorer/types/remaining.go`) is the single source of truth for the countdown
+  string so the server-rendered template and live WS update can never diverge (issue #502).
 - **C3 (template + WS parity)** and **C8 (dual-transport shape asymmetry).** A
   field added to a server template must also be added to the WS payload *and* the
   consuming controller, or new entities (arriving by WS) silently miss it while
@@ -302,9 +306,12 @@ When modifying the transport, check:
   const); both `Home()` and `latestExplorerBlocks()` reference it. Changing the
   home template's `blocks` slice without changing the const diverges the
   server-rendered and WS-refreshed lists silently.
-- **Change `CBlockSubsidy` field in `HomeInfo`:** must also update `pubsubhub.go`
-  (C2) and the consuming JS (`mining_controller.js`); all three sites share the
-  fallback logic `CBlockSubsidy || NBlockSubsidy`.
+- **Change any dual-populated `HomeInfo`/`GeneralInfo` field (`CBlockSubsidy`,
+  `WindowRemaining`, `RewardRemaining`):** must update both `explorer.go` **and**
+  `pubsubhub.go` (C2), plus the consuming JS. `CBlockSubsidy` also has a fallback
+  `CBlockSubsidy || NBlockSubsidy` used in `mining_controller.js`.
+  `RemainingWindowText` is the single source of truth — both producers call it, so a
+  change to its signature propagates to two call sites.
 - **Change hub fan-out (buffer size / blocking send):** the spoke send is
   non-blocking with unregister-on-full (`:263-267`); making it blocking risks
   stalling `run()` for *all* clients (loud); enlarging buffers hides slow clients.
@@ -368,8 +375,12 @@ stalling `run()`.
   `RegisterClient` `:124`, `NumClients` `:112`, `pingClients` `:172-191`, `run()`
   `:201-322`, `maybeSendTxns`/buffer `:327-366`.
 - Event-id map: [pubsub_types.go:121-147](../../../pubsub/types/pubsub_types.go#L121-L147).
-- `CBlockSubsidy` population: [explorer.go:574-580](../../../cmd/dcrdata/internal/explorer/explorer.go#L574-L580),
-  [pubsubhub.go:740-756](../../../pubsub/pubsubhub.go#L740-L756).
+- Dual-populate in `Store()`: `WindowRemaining`+`RewardRemaining`
+  [explorer.go:568-570](../../../cmd/dcrdata/internal/explorer/explorer.go#L568-L570),
+  [pubsubhub.go:734-736](../../../pubsub/pubsubhub.go#L734-L736);
+  `CBlockSubsidy` [explorer.go:576-583](../../../cmd/dcrdata/internal/explorer/explorer.go#L576-L583),
+  [pubsubhub.go:742-748](../../../pubsub/pubsubhub.go#L742-L748).
+  `RemainingWindowText` source of truth: [explorer/types/remaining.go](../../../explorer/types/remaining.go).
 - Client service: [messagesocket_service.js](../../../cmd/dcrdata/public/js/services/messagesocket_service.js)
   — `reconnectOptions` `:32-39`, `forward` `:41-46`, `send`/queue `:78-92`,
   `connect`/synthetic events `:94-128`, `close` `:131-133`.
@@ -383,7 +394,7 @@ stalling `run()`.
   [home_latest_blocks_controller.js](../../../cmd/dcrdata/public/js/controllers/home_latest_blocks_controller.js),
   [blocks_controller.js](../../../cmd/dcrdata/public/js/controllers/blocks_controller.js),
   [time_controller.js](../../../cmd/dcrdata/public/js/controllers/time_controller.js),
-  [mining_controller.js:34](../../../cmd/dcrdata/public/js/controllers/mining_controller.js#L34).
+  [mining_controller.js](../../../cmd/dcrdata/public/js/controllers/mining_controller.js) (`handleBlock` reads `cblock_subsidy`, `reward_idx`, `reward_remaining`).
 - Automated coverage: `messagesocket_service.test.js`, `connection_controller.test.js`,
   `websockethandlers_test.go`, `latest_blocks_test.go`, `explorerroutes_test.go:384`.
 
