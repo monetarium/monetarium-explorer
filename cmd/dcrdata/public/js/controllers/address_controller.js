@@ -787,8 +787,27 @@ export default class extends Controller {
   // Push the current dark/light theme state to the handle and ranger.
   redrawTheme() {
     const dark = darkEnabled()
+    // Capture the main chart's visible x-range BEFORE rebuilding — uPlot commits scale values
+    // on a microtask, so reading scales.x right after a rebuild yields stale nulls.
+    const sx = this.handle && this.handle.uplot.scales.x
+    const range = sx && sx.min != null && sx.max != null ? [sx.min, sx.max] : null
     if (this.handle) this.handle.setDark(dark)
-    if (this.ranger) this.ranger.setDark(dark)
+    if (this.ranger) {
+      this.ranger.setDark(dark)
+      // setDark rebuilds the strip fresh (no selection); re-apply it so the rectangle survives
+      // the toggle. The rebuild commits its scales/layout on a microtask, so setSelection's
+      // valToPos is not ready synchronously — defer to a later microtask (FIFO: uPlot's commit
+      // runs first) or the rectangle collapses to zero width. Prefer the captured main-chart
+      // range; fall back to the strip's full extent so the rectangle can never vanish.
+      queueMicrotask(() => {
+        if (!this.ranger) return
+        if (range) this.ranger.setSelection(range[0], range[1])
+        else {
+          const xs = this.ranger.uplot.data[0]
+          if (xs && xs.length) this.ranger.setSelection(xs[0], xs[xs.length - 1])
+        }
+      })
+    }
   }
 
   // Resize the chart and ranger strip after a window resize.
@@ -796,8 +815,18 @@ export default class extends Controller {
     if (!this.handle) return
     const width = this.chartTarget.clientWidth || 800
     this.handle.resize(width, this.chartTarget.clientHeight || 320)
-    if (this.ranger && this.hasRangerViewTarget) {
-      this.ranger.setWidth(this.rangerViewTarget.clientWidth || width)
+    if (!this.ranger || !this.hasRangerViewTarget) return
+    this.ranger.setWidth(this.rangerViewTarget.clientWidth || width)
+    // The strip's selection rectangle is pixel-based, so a width change invalidates it. Re-apply
+    // it from the main chart's current x-range, deferred to a microtask so uPlot's own resize
+    // commit (which rescales the selection) settles first (mirrors redrawTheme).
+    const sx = this.handle.uplot.scales.x
+    if (sx && sx.min != null && sx.max != null) {
+      const min = sx.min
+      const max = sx.max
+      queueMicrotask(() => {
+        if (this.ranger) this.ranger.setSelection(min, max)
+      })
     }
   }
 

@@ -287,6 +287,46 @@ describe('address ranger + theme', () => {
     const encodedZoom = Zoom.encode(100 * 1000, 500 * 1000)
     expect(spy).toHaveBeenCalledWith(Zoom.mapKey(encodedZoom, [0, 1000000]))
   })
+  it('redrawTheme re-applies the ranger selection after theme toggle', async () => {
+    // Regression: before the fix, setDark rebuilt the ranger strip without restoring the
+    // selection rectangle — the rectangle collapsed to zero width on theme toggle.
+    const ctrl = makeRenderController('balance', 0, {})
+    // Set a known x-range on the main chart so redrawTheme can capture it.
+    fakeHandle.uplot.scales.x = { min: 100, max: 200 }
+    ctrl.handle = fakeHandle
+    ctrl.ranger = fakeRanger
+    fakeRanger.setDark.mockClear()
+    fakeRanger.setSelection.mockClear()
+    ctrl.redrawTheme()
+    // setDark must fire synchronously.
+    expect(fakeRanger.setDark).toHaveBeenCalled()
+    // setSelection is deferred to a microtask — flush it.
+    await Promise.resolve()
+    expect(fakeRanger.setSelection).toHaveBeenCalledWith(100, 200)
+    // Restore shared mock to neutral state so other tests are unaffected.
+    fakeHandle.uplot.scales.x = {}
+  })
+  it('resizeChart re-applies the ranger selection after width change', async () => {
+    // Regression: before the fix, setWidth invalidated the pixel-based selection rectangle
+    // and it was never restored — the rectangle vanished on every window resize.
+    const ctrl = makeRenderController('balance', 0, {})
+    fakeHandle.uplot.scales.x = { min: 100, max: 200 }
+    ctrl.handle = fakeHandle
+    ctrl.ranger = fakeRanger
+    ctrl.chartTarget = { clientWidth: 900, clientHeight: 320 }
+    ctrl.rangerViewTarget = { clientWidth: 900 }
+    ctrl.hasRangerViewTarget = true
+    fakeRanger.setWidth.mockClear()
+    fakeRanger.setSelection.mockClear()
+    ctrl.resizeChart()
+    // setWidth must fire synchronously.
+    expect(fakeRanger.setWidth).toHaveBeenCalled()
+    // setSelection is deferred to a microtask — flush it.
+    await Promise.resolve()
+    expect(fakeRanger.setSelection).toHaveBeenCalledWith(100, 200)
+    // Restore shared mock to neutral state.
+    fakeHandle.uplot.scales.x = {}
+  })
 })
 
 // Regression test: bug 3 (unit mismatch) — xExtent must be in ms so that chartDuration
