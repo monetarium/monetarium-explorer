@@ -75,3 +75,66 @@ export function balanceDef(coinType) {
       )
   }
 }
+
+// Sent/Received amount flow. Stacked bars; 4 series. VAR uses float columns; SKA
+// uses lossy Number(atom) columns for geometry while formatValue reads exact strings.
+// Net is sign-split into "Net Received" (net > 0) and "Net Spent" (net < 0, magnitude).
+const FLOW_SERIES = ['Received', 'Spent', 'Net Received', 'Net Spent']
+
+// Strip a leading '-' on an atom string (magnitude) without BigInt arithmetic.
+function absAtom(atomStr) {
+  return atomStr && atomStr.charAt(0) === '-' ? atomStr.slice(1) : atomStr
+}
+
+export function amountflowDef(coinType) {
+  const isSKA = coinType > 0
+  const coinLabel = renderCoinType(coinType)
+  return {
+    name: 'amountflow',
+    label: `Total (${coinLabel})`,
+    stacked: true,
+    axes: [{ label: `Total (${coinLabel})`, scale: 'y' }],
+    series: FLOW_SERIES.map((label, i) => ({
+      label: label,
+      scale: 'y',
+      kind: 'bars',
+      colorIndex: i
+    })),
+    toColumns: (raw) => {
+      const xs = secondsFromTimes(raw.time)
+      if (!isSKA) {
+        const received = (raw.received || []).slice()
+        const sent = (raw.sent || []).slice()
+        const net = raw.net || []
+        const netReceived = net.map((v) => (v > 0 ? v : 0))
+        const netSent = net.map((v) => (v < 0 ? -v : 0))
+        return [xs, received, sent, netReceived, netSent]
+      }
+      const toNum = (arr) => (arr || []).map((s) => Number(s) * SKA_ATOMS_TO_COIN)
+      const received = toNum(raw.received_atoms)
+      const sent = toNum(raw.sent_atoms)
+      const netA = raw.net_atoms || []
+      const netReceived = netA.map((s) => (s.charAt(0) === '-' ? 0 : Number(s) * SKA_ATOMS_TO_COIN))
+      const netSent = netA.map((s) =>
+        s.charAt(0) === '-' ? Number(s.slice(1)) * SKA_ATOMS_TO_COIN : 0
+      )
+      return [xs, received, sent, netReceived, netSent]
+    },
+    formatValue: (seriesIdx, datum) => {
+      const p = datum.payload
+      const i = datum.idx
+      if (!isSKA) return `${datum.value} ${coinLabel}`
+      // SKA: exact strings, sign-split for the two net series.
+      let atomStr
+      if (seriesIdx === 0) atomStr = p.received_atoms[i]
+      else if (seriesIdx === 1) atomStr = p.sent_atoms[i]
+      else {
+        const net = p.net_atoms[i]
+        const isNeg = net.charAt(0) === '-'
+        // seriesIdx === 2: Net Received; seriesIdx === 3: Net Spent (magnitude).
+        atomStr = seriesIdx === 2 ? (isNeg ? '0' : net) : isNeg ? absAtom(net) : '0'
+      }
+      return `${formatSkaAtomsExact(atomStr)} ${coinLabel}`
+    }
+  }
+}
