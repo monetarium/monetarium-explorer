@@ -209,8 +209,7 @@ export default class extends Controller {
         }
       })
       this.purchasesHandle.setData(cols)
-      const g =
-        this._measureGutters(this.purchasesHandle.uplot) || { left: 0, right: 0 }
+      const g = this._measureGutters(this.purchasesHandle.uplot) || { left: 0, right: 0 }
       this.purchasesRanger = await createRanger(
         this.purchasesRangerTarget,
         { ...ticketpoolPurchases, series: [{ ...ticketpoolPurchases.series[2], colorIndex: 0 }] },
@@ -264,8 +263,7 @@ export default class extends Controller {
         }
       })
       this.priceHandle.setData(cols)
-      const g1 =
-        this._measureGutters(this.priceHandle.uplot) || { left: 0, right: 0 }
+      const g1 = this._measureGutters(this.priceHandle.uplot) || { left: 0, right: 0 }
       this.priceRanger = await createRanger(
         this.priceRangerTarget,
         { ...ticketpoolPrice, series: [{ ...ticketpoolPrice.series[2], colorIndex: 0 }] },
