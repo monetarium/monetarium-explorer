@@ -33,8 +33,8 @@ The confirmed page is server-rendered once; it does **not** live-update over Web
 **Mempool Ingestion & Aggregation**
 
 - **Location:** `mempool/monitor.go`, `mempool/collector.go`, `txhelpers/txhelpers.go`
-- **Data Structures:** `wire.MsgTx`, `explorertypes.MempoolTx` (fields: `SKATotals map[uint8]string`, `TicketStage string`)
-- **Transformations Applied:** Raw transaction hex is decoded into `wire.MsgTx`. Outputs are summed for the tx's CoinType into `SKATotals` using `*big.Int` arithmetic. For `TxTypeSStx` ticket purchases, `ticketStage()` inspects each vin's parent in `txnsStore`: if any parent `BlockHeight == 0` (still in mempool), returns "Staging"; all confirmed → "Ready". Both `DataCollector.processTransaction` and `MempoolMonitor.processTransaction` set `TicketStage`.
+- **Data Structures:** `wire.MsgTx`, `explorertypes.MempoolTx` (fields: `TxID string` (JSON: `"txid"`), `SKATotals map[uint8]string`, `TicketStage string`). The `Hash` field was **removed** (it was a duplicate of `TxID`); all dedup maps and identity checks now use `TxID`. The JSON wire format no longer includes a `"hash"` key.
+- **Transformations Applied:** Raw transaction hex is decoded into `wire.MsgTx`. Outputs are summed for the tx's CoinType into `SKATotals` using `*big.Int` arithmetic. SKA amount parse errors in `ParseTxns()` now log an error and skip the coin type (previously silent). For `TxTypeSStx` ticket purchases, `ticketStage()` inspects each vin's parent in `txnsStore`: if any parent `BlockHeight == 0` (still in mempool), returns "Staging"; all confirmed → "Ready". Both `DataCollector.processTransaction` and `MempoolMonitor.processTransaction` set `TicketStage`. The `mpoolInfo` field in `MempoolMonitor` was narrowed from `MempoolInfo` to `CollectState` (tracking only `CurrentHeight`, `LastCollectTime`, `NumTicketPurchasesInMempool` — no longer tracks `NumTicketsSinceStatsReport`). `StoreMPData` goroutine now has panic recovery. `BlockHandler()` now propagates errors from `CollectAndStore()`.
 
 **Confirmed Database & API — Basic Construction**
 
@@ -60,7 +60,8 @@ The confirmed page is server-rendered once; it does **not** live-update over Web
 - **Location:** `cmd/dcrdata/views/tx.tmpl`, `cmd/dcrdata/views/home_mempool.tmpl`, `cmd/dcrdata/public/js/controllers/homepage_controller.js`
 - **Data Structures:** WebSocket JSON (`TrimmedMempoolTx`), Template Data (`explorertypes.TxInfo`)
 - **Transformations Applied:**
-  - The mempool relies on Javascript checking `if (tx.ska_totals)` and formatting it live.
+  - The mempool relies on Javascript checking `if (tx.ska_totals)` and formatting it live. `homepage_controller.js` now reads `tx.txid` (not `tx.hash`) for link construction and `humanize.hashElide` display.
+  - `home_mempool.tmpl` renders hash cells using `.TxID` (not `.Hash`) in the `hashlink` template call.
   - The confirmed view uses a four-way branch for the fee/reward header cell (see Section 2 "Fee/Reward Display Path").
   - Fee rate display unified: `coinFeeRateDecimalParts .FeeRateRaw .CoinType` + `coinFeeRateUnit .CoinType` (replaces the old `.FeeRate`/`FeeRateRaw` split).
   - Vin rows: stakebase inputs now render "N/A" via `.IsStakeBase()` check (not just `AmountIn < 0`). This makes the Inputs Consumed table consistent with `.FeeReward()` which also skips stakebase.
@@ -76,11 +77,15 @@ The confirmed page is server-rendered once; it does **not** live-update over Web
 - `ssFeeNetReward` in `pgblockchain.go` duplicates `blockSSFeeTotalsInternal` in `txhelpers/ssfee.go`. Changing one without the other causes the block page (which calls `ssFeeNetReward`) and any txhelpers-level caller to disagree.
 - The Stimulus Javascript controllers handle the live mempool single-coin total (`ska_totals`); confirmed SKA transactions are rendered server-side by `tx.tmpl`. The two render paths are independent and must be kept coin-consistent (C3).
 - `ticketStage()` logic lives independently in both `mempool/collector.go` and `mempool/monitor.go` — they call the same function, so a single-site change to `ticketStage()` covers both paths.
+- **Tx type string canonical location:** All `TxType*` string constants (`TxTypeVote`, `TxTypeTicket`, `TxTypeSSFee`, etc.) now live exclusively in `txhelpers/txhelpers.go` (exported `string` vars). The local duplicates in `explorertypes.go` were removed; only `CoinbaseTypeStr` remains there (coinbase has no counterpart in the stake package). All `TxInfo.Is*()` methods compare against `txhelpers.TxTypeXxx`. Adding a new tx type string must go into `txhelpers`, not `explorertypes`.
+- **`MempoolInfo.DeepCopy()` completeness:** Now copies `Ident` and `CoinFills` fields — previously omitted, which silently dropped these from WS broadcast copies. Any future additions to `MempoolInfo` must be added to `DeepCopy()` or they will be dropped in broadcast.
+- **`HomeInfo` new fields:** `WindowRemaining string` and `RewardRemaining string` added (JSON: `"window_remaining"`, `"reward_remaining"`). Populated in `pubsubhub.go:Store()` via `exptypes.RemainingWindowText(idx, max, blockTime)`. WS clients reading `HomeInfo` now receive pre-formatted time-remaining text for both windows.
 
 ### 5. Critical Constraints
 
-- **Precision Rules (C1):** Multi-coin SKA values use 18 decimal places and must traverse the stack as `*big.Int` or `string`. `ssFeeNetReward` uses `out.SKAValue` (*big.Int) directly — never float. `FeeReward()` on `TxInfo` is VAR-only float64 and must never be called for SKA txs.
+- **Precision Rules (C1):** Multi-coin SKA values use 18 decimal places and must traverse the stack as `*big.Int` or `string`. `ssFeeNetReward` uses `out.SKAValue` (*big.Int) directly — never float. `FeeReward()` on `TxInfo` is VAR-only float64 and must never be called for SKA txs. As of HEAD=1bc57372, `FeeReward()` enforces this defensively: it returns `0` immediately if `CoinType != 0` — callers see a silent 0, not a precision-corrupted value. SKA tx fee display must use `skaDecimalParts .FeeRaw` or `coinDecimalParts .FeeRaw .CoinType`.
 - **`FeeRaw` semantic overload:** For SSFee txs, `FeeRaw` = Σoutputs − Σinputs (net reward, ≥ 0). For regular txs, `FeeRaw` = Σinputs − Σoutputs (fee, ≥ 0). The sign convention is opposite. Template MUST branch on `IsSSFee()` before rendering.
+- **`UnspentOutputIndices()` SKA fix:** Prior to HEAD=1bc57372, the function excluded all vouts with `Amount == 0.0` — which incorrectly excluded every SKA output (VAR amount is always 0 for SKA txs). Now correctly: skip `Spent` vouts first, then skip only vouts where `SKAValue == "" && Amount == 0.0` (genuinely zero-value). Callers written against old behavior that added SKA-specific workarounds should be reviewed.
 - **Divergent Source of Truth (C2):** Confirmed data trusts the node's RPC parsing. Mempool data trusts `txhelpers` internal parsing.
 - **Dual implementation of ssFeeNetReward:** `pgblockchain.go:ssFeeNetReward` and `txhelpers/ssfee.go:blockSSFeeTotalsInternal` are independent. Any protocol change that affects SSFee output structure requires updating both.
 - **Missing WebSocket Events:** Confirmed transactions are not broadcast via WebSockets with full datasets; clients are only pinged a `sigNewBlock` signal.
@@ -113,6 +118,10 @@ When modifying **transaction data structures or multi-coin logic**, check ALL of
 - Routing coinbase/vote fee reward through `coinDecimalParts` instead of `float64AsDecimalParts .FeeReward` — they are different code paths; coinbase/vote is VAR-only float, SSFee can be VAR or SKA big.Int.
 - Assuming `ticketStage` is only in `collector.go`: `monitor.go` has a parallel call site.
 - Parsing the transaction's coin data using only the legacy `.Amount` (float64) field.
+- Accessing `MempoolTx.Hash` — the field was removed; use `TxID` (JSON key `"txid"`). Any JS, stored JSON, or Go code that referenced the `"hash"` key on a mempool tx object will silently receive `undefined`/zero-value.
+- Expecting `FeeReward()` to fail visibly on SKA txs — it now returns `0` silently (defensive guard at `explorertypes.go:497`). Callers must use `FeeRaw` + `CoinType` path for SKA.
+- Defining new tx-type comparison strings in `explorertypes.go` — canonical strings live in `txhelpers/txhelpers.go` (exported vars `TxTypeVote`, `TxTypeTicket`, etc.). Adding a duplicate locally creates two constants that can drift.
+- Adding fields to `MempoolInfo` without updating `DeepCopy()` — fields not copied there will be silently dropped from WS broadcasts.
 
 ### 8. Evidence
 
@@ -123,15 +132,21 @@ When modifying **transaction data structures or multi-coin logic**, check ALL of
 - **ssFeeNetReward function:** `db/dcrpg/pgblockchain.go:ssFeeNetReward` — `net = Σ(out.SKAValue or out.Value) − Σ(vin.SKAValueIn or vin.ValueIn)`, skipping coinbase-marker inputs
 - **SSFee specialization in GetExplorerBlock:** `db/dcrpg/pgblockchain.go` — scans TxOut for first `CoinType.IsSKA()` output, sets `CoinType`, calls `ssFeeNetReward`, detects `stake.HasSSFeeMarker` for SF/MF
 - **SSFee specialization in GetExplorerTx:** `db/dcrpg/pgblockchain.go` — mirrors block path: scans TxOut, sets `tx.CoinType`, sets `tx.FeeRaw = ssFeeNetReward(msgTx).String()`
-- **FeeReward() method:** `explorer/types/explorertypes.go:TxInfo.FeeReward()` — VAR-only float64: Σvout.Amount − Σvin.AmountIn (skips stakebase, skips negative AmountIn)
-- **IsSSFee() method:** `explorer/types/explorertypes.go:TxInfo.IsSSFee()` — `t.Type == SSFeeTypeStr` ("Stake Fee")
+- **FeeReward() method:** `explorer/types/explorertypes.go:496` — VAR-only float64: returns 0 early if `CoinType != 0` (SKA guard at line 497), then Σvout.Amount − Σvin.AmountIn (skips stakebase, skips negative AmountIn)
+- **IsSSFee() method:** `explorer/types/explorertypes.go:TxInfo.IsSSFee()` — `t.Type == txhelpers.TxTypeSSFee` (no longer a local constant; all Is*() methods now use `txhelpers.TxTypeXxx` vars)
 - **tx.tmpl fee/reward branch (line 88–92):** `cmd/dcrdata/views/tx.tmpl` — label: `{{if or .Coinbase .IsVote .IsSSFee}}Fee Reward{{else}}Fee{{end}}`; value: 4-way branch on `Coinbase/IsVote` → `float64AsDecimalParts .FeeReward`, `IsSSFee` → `coinDecimalParts .FeeRaw .CoinType`, VAR → `.Fee.ToCoin`, SKA → `skaDecimalParts .FeeRaw`
 - **Stakebase vin N/A:** `cmd/dcrdata/views/tx.tmpl:486` — `{{if or (lt .AmountIn 0.0) .IsStakeBase}} N/A {{else}}...{{end}}`
 - **Fee rate unified display:** `cmd/dcrdata/views/tx.tmpl:233` — `{{template "decimalParts" (coinFeeRateDecimalParts .FeeRateRaw .CoinType false)}} {{coinFeeRateUnit .CoinType}}`
 - **MiningFee scope:** `db/dcrpg/pgblockchain.go` — `block.MiningFee = (getTotalFee(block.Tx) + getTotalFee(block.Tickets)).ToCoin()`
 - **Confirmed API Node usage:** `db/dcrpg/pgblockchain.go` — `pgb.Client.GetRawTransactionVerbose`
 - **Per-coin output rendering:** `cmd/dcrdata/views/tx.tmpl:559` — `{{if eq $.Data.CoinType 0}}{{float64AsDecimalParts .Amount 8 false}}{{else}}{{skaDecimalParts .ValueRaw false}}{{end}}`
-- **Mempool UI Logic:** `cmd/dcrdata/public/js/controllers/homepage_controller.js` handles `ska_totals` via DOM templates correctly
+- **Mempool UI Logic:** `cmd/dcrdata/public/js/controllers/homepage_controller.js` — `mempoolTableRow(tx)` reads `tx.txid` (not `tx.hash`) at lines 26, 45; handles `ska_totals` via DOM templates
+- **home_mempool.tmpl hash cell:** `cmd/dcrdata/views/home_mempool.tmpl:120` — `hashlink .TxID (print "/tx/" .TxID)` (not `.Hash`)
+- **MempoolTx struct (Hash removed):** `explorer/types/explorertypes.go:1473` — `Hash string` field gone; canonical field is `TxID string json:"txid"` at line 1474
+- **UnspentOutputIndices SKA fix:** `explorer/types/explorertypes.go:1751` — now checks `vout.SKAValue == "" && vout.Amount == 0.0` (SKA vouts have Amount==0; were incorrectly excluded before)
+- **addAtomStrings hardened:** `mempool/monitor.go:656` — uses `strconv.ParseInt` for VAR (explicit error) and checks `big.Int.SetString` ok flag explicitly for SKA; logs warnings on bad input
+- **HomeInfo window fields:** `explorer/types/explorertypes.go:911,913` — `WindowRemaining string json:"window_remaining"`, `RewardRemaining string json:"reward_remaining"`; populated in `pubsub/pubsubhub.go:733-734`
+- **TxType constants canonical home:** `txhelpers/txhelpers.go:1185-1194` — `TxTypeVote`, `TxTypeTicket`, `TxTypeRevocation`, `TxTypeSSFee`, etc. are the single source of truth; `explorertypes.go` retains only `CoinbaseTypeStr` (no stake-package counterpart)
 
 ### 9. Compact Knowledge (LLM-Optimized)
 

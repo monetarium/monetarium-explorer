@@ -47,7 +47,7 @@ _Data flow for block rendering, including headers, metrics, and block content pa
 
 ### Transaction
 
-_End-to-end pipeline for transaction processing, decoding, and rendering inputs/outputs. SSFee (Stake Fee) txs have their own rendering path: `FeeRaw` is semantically overloaded (net reward for SSFee, fee for regular txs); coinbase/vote use `FeeReward()` float; SSFee use `coinDecimalParts .FeeRaw .CoinType` (VAR or SKA). Mempool ticket purchases carry `TicketStage` ("Ready"/"Staging"). Revised at `HEAD=2d4b64ac`._
+_End-to-end pipeline for transaction processing, decoding, and rendering inputs/outputs. SSFee (Stake Fee) txs have their own rendering path: `FeeRaw` is semantically overloaded (net reward for SSFee, fee for regular txs); coinbase/vote use `FeeReward()` float (now guards SKA with early-return 0); SSFee use `coinDecimalParts .FeeRaw .CoinType` (VAR or SKA). `MempoolTx.Hash` removed — use `TxID`/`"txid"`. Tx type strings canonical home is `txhelpers.TxTypeXxx`. Revised at `HEAD=1bc57372`._
 
 - flow (compact): code-analysis/transaction/flow.compact.md — high-level summary of how transaction inputs/outputs and SSFee/coinbase/vote fee-reward paths are processed
 - flow (full): code-analysis/transaction/flow.full.md — detailed step-by-step trace including SSFee net-reward overload, TicketStage, FeeRateRaw unification, and MiningFee scope
