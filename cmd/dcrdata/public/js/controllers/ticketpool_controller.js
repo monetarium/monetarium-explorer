@@ -85,11 +85,11 @@ function computeZoomWindow(val, xs) {
   const min = xs.length ? xs[0] : max - 86400
   switch (val) {
     case 'day':
-      return [max - 86400, max]
+      return [Math.max(max - 86400, min), max]
     case 'wk':
-      return [max - 604800, max]
+      return [Math.max(max - 604800, min), max]
     case 'mo':
-      return [max - 2628000, max]
+      return [Math.max(max - 2628000, min), max]
     default:
       return [min, max]
   }
@@ -169,7 +169,11 @@ export default class extends Controller {
     const cols = ticketpoolPurchases.toColumns(timeData, mempool)
     if (this.purchasesHandle) {
       this.purchasesHandle.setData(cols)
-      if (this.purchasesRanger) this.purchasesRanger.setData([cols[0], cols[3]])
+      if (this.purchasesRanger) {
+        this.purchasesRanger.setData([cols[0], cols[3]])
+        const ru = this.purchasesRanger.uplot
+        ru.setSelect({ left: 0, top: 0, width: ru.width, height: ru.height }, false)
+      }
       return
     }
     if (this._creatingPurchases) return
@@ -181,6 +185,9 @@ export default class extends Controller {
         width: el.clientWidth || 800,
         height: el.clientHeight || 250,
         xTime: true,
+        onRangeChange: (min, max) => {
+          if (this.purchasesRanger) this.purchasesRanger.setSelection(min, max)
+        },
         hooks: {
           ready: [
             (u) => {
@@ -190,13 +197,6 @@ export default class extends Controller {
           setCursor: [
             (u) => {
               renderTooltip(u, this.purchasesTooltip, ticketpoolPurchases)
-            }
-          ],
-          setScale: [
-            (u, key) => {
-              if (key === 'x' && this.purchasesRanger) {
-                this.purchasesRanger.setSelection(u.scales.x.min, u.scales.x.max)
-              }
             }
           ]
         }
@@ -236,6 +236,9 @@ export default class extends Controller {
         width: el.clientWidth || 800,
         height: el.clientHeight || 250,
         xTime: false,
+        onRangeChange: (min, max) => {
+          if (this.priceRanger) this.priceRanger.setSelection(min, max)
+        },
         hooks: {
           ready: [
             (u) => {
@@ -245,13 +248,6 @@ export default class extends Controller {
           setCursor: [
             (u) => {
               renderTooltip(u, this.priceTooltip, ticketpoolPrice)
-            }
-          ],
-          setScale: [
-            (u, key) => {
-              if (key === 'x' && this.priceRanger) {
-                this.priceRanger.setSelection(u.scales.x.min, u.scales.x.max)
-              }
             }
           ]
         }
@@ -346,7 +342,17 @@ export default class extends Controller {
     if (this.purchasesHandle) {
       this.purchasesHandle.setData(cols)
       this.purchasesRanger?.setData([cols[0], cols[3]])
+      if (this.purchasesRanger) {
+        const ru = this.purchasesRanger.uplot
+        ru.setSelect({ left: 0, top: 0, width: ru.width, height: ru.height }, false)
+      }
     }
+    // Reset zoom to full extent — bar aggregation changes the data's x-range,
+    // and the old zoom window no longer corresponds to the same time span.
+    this.zoom = 'all'
+    this.zoomTargets.forEach((zt) => zt.classList.remove('btn-active'))
+    const allZoom = Array.from(this.zoomTargets).find((zt) => zt.name === 'all')
+    if (allZoom) allZoom.classList.add('btn-active')
     this.wrapperTarget.classList.remove('loading')
   }
 }
