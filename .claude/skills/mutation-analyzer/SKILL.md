@@ -256,30 +256,68 @@ All findings grounded in actual files. Mark assumptions as **INFERRED**.
 
 **Trigger:** `Refresh: <domain>` (e.g. `Refresh: windows`). The one-keyword response to a
 `STALE` domain flagged by `dev/wiki-staleness.sh`. Refresh is a **scoped entry** into
-Explore → Synthesize, not a new pipeline step — all Mode 2 and Mode 3 rules apply.
+Explore → Synthesize, not a new pipeline step — all Mode 2 and Mode 3 rules apply. Append
+`--full` (`Refresh: <domain> --full`) to force a full end-to-end re-trace, bypassing the
+diff-driven tiering below.
+
+**Tiers (chosen by the `anchor..HEAD` diff over covered files):**
+
+- **Tier 0 — anchor bump.** Diff is whitespace-only or comment-only (no executable code
+  changed). Bump `meta.yml.anchor` and commit; no flow re-trace.
+- **Tier 1 — diff-scoped + 1-hop (default).** Re-trace each *changed* covered file, re-verify
+  the seam to its immediate flow neighbours (one hop up/down the documented flow), and **widen**
+  into added/renamed files the diff points at. Untouched covered files are left as-is — their
+  bytes are identical, so their `file:line` refs cannot have drifted.
+- **`--full` override.** Today's full Mode 2 — Explore pass over the whole domain; use when a
+  domain was heavily refactored and the diff signals understate the churn.
 
 **Procedure:**
 
 1. Read `wiki/code-analysis/<domain>/meta.yml` for its `anchor` and `files`. If there is no
    `meta.yml`, this is not a Refresh — tell the user to seed one with
    `./dev/wiki-staleness.sh --bootstrap`, or treat it as a fresh Explore on the domain.
-2. Compute likely drift since the anchor — `git log --name-only <anchor>..HEAD -- <files>` — to
-   see which already-tracked files changed, and in which commits. Treat this as a **priority
-   hint** for where to look first, **not** the boundary of the re-trace: it is scoped to the
-   existing `files`, so by construction it cannot surface a newly-added file that now belongs to
-   the domain.
-3. Run a **full Mode 2 — Explore** pass against current `HEAD` — the complete checklist
-   (definition → ≥3 usage points → ≥2 transformations → serialization boundary), tracing the
-   domain's actual current flow **end to end**, not just the files from step 2. This is what
-   keeps coverage correct: re-verify every `file:line` reference in the existing trace; **add any
-   newly-introduced file the flow now passes through** to the domain's coverage, and drop files
-   the flow no longer touches. Capture the flows, invariants, and risks that changed.
+2. **Classify the diff.** Compute everything from `anchor..HEAD` — **`HEAD`, not
+   `origin/develop`**: Refresh must diff against the same ref `wiki-staleness.sh` uses, or a
+   domain could read `FRESH` in the detector yet be re-traced against a different tree (the
+   working branch routinely sits ahead of `origin/develop`). Let `<files>` be the covered paths
+   from `meta.yml` and `<dirs>` their unique directories (`dirname` of each, de-duplicated):
+
+   ```sh
+   # a. Status of each covered file — Tier 0/1 split, plus delete/rename signals
+   git diff --name-status --find-renames <anchor>..HEAD -- <files>
+   # b. Tier 0 gate — whitespace-only check (empty output ⇒ whitespace-only diff)
+   git diff -w --ignore-blank-lines <anchor>..HEAD -- <files>
+   # c. Blind-spot probe — files ADDED in the covered files' directories
+   git diff --name-status --diff-filter=A <anchor>..HEAD -- <dirs>
+   ```
+
+   **Tier 0** if (b) is empty, or its residual hunks are exclusively comment lines. Otherwise
+   **Tier 1**: the `M` files from (a) are re-traced; `D`/`R` files from (a) and added files from
+   (c) that a *changed* covered file imports/calls are **widened** into. An explicit `--full`
+   request skips classification and runs a full Explore (step 3).
+3. **Execute the tier.**
+   - **Tier 0:** confirm (b) is whitespace/comment-only, then skip to step 4 with no flow
+     re-trace — only `meta.yml.anchor` moves.
+   - **Tier 1:** for each `M` covered file, re-trace it against current `HEAD` and re-verify the
+     **seam** to its immediate producer and consumer in the documented flow (one hop — re-check
+     the interface, e.g. a changed `*.tmpl`'s `data-*` contract with its controller, or a changed
+     collector's direct subscribers; do **not** re-trace neighbours end to end). For each `D`/`R`
+     file, or an added file (c) that a changed covered file imports/calls, **widen**: pull it —
+     and any new-file chain reachable from changed files — into coverage and apply the full Mode 2
+     checklist to that region only. Re-verify `file:line` refs **only in re-traced files**; leave
+     untouched covered files alone (their bytes are identical). Add newly-covered files to
+     `meta.yml.files` and drop ones the flow no longer touches.
+   - **`--full`:** run the complete Mode 2 — Explore checklist end to end (definition → ≥3 usage
+     points → ≥2 transformations → serialization boundary), re-verifying every `file:line`
+     reference and re-deriving coverage from scratch. This is the pre-tiering behaviour, kept as
+     a manual escape hatch.
 4. Auto-chain into **Mode 3 — Synthesize**, but **UPDATE in place**: extend/merge the existing
    `flow.*` / `patterns.md` / `impact.md` (never create parallel files), refresh the
    `wiki/index.md` entry if the domain's scope description changed, and **bump `meta.yml`**
    (`anchor` = current `git rev-parse --short HEAD`, `files` = the trace's current coverage).
-5. Report the before→after anchor and the files updated, and tell the user to re-run
-   `./dev/wiki-staleness.sh` to confirm `<domain>` is now `FRESH`.
+5. Report the before→after anchor, **which tier ran (0 / 1 / `--full`) and what was widened**,
+   and the files updated, and tell the user to re-run `./dev/wiki-staleness.sh` to confirm
+   `<domain>` is now `FRESH`. Stating the tier keeps the cheap path auditable rather than silent.
 6. **Commit the refresh.** Stage only this domain's wiki artifacts — everything under
    `wiki/code-analysis/<domain>/` plus `wiki/index.md` *if it changed* — and commit. Use the
    repo's established Refresh subject, matching existing history exactly:
@@ -295,10 +333,11 @@ Explore → Synthesize, not a new pipeline step — all Mode 2 and Mode 3 rules 
    keep unrelated working-tree changes out of the commit. Follow repo commit hygiene: no
    `--amend`, no `--no-verify`; if a hook blocks, fix and re-commit.
 
-If the re-trace shows the existing trace is still accurate (a covered file moved but the
-documented flow is unaffected — only the anchor lagged), it is enough to bump `meta.yml.anchor`
-to current `HEAD` (still committed per step 6). Say so explicitly rather than churning unchanged
-prose.
+**Tier 0 is the mechanical, diff-detected form of the "still accurate" allowance** — it reaches
+the anchor-only bump directly from the diff, no re-trace needed. The broader judgment ("a covered
+file changed but the documented flow is unaffected") can still apply *within* Tier 1 or `--full`
+once a changed file is read; when it does, bump `meta.yml.anchor` to current `HEAD` (still
+committed per step 6) and say so explicitly rather than churning unchanged prose.
 
 ---
 
