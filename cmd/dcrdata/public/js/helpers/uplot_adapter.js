@@ -82,6 +82,8 @@ const TIME_AXIS_VALUES = (() => {
  * @property {number} [width]       // stroke width in px (uPlot default is 1)
  * @property {boolean} [spanGaps]   // draw the line across null gaps
  * @property {boolean} [fill]  // force a translucent area fill (e.g. a filled stepped line)
+ * @property {number} [barAlign]   // bars: 0 center (default), 1 left edge at x, -1 right edge at x
+ * @property {number[]} [barSize]  // bars: uPlot size [widthFactor, maxPx?, minPx?]; default [0.6, 100]
  *
  * @typedef {Object} ChartDefinition
  * @property {string} name
@@ -95,10 +97,13 @@ const TIME_AXIS_VALUES = (() => {
  * @property {(seriesIdx:number, rawDatum:*, settings:object)=>string} [formatValue]
  */
 
-function pathsFor(UPlot, kind) {
-  switch (kind) {
+function pathsFor(UPlot, s) {
+  switch (s.kind) {
     case 'bars':
-      return UPlot.paths.bars({ size: [0.6, 100], align: 0 })
+      // Per-series bar geometry. Default: centered, 60% width, capped at 100px (the /charts
+      // bar charts). Histograms opt in to barAlign:1 (left edge at the bucket start) and a
+      // full-width, uncapped barSize so each bar spans its bin — see address.js.
+      return UPlot.paths.bars({ size: s.barSize || [0.6, 100], align: s.barAlign ?? 0 })
     case 'stepped':
       return UPlot.paths.stepped({ align: 1 })
     default: // 'line' and 'area' share the linear path; 'area' adds a fill
@@ -316,7 +321,7 @@ export function buildOpts(UPlot, def, opts = {}) {
         scale: s.scale || 'y',
         stroke: seriesColors[i],
         fill: filled ? fillForStroke(seriesColors[i], dark) : null,
-        paths: pathsFor(UPlot, s.kind),
+        paths: pathsFor(UPlot, s),
         points: { show: false },
         spanGaps: !!s.spanGaps
       }

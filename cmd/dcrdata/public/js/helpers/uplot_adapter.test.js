@@ -125,6 +125,42 @@ describe('buildOpts — dual-axis with a bars series', () => {
   })
 })
 
+describe('buildOpts — per-series bars geometry', () => {
+  it('passes barSize/barAlign through to paths.bars and defaults when unset', () => {
+    const calls = []
+    const recUPlot = {
+      paths: {
+        bars: (o) => {
+          calls.push(o)
+          return 'BARS'
+        },
+        stepped: () => 'STEP',
+        linear: () => 'LINE'
+      }
+    }
+    const def = {
+      name: 'x',
+      label: 'X',
+      stacked: false,
+      axes: [{ label: '', scale: 'y' }],
+      series: [
+        { label: 'Default bar', scale: 'y', kind: 'bars', colorIndex: 0 },
+        {
+          label: 'Histogram bar',
+          scale: 'y',
+          kind: 'bars',
+          colorIndex: 1,
+          barAlign: 1,
+          barSize: [1]
+        }
+      ]
+    }
+    buildOpts(recUPlot, def, {})
+    expect(calls[0]).toEqual({ size: [0.6, 100], align: 0 }) // default preserved (e.g. /charts bars)
+    expect(calls[1]).toEqual({ size: [1], align: 1 }) // per-series histogram opt-in
+  })
+})
+
 describe('buildOpts — options', () => {
   it('switches the y scale to log when scaleType is log', () => {
     const opts = buildOpts(fakeUPlot, lineDef, { scaleType: 'log' })

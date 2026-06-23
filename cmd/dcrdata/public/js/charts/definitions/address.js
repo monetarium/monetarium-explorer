@@ -8,9 +8,33 @@ import { renderCoinType } from '../../helpers/ska_helper'
 
 const SKA_ATOMS_TO_COIN = 1e-18
 
+// Histogram bar geometry for the time-bucketed count/amount charts. The backend stamps each
+// bucket at its START (date_trunc), so bars are LEFT-aligned (left edge at the bucket x) and
+// sized to fill the whole bin (size:[1] = 100% width, uncapped) — each bar visually spans its
+// period. Contrast the adapter default (centered, 60%, capped 100px) used by the /charts bars.
+const HISTOGRAM_BAR_ALIGN = 1
+const HISTOGRAM_BAR_SIZE = [1]
+
 // RFC3339 strings (TimeDef.MarshalJSON) -> integer UNIX seconds for the uPlot x-axis.
 export function secondsFromTimes(times) {
   return times.map((t) => Math.floor(Date.parse(t) / 1000))
+}
+
+// Left-aligned histogram bars are stamped at the bucket START, so the last (current) period's
+// bar extends one bin to the right of the final data x. Append a trailing x one bin past the
+// last — with null y for every series (no bar is drawn there) — so the x-domain reaches the end
+// of the current period and that last bar is fully visible. binSize is in seconds
+// (settings.binSize); 0/absent leaves the columns untouched (callers without settings, e.g.
+// unit tests). Mutates in place and returns the same array. The leading edge needs no pad: a
+// left-aligned bar at the first bucket already starts at the domain's left edge.
+function padTrailingBin(cols, settings) {
+  const binSize = (settings && settings.binSize) || 0
+  const xs = cols[0]
+  if (binSize > 0 && xs.length) {
+    xs.push(xs[xs.length - 1] + binSize)
+    for (let i = 1; i < cols.length; i++) cols[i].push(null)
+  }
+  return cols
 }
 
 // Tx-type counts (coin-independent). Stacked bars matching the legacy Dygraphs
@@ -33,12 +57,15 @@ export function typesDef() {
       label: s.label,
       scale: 'y',
       kind: 'bars',
-      colorIndex: i
+      colorIndex: i,
+      barAlign: HISTOGRAM_BAR_ALIGN,
+      barSize: HISTOGRAM_BAR_SIZE
     })),
-    toColumns: (raw) => [
-      secondsFromTimes(raw.time),
-      ...TYPE_SERIES.map((s) => (raw[s.field] || []).slice())
-    ],
+    toColumns: (raw, settings) =>
+      padTrailingBin(
+        [secondsFromTimes(raw.time), ...TYPE_SERIES.map((s) => (raw[s.field] || []).slice())],
+        settings
+      ),
     formatValue: (seriesIdx, datum) =>
       intComma(datum.payload[TYPE_SERIES[seriesIdx].field][datum.idx])
   }
@@ -111,27 +138,34 @@ export function amountflowDef(coinType) {
       label: label,
       scale: 'y',
       kind: 'bars',
-      colorIndex: i
+      colorIndex: i,
+      barAlign: HISTOGRAM_BAR_ALIGN,
+      barSize: HISTOGRAM_BAR_SIZE
     })),
-    toColumns: (raw) => {
+    toColumns: (raw, settings) => {
       const xs = secondsFromTimes(raw.time)
+      let cols
       if (!isSKA) {
         const received = (raw.received || []).slice()
         const sent = (raw.sent || []).slice()
         const net = raw.net || []
         const netReceived = net.map((v) => (v > 0 ? v : 0))
         const netSent = net.map((v) => (v < 0 ? -v : 0))
-        return [xs, received, sent, netReceived, netSent]
+        cols = [xs, received, sent, netReceived, netSent]
+      } else {
+        const toNum = (arr) => (arr || []).map((s) => Number(s) * SKA_ATOMS_TO_COIN)
+        const received = toNum(raw.received_atoms)
+        const sent = toNum(raw.sent_atoms)
+        const netA = raw.net_atoms || []
+        const netReceived = netA.map((s) =>
+          s.charAt(0) === '-' ? 0 : Number(s) * SKA_ATOMS_TO_COIN
+        )
+        const netSent = netA.map((s) =>
+          s.charAt(0) === '-' ? Number(s.slice(1)) * SKA_ATOMS_TO_COIN : 0
+        )
+        cols = [xs, received, sent, netReceived, netSent]
       }
-      const toNum = (arr) => (arr || []).map((s) => Number(s) * SKA_ATOMS_TO_COIN)
-      const received = toNum(raw.received_atoms)
-      const sent = toNum(raw.sent_atoms)
-      const netA = raw.net_atoms || []
-      const netReceived = netA.map((s) => (s.charAt(0) === '-' ? 0 : Number(s) * SKA_ATOMS_TO_COIN))
-      const netSent = netA.map((s) =>
-        s.charAt(0) === '-' ? Number(s.slice(1)) * SKA_ATOMS_TO_COIN : 0
-      )
-      return [xs, received, sent, netReceived, netSent]
+      return padTrailingBin(cols, settings)
     },
     formatValue: (seriesIdx, datum) => {
       const p = datum.payload

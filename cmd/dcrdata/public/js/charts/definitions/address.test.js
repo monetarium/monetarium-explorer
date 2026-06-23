@@ -74,12 +74,15 @@ describe('typesDef (Tx Type stacked bars)', () => {
     votes: [5, 0],
     revokeTx: [0, 0]
   }
-  it('is stacked with 5 bar series', () => {
+  it('is stacked with 5 left-aligned full-bin bar series (histogram)', () => {
     expect(def.stacked).toBe(true)
     expect(def.series).toHaveLength(5)
     expect(def.series.every((s) => s.kind === 'bars')).toBe(true)
+    // Histogram geometry: left edge at the bucket start, full-bin width (uncapped).
+    expect(def.series.every((s) => s.barAlign === 1)).toBe(true)
+    expect(def.series.every((s) => Array.isArray(s.barSize))).toBe(true)
   })
-  it('toColumns emits xs + 5 raw count columns', () => {
+  it('toColumns emits xs + 5 raw count columns (no trailing pad without binSize)', () => {
     const cols = def.toColumns(raw)
     expect(cols[0]).toEqual([1717279200, 1717365600])
     expect(cols.slice(1)).toHaveLength(5)
@@ -87,6 +90,18 @@ describe('typesDef (Tx Type stacked bars)', () => {
     const labels = def.series.map((s) => s.label)
     const sentIdx = labels.indexOf('Sending (regular)') + 1
     expect(cols[sentIdx]).toEqual([1, 2])
+  })
+  it('toColumns appends a trailing null bucket when binSize is provided (issues 2/3)', () => {
+    // Left-aligned bars are stamped at the bucket start, so the last (current) period's bar
+    // extends one bin to the right. A trailing x one bin past the last (null y for every
+    // series → no bar) extends the domain so that bar is fully visible and the axis reaches
+    // the end of the current period. binSize is in seconds.
+    const cols = def.toColumns(raw, { binSize: 2628000 }) // ~1 month
+    expect(cols[0]).toEqual([1717279200, 1717365600, 1717365600 + 2628000])
+    cols.slice(1).forEach((col) => {
+      expect(col).toHaveLength(3)
+      expect(col[2]).toBeNull() // trailing bucket draws no bar
+    })
   })
   it('formatValue reads the raw count from the payload by index', () => {
     const labels = def.series.map((s) => s.label)
@@ -104,17 +119,25 @@ describe('amountflowDef VAR (coin 0)', () => {
     net: [7] // net > 0 -> Net Received = 7, Net Spent = 0
   }
   const labels = def.series.map((s) => s.label)
-  it('is stacked with 4 bar series in fixed label order', () => {
+  it('is stacked with 4 left-aligned full-bin bar series in fixed label order', () => {
     expect(def.stacked).toBe(true)
     expect(labels).toEqual(['Received', 'Spent', 'Net Received', 'Net Spent'])
+    expect(def.series.every((s) => s.barAlign === 1)).toBe(true)
+    expect(def.series.every((s) => Array.isArray(s.barSize))).toBe(true)
   })
-  it('toColumns splits net by sign', () => {
+  it('toColumns splits net by sign (no trailing pad without binSize)', () => {
     const cols = def.toColumns(raw)
     expect(cols[0]).toEqual([1717279200])
     expect(cols[1]).toEqual([10]) // Received
     expect(cols[2]).toEqual([3]) // Spent
     expect(cols[3]).toEqual([7]) // Net Received
     expect(cols[4]).toEqual([0]) // Net Spent
+  })
+  it('toColumns appends a trailing null bucket when binSize is provided (issues 2/3)', () => {
+    const cols = def.toColumns(raw, { binSize: 2628000 })
+    expect(cols[0]).toEqual([1717279200, 1717279200 + 2628000])
+    expect(cols[1]).toEqual([10, null]) // Received + trailing null
+    expect(cols[4]).toEqual([0, null]) // Net Spent + trailing null
   })
   it('formatValue renders VAR per series', () => {
     expect(def.formatValue(0, { idx: 0, payload: raw, value: 10 }, {})).toBe('10 VAR')
