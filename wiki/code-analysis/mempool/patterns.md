@@ -74,8 +74,8 @@ Each transport owns its own `invs` pointer + mutex; both implement `MempoolDataS
 **Description:**
 Per-coin aggregate amounts (`MempoolCoinStats.Amount`, `RegularAmount`, etc.) are stored as **decimal-atom strings**, not numeric types, so the same field can losslessly carry VAR (8-decimal `int64`) or SKA (18-decimal `*big.Int`) values. Arithmetic uses `addAtomStrings(a, b, isBig bool)`:
 
-- `isBig == true` → parse both with `big.Int.SetString` and add; on parse failure, return `a` unchanged (silent skip).
-- `isBig == false` → `fmt.Sscan` into `int64` and sum.
+- `isBig == true` → parse both with `big.Int.SetString` and add; on parse failure, log a warning and return `a` unchanged.
+- `isBig == false` → `strconv.ParseInt` into `int64`; on parse failure, log a warning and return `"0"`.
 - Empty `a` returns `b` as-is.
 
 Per-type fields default to `"0"` (not `""`) so the JSON contract is stable regardless of which tx types have appeared in the mempool.

@@ -83,7 +83,7 @@ _Aggregation and grouping of blocks over specific time intervals (days, weeks, m
 
 ### Mempool
 
-_Multi-coin aggregation (CoinStats + derived CoinFills), dual collection paths (batch ParseTxns at block boundary vs. incremental addTxToCoinStats per tx), multi-saver fan-out, dual-transport WS delivery, and live indicator rendering._
+_Multi-coin aggregation (CoinStats + derived CoinFills), dual collection paths (batch ParseTxns at block boundary vs. incremental addTxToCoinStats per tx), multi-saver fan-out, dual-transport WS delivery, and live indicator rendering. **Refreshed at `HEAD=3837b7b8`**: `MempoolTx.Hash` field removed (json:"hash" gone; sole identifier is `TxID`/`json:"txid"`); `MempoolInfo.DeepCopy` now copies `Ident`+`CoinFills` (bug fix); `addAtomStrings` VAR path uses `strconv.ParseInt`; `mpoolInfo` field narrowed to `CollectState`; `BytesString` removed in favour of `humanize.Bytes`; saver goroutines now panic-recovered; `FeeReward` SKA guard; `UnspentOutputIndices` SKA fix; `HomeInfo.WindowRemaining`/`RewardRemaining` added via new `explorer/types/remaining.go`._
 
 - flow (compact): code-analysis/mempool/flow.compact.md — high-level summary of mempool state aggregation, fan-out, and WS delivery
 - flow (full): code-analysis/mempool/flow.full.md — detailed, step-by-step function trace covering monitor/collector, savers, CoinFills derivation, WS encoders, templates, and JS controller

@@ -7,7 +7,8 @@
 - **Dual collection paths (batch vs. incremental).** `ParseTxns` at block boundaries fully rebuilds `MempoolInfo.CoinStats`; `addTxToCoinStats` updates it incrementally per new tx. Both must stay equivalent. Tests: [mempool/monitor_test.go](../../../mempool/monitor_test.go).
 - **Multi-saver fan-out.** `MempoolMonitor` dispatches to `[]MempoolDataSaver`: `explorerUI` (computes `CoinFills`), `PubSubHub` (pointer-assign), `DataCache` (early-returns on incremental path via `stakeData==nil` guard).
 - **Dual-transport WS.** Root explorer WS ([websockethandlers.go](../../../cmd/dcrdata/internal/explorer/websockethandlers.go)) and `PubSubHub` ([pubsubhub.go](../../../pubsub/pubsubhub.go)) both emit identical `sigMempoolUpdate(MempoolShort)` and `sigNewTxs(Txs+CoinFills+TotalFillRatio+ActiveSKACount)` payloads. See [/wiki/code-analysis/visualblocks/patterns.md](../visualblocks/patterns.md).
-- **`CoinFills` derived in two sites.** Computed via `types.ComputeCoinFills(CoinStats, maxBlockSize, issuedSKA)` (`explorer/types/explorertypes.go:1760`) inside both `(*explorerUI).StoreMPData` (mempool change, `explorer.go:487`) and `(*explorerUI).Store` (new block, after `SKACoinSupply` refresh, `explorer.go:598`). The old unexported `explorer.go:1000 computeCoinFills` is now dead code.
+- **`CoinFills` derived in two sites.** Computed via `types.ComputeCoinFills(CoinStats, maxBlockSize, issuedSKA)` (`explorer/types/explorertypes.go:1047`) inside both `(*explorerUI).StoreMPData` (mempool change, `explorer.go:492`) and `(*explorerUI).Store` (new block, after `SKACoinSupply` refresh, `explorer.go:628`). The old unexported `explorer.go:1047 computeCoinFills` is dead code.
+- **`MempoolTx` identifier is `TxID` only.** The `Hash string json:"hash"` field has been removed. All dedup maps, templates, and JS controllers use `TxID`/`tx.txid`. Any code referencing `tx.hash` on a mempool tx payload gets `undefined`.
 - **`issuedSKA` seeding.** Drawn from `HomeInfo.SKACoinSupply` so ever-issued coin types render zero-fill bars even with no current mempool activity.
 - **rAF-batched indicator updates.** Frontend collapses overlapping `coin_fills` payloads into a single animation frame; bars are zeroed, never removed (`homepage_controller.js:216-269`).
 
@@ -18,6 +19,7 @@
 - **SKA → Regular only:** SKA `TicketAmount/VoteAmount/RevokeAmount` are always `"0"` (not `""`); `normalizeCoinStatsAmounts` + `skaPerTypeStr` enforce.
 - **`PctOfTC` is unclamped** — overflow must surface as text; SCSS clips visually.
 - **Inventory locking order:** `MempoolMonitor.mtx` (pointer) outermost, `MempoolInfo.RWMutex` (contents) inner. Reverse = deadlock risk against `Refresh`.
+- **`addAtomStrings` VAR path uses `strconv.ParseInt`** (not `fmt.Sscan`): returns `"0"` on parse error with a warning log. SKA path returns `a` unchanged on `SetString` failure.
 
 ### Mutation Checklist
 
