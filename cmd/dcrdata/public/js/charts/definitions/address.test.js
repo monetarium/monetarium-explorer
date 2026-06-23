@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { secondsFromTimes, balanceDef } from './address'
+import { secondsFromTimes, balanceDef, typesDef } from './address'
 
 describe('secondsFromTimes', () => {
   it('converts RFC3339 strings to integer seconds', () => {
@@ -35,5 +35,36 @@ describe('balanceDef SKA (coin 2) — precision firewall', () => {
   it('formatValue returns the EXACT 18-decimal string (no Number())', () => {
     const datum = { idx: 0, payload: raw, value: 12345.678 }
     expect(def.formatValue(0, datum, {})).toBe('12,345.678901234567890123 SKA2')
+  })
+})
+
+describe('typesDef (Tx Type stacked bars)', () => {
+  const def = typesDef()
+  const raw = {
+    time: ['2024-06-01T22:00:00Z', '2024-06-02T22:00:00Z'],
+    sentRtx: [1, 2],
+    receivedRtx: [3, 4],
+    tickets: [0, 1],
+    votes: [5, 0],
+    revokeTx: [0, 0]
+  }
+  it('is stacked with 5 bar series', () => {
+    expect(def.stacked).toBe(true)
+    expect(def.series).toHaveLength(5)
+    expect(def.series.every((s) => s.kind === 'bars')).toBe(true)
+  })
+  it('toColumns emits xs + 5 raw count columns', () => {
+    const cols = def.toColumns(raw)
+    expect(cols[0]).toEqual([1717279200, 1717365600])
+    expect(cols.slice(1)).toHaveLength(5)
+    // columns align to def.series order
+    const labels = def.series.map((s) => s.label)
+    const sentIdx = labels.indexOf('Sending (regular)') + 1
+    expect(cols[sentIdx]).toEqual([1, 2])
+  })
+  it('formatValue reads the raw count from the payload by index', () => {
+    const labels = def.series.map((s) => s.label)
+    const votesIdx = labels.indexOf('Votes')
+    expect(def.formatValue(votesIdx, { idx: 0, payload: raw, value: 999 }, {})).toBe('5')
   })
 })
