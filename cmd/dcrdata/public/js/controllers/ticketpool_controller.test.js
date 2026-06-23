@@ -103,7 +103,7 @@ function makeController({ handlesLoaded = true } = {}) {
       setData: vi.fn(),
       setXRange: vi.fn(),
       destroy: vi.fn(),
-      uplot: { data: [[1, 2, 3]] }
+      uplot: { data: [[1, 90000, 180000]] }
     }
     c.priceHandle = {
       setData: vi.fn(),
