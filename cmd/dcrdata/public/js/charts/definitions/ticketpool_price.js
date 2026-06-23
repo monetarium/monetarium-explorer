@@ -14,14 +14,14 @@ export const ticketpoolPrice = {
     const imm = data.immature ? data.immature.slice() : new Array(n).fill(0)
     const live = data.live ? data.live.slice() : new Array(n).fill(0)
     if (mempool) {
-      const lastPrice = prices.length ? prices[prices.length - 1] : -1
-      if (mempool.price !== lastPrice) {
+      const idx = prices.indexOf(mempool.price)
+      if (idx >= 0) {
+        mem[idx] += mempool.count
+      } else {
         prices.push(mempool.price)
         mem.push(mempool.count)
         imm.push(0)
         live.push(0)
-      } else {
-        mem[mem.length - 1] += mempool.count
       }
     }
     return [prices, mem, imm, live]
