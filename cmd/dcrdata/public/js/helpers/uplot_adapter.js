@@ -360,30 +360,6 @@ export async function loadUPlot() {
 }
 
 /**
- * @typedef {Object} ChartHandle
- * @property {object} uplot              live uPlot instance (escape hatch)
- * @property {(columns:number[][])=>void} setData
- * @property {(type:('linear'|'log'))=>void} setScaleType
- * @property {(dark:boolean)=>void} setDark   recolor for a theme switch (rebuilds)
- * @property {(mode:('line'|'stepped'))=>void} setMode
- * @property {(map:Object<string,boolean>)=>void} setVisibility
- * @property {(width:number, height:number)=>void} resize
- * @property {(min:number, max:number)=>void} setXRange  set the visible x-range
- * @property {()=>void} destroy        MUST be called on Stimulus disconnect
- */
-
-/**
- * Build a live chart for `def` inside `el`.
- * @param {HTMLElement} el
- * @param {ChartDefinition} def
- * @param {{dark?:boolean, width?:number, height?:number,
- *          scaleType?:('linear'|'log'), syncKey?:string,
- *          onRangeChange?:(min:number, max:number)=>void}} [opts]
- *   onRangeChange fires only on user-driven x-range changes (drag-zoom, double-click
- *   reset) — never for programmatic setData/setXRange/rebuild.
- * @returns {Promise<ChartHandle>}
- */
-/**
  * uPlot stacking transform (port of uPlot's demos/stack.js). Accumulates each
  * non-omitted series into a running per-row total and emits `bands` so uPlot fills
  * each visible series down to the next visible one above it — the canonical way to
@@ -400,11 +376,11 @@ export function stack(columns, omit) {
   const xs = columns[0]
   const len = xs.length
   const accum = new Array(len).fill(0)
-  const data = [xs]
+  const data = [xs.slice()]
   for (let i = 1; i < columns.length; i++) {
     const col = columns[i]
     if (omit(i)) {
-      data.push(col) // hidden: passed through, not drawn, not accumulated
+      data.push(col.slice()) // hidden: passed through, not drawn, not accumulated
       continue
     }
     data.push(
@@ -451,6 +427,30 @@ export function applyLogFloors(columns, series, isLog) {
   })
 }
 
+/**
+ * @typedef {Object} ChartHandle
+ * @property {object} uplot              live uPlot instance (escape hatch)
+ * @property {(columns:number[][])=>void} setData
+ * @property {(type:('linear'|'log'))=>void} setScaleType
+ * @property {(dark:boolean)=>void} setDark   recolor for a theme switch (rebuilds)
+ * @property {(mode:('line'|'stepped'))=>void} setMode
+ * @property {(map:Object<string,boolean>)=>void} setVisibility
+ * @property {(width:number, height:number)=>void} resize
+ * @property {(min:number, max:number)=>void} setXRange  set the visible x-range
+ * @property {()=>void} destroy        MUST be called on Stimulus disconnect
+ */
+
+/**
+ * Build a live chart for `def` inside `el`.
+ * @param {HTMLElement} el
+ * @param {ChartDefinition} def
+ * @param {{dark?:boolean, width?:number, height?:number,
+ *          scaleType?:('linear'|'log'), syncKey?:string,
+ *          onRangeChange?:(min:number, max:number)=>void}} [opts]
+ *   onRangeChange fires only on user-driven x-range changes (drag-zoom, double-click
+ *   reset) — never for programmatic setData/setXRange/rebuild.
+ * @returns {Promise<ChartHandle>}
+ */
 export async function createChart(el, def, opts = {}) {
   const UPlot = await loadUPlot()
   let currentDef = def
@@ -599,10 +599,9 @@ export async function createChart(el, def, opts = {}) {
       })
       if (currentDef.stacked) {
         // Restack: bands + accumulation must recompute for the new visible set, which
-        // is baked into opts at construction — so rebuild, then re-apply hidden flags
-        // and re-feed the restacked data.
+        // is baked into opts at construction — so rebuild (which feeds restacked data
+        // derived from rawColumns via displayData() to the new uPlot constructor).
         rebuild()
-        if (rawColumns) withProgrammaticScale(() => uplot.setData(displayData()))
         return
       }
       currentDef.series.forEach((s, i) => {
