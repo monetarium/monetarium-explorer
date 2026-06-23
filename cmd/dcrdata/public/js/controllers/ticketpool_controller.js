@@ -1,5 +1,4 @@
 import { Controller } from '@hotwired/stimulus'
-import dompurify from 'dompurify'
 import { requestJSON } from '../helpers/http'
 import { createChart, resolveSeriesColor } from '../helpers/uplot_adapter'
 import { createRanger } from '../helpers/uplot_ranger'
@@ -64,9 +63,12 @@ function renderTooltip(u, tt, def) {
     const text = def.formatValue(i, datum)
     const color = resolveSeriesColor(s, i, darkEnabled())
     const entry = document.createElement('div')
-    const label = dompurify.sanitize(s.label)
-    const fv = dompurify.sanitize(text)
-    entry.innerHTML = `<span style="color:${color};font-weight:bold">●</span> ${label}: ${fv}`
+    const marker = document.createElement('span')
+    marker.style.color = color
+    marker.style.fontWeight = 'bold'
+    marker.textContent = '\u25CF'
+    entry.appendChild(marker)
+    entry.appendChild(document.createTextNode(` ${s.label}: ${text}`))
     tt.appendChild(entry)
   })
   const pad = 12
@@ -107,6 +109,8 @@ export default class extends Controller {
     this.priceTooltip = null
     this.purchasesRanger = null
     this.priceRanger = null
+    this._creatingPurchases = false
+    this._creatingPrice = false
     this.zoom = 'all'
     this.bars = 'all'
   }
@@ -168,46 +172,52 @@ export default class extends Controller {
       if (this.purchasesRanger) this.purchasesRanger.setData([cols[0], cols[3]])
       return
     }
+    if (this._creatingPurchases) return
+    this._creatingPurchases = true
     const el = document.getElementById('tickets-by-purchase-date')
-    this.purchasesHandle = await createChart(el, ticketpoolPurchases, {
-      dark: darkEnabled(),
-      width: el.clientWidth || 800,
-      height: el.clientHeight || 250,
-      xTime: true,
-      hooks: {
-        ready: [
-          (u) => {
-            this.purchasesTooltip = installTooltip(u)
-          }
-        ],
-        setCursor: [
-          (u) => {
-            renderTooltip(u, this.purchasesTooltip, ticketpoolPurchases)
-          }
-        ],
-        setScale: [
-          (u, key) => {
-            if (key === 'x' && this.purchasesRanger) {
-              this.purchasesRanger.setSelection(u.scales.x.min, u.scales.x.max)
-            }
-          }
-        ]
-      }
-    })
-    this.purchasesHandle.setData(cols)
-    this.purchasesRanger = await createRanger(
-      this.purchasesRangerTarget,
-      { ...ticketpoolPurchases, series: [{ ...ticketpoolPurchases.series[2], colorIndex: 0 }] },
-      {
+    try {
+      this.purchasesHandle = await createChart(el, ticketpoolPurchases, {
         dark: darkEnabled(),
-        width: this.purchasesRangerTarget.clientWidth || el.clientWidth || 800,
+        width: el.clientWidth || 800,
+        height: el.clientHeight || 250,
         xTime: true,
-        onSelect: (min, max) => this.purchasesHandle.setXRange(min, max)
-      }
-    )
-    this.purchasesRanger.setData([cols[0], cols[3]])
-    const ru0 = this.purchasesRanger.uplot
-    ru0.setSelect({ left: 0, top: 0, width: ru0.width, height: ru0.height }, false)
+        hooks: {
+          ready: [
+            (u) => {
+              this.purchasesTooltip = installTooltip(u)
+            }
+          ],
+          setCursor: [
+            (u) => {
+              renderTooltip(u, this.purchasesTooltip, ticketpoolPurchases)
+            }
+          ],
+          setScale: [
+            (u, key) => {
+              if (key === 'x' && this.purchasesRanger) {
+                this.purchasesRanger.setSelection(u.scales.x.min, u.scales.x.max)
+              }
+            }
+          ]
+        }
+      })
+      this.purchasesHandle.setData(cols)
+      this.purchasesRanger = await createRanger(
+        this.purchasesRangerTarget,
+        { ...ticketpoolPurchases, series: [{ ...ticketpoolPurchases.series[2], colorIndex: 0 }] },
+        {
+          dark: darkEnabled(),
+          width: this.purchasesRangerTarget.clientWidth || el.clientWidth || 800,
+          xTime: true,
+          onSelect: (min, max) => this.purchasesHandle.setXRange(min, max)
+        }
+      )
+      this.purchasesRanger.setData([cols[0], cols[3]])
+      const ru0 = this.purchasesRanger.uplot
+      ru0.setSelect({ left: 0, top: 0, width: ru0.width, height: ru0.height }, false)
+    } finally {
+      this._creatingPurchases = false
+    }
   }
 
   async renderOrUpdatePrice(priceData, mempool) {
@@ -217,46 +227,52 @@ export default class extends Controller {
       if (this.priceRanger) this.priceRanger.setData([cols[0], cols[3]])
       return
     }
+    if (this._creatingPrice) return
+    this._creatingPrice = true
     const el = document.getElementById('tickets-by-purchase-price')
-    this.priceHandle = await createChart(el, ticketpoolPrice, {
-      dark: darkEnabled(),
-      width: el.clientWidth || 800,
-      height: el.clientHeight || 250,
-      xTime: false,
-      hooks: {
-        ready: [
-          (u) => {
-            this.priceTooltip = installTooltip(u)
-          }
-        ],
-        setCursor: [
-          (u) => {
-            renderTooltip(u, this.priceTooltip, ticketpoolPrice)
-          }
-        ],
-        setScale: [
-          (u, key) => {
-            if (key === 'x' && this.priceRanger) {
-              this.priceRanger.setSelection(u.scales.x.min, u.scales.x.max)
-            }
-          }
-        ]
-      }
-    })
-    this.priceHandle.setData(cols)
-    this.priceRanger = await createRanger(
-      this.priceRangerTarget,
-      { ...ticketpoolPrice, series: [{ ...ticketpoolPrice.series[2], colorIndex: 0 }] },
-      {
+    try {
+      this.priceHandle = await createChart(el, ticketpoolPrice, {
         dark: darkEnabled(),
-        width: this.priceRangerTarget.clientWidth || el.clientWidth || 800,
+        width: el.clientWidth || 800,
+        height: el.clientHeight || 250,
         xTime: false,
-        onSelect: (min, max) => this.priceHandle.setXRange(min, max)
-      }
-    )
-    this.priceRanger.setData([cols[0], cols[3]])
-    const ru1 = this.priceRanger.uplot
-    ru1.setSelect({ left: 0, top: 0, width: ru1.width, height: ru1.height }, false)
+        hooks: {
+          ready: [
+            (u) => {
+              this.priceTooltip = installTooltip(u)
+            }
+          ],
+          setCursor: [
+            (u) => {
+              renderTooltip(u, this.priceTooltip, ticketpoolPrice)
+            }
+          ],
+          setScale: [
+            (u, key) => {
+              if (key === 'x' && this.priceRanger) {
+                this.priceRanger.setSelection(u.scales.x.min, u.scales.x.max)
+              }
+            }
+          ]
+        }
+      })
+      this.priceHandle.setData(cols)
+      this.priceRanger = await createRanger(
+        this.priceRangerTarget,
+        { ...ticketpoolPrice, series: [{ ...ticketpoolPrice.series[2], colorIndex: 0 }] },
+        {
+          dark: darkEnabled(),
+          width: this.priceRangerTarget.clientWidth || el.clientWidth || 800,
+          xTime: false,
+          onSelect: (min, max) => this.priceHandle.setXRange(min, max)
+        }
+      )
+      this.priceRanger.setData([cols[0], cols[3]])
+      const ru1 = this.priceRanger.uplot
+      ru1.setSelect({ left: 0, top: 0, width: ru1.width, height: ru1.height }, false)
+    } finally {
+      this._creatingPrice = false
+    }
   }
 
   redrawTheme() {
