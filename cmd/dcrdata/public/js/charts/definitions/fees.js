@@ -36,7 +36,7 @@ export function feesDef(coinType) {
       // to 0 — keep full precision with maximumFractionDigits:20, matching the
       // pow-difficulty tooltip fix (commit 523242ec).
       if (!Number.isFinite(datum.value)) return ''
-      return `${datum.value.toLocaleString(undefined, { maximumFractionDigits: 20 })} VAR`
+      return `${datum.value.toLocaleString('en-US', { maximumFractionDigits: 20 })} VAR`
     }
   }
 }

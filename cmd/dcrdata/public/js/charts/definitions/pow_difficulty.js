@@ -31,7 +31,7 @@ export const powDifficulty = {
     // decimal so it introduces no float artifacts. Mirror intComma's non-finite guard
     // so a log-scale-nulled point still reads blank rather than "NaN".
     if (!Number.isFinite(datum.value)) return ''
-    return datum.value.toLocaleString(undefined, { maximumFractionDigits: 20 })
+    return datum.value.toLocaleString('en-US', { maximumFractionDigits: 20 })
   }
 }
 
