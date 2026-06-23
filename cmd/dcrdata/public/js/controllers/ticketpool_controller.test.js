@@ -12,6 +12,64 @@ vi.mock('../helpers/http', () => ({
   requestJSON: vi.fn(() => Promise.resolve({}))
 }))
 
+vi.mock('../helpers/uplot_adapter', () => ({
+  createChart: vi.fn(() =>
+    Promise.resolve({
+      setData: vi.fn(),
+      setXRange: vi.fn(),
+      setMode: vi.fn(),
+      destroy: vi.fn(),
+      uplot: { data: [[]] }
+    })
+  ),
+  resolveSeriesColor: vi.fn(() => '#000')
+}))
+
+vi.mock('../helpers/uplot_ranger', () => ({
+  createRanger: vi.fn(() =>
+    Promise.resolve({
+      setData: vi.fn(),
+      setSelection: vi.fn(),
+      setDark: vi.fn(),
+      destroy: vi.fn(),
+      uplot: { data: [[]] }
+    })
+  )
+}))
+
+vi.mock('../services/theme_service', () => ({
+  darkEnabled: vi.fn(() => false)
+}))
+
+vi.mock('../charts/definitions/ticketpool_purchases', () => ({
+  ticketpoolPurchases: {
+    name: 'ticketpool-purchases',
+    axes: [],
+    series: [
+      { label: 'Mempool Tickets', scale: 'y', kind: 'bars', colorIndex: 0 },
+      { label: 'Immature Tickets', scale: 'y', kind: 'bars', colorIndex: 1 },
+      { label: 'Live Tickets', scale: 'y', kind: 'bars', colorIndex: 2 },
+      { label: 'Ticket Value', scale: 'y2', kind: 'line', colorIndex: 3, width: 2 }
+    ],
+    toColumns: vi.fn(() => [[], [], [], [], []]),
+    formatValue: vi.fn(() => '0')
+  }
+}))
+
+vi.mock('../charts/definitions/ticketpool_price', () => ({
+  ticketpoolPrice: {
+    name: 'ticketpool-price',
+    axes: [],
+    series: [
+      { label: 'Mempool Tickets', scale: 'y', kind: 'bars', colorIndex: 0 },
+      { label: 'Immature Tickets', scale: 'y', kind: 'bars', colorIndex: 1 },
+      { label: 'Live Tickets', scale: 'y', kind: 'bars', colorIndex: 2 }
+    ],
+    toColumns: vi.fn(() => [[], [], [], []]),
+    formatValue: vi.fn(() => '0')
+  }
+}))
+
 // Each registerEvtHandler call gets its own distinct unsubscribe spy, recorded
 // per event, so tests can assert the *specific* handler was torn down with the
 // per-handler API rather than a shared bulk clear.
@@ -34,18 +92,42 @@ vi.mock('../services/messagesocket_service', () => ({
 
 const { default: TicketpoolController } = await import('./ticketpool_controller.js')
 
-function makeController({ graphsLoaded = true } = {}) {
+function makeController({ handlesLoaded = true } = {}) {
   const c = new TicketpoolController()
   c.bars = 'wk'
   c.wrapperTarget = { classList: { add: vi.fn(), remove: vi.fn() } }
-  if (graphsLoaded) {
-    c.purchasesGraph = { destroy: vi.fn(), updateOptions: vi.fn(), resetZoom: vi.fn() }
-    c.priceGraph = { destroy: vi.fn(), updateOptions: vi.fn() }
+  c.purchasesRangerTarget = { clientWidth: 800 }
+  c.priceRangerTarget = { clientWidth: 800 }
+  if (handlesLoaded) {
+    c.purchasesHandle = {
+      setData: vi.fn(),
+      setXRange: vi.fn(),
+      destroy: vi.fn(),
+      uplot: { data: [[1, 2, 3]] }
+    }
+    c.priceHandle = {
+      setData: vi.fn(),
+      setXRange: vi.fn(),
+      destroy: vi.fn(),
+      uplot: { data: [[]] }
+    }
+    c.purchasesRanger = {
+      setData: vi.fn(),
+      setSelection: vi.fn(),
+      destroy: vi.fn(),
+      uplot: { data: [[]] }
+    }
+    c.priceRanger = {
+      setData: vi.fn(),
+      setSelection: vi.fn(),
+      destroy: vi.fn(),
+      uplot: { data: [[]] }
+    }
   } else {
-    // initialize() is async; before the dygraphs chunk resolves the graphs are
-    // still null (their initial value in initialize()).
-    c.purchasesGraph = null
-    c.priceGraph = null
+    c.purchasesHandle = null
+    c.priceHandle = null
+    c.purchasesRanger = null
+    c.priceRanger = null
   }
   return c
 }
@@ -82,11 +164,43 @@ describe('ticketpool reconnect resync', () => {
   })
 
   it('still runs websocket cleanup when disconnecting before the charts have loaded', () => {
-    const c = makeController({ graphsLoaded: false })
+    const c = makeController({ handlesLoaded: false })
     c.connect()
 
     expect(() => c.disconnect()).not.toThrow()
     expect(registered.newblock[0].unsub).toHaveBeenCalledTimes(1)
     expect(registered.reconnect[0].unsub).toHaveBeenCalledTimes(1)
+  })
+
+  it('destroys chart handles on disconnect', () => {
+    const c = makeController()
+    c.connect()
+    c.disconnect()
+    expect(c.purchasesHandle.destroy).toHaveBeenCalledTimes(1)
+    expect(c.priceHandle.destroy).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not throw when disconnecting before handles are created', () => {
+    const c = makeController({ handlesLoaded: false })
+    c.connect()
+    expect(() => c.disconnect()).not.toThrow()
+  })
+
+  it('destroys rangers on disconnect', () => {
+    const c = makeController()
+    c.connect()
+    c.disconnect()
+    expect(c.purchasesRanger.destroy).toHaveBeenCalledTimes(1)
+    expect(c.priceRanger.destroy).toHaveBeenCalledTimes(1)
+  })
+
+  it('syncs the ranger selection when a zoom button is pressed', () => {
+    const c = makeController()
+    c.zoomTargets = []
+    const target = { name: 'day', classList: { add: vi.fn(), remove: vi.fn() } }
+    c.onZoom({ target })
+    expect(c.purchasesRanger.setSelection).toHaveBeenCalled()
+    const args = c.purchasesRanger.setSelection.mock.calls[0]
+    expect(args[1] - args[0]).toBeCloseTo(86400, 0) // one day window in seconds
   })
 })

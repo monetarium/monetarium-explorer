@@ -31,9 +31,14 @@
           <input data-ticketpool-target="bars" data-action="click->ticketpool#onBarsChange" type="button" class="btn btn_sm 1m" value="Month" name="mo">
         </div>
 
-        <div id="tickets-by-purchase-date" class="tp-charts"></div>
-        <br>
-        <div id="tickets-by-purchase-price" class="tp-charts"></div>
+        <div class="chart-wrapper px-2 pb-5">
+          <div id="tickets-by-purchase-date" class="tp-charts"></div>
+          <div data-ticketpool-target="purchasesRanger" class="tp-chart-ranger"></div>
+        </div>
+        <div class="chart-wrapper px-2 pb-5">
+          <div id="tickets-by-purchase-price" class="tp-charts"></div>
+          <div data-ticketpool-target="priceRanger" class="tp-chart-ranger"></div>
+        </div>
         <br>
         <div class="justify-content-between">
           <div class="dygraph-label dygraph-title mb-1">Distribution of Tickets by Reward Outputs</div>
