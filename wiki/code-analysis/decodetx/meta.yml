@@ -1,5 +1,5 @@
 domain: decodetx
-anchor: 1be8accc
+anchor: 45fa8e5c
 files:
   - cmd/dcrdata/internal/api/insight/apiroutes.go
   - cmd/dcrdata/internal/explorer/explorer.go
