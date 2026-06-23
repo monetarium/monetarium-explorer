@@ -3605,7 +3605,14 @@ func appendCoinSupply(charts *cache.ChartData, rows *sql.Rows) error {
 // retrieveMissedVotes fetches the missed votes data from the misses and
 // transactions tables.
 func retrieveMissedVotes(ctx context.Context, db *sql.DB, charts *cache.ChartData) (*sql.Rows, error) {
-	rows, err := db.QueryContext(ctx, internal.SelectMissCountPerBlock, charts.MissedVotesTip())
+	// Use a height-based cursor matching retrieveWindowStats so that after a
+	// reorg the last cached window's blocks are re-fetched and its missed-votes
+	// tally is recomputed from the canonical chain rather than left stale.
+	var cursor int32 = -1
+	if len(charts.Windows.Height) > 0 {
+		cursor = int32(charts.Windows.Height[len(charts.Windows.Height)-1]) - 1
+	}
+	rows, err := db.QueryContext(ctx, internal.SelectMissCountPerBlock, cursor)
 	if err != nil {
 		return nil, err
 	}
@@ -3620,29 +3627,44 @@ func appendMissedVotesPerWindow(charts *cache.ChartData, rows *sql.Rows) error {
 
 	windows := charts.Windows
 	windowSize := int(charts.DiffInterval)
-	nextWindowHeight := windowSize * (len(windows.MissedVotes) + 1)
 
+	// Compute each window's end from actual row heights rather than from
+	// len(MissedVotes). This handles reorg recovery where the height-based
+	// cursor pulls back to the last cached window's first block — we detect
+	// whether the completed window is already tracked and overwrite instead
+	// of only ever appending.
 	var windowMisses int
+	firstBlock := true
+	nextWindowEnd := 0
+
 	for rows.Next() {
 		var height, misses int
 		if err := rows.Scan(&height, &misses); err != nil {
 			return err
 		}
+
+		if firstBlock {
+			nextWindowEnd = (height/windowSize+1)*windowSize - 1
+			firstBlock = false
+		}
+
 		windowMisses += misses
 
-		// If that was the last block in the current sdiff window, append the
-		// windowMisses, and reset for the next window.
-		fullWindow := height == nextWindowHeight-1 // e.g. mainnet block 143, 287, etc.
-		if fullWindow {
-			windows.MissedVotes = append(windows.MissedVotes, uint64(windowMisses))
-
-			// Next sdiff window
+		if height == nextWindowEnd {
+			windowIdx := height / windowSize
+			if windowIdx < len(windows.MissedVotes) {
+				// Overwrite: this window is already tracked (reorg recovery).
+				windows.MissedVotes[windowIdx] = uint64(windowMisses)
+			} else {
+				// Append: first time we see this window completed.
+				windows.MissedVotes = append(windows.MissedVotes, uint64(windowMisses))
+			}
 			windowMisses = 0
-			nextWindowHeight += windowSize
-		} else if height >= nextWindowHeight {
+			nextWindowEnd += windowSize
+		} else if height > nextWindowEnd {
 			return fmt.Errorf("reach height %d before the end of an sdiff window at %d",
-				height, nextWindowHeight)
-		} // else height < nextWindowHeight-1
+				height, nextWindowEnd)
+		}
 	}
 
 	return rows.Err()
