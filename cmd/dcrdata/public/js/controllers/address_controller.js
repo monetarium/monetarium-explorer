@@ -676,9 +676,14 @@ export default class extends Controller {
   }
 
   validateZoom(binSize) {
-    ctrl.setButtonVisibility()
-    const zoom = Zoom.validate(ctrl.activeZoomKey || ctrl.settings.zoom, ctrl.xExtent, binSize)
-    ctrl.setZoom(zoom.start, zoom.end)
+    this.setButtonVisibility()
+    const zoom = Zoom.validate(this.activeZoomKey || this.settings.zoom, this.xExtent, binSize)
+    this.setZoom(zoom.start, zoom.end)
+    // setZoom drives the chart + persists an encoded range but selects no button. On load
+    // connect() has deselected every zoom button, so without this the control reads as
+    // unselected (issue 1). Map the validated window back to a preset key and re-highlight
+    // it (null for a custom range → setSelectedZoom clears all, which is correct).
+    this.setSelectedZoom(Zoom.mapKey(zoom, this.xExtent))
   }
 
   changeGraph(_e) {

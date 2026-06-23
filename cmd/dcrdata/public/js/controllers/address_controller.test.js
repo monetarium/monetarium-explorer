@@ -265,6 +265,28 @@ describe('address setZoom', () => {
   })
 })
 
+describe('address validateZoom (load-time preset restore)', () => {
+  it('re-selects the zoom button matching the validated range on load (issue 1)', () => {
+    // On reload the URL carries a zoom but connect() deselects every button; validateZoom
+    // (run after the data lands) must re-highlight the matching preset. A full-extent range
+    // maps to 'all'.
+    const c = makeRenderController('types', 0, {})
+    c.xExtent = [0, 1000000] // ms
+    c.settings = { zoom: null }
+    // activeZoomKey reads zoomTarget; no button selected → getter returns null.
+    c.zoomTarget = { getElementsByClassName: () => [] }
+    c.setButtonVisibility = vi.fn()
+    c.setZoom = vi.fn()
+    const spy = vi.spyOn(c, 'setSelectedZoom').mockImplementation(() => {})
+
+    c.validateZoom(1000) // binSize well under the 1e6 span → no shift/clamp
+
+    expect(c.setZoom).toHaveBeenCalledWith(0, 1000000)
+    // Full extent → mapKey 'all' → the All button gets re-selected.
+    expect(spy).toHaveBeenCalledWith('all')
+  })
+})
+
 describe('address ranger + theme', () => {
   it('creates a ranger seeded with the x + primary series columns', async () => {
     const { createRanger } = await import('../helpers/uplot_ranger')
