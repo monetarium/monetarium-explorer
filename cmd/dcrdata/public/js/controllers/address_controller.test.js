@@ -69,7 +69,6 @@ function makeRenderController(chart, coin, payload) {
   const key = chart === 'balance' ? 'amountflow' : chart
   ctrl.retrievedData[`${key}-day-${coin}`] = payload
   ctrl.requestedChart = `${chart}-day-${coin}`
-  ctrl.coinType = coin
   ctrl.currentDef = ctrl.defFor ? ctrl.defFor(chart, coin) : null
   // Stub required DOM targets
   ctrl.chartTarget = { clientWidth: 800, clientHeight: 320 }
@@ -161,7 +160,10 @@ describe('address renderChart', () => {
 })
 
 describe('address renderLegend', () => {
-  it('formats each visible non-zero series via the definition formatter', () => {
+  it('reads raw payload values (not cumulative u.data) for stacked amountflow VAR', () => {
+    // payload: received=10, sent=0, net=10
+    // u.data reflects cumulative stacking: received=10, +sent0=10, +netReceived10=20, +netSpent0=20
+    // The key assertion: Net Received must show 10 (raw payload), NOT 20 (cumulative u.data[3][0]).
     const ctrl = makeRenderController('amountflow', 0, {
       time: ['2024-06-01T22:00:00Z'],
       received: [10],
@@ -177,16 +179,24 @@ describe('address renderLegend', () => {
     }
     ctrl.legendEntry = (txt) => ({ textContent: txt })
     ctrl.legendMarker = () => ''
+    // Cumulative u.data as the adapter would produce after stacking all visible series:
+    // [time, Received=10, Received+Spent=10, Received+Spent+NetReceived=20, ...+NetSpent=20]
     const u = {
       cursor: { idx: 0 },
-      data: [[1717279200], [10], [0], [10], [0]],
+      data: [[1717279200], [10], [10], [20], [20]],
       series: [{}, { show: true }, { show: true }, { show: true }, { show: true }]
     }
     ctrl.positionTooltip = () => {}
     ctrl.renderLegend(u)
-    // Received: 10 VAR present; Spent (0) and Net Spent (0) skipped
+    // Received: raw payload value 10 must be shown
     expect(entries.some((e) => e.includes('Received: 10 VAR'))).toBe(true)
+    // Net Received: raw payload net[0]=10, NOT cumulative u.data[3][0]=20
+    expect(entries.some((e) => e.includes('Net Received: 10 VAR'))).toBe(true)
+    expect(entries.some((e) => e.includes('Net Received: 20 VAR'))).toBe(false)
+    // Spent=0 is zero-skipped
     expect(entries.some((e) => e.includes('Spent: 0 VAR'))).toBe(false)
+    // Net Spent=0 is zero-skipped
+    expect(entries.some((e) => e.includes('Net Spent'))).toBe(false)
   })
 })
 

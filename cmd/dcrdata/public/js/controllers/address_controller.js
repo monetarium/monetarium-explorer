@@ -545,7 +545,6 @@ export default class extends Controller {
     const dataKey = `${chart === 'balance' ? 'amountflow' : chart}-${bin}-${coin}`
     if (!ctrl.retrievedData[dataKey] || ctrl.requestedChart !== `${chart}-${bin}-${coin}`) return
     ctrl.payload = ctrl.retrievedData[dataKey]
-    ctrl.coinType = coin
     ctrl.currentDef = ctrl.defFor(chart, coin)
     const coinLabel = renderCoinType(coin)
     ctrl.flowTarget.classList.add('d-hide')
@@ -787,11 +786,11 @@ export default class extends Controller {
 
   // Resize the chart and ranger strip after a window resize.
   resizeChart() {
-    if (!ctrl.handle) return
-    const width = ctrl.chartTarget.clientWidth || 800
-    ctrl.handle.resize(width, ctrl.chartTarget.clientHeight || 320)
-    if (ctrl.ranger && ctrl.hasRangerViewTarget) {
-      ctrl.ranger.setWidth(ctrl.rangerViewTarget.clientWidth || width)
+    if (!this.handle) return
+    const width = this.chartTarget.clientWidth || 800
+    this.handle.resize(width, this.chartTarget.clientHeight || 320)
+    if (this.ranger && this.hasRangerViewTarget) {
+      this.ranger.setWidth(this.rangerViewTarget.clientWidth || width)
     }
   }
 
