@@ -28,7 +28,7 @@ export function typesDef() {
     name: 'types',
     label: 'Tx Count',
     stacked: true,
-    axes: [{ label: 'Tx Count', scale: 'y', intTicks: true }],
+    axes: [{ label: '', scale: 'y', intTicks: true }],
     series: TYPE_SERIES.map((s, i) => ({
       label: s.label,
       scale: 'y',
@@ -51,7 +51,7 @@ export function balanceDef(coinType) {
     name: 'balance',
     label: `Balance (${coinLabel})`,
     stacked: false,
-    axes: [{ label: `Balance (${coinLabel})`, scale: 'y' }],
+    axes: [{ label: '', scale: 'y' }],
     series: [{ label: 'Balance', scale: 'y', kind: 'stepped', colorIndex: 0, fill: true }],
     toColumns: (raw, settings) => {
       const xs = secondsFromTimes(raw.time)
@@ -106,7 +106,7 @@ export function amountflowDef(coinType) {
     name: 'amountflow',
     label: `Total (${coinLabel})`,
     stacked: true,
-    axes: [{ label: `Total (${coinLabel})`, scale: 'y' }],
+    axes: [{ label: '', scale: 'y' }],
     series: FLOW_SERIES.map((label, i) => ({
       label: label,
       scale: 'y',

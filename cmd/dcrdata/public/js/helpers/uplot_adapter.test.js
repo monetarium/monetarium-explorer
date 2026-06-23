@@ -198,7 +198,7 @@ describe('buildOpts — options', () => {
     expect(hi).toBeGreaterThan(1e9)
   })
 
-  it('sets a 16px axis label font on the y axis', () => {
+  it('sets a 16px axis label font on the y axis when a label is present', () => {
     const opts = buildOpts(fakeUPlot, lineDef, {})
     expect(opts.axes[1].labelFont).toContain('16px')
   })
@@ -216,6 +216,25 @@ describe('buildOpts — options', () => {
     const opts = buildOpts(fakeUPlot, dualAxisDef, {})
     const y2 = opts.axes.find((a) => a.scale === 'y2')
     expect(y2.labelGap).toBeGreaterThan(0)
+  })
+
+  it('omits label, labelFont, labelSize, labelGap when axis label is empty', () => {
+    const noLabelDef = {
+      ...lineDef,
+      axes: [{ label: '', scale: 'y' }]
+    }
+    const opts = buildOpts(fakeUPlot, noLabelDef, {})
+    // axis index 0 is x, index 1 is the first y-axis
+    expect(opts.axes[1].label).toBeUndefined()
+    expect('labelSize' in opts.axes[1]).toBe(false)
+    expect('labelFont' in opts.axes[1]).toBe(false)
+    expect('labelGap' in opts.axes[1]).toBe(false)
+  })
+
+  it('keeps label, labelFont, labelSize, labelGap when axis label is non-empty', () => {
+    const opts = buildOpts(fakeUPlot, lineDef, {})
+    expect(opts.axes[1].label).toBe('Difficulty')
+    expect('labelSize' in opts.axes[1]).toBe(true)
   })
 
   it('renders integer-only ticks for an intTicks axis', () => {

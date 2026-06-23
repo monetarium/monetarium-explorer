@@ -281,13 +281,15 @@ export function buildOpts(UPlot, def, opts = {}) {
       const axisColor = si >= 0 ? seriesColors[si] : c.axis
       const axis = {
         scale: scale,
-        label: a.label,
-        labelFont: AXIS_LABEL_FONT,
-        labelSize: AXIS_LABEL_SIZE,
-        labelGap: AXIS_LABEL_GAP,
         stroke: axisColor,
         grid: { stroke: scale === 'y' ? c.grid : 'transparent' },
         side: scale === 'y2' ? 1 : 3 // 3 = left, 1 = right
+      }
+      if (a.label) {
+        axis.label = a.label
+        axis.labelFont = AXIS_LABEL_FONT
+        axis.labelSize = AXIS_LABEL_SIZE
+        axis.labelGap = AXIS_LABEL_GAP
       }
       if (isLog && scale === 'y') {
         // Adaptive ticks for the (tight) log y-scale — see logSplits / adaptiveLogValues.
