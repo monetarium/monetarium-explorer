@@ -280,10 +280,25 @@ Explore → Synthesize, not a new pipeline step — all Mode 2 and Mode 3 rules 
    (`anchor` = current `git rev-parse --short HEAD`, `files` = the trace's current coverage).
 5. Report the before→after anchor and the files updated, and tell the user to re-run
    `./dev/wiki-staleness.sh` to confirm `<domain>` is now `FRESH`.
+6. **Commit the refresh.** Stage only this domain's wiki artifacts — everything under
+   `wiki/code-analysis/<domain>/` plus `wiki/index.md` *if it changed* — and commit. Use the
+   repo's established Refresh subject, matching existing history exactly:
+
+   ```text
+   wiki/code-analysis/<domain>: refresh trace to HEAD=<new-anchor>
+   ```
+
+   where `<new-anchor>` is the value just written to `meta.yml` (`git rev-parse --short HEAD`).
+   When the pass changed more than the anchor (corrected `file:line` refs, added/dropped covered
+   files, revised flows/invariants/risks), add a short body summarizing what moved; for a pure
+   anchor-bump (trace still accurate), the subject line alone is enough. Never `git add -A` —
+   keep unrelated working-tree changes out of the commit. Follow repo commit hygiene: no
+   `--amend`, no `--no-verify`; if a hook blocks, fix and re-commit.
 
 If the re-trace shows the existing trace is still accurate (a covered file moved but the
 documented flow is unaffected — only the anchor lagged), it is enough to bump `meta.yml.anchor`
-to current `HEAD`. Say so explicitly rather than churning unchanged prose.
+to current `HEAD` (still committed per step 6). Say so explicitly rather than churning unchanged
+prose.
 
 ---
 
