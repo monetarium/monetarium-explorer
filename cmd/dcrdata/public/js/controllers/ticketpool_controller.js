@@ -329,6 +329,7 @@ export default class extends Controller {
     const cols = ticketpoolPurchases.toColumns(ticketPoolResponse.time_chart)
     if (this.purchasesHandle) {
       this.purchasesHandle.setData(cols)
+      this.purchasesRanger?.setData([cols[0], cols[3]])
     }
     this.wrapperTarget.classList.remove('loading')
   }
