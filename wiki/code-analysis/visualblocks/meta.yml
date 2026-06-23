@@ -1,5 +1,5 @@
 domain: visualblocks
-anchor: 717be5a6
+anchor: 347e5f9a
 files:
   - cmd/dcrdata/internal/explorer/explorer.go
   - cmd/dcrdata/internal/explorer/explorerroutes.go
@@ -13,3 +13,5 @@ files:
   - cmd/dcrdata/views/visualblocks.tmpl
   - db/dcrpg/pgblockchain.go
   - explorer/types/explorertypes.go
+  - explorer/types/remaining.go
+  - explorer/types/remaining_test.go
