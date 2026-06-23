@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import uPlot from 'uplot'
 import {
   applyLogFloors,
@@ -7,6 +7,7 @@ import {
   createSyncKey,
   logRange,
   niceLinearTicks,
+  stack,
   trimTrailingZeros
 } from './uplot_adapter'
 import { getDefault } from './module_helper'
@@ -829,5 +830,56 @@ describe('buildOpts — colorIndex 0 is theme-aware (primary series)', () => {
     }
     const opts = buildOpts(fakeUPlot, colorKeyDef, { dark: true })
     expect(opts.series[1].stroke).toBe('#2dd8a3') // from SERIES_COLORS, not colorForIndex
+  })
+})
+
+describe('stack (uPlot stacking transform)', () => {
+  const none = () => false
+
+  it('accumulates each series into a running per-row total', () => {
+    const cols = [
+      [1, 2, 3], // xs
+      [10, 20, 30], // s1
+      [1, 2, 3], // s2
+      [100, 200, 300] // s3
+    ]
+    const { data } = stack(cols, none)
+    expect(data[0]).toEqual([1, 2, 3]) // xs untouched
+    expect(data[1]).toEqual([10, 20, 30]) // s1 = s1
+    expect(data[2]).toEqual([11, 22, 33]) // s2 = s1 + s2
+    expect(data[3]).toEqual([111, 222, 333]) // s3 = s1 + s2 + s3
+  })
+
+  it('emits bands linking each series to the next one above it', () => {
+    const cols = [[1], [1], [1], [1]]
+    const { bands } = stack(cols, none)
+    // series indices are 1-based uPlot data indices
+    expect(bands).toEqual([{ series: [2, 1] }, { series: [3, 2] }])
+  })
+
+  it('omits a hidden series from accumulation AND from bands', () => {
+    const cols = [
+      [1, 2],
+      [10, 10], // s1 visible
+      [5, 5], // s2 HIDDEN
+      [1, 1] // s3 visible
+    ]
+    const omit = (i) => i === 2
+    const { data, bands } = stack(cols, omit)
+    expect(data[1]).toEqual([10, 10]) // s1
+    expect(data[2]).toEqual([5, 5]) // s2 passed through unchanged (hidden, not drawn)
+    expect(data[3]).toEqual([11, 11]) // s3 = s1 + s3 (s2 skipped)
+    expect(bands).toEqual([{ series: [3, 1] }]) // s1 fills up to s3, s2 skipped
+  })
+
+  it('treats null/NaN as 0 in the total but keeps the gap in its own column', () => {
+    const cols = [
+      [1, 2],
+      [10, null],
+      [1, 2]
+    ]
+    const { data } = stack(cols, none)
+    expect(data[1]).toEqual([10, null]) // own column keeps the gap
+    expect(data[2]).toEqual([11, 2]) // null counted as 0 in the running total
   })
 })

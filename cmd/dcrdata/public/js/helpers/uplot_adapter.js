@@ -373,6 +373,53 @@ export async function loadUPlot() {
  * @returns {Promise<ChartHandle>}
  */
 /**
+ * uPlot stacking transform (port of uPlot's demos/stack.js). Accumulates each
+ * non-omitted series into a running per-row total and emits `bands` so uPlot fills
+ * each visible series down to the next visible one above it — the canonical way to
+ * render stacked area/bar charts. Pure; never mutates the input.
+ *
+ * Null/NaN y-values count as 0 in the running total but stay null in their own
+ * column (rendered as a gap). `omit(i)` (1-based series index) excludes a hidden
+ * series from both accumulation and bands, so a visibility toggle restacks exactly.
+ * @param {Array<Array<number|null>>} columns  [xs, ...ys]
+ * @param {(seriesIdx1Based:number)=>boolean} omit
+ * @returns {{ data: Array<Array<number|null>>, bands: Array<{series:[number,number]}> }}
+ */
+export function stack(columns, omit) {
+  const xs = columns[0]
+  const len = xs.length
+  const accum = new Array(len).fill(0)
+  const data = [xs]
+  for (let i = 1; i < columns.length; i++) {
+    const col = columns[i]
+    if (omit(i)) {
+      data.push(col) // hidden: passed through, not drawn, not accumulated
+      continue
+    }
+    data.push(
+      col.map((v, r) => {
+        if (v == null || !isFinite(v)) return v // keep the gap in this column
+        accum[r] += v
+        return accum[r]
+      })
+    )
+  }
+  const bands = []
+  for (let i = 1; i < columns.length; i++) {
+    if (omit(i)) continue
+    let above = -1
+    for (let j = i + 1; j < columns.length; j++) {
+      if (!omit(j)) {
+        above = j
+        break
+      }
+    }
+    if (above > -1) bands.push({ series: [above, i] })
+  }
+  return { data, bands }
+}
+
+/**
  * On a log scale, raise each series' sub-`logFloor` plot values up to its floor so the
  * line stays plottable (log10(0) = -Inf) and the log axis does not collapse onto the
  * floor (the SKA coin-supply zeros-then-plateau case). Off log, or when no series
