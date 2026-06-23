@@ -1,8 +1,12 @@
 domain: page-rendering
-anchor: a8a64e4b
+anchor: 5ccc0327
 files:
   - cmd/dcrdata/internal/explorer/explorer.go
   - cmd/dcrdata/internal/explorer/explorermiddleware.go
   - cmd/dcrdata/internal/explorer/explorerroutes.go
   - cmd/dcrdata/internal/explorer/hashrate_shares.go
   - cmd/dcrdata/main.go
+  - explorer/types/remaining.go
+  - explorer/types/explorertypes.go
+  - db/cache/charts.go
+  - pubsub/pubsubhub.go

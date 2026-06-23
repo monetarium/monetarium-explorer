@@ -39,9 +39,14 @@ blockdata fan-out (main.go:570,1092)
   │     writes pageData.{BlockInfo,BlockchainInfo,HomeInfo}
   │     resets ETag/Last-Modified
   │     signals wsHub (sigNewBlock, sigMempoolUpdate)
+  │     ─► chartSource.(*cache.ChartData).SetTip()  ← side effect (type assertion)
+  │           stores ChartTip{Height,Time,TicketPrice,Difficulty,PoolValue,CoinSupply}
+  │           invalidates cached charts: TicketPrice, POWDifficulty (WindowBin),
+  │           PercentStaked (BlockBin, DayBin)
   ├─► pgb.Store(…)
   └─► psHub.Store(…)                                ← WebSocket path
         writes identical HomeInfo fields (parallel, no shared layer)
+        calls types.RemainingWindowText for WindowRemaining/RewardRemaining
 
 mempool.MempoolMonitor
   │ sends *types.MempoolInfo
@@ -93,6 +98,8 @@ HTTP request → chi router (main.go:659–793)
 | `HomeInfo.VoteVARReward` | `txhelpers.ComputeVoteVARReward(…)` | `types.VoteVARReward` |
 | `HomeInfo.SKAVoteRewards` | per-coin PoS split from `SSFeeTotalsByCoin` + 30d history fallback | `[]types.SKAVoteReward` |
 | `HomeInfo.PoWSKARewards` | per-coin PoW split from `SSFeeTotalsByCoin` + 30d fallback | `[]types.PoWSKAReward` |
+| `HomeInfo.WindowRemaining` | `types.RemainingWindowText(IdxBlockInWindow, Params.WindowSize, Params.BlockTime)` | `string` |
+| `HomeInfo.RewardRemaining` | `types.RemainingWindowText(IdxInRewardWindow, Params.RewardWindowSize, Params.BlockTime)` | `string` |
 
 After `p.Unlock()`, `Store` also recomputes `invs.CoinFills` under `invsMtx.Lock`
 (while holding `pageData.Lock`) so newly-issued SKA coins appear in fill bars
@@ -102,6 +109,19 @@ before any mempool tx arrives (`explorer.go:614–631`).
 - Sends `sigNewBlock` and `sigMempoolUpdate` to `wsHub.HubRelay`.
 - Every 5 blocks: triggers `voteTracker.Refresh()`, `proposals.ProposalsSync()`,
   `agendasSource.UpdateAgendas()`.
+
+**Chart cache side effect (synchronous, inline):**
+After computing HomeInfo, `Store` type-asserts `exp.chartSource` to
+`*cache.ChartData`. If the assertion succeeds (i.e., the real chart cache is
+wired — not a mock or simnet stub), it calls `cd.SetTip(cache.ChartTip{…})` with
+`Height`, `Time`, `TicketPrice`, `Difficulty`, `PoolValue` (atoms, converted from
+`PoolInfo.Value * 1e8`), and `CoinSupply`. `SetTip` stores the tip under
+`tipMtx.Lock` and calls `invalidateTipCharts()`, which deletes cached chart bytes
+for `TicketPrice` and `POWDifficulty` (WindowBin) and `PercentStaked`
+(BlockBin + DayBin) — forcing those charts to re-run their maker functions on the
+next `/api/chart/...` request rather than serving bytes whose cacheID hasn't yet
+rolled to a new window boundary. If the assertion fails, the tip push is silently
+skipped (no error, no log). (`explorer.go:652–668`, `db/cache/charts.go:908–933`)
 
 ### 3.2 Background Saver — `(*explorerUI).StoreMPData`
 
@@ -215,6 +235,7 @@ previously converted to `int64` before the cap check.
 |---|---|---|
 | `Store` writes `pageData`, `Home` reads it | Background writer / HTTP reader | `pageData.RWMutex` prevents race; snapshot may be 1 block stale |
 | `Store` (HTTP) vs `psHub.Store` (WS) | Parallel savers, no shared transform layer | Must duplicate every `HomeInfo` field change in both; drift is silent |
+| `Store` → `chartSource.(*cache.ChartData).SetTip` | Cross-module type assertion into `db/cache` | Silently skipped if `chartSource` is a mock/stub (no error); chart cache stale until next block if wiring is broken |
 | `commonData` → `GetTip` (Postgres) | Synchronous DB call on every page render | DB down → `nil` return → every page fails simultaneously |
 | `withCache` ETag key | Shared across all `withCache` routes | Reset by `Store`/`StoreMPData` on any new block/mempool event |
 | `HashrateSharesData` → `pageData.BlockInfo.BlockTime` | `intervalMinHeight` reads `pageData.RLock` | Must hold `pageData` lock; not under `withCache` — per-request |
@@ -263,6 +284,21 @@ summaries via `filterAgendaSummaries` to exclude pre-Monetarium (VoteVersion < 1
 agendas. Adding a new agenda type requires ensuring `AllAgendas()` returns it with
 the correct VoteVersion, otherwise it will be hidden from status cards.
 
+**C9 (RemainingWindowText single source of truth):** `WindowRemaining` and
+`RewardRemaining` in `HomeInfo` are computed by `types.RemainingWindowText`
+(`explorer/types/remaining.go:17`). Both `(*explorerUI).Store` and
+`psHub.Store` (`pubsub/pubsubhub.go:734,736`) call the same function, ensuring the
+server-rendered HTML and the live WS payload always produce identical countdown
+strings. Do not inline this calculation in either saver or in a template — the
+function is the single authority (comment references issue #502).
+
+**C10 (ChartTip PoolValue VAR-only float conversion):** `SetTip` converts
+`blockData.PoolInfo.Value` (a `float64` in VAR coins) to atoms via `* 1e8` before
+casting to `uint64`. This is safe because `PoolInfo.Value` is VAR (see C3 — all
+PoW pool value is VAR); the 8-decimal precision fits float64 without loss. Do not
+apply the same pattern to SKA amounts — SKA values must stay `big.Int`-derived
+strings (see C1).
+
 ---
 
 ## Section 6 — Mutation Impact
@@ -309,6 +345,25 @@ as a recent example). Missing mock update causes test compilation failure.
 called from a goroutine that also holds `invsMtx`, check for lock-order inversion
 against `Store` (see `impact.md` → *Lock-Order Inversion*).
 
+### Modifying `HomeInfo.WindowRemaining` / `HomeInfo.RewardRemaining`
+
+Both fields are computed by `types.RemainingWindowText` from `explorer/types/remaining.go`.
+The call sites are `explorer.go:568,570` and `pubsub/pubsubhub.go:734,736`. Changing
+the signature or semantics of `RemainingWindowText` affects both the HTTP render and
+the WS push simultaneously. If either call site is removed or changed independently,
+the HTML countdown and the WS live-update diverge (see `impact.md` →
+*Saver Writer/Reader Drift*). Both fields carry `json:` tags and are transmitted
+over WS even if no template currently renders them directly.
+
+### Modifying `Store`'s `chartSource.SetTip` call
+
+If `chartSource` is replaced with a different implementation that does not satisfy
+`*cache.ChartData`, the type assertion silently fails and charts for `TicketPrice`,
+`POWDifficulty`, and `PercentStaked` will lag by one window/day bin boundary after a
+block (they will only refresh when their `cacheID` rolls over naturally). The failure
+is silent — no error, no log. To verify `SetTip` is firing in production, check that
+`invalidateTipCharts` deletes the appropriate keys on block arrival.
+
 ---
 
 ## Section 7 — Common Pitfalls
@@ -341,6 +396,19 @@ against `Store` (see `impact.md` → *Lock-Order Inversion*).
    at the template boundary as a pre-formatted string (from `FormatSKAAtoms` or
    equivalent). Do not convert to `float64` at any intermediate step.
 
+7. **`ChartDataSource` interface type assertion in `Store`:** The `chartSource` field
+   is typed as the `ChartDataSource` interface, not `*cache.ChartData`. The type
+   assertion in `Store` silently no-ops when a mock or non-concrete type is assigned
+   (simnet, tests). This is intentional, but it means chart staleness bugs caused by
+   a broken `SetTip` call will not surface in unit tests — only in a live explorer run
+   where `*cache.ChartData` is the actual implementation.
+
+8. **Inlining `RemainingWindowText` logic in one saver only:** The two-saver symmetry
+   requires both `explorer.go` and `pubsub/pubsubhub.go` to call the shared function.
+   If the countdown formatting is ever "temporarily" inlined in one saver (e.g. a
+   quick fix), the HTML and WS payloads will diverge and the bug manifests as the
+   live countdown ticking differently than the initial page render.
+
 ---
 
 ## Section 8 — Evidence
@@ -364,6 +432,16 @@ against `Store` (see `impact.md` → *Lock-Order Inversion*).
 | `filterAgendaSummaries` VoteVersion cross-filter | `explorerroutes.go:2196–2208` |
 | `mockDataSource.MinerHashrateShares` added to test mock | `explorer_test.go:207` |
 | `commonData` nil return on `GetTip` failure | `explorerroutes.go:2417–2421` |
+| `HomeInfo.WindowRemaining` populated via `types.RemainingWindowText` | `explorer.go:568` |
+| `HomeInfo.RewardRemaining` populated via `types.RemainingWindowText` | `explorer.go:570` |
+| `RemainingWindowText` single-source-of-truth with issue #502 comment | `explorer/types/remaining.go:8–17` |
+| `WindowRemaining`/`RewardRemaining` json tags on `HomeInfo` | `explorer/types/explorertypes.go:911,913` |
+| `psHub.Store` also calls `RemainingWindowText` for both fields | `pubsub/pubsubhub.go:734,736` |
+| `ChartTip` struct definition | `db/cache/charts.go:490–497` |
+| `SetTip` stores tip, calls `invalidateTipCharts` | `db/cache/charts.go:908–913` |
+| `invalidateTipCharts` deletes `TicketPrice`+`POWDifficulty` (WindowBin) and `PercentStaked` (Block+DayBin) | `db/cache/charts.go:919–933` |
+| Type assertion `exp.chartSource.(*cache.ChartData)` + `PoolInfo.Value * 1e8` conversion | `explorer.go:652–668` |
+| `chartSource` field typed as `ChartDataSource` interface on `explorerUI` | `explorer.go:223` |
 
 See also:
 - /wiki/code-analysis/page-rendering/patterns.md (shares-pattern-with: all cross-domain rendering patterns)

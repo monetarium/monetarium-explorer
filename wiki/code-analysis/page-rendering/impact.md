@@ -138,12 +138,44 @@ Adding a new miner-reward display must use `CBlockSubsidy`, not `NBlockSubsidy`.
 
 ---
 
+---
+
+## Risk: Chart Tip Push Silent Skip (`SetTip` type assertion)
+
+**Trigger:**
+`exp.chartSource` is replaced with a type that does not satisfy `*cache.ChartData`
+(e.g. a different implementation, a mock, or an interface wrapper), or the
+`SetTip` call in `Store` is removed.
+
+**Affected flows:**
+
+- /wiki/code-analysis/page-rendering/flow.full.md (`Store` → `chartSource.SetTip`)
+- /wiki/code-analysis/charts/flow.full.md (chart cache served to `/api/chart/...`)
+
+**Failure mode:** silent.
+
+**Description:**
+`Store` type-asserts `exp.chartSource` to `*cache.ChartData`; the `ok` idiom means
+a non-matching type produces no error and no log — the tip push is simply skipped.
+The visible consequence: `TicketPrice`, `POWDifficulty`, and `PercentStaked` charts
+will show the last-boundary-aligned value rather than the current block value until
+the chart's `cacheID` naturally rolls over (a window or day boundary). This lag is
+invisible to users on mainnet (where boundaries are frequent relative to a single
+missed push) but can be obvious in test/simnet environments where the chart cache is
+not populated from live data. Any refactor that changes `chartSource`'s concrete type
+must verify `SetTip` still executes — add a debug log or a `require.NoError`-style
+assertion in integration tests.
+
+---
+
 ## Cross-Domain Observation
 
-These three risks share one root: **page handlers are pure readers of
+These risks share one root: **page handlers are pure readers of
 background-written shared state behind a hand-maintained multi-lock, multi-saver
 fan-out with no shared transformation layer.** Drift (silent) and lock
 inversion (loud) are both consequences of "no shared layer"; the `commonData`
-crash is the blast-radius amplifier (one shared dependency, every page). Any
-refactor that introduces a shared transformation/render layer should treat all
-three as a single design constraint, not three separate fixes.
+crash is the blast-radius amplifier (one shared dependency, every page); the
+`SetTip` silent-skip is a cross-module extension of the same pattern — a type
+boundary adds another unverified coupling. Any refactor that introduces a shared
+transformation/render layer should treat all four as a single design constraint,
+not separate fixes.
