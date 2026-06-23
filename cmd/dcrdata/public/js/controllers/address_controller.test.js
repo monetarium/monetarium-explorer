@@ -287,6 +287,46 @@ describe('address validateZoom (load-time preset restore)', () => {
   })
 })
 
+describe('address ranger gutter alignment (issue 4)', () => {
+  it('syncRangerGutters mirrors the main chart plot-box insets onto the strip', () => {
+    const c = makeRenderController('types', 0, {})
+    c.ranger = fakeRanger
+    fakeRanger.setGutters.mockClear()
+    const u = {
+      root: { getBoundingClientRect: () => ({ left: 0, right: 800 }) },
+      over: { getBoundingClientRect: () => ({ left: 50, right: 780 }) }
+    }
+    c.syncRangerGutters(u)
+    // left = over.left - root.left = 50; right = root.right - over.right = 20
+    expect(fakeRanger.setGutters).toHaveBeenCalledWith(50, 20)
+  })
+  it('syncRangerGutters is a no-op when there is no ranger', () => {
+    const c = makeRenderController('types', 0, {})
+    c.ranger = null
+    expect(() => c.syncRangerGutters({})).not.toThrow()
+  })
+  it('recreateRanger seeds the strip with the main chart gutters', async () => {
+    const { createRanger } = await import('../helpers/uplot_ranger')
+    createRanger.mockClear()
+    const c = makeRenderController('balance', 0, {})
+    c.hasRangerViewTarget = true
+    c.rangerViewTarget = { clientWidth: 800 }
+    c.handle = {
+      uplot: {
+        root: { getBoundingClientRect: () => ({ left: 0, right: 800 }) },
+        over: { getBoundingClientRect: () => ({ left: 40, right: 790 }) }
+      }
+    }
+    await c.recreateRanger(balanceDef(0), [
+      [1, 2],
+      [10, 20]
+    ])
+    const opts = createRanger.mock.calls.at(-1)[2]
+    expect(opts.leftGutter).toBe(40) // over.left - root.left
+    expect(opts.rightGutter).toBe(10) // root.right - over.right
+  })
+})
+
 describe('address ranger + theme', () => {
   it('creates a ranger seeded with the x + primary series columns', async () => {
     const { createRanger } = await import('../helpers/uplot_ranger')

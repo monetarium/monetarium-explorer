@@ -561,12 +561,32 @@ export default class extends Controller {
     ctrl.validateZoom(Zoom.mapValue(bin) || blockDuration)
   }
 
-  // Build chart hooks for the tooltip (ready + setCursor).
+  // Build chart hooks for the tooltip (ready + setCursor) and ranger alignment (draw).
   buildHooks() {
     return {
       ready: [(u) => this.installTooltip(u)],
-      setCursor: [(u) => this.renderLegend(u)]
+      setCursor: [(u) => this.renderLegend(u)],
+      // On every main-chart draw, mirror its plot-box insets onto the strip so the two stay
+      // aligned through zoom and chart-type/coin switches (ported from charts_controller).
+      draw: [(u) => this.syncRangerGutters(u)]
     }
+  }
+
+  // The main chart's plot-box insets in CSS px: the gap between the uPlot root and its
+  // over(lay) element on each side. Used to size the strip's reserve padding so its plot
+  // area lines up under the main chart's (so the ranger spans the same length as the
+  // x-axis). Null if the geometry isn't available yet. Ported from charts_controller.
+  measureGutters(u) {
+    if (!u || !u.over || !u.root) return null
+    const root = u.root.getBoundingClientRect()
+    const over = u.over.getBoundingClientRect()
+    return { left: over.left - root.left, right: root.right - over.right }
+  }
+
+  syncRangerGutters(u) {
+    if (!this.ranger) return
+    const g = this.measureGutters(u)
+    if (g) this.ranger.setGutters(g.left, g.right)
   }
 
   // Create the on-plot hover tooltip inside the uPlot overlay div.
@@ -778,10 +798,15 @@ export default class extends Controller {
       this.ranger = null
     }
     if (!this.hasRangerViewTarget) return
+    // Seed the strip's plot insets from the main chart's so it starts aligned; the draw
+    // hook (syncRangerGutters) keeps them matched thereafter.
+    const g = (this.handle && this.measureGutters(this.handle.uplot)) || { left: 0, right: 0 }
     this.ranger = await createRanger(this.rangerViewTarget, def, {
       dark: darkEnabled(),
       width: this.rangerViewTarget.clientWidth || 800,
       xTime: true,
+      leftGutter: g.left,
+      rightGutter: g.right,
       onSelect: (min, max) => this.onRangerSelect(min, max)
     })
     this.ranger.setData([cols[0], cols[1]])
