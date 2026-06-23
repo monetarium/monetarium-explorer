@@ -66,7 +66,7 @@ template surfaces this as `({{.BlocksCount}}/{{$.WindowSize}})`
 
 **Description:**
 The handler does no transformation between DB and template. `StakeDiffWindows`
-(`cmd/dcrdata/internal/explorer/explorerroutes.go:364`) calls
+(`cmd/dcrdata/internal/explorer/explorerroutes.go:424`) calls
 `exp.dataSource.PosIntervals` and passes the returned
 `[]*dbtypes.BlocksGroupedInfo` straight into
 `exp.templates.exec("windows", struct{ ... Data []*dbtypes.BlocksGroupedInfo

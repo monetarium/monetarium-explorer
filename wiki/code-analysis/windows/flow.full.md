@@ -7,7 +7,7 @@ default 144). For each window the table shows the index, end block, per-window
 sums of regular txs / votes / fresh tickets / revocations, total size, and the
 window's difficulty and `MAX(sbits)` ticket price. The page is fully
 server-rendered Go HTML (`windows.tmpl`); no REST or WebSocket consumes this
-flow. Refreshed at `HEAD=607299f2`.
+flow. Refreshed at `HEAD=4a8e67ec`.
 
 ### Section 2 — End-to-End Data Flow
 
@@ -17,7 +17,7 @@ monetarium-node JSON-RPC (block ingest, separate flow)
         → SelectWindowsByLimit            (db/dcrpg/internal/blockstmts.go:134)
         → retrieveWindowBlocks            (db/dcrpg/queries.go:856) — Scan → parseCoinTxStats → BlocksGroupedInfo build
             → (*ChainDB).PosIntervals     (db/dcrpg/pgblockchain.go:1846) — adds queryTimeout + replaceCancelError
-                → dataSource interface    (cmd/dcrdata/internal/explorer/explorer.go:96)
+                → dataSource interface    (cmd/dcrdata/internal/explorer/explorer.go:97)
                     → (*explorerUI).StakeDiffWindows handler (cmd/dcrdata/internal/explorer/explorerroutes.go:423)
                         → exp.templates.exec("windows", ...) (explorerroutes.go:467)
                             → views/windows.tmpl rendering   → HTTP HTML response
@@ -89,7 +89,7 @@ only client-side behavior is the `data-controller="pagenavigation"` pager and a
 
 - **Location:** `cmd/dcrdata/internal/explorer/explorerroutes.go:423`
   (`(*explorerUI).StakeDiffWindows`), interface at
-  `cmd/dcrdata/internal/explorer/explorer.go:96`
+  `cmd/dcrdata/internal/explorer/explorer.go:97`
   (`dataSource.PosIntervals`), mock at
   `cmd/dcrdata/internal/explorer/explorer_test.go:109`.
 - **Route:** `r.Get("/ticketpricewindows", explore.StakeDiffWindows)`
@@ -166,7 +166,7 @@ only client-side behavior is the `data-controller="pagenavigation"` pager and a
   aggregate as `[]map[string]CoinTxStats` (the `[]` from `JSONB_AGG`, the
   string key because JSON object keys are strings).
 - **Interface boundary at `dataSource.PosIntervals`** —
-  `cmd/dcrdata/internal/explorer/explorer.go:96` and mock at
+  `cmd/dcrdata/internal/explorer/explorer.go:97` and mock at
   `explorer_test.go:109` must move in lockstep with the prod
   `*ChainDB.PosIntervals` signature.
 
@@ -282,7 +282,7 @@ Routing / handler:
 - `cmd/dcrdata/internal/explorer/explorerroutes.go:467` — `exp.templates.exec("windows", ...)`.
 
 Interface / mock:
-- `cmd/dcrdata/internal/explorer/explorer.go:96` — `dataSource.PosIntervals` interface method.
+- `cmd/dcrdata/internal/explorer/explorer.go:97` — `dataSource.PosIntervals` interface method.
 - `cmd/dcrdata/internal/explorer/explorer_test.go:109` — `mockDataSource.PosIntervals`.
 
 DB / queries:
