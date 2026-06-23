@@ -3643,6 +3643,12 @@ func appendMissedVotesPerWindow(charts *cache.ChartData, rows *sql.Rows) error {
 			return err
 		}
 
+		windowIdx := height / windowSize
+
+		for len(windows.MissedVotes) <= windowIdx {
+			windows.MissedVotes = append(windows.MissedVotes, 0)
+		}
+
 		if firstBlock {
 			nextWindowEnd = (height/windowSize+1)*windowSize - 1
 			firstBlock = false
@@ -3651,7 +3657,6 @@ func appendMissedVotesPerWindow(charts *cache.ChartData, rows *sql.Rows) error {
 		windowMisses += misses
 
 		if height == nextWindowEnd {
-			windowIdx := height / windowSize
 			if windowIdx < len(windows.MissedVotes) {
 				// Overwrite: this window is already tracked (reorg recovery).
 				windows.MissedVotes[windowIdx] = uint64(windowMisses)
