@@ -29,6 +29,27 @@ div.expando {
   display: block;
 }
 
+// The address chart fills its card via absolute positioning, so the uPlot ranger strip
+// can't be a normal-flow sibling — it would overlap the chart. Reserve a strip at the
+// bottom of the card and anchor the ranger there, matching the chart's horizontal box
+// (left/right) so the two plot areas line up. (px values are layout-tuned; verify in browser.)
+.address_chart_wrap {
+  min-height: 340px;
+
+  .address_chart {
+    bottom: calc(1em + 92px);
+  }
+
+  .chart-ranger {
+    position: absolute;
+    left: 1em;
+    right: 2em;
+    bottom: 1em;
+    width: auto;
+    margin: 0;
+  }
+}
+
 .fullscreen {
   position: fixed;
   top: 0;
