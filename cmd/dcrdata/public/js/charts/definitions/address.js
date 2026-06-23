@@ -123,7 +123,19 @@ export function amountflowDef(coinType) {
     formatValue: (seriesIdx, datum) => {
       const p = datum.payload
       const i = datum.idx
-      if (!isSKA) return `${datum.value} ${coinLabel}`
+      if (!isSKA) {
+        // Read raw payload fields — datum.value is the stacked cumulative total
+        // and must NOT be used here (stacking-immune; VAR floats are display-safe).
+        let v
+        if (seriesIdx === 0) v = p.received[i]
+        else if (seriesIdx === 1) v = p.sent[i]
+        else {
+          const net = p.net[i]
+          // seriesIdx 2: Net Received (net > 0); seriesIdx 3: Net Spent (magnitude).
+          v = seriesIdx === 2 ? (net > 0 ? net : 0) : net < 0 ? -net : 0
+        }
+        return `${v} ${coinLabel}`
+      }
       // SKA: exact strings, sign-split for the two net series.
       let atomStr
       if (seriesIdx === 0) atomStr = p.received_atoms[i]

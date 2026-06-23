@@ -94,6 +94,12 @@ describe('amountflowDef VAR (coin 0)', () => {
     expect(def.formatValue(0, { idx: 0, payload: raw, value: 10 }, {})).toBe('10 VAR')
     expect(def.formatValue(3, { idx: 0, payload: raw, value: 0 }, {})).toBe('0 VAR')
   })
+  it('VAR formatValue reads the raw payload, ignoring the cumulative datum.value', () => {
+    // datum.value is the stacked cumulative total (e.g. 13 = received+spent) — must be ignored
+    expect(def.formatValue(1, { idx: 0, payload: raw, value: 13 }, {})).toBe('3 VAR') // Spent raw=3
+    expect(def.formatValue(2, { idx: 0, payload: raw, value: 999 }, {})).toBe('7 VAR') // Net Received raw=7
+    expect(def.formatValue(3, { idx: 0, payload: raw, value: 999 }, {})).toBe('0 VAR') // Net Spent=0 (net>0)
+  })
 })
 
 describe('amountflowDef VAR net negative', () => {
