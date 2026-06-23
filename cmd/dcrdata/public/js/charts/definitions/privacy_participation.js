@@ -28,8 +28,8 @@ export const privacyParticipation = {
     let end = 0
     if (raw.axis === 'height') {
       for (let i = 0; i < set.length; i++) {
-        if (start === -1 && set[i] > 0) start = raw.bin === 'block' ? i + 1 : raw.h[i]
-        end = raw.bin === 'block' ? i + 1 : raw.h[i]
+        if (start === -1 && set[i] > 0) start = raw.bin === 'block' ? i : raw.h[i]
+        end = raw.bin === 'block' ? i : raw.h[i]
       }
     } else {
       for (let i = 0; i < set.length; i++) {

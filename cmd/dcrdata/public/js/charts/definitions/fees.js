@@ -1,5 +1,5 @@
 import { register } from '../registry'
-import { xColumn, intComma, formatSkaAtomsExact, ATOMS_TO_VAR } from '../format'
+import { xColumn, formatSkaAtomsExact, ATOMS_TO_VAR } from '../format'
 import { renderCoinType } from '../../helpers/ska_helper'
 
 const SKA_ATOMS_TO_COIN = 1e-18
@@ -32,7 +32,11 @@ export function feesDef(coinType) {
       if (isSKA) {
         return `${formatSkaAtomsExact(datum.payload.fees[datum.idx])} ${coinLabel}`
       }
-      return `${intComma(datum.value)} VAR`
+      // Fees are atoms scaled to VAR (1e-8). intComma would round sub-1 VAR fees
+      // to 0 — keep full precision with maximumFractionDigits:20, matching the
+      // pow-difficulty tooltip fix (commit 523242ec).
+      if (!Number.isFinite(datum.value)) return ''
+      return `${datum.value.toLocaleString('en-US', { maximumFractionDigits: 20 })} VAR`
     }
   }
 }

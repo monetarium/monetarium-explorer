@@ -62,10 +62,10 @@ describe('xColumn', () => {
     const raw = { axis: 'time', t: [1000, 2000, 3000] }
     expect(xColumn(raw, 3)).toEqual([1000, 2000, 3000])
   })
-  it('height axis + block bin → 1-based index, ignoring offset (matches zip2D/zipIvY)', () => {
+  it('height axis + block bin → 0-based index (genesis=0), ignoring offset', () => {
     const raw = { axis: 'height', bin: 'block' }
-    expect(xColumn(raw, 3)).toEqual([1, 2, 3])
-    expect(xColumn(raw, 3, 100)).toEqual([1, 2, 3]) // block ignores offset
+    expect(xColumn(raw, 3)).toEqual([0, 1, 2])
+    expect(xColumn(raw, 3, 100)).toEqual([0, 1, 2]) // block ignores offset
   })
   it('height axis + day bin → offset + height value (offset defaults to 1)', () => {
     const raw = { axis: 'height', bin: 'day', h: [10, 20, 30] }
