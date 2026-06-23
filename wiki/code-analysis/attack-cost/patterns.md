@@ -40,15 +40,20 @@ server: the USD/VAR `Exchange Rate` (Monetarium has no listing, so no authoritat
 rate) and the mining-device specs (hashrate, power, price — no hard-coded ASIC list,
 no external catalog). Defaults are neutral round numbers in the controller
 (`defaultExchangeRate=1`, `defaultDeviceHashrate=50`, `defaultDevicePower=1500`,
-`defaultDevicePrice=1500`).
+`defaultDevicePrice=1500`). The exchange-rate input has no upper ceiling (`max`
+attribute removed) so arbitrarily large USD/VAR rates are accepted.
 
 **Constraints:**
 - Do not re-introduce an auto-fetched exchange rate (no `xcBot.Conversion` here) — the
   page is explicitly a scenario calculator, not a market-data view.
 - Do not re-introduce a hard-coded device catalog — users supply the three numbers.
+- When writing a computed value back to a `<input type="number">` (e.g. refreshing the
+  exchange-rate field in `calculate()`), call `digitformat(v, n, true)` with
+  `noComma=true`. Locale-formatted strings like `"1,234.00"` are silently rejected by
+  the browser's number-input setter, leaving the displayed value stale.
 - Source: `attackcost_controller.js` module-level `default*` constants and the
   `updateDeviceHashrate` / `updateDevicePower` / `updateDevicePrice` / `updatePrice`
-  action handlers.
+  action handlers; exchange-rate `<input>` in `attackcost.tmpl` (Adjustable Parameters).
 
 ## Untyped Go → Stimulus String Contract
 

@@ -60,7 +60,7 @@ The second transport (`/ps`) follows the same RPC path but wraps the response in
 **Location:**
 
 - Route: [cmd/dcrdata/main.go:750](../../../cmd/dcrdata/main.go#L750) — `r.Get("/decodetx", explore.DecodeTxPage)`.
-- Legacy redirect: [cmd/dcrdata/internal/explorer/explorer.go:985](../../../cmd/dcrdata/internal/explorer/explorer.go#L985) — `exp.Mux.Get("/decodetx", redirect("decodetx"))` (handles `/explorer/decodetx → /decodetx`).
+- Legacy redirect: [cmd/dcrdata/internal/explorer/explorer.go:1005](../../../cmd/dcrdata/internal/explorer/explorer.go#L1005) — `exp.Mux.Get("/decodetx", redirect("decodetx"))` (handles `/explorer/decodetx → /decodetx`).
 - Handler: [cmd/dcrdata/internal/explorer/explorerroutes.go:1728](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L1728) — `DecodeTxPage`.
 - Template: [cmd/dcrdata/views/rawtx.tmpl](../../../cmd/dcrdata/views/rawtx.tmpl).
 
@@ -119,7 +119,7 @@ str, err := exp.templates.exec("rawtx", struct {
 
 ### 3.3 WebSocket server — explorer (`/ws`)
 
-**Location:** [cmd/dcrdata/internal/explorer/websockethandlers.go:109-247](../../../cmd/dcrdata/internal/explorer/websockethandlers.go#L109-L247) — receive goroutine inside `RootWebsocket`.
+**Location:** [cmd/dcrdata/internal/explorer/websockethandlers.go:109-271](../../../cmd/dcrdata/internal/explorer/websockethandlers.go#L109-L271) — receive goroutine inside `RootWebsocket`.
 
 **Data structures:**
 
@@ -136,7 +136,7 @@ str, err := exp.templates.exec("rawtx", struct {
 
 **Location:**
 
-- Interface (explorer-side): [cmd/dcrdata/internal/explorer/explorer.go:109-110](../../../cmd/dcrdata/internal/explorer/explorer.go#L109-L110).
+- Interface (explorer-side): [cmd/dcrdata/internal/explorer/explorer.go:110-111](../../../cmd/dcrdata/internal/explorer/explorer.go#L110-L111).
 - Interface (pubsub-side): [pubsub/pubsubhub.go:53-54](../../../pubsub/pubsubhub.go#L53-L54).
 - Decode impl: [db/dcrpg/pgblockchain.go:7468-7482](../../../db/dcrpg/pgblockchain.go#L7468-L7482) — `ChainDB.DecodeRawTransaction`.
 - Send impl: [db/dcrpg/insightapi.go:49-63](../../../db/dcrpg/insightapi.go#L49-L63) — `ChainDB.SendRawTransaction`.
@@ -165,7 +165,7 @@ Because the explorer passes this through verbatim as a JSON blob (it never reads
 
 `DecodeRawTransaction` / `SendRawTransaction` have one mock pair:
 
-- [cmd/dcrdata/internal/explorer/explorer_test.go:140-145](../../../cmd/dcrdata/internal/explorer/explorer_test.go#L140-L145) — `mockDataSource`.
+- [cmd/dcrdata/internal/explorer/explorer_test.go:151-154](../../../cmd/dcrdata/internal/explorer/explorer_test.go#L151-L154) — `mockDataSource`.
 
 Pubsub has no separate mock for these two methods (its test suite does not exercise the decodetx/sendtx branch).
 
@@ -179,7 +179,7 @@ Pubsub has no separate mock for these two methods (its test suite does not exerc
 | Coupling                          | Where                                                                                            | Notes                                                                                                                          |
 |-----------------------------------|--------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------|
 | `event` string contract           | Frontend `data-event-id` (rawtx.tmpl:15,22,29) ↔ server `switch msg.EventId` (websockethandlers.go:133) ↔ pubsub `case "decodetx"` (pubsubhub.go:292) ↔ `SigDecodeTx="decodetx"` (pubsub/types/pubsub_types.go:134-136) | Free string. A typo on either side silently routes to the `default` handler ("Unrecognized event ID"); no compile-time check. |
-| Response event suffix `"Resp"`     | Server appends in [websockethandlers.go:241](../../../cmd/dcrdata/internal/explorer/websockethandlers.go#L241); client registers `decodetxResp`/`sendtxResp` in [rawtx_controller.js:11,16](../../../cmd/dcrdata/public/js/controllers/rawtx_controller.js#L11-L16). | The suffix is the only mechanism distinguishing request from response on the same WS channel. |
+| Response event suffix `"Resp"`     | Server appends in [websockethandlers.go:265](../../../cmd/dcrdata/internal/explorer/websockethandlers.go#L265); client registers `decodetxResp`/`sendtxResp` in [rawtx_controller.js:11,16](../../../cmd/dcrdata/public/js/controllers/rawtx_controller.js#L11-L16). | The suffix is the only mechanism distinguishing request from response on the same WS channel. |
 | `*chainjson.TxRawResult` shape    | Node ([monetarium-node/.../chainsvrresults.go:410](../../../../monetarium-node/rpc/jsonrpc/types/chainsvrresults.go#L410)) → `pgb.Client.DecodeRawTransaction` → marshaled verbatim to the browser. | Multi-coin shape (`Value` float64 VAR-only + `SKAValue` string SKA-only + `CoinType`) is owned by the node; the explorer doesn't normalize. |
 | Two parallel WS handlers          | `RootWebsocket` (explorer) and `pubsubhub.WebSocketHandler` (pubsub) implement `decodetx`/`sendtx` independently. | Duplicate switch arms must change together; the response envelopes (`{event,message}` vs `{ID,RequestID,Data,Success}`) are NOT interchangeable. |
 | 1 MB WS read limit                | [websockethandlers.go:48-50,127-131](../../../cmd/dcrdata/internal/explorer/websockethandlers.go#L48-L131) (hard-coded `1<<20`); pubsub uses `psh.wsHub.requestLimit`. | Insight REST uses a separate budget (`iapi.params.MaxTxSize`). Three independent size limits, no shared constant. |
@@ -230,15 +230,15 @@ Pubsub has no separate mock for these two methods (its test suite does not exerc
 3. **Treating the page like other explorer pages.** There is no `pageData`/`HomeInfo`/`commonData.X` to populate. Adding pre-decoded data to the server-rendered HTML would create the first template→WS parity dependency the page currently lacks (C3 trap).
 4. **Using `innerHTML` for the response (violating C6).** The current `<pre>.textContent = evt` is the right call — the response is intentionally raw text and contains potentially user-controlled hex/script content. Replacing it with `innerHTML` would open an XSS surface from a node-decoded `asm` or `addresses` string.
 5. **Coupling decode and send signatures.** They look alike but have different return types (`*TxRawResult` vs `string txid`) and different external surfaces (decode is internal-only, send is also exposed on `/insight/api/tx/send`). Don't refactor them behind a shared interface without updating the Insight REST caller.
-6. **Forgetting the legacy `/explorer/decodetx` route** ([explorer.go:958](../../../cmd/dcrdata/internal/explorer/explorer.go#L958)). It 308-redirects to `/decodetx`; if the canonical route is renamed, the redirect target must update too.
+6. **Forgetting the legacy `/explorer/decodetx` route** ([explorer.go:1005](../../../cmd/dcrdata/internal/explorer/explorer.go#L1005)). It 308-redirects to `/decodetx`; if the canonical route is renamed, the redirect target must update too.
 7. **Cross-tx-coin assumption.** Per CLAUDE.md, a tx is always single-coin. If the decoded blob contains mixed `CoinType` Vouts, treat it as a node-side bug, not a feature; this page surfaces whatever the node returns without normalization.
 
 ## Section 8 — Evidence
 
-- Route registration: [cmd/dcrdata/main.go:750](../../../cmd/dcrdata/main.go#L750); legacy redirect [cmd/dcrdata/internal/explorer/explorer.go:985](../../../cmd/dcrdata/internal/explorer/explorer.go#L985); WS routes [cmd/dcrdata/main.go:663-664](../../../cmd/dcrdata/main.go#L663-L664).
+- Route registration: [cmd/dcrdata/main.go:750](../../../cmd/dcrdata/main.go#L750); legacy redirect [cmd/dcrdata/internal/explorer/explorer.go:1005](../../../cmd/dcrdata/internal/explorer/explorer.go#L1005); WS routes [cmd/dcrdata/main.go:663-664](../../../cmd/dcrdata/main.go#L663-L664).
 - HTTP handler: [cmd/dcrdata/internal/explorer/explorerroutes.go:1728-1744](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L1728-L1744).
 - Template: [cmd/dcrdata/views/rawtx.tmpl](../../../cmd/dcrdata/views/rawtx.tmpl) (43 lines, no data bindings).
-- Explorer WS receive loop & cases: [cmd/dcrdata/internal/explorer/websockethandlers.go:109-247](../../../cmd/dcrdata/internal/explorer/websockethandlers.go#L109-L247), cases at lines 134 (`decodetx`) and 150 (`sendtx`).
+- Explorer WS receive loop & cases: [cmd/dcrdata/internal/explorer/websockethandlers.go:109-271](../../../cmd/dcrdata/internal/explorer/websockethandlers.go#L109-L271), cases at lines 134 (`decodetx`) and 150 (`sendtx`).
 - Pubsub WS twin: [pubsub/pubsubhub.go:292-319](../../../pubsub/pubsubhub.go#L292-L319); signal constants [pubsub/types/pubsub_types.go:134-136](../../../pubsub/types/pubsub_types.go#L134-L136).
 - Data source interface: [cmd/dcrdata/internal/explorer/explorer.go:109-110](../../../cmd/dcrdata/internal/explorer/explorer.go#L109-L110); [pubsub/pubsubhub.go:53-54](../../../pubsub/pubsubhub.go#L53-L54).
 - Decode impl: [db/dcrpg/pgblockchain.go:7468-7482](../../../db/dcrpg/pgblockchain.go#L7468-L7482).
@@ -248,7 +248,7 @@ Pubsub has no separate mock for these two methods (its test suite does not exerc
 - Frontend controller: [cmd/dcrdata/public/js/controllers/rawtx_controller.js](../../../cmd/dcrdata/public/js/controllers/rawtx_controller.js).
 - WS client service: [cmd/dcrdata/public/js/services/messagesocket_service.js](../../../cmd/dcrdata/public/js/services/messagesocket_service.js).
 - WS bootstrap: [cmd/dcrdata/public/index.js:37-61](../../../cmd/dcrdata/public/index.js#L37-L61).
-- Mock data source: [cmd/dcrdata/internal/explorer/explorer_test.go:140-145](../../../cmd/dcrdata/internal/explorer/explorer_test.go#L140-L145).
+- Mock data source: [cmd/dcrdata/internal/explorer/explorer_test.go:151-154](../../../cmd/dcrdata/internal/explorer/explorer_test.go#L151-L154).
 
 See also:
 - /wiki/code-analysis/transaction/flow.full.md (shares-pattern-with: `*chainjson.TxRawResult`/`Vout` shape consumed by the read-only `/tx` page; same multi-coin Vout contract)

@@ -1,7 +1,7 @@
 ### Section 1 — Overview
 Tracing the data flow that drives `/visualblocks` — the latest-N-blocks-plus-mempool tile page rendered as a 3-row block-tile (votes / tickets / indicator-fill bars) plus a mempool tile of identical shape. The page has **two independent pipelines** that feed the same DOM: an HTTP `GET` handler that server-renders 30 trimmed blocks plus a mempool tile, and a WebSocket push channel that re-renders individual tiles when new blocks arrive or the mempool changes.
 
-**Revision tag:** `HEAD=717be5a6`. This is the post-rewrite snapshot for issue #270 on top of PR #284's data contract. The 386f2e12 revision documented the contract as "populated but not yet consumed by the UI"; commit `38636d52` is that UI rewrite plus one additional contract field (`TotalFillRatio`). Subsequent fixes (`793610c8`/`2218b9c`/`fe58506`) replaced fragile `box.firstChild` DOM-position assumptions with a stable `[data-role="mempool-tile"]` CSS selector in both `_handleVisualBlocksUpdate` and `handleMempoolUpdate`, added a null guard for the empty-box case during reconnect, and removed HTML comments from the template that had been creating whitespace `Text` nodes that displaced `firstChild`. Net page-surface changes vs the legacy state:
+**Revision tag:** `HEAD=347e5f9a`. This is the post-rewrite snapshot for issue #270 on top of PR #284's data contract. The 386f2e12 revision documented the contract as "populated but not yet consumed by the UI"; commit `38636d52` is that UI rewrite plus one additional contract field (`TotalFillRatio`). Subsequent fixes (`793610c8`/`2218b9c`/`fe58506`) replaced fragile `box.firstChild` DOM-position assumptions with a stable `[data-role="mempool-tile"]` CSS selector in both `_handleVisualBlocksUpdate` and `handleMempoolUpdate`, added a null guard for the empty-box case during reconnect, and removed HTML comments from the template that had been creating whitespace `Text` nodes that displaced `firstChild`. Net page-surface changes vs the legacy state:
 
 - The hard-coded `DCR` label and aggregate amount are gone everywhere. The tile header now shows block size (humanize.Bytes) + an optional `% of maxBlockSize` next to it. The mempool tile shows the current mempool size with the same `%` semantics.
 - The rewards row (`block-rewards` with `.pow/.pos/.fund/.fees` segments) is deleted from both tile types in template + controller + SCSS. Project Fund/Treasury share is absent in Monetarium; PoW/PoS is fixed 50/50, so the bar carried no information.
@@ -37,13 +37,15 @@ WebSocket mempool path:
   - **Data Structures:** `*exptypes.BlockInfo` (full), `pgb.lastExplorerBlock` (single-block memo).
   - **Transformations:** Memoizes the last hash and returns the same pointer to concurrent callers (`lastExplorerBlock.Lock`). `trimmedTxInfoFromMsgTx` sets `Voted: txBasic.VoteInfo != nil` per tx; this drives the three-state vote rendering in the new template. `MiningFee` and `TotalSent` are summed via `dcrutil.Amount.ToCoin()` (VAR-precision float64) — still surfaced on `BlockInfo`/`TrimmedBlockInfo` but **no longer read by the page** (header now shows size, not amount).
 
-- **Location:** `explorer/types/explorertypes.go` (Go types — extended by commit `38636d52` on top of PR #284 contract)
-  - `TrimmedTxInfo` at [`:357-367`](../../../explorer/types/explorertypes.go#L357-L367) — JSON tags from PR #284 unchanged (`fees`, `vote_valid`, `voted`, `vin_count`, `vout_count`, `coin_type,omitempty`, `ticket_status,omitempty`). `Voted bool` (`json:"voted"`) and `VoteValid bool` (`json:"vote_valid"`) drive the three-state class on the vote row.
-  - `TrimmedBlockInfo` at [`:704-723`](../../../explorer/types/explorertypes.go#L704-L723) — PR #284 shape plus new `TotalFillRatio float64 \`json:"total_fill_ratio"\`` ([`:722`](../../../explorer/types/explorertypes.go#L722)). All other fields unchanged.
-  - `(*BlockInfo).Trim(maxBlockSize, issuedSKA)` at [`:725-758`](../../../explorer/types/explorertypes.go#L725-L758) — extended to compute `totalFillRatio` as `float64(bi.BlockBasic.Size) / maxBlockSize` (guarded for `maxBlockSize > 0`) and populate it on the returned struct.
-  - `BlockInfo` at [`:757-805`](../../../explorer/types/explorertypes.go#L757-L805) — added `TotalFillRatio float64 \`json:"total_fill_ratio,omitempty"\`` next to the other contract fields. PR #284's promoted-to-wire fields (`RegularCoinCounts`, `CoinFills`, `ActiveSKACount`, `MaxBlockSize`) unchanged.
-  - `TrimmedMempoolInfo` at [`:898-915`](../../../explorer/types/explorertypes.go#L898-L915) — PR #284 shape unchanged; `TotalFillRatio` was already present (from the homepage indicator-fill work) and is now also read by the visualblocks mempool tile.
-  - `MempoolInfo.Trim(maxBlockSize)` at [`:957-989`](../../../explorer/types/explorertypes.go#L957-L989) — unchanged from PR #284.
+- **Location:** `explorer/types/explorertypes.go` (Go types — extended by commit `38636d52` on top of PR #284 contract; constant consolidation in the anchor→HEAD diff)
+  - `TrimmedTxInfo` at [`:373`](../../../explorer/types/explorertypes.go#L373) — JSON tags from PR #284 unchanged (`fees`, `vote_valid`, `voted`, `vin_count`, `vout_count`, `coin_type,omitempty`, `ticket_status,omitempty`). `Voted bool` (`json:"voted"`) and `VoteValid bool` (`json:"vote_valid"`) drive the three-state class on the vote row.
+  - `TrimmedBlockInfo` at [`:748`](../../../explorer/types/explorertypes.go#L748) — PR #284 shape plus `TotalFillRatio float64 \`json:"total_fill_ratio"\`` at [`:765`](../../../explorer/types/explorertypes.go#L765). All other fields unchanged.
+  - `(*BlockInfo).Trim(maxBlockSize, issuedSKA)` at [`:769`](../../../explorer/types/explorertypes.go#L769) — computes `totalFillRatio` as `float64(bi.BlockBasic.Size) / maxBlockSize` (guarded for `maxBlockSize > 0`) and populates it on the returned struct.
+  - `BlockInfo` — added `TotalFillRatio float64 \`json:"total_fill_ratio,omitempty"\`` at [`:854`](../../../explorer/types/explorertypes.go#L854) next to `MaxBlockSize` at [`:853`](../../../explorer/types/explorertypes.go#L853). PR #284's promoted-to-wire fields (`RegularCoinCounts`, `CoinFills`, `ActiveSKACount`, `MaxBlockSize`) unchanged.
+  - `TrimmedMempoolInfo` at [`:945`](../../../explorer/types/explorertypes.go#L945) — PR #284 shape unchanged; `TotalFillRatio` at [`:957`](../../../explorer/types/explorertypes.go#L957) was already present (from the homepage indicator-fill work) and is also read by the visualblocks mempool tile.
+  - `MempoolInfo.Trim(maxBlockSize)` at [`:1007`](../../../explorer/types/explorertypes.go#L1007) — unchanged from PR #284.
+  - **Constant consolidation (anchor→HEAD):** The `TicketTypeStr`, `VoteTypeStr`, `RevTypeStr`, `SSFeeTypeStr`, `TreasurybaseTypeStr`, `TreasuryAddTypeStr`, `TreasurySpendTypeStr` string constants were removed. Only `CoinbaseTypeStr = "Coinbase"` remains (at [`:408`](../../../explorer/types/explorertypes.go#L408)) — it has no txhelpers counterpart because coinbase is not a distinct protocol tx-type. All `TxInfo.Is*()` methods now delegate to the canonical `txhelpers.TxType*` constants (`txhelpers.TxTypeTicket`, `txhelpers.TxTypeVote`, etc.) rather than local string literals, eliminating a drift risk.
+  - **`explorer/types/remaining.go`** (new — widened into coverage): defines `RemainingWindowText(idx int, max, blockTime int64) string` at [`:17`](../../../explorer/types/remaining.go#L17) — the single source of truth for the countdown string shared by: the `remaining` template func in `templates.go:816`, and `explorer.go:Store()` pre-computing `HomeInfo.WindowRemaining`/`HomeInfo.RewardRemaining` on every new block. The visualblocks template does not currently read these fields, but they are present in the `.Info` template context.
 
 - **Location:** `cmd/dcrdata/internal/explorer/templates.go` (template helpers — five new registrations in `38636d52`)
   - **Data Structures:** `template.FuncMap` extended in `makeTemplateFuncMap`.
@@ -53,11 +55,13 @@ WebSocket mempool path:
     - `mempoolRegularCountForSymbol(stats map[uint8]types.MempoolCoinStats, symbol string) int` — mempool-tile equivalent; parses `"SKA{n}"` via the new `coinTypeFromSymbol` helper to index the `CoinStats` map.
     - `sumRegularCoinCounts(counts []types.CoinCount) int` — TOTAL bar count on block tiles.
     - `sumMempoolRegularCounts(stats map[uint8]types.MempoolCoinStats) int` — TOTAL bar count on the mempool tile.
-  - `coinTypeFromSymbol(symbol string) (uint8, bool)` is the inverse of `coinSymbol(ct)`; declared at file scope ([`:1019-1035`](../../../cmd/dcrdata/internal/explorer/templates.go#L1019-L1035)), used internally by `mempoolRegularCountForSymbol`.
+  - `coinTypeFromSymbol(symbol string) (uint8, bool)` is the inverse of `coinSymbol(ct)`; declared at file scope ([`:1052`](../../../cmd/dcrdata/internal/explorer/templates.go#L1052)), used internally by `mempoolRegularCountForSymbol`.
+  - **`remaining` func (anchor→HEAD):** the `remaining` template func at [`:816`](../../../cmd/dcrdata/internal/explorer/templates.go#L816) now delegates to `types.RemainingWindowText` instead of inlining the countdown logic. This func is used by home-page templates, not by `visualblocks.tmpl` (which uses `intSubtract`/`zeroSlice` for vote-slot counts).
 
 - **Location:** `cmd/dcrdata/internal/explorer/explorer.go`
   - **Data Structures:** `pageData{BlockInfo, BlockchainInfo, HomeInfo}` at `:209-216`, `exp.invs *types.MempoolInfo` guarded by `invsMtx`. Unchanged.
   - **Transformations:** `Store()` and `StoreMPData()` still call `types.ComputeCoinFills`. **Note:** `Store` writes through to the memoized `*BlockInfo` (lastExplorerBlock); see Section 4 for the cross-page implications.
+  - **anchor→HEAD additions in `Store()`:** (1) Pre-computes `p.HomeInfo.WindowRemaining` and `p.HomeInfo.RewardRemaining` via `types.RemainingWindowText` on every new block at [`:568,570`](../../../cmd/dcrdata/internal/explorer/explorer.go#L568-L570). These fields are now present in the visualblocks template context (`.Info`) but the template does not yet read them. (2) Pushes chart tip data to `db/cache.ChartData` via a type assertion on `exp.chartSource` at [`:648`](../../../cmd/dcrdata/internal/explorer/explorer.go#L648) — chart infrastructure, not visualblocks-specific.
 
 - **Location:** `cmd/dcrdata/internal/explorer/websockethandlers.go`
   - **Data Structures:** `types.WebsocketBlock`, `types.MempoolShort`, `types.TrimmedMempoolInfo`.
@@ -256,13 +260,15 @@ When modifying `/visualblocks` data:
 - `db/dcrpg/pgblockchain.go:6558-6562` — `trimmedTxInfoFromMsgTx` populates `Voted: txBasic.VoteInfo != nil`.
 - `db/dcrpg/pgblockchain.go:7172-7188` — `GetExplorerFullBlocks` sequential loop.
 - `db/dcrpg/pgblockchain.go:6366-6633` — `GetExplorerBlock` with memo at `:6371-6376` / `:6626-6630`.
-- `explorer/types/explorertypes.go:357-367` — `TrimmedTxInfo` with PR #284 JSON tags; `Voted bool`.
-- `explorer/types/explorertypes.go:704-723` — `TrimmedBlockInfo` extended with `TotalFillRatio` (line 722).
-- `explorer/types/explorertypes.go:725-758` — `(*BlockInfo).Trim` extended to populate `TotalFillRatio` (guarded `maxBlockSize > 0`).
-- `explorer/types/explorertypes.go:757-805` — `BlockInfo` adds `TotalFillRatio float64 \`json:"total_fill_ratio,omitempty"\``.
-- `explorer/types/explorertypes.go:898-915` — `TrimmedMempoolInfo` (PR #284 shape unchanged).
-- `explorer/types/explorertypes.go:957-989` — `MempoolInfo.Trim` (unchanged from PR #284).
-- `cmd/dcrdata/internal/explorer/templates.go:1019-1075` — five new template helpers + `coinTypeFromSymbol`.
+- `explorer/types/explorertypes.go:373` — `TrimmedTxInfo` with PR #284 JSON tags; `Voted bool`.
+- `explorer/types/explorertypes.go:748` — `TrimmedBlockInfo` extended with `TotalFillRatio` (line 765).
+- `explorer/types/explorertypes.go:769` — `(*BlockInfo).Trim` extended to populate `TotalFillRatio` (guarded `maxBlockSize > 0`).
+- `explorer/types/explorertypes.go:853-854` — `BlockInfo` adds `TotalFillRatio float64 \`json:"total_fill_ratio,omitempty"\`` next to `MaxBlockSize`.
+- `explorer/types/explorertypes.go:945` — `TrimmedMempoolInfo` (PR #284 shape unchanged).
+- `explorer/types/explorertypes.go:1007` — `MempoolInfo.Trim` (unchanged from PR #284).
+- `explorer/types/explorertypes.go:408` — `CoinbaseTypeStr = "Coinbase"` (the only remaining locally-defined tx-type string constant; all other `TxInfo.Is*()` methods now delegate to `txhelpers.TxType*`).
+- `explorer/types/remaining.go:17` — `RemainingWindowText` (new file — widened into coverage; canonical countdown formatter).
+- `cmd/dcrdata/internal/explorer/templates.go:1052` — `coinTypeFromSymbol`; five visualblocks template helpers at `:993-1049`.
 - `cmd/dcrdata/internal/explorer/websockethandlers.go:272-300` — `sigNewBlock` shallow-copy + 5-field patch.
 - `cmd/dcrdata/internal/explorer/websockethandlers.go:189-209` — `getmempooltrimmed` (PR #284 lock-order preserved).
 - `pubsub/pubsubhub.go:319-340` — `getmempooltxs` (PR #284 lock-order preserved).

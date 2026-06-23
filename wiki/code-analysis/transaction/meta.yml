@@ -1,5 +1,5 @@
 domain: transaction
-anchor: 2d4b64ac
+anchor: 1bc57372
 files:
   - api/types/apitypes.go
   - cmd/dcrdata/public/js/controllers/homepage_controller.js

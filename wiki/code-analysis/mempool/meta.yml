@@ -1,5 +1,5 @@
 domain: mempool
-anchor: 7dac4adc
+anchor: 3837b7b8
 files:
   - cmd/dcrdata/internal/explorer/dev_indicators.go
   - cmd/dcrdata/internal/explorer/explorer.go
@@ -10,6 +10,8 @@ files:
   - cmd/dcrdata/views/home_mempool.tmpl
   - cmd/dcrdata/views/mempool.tmpl
   - explorer/types/explorertypes.go
+  - explorer/types/remaining.go
+  - explorer/types/remaining_test.go
   - mempool/collector.go
   - mempool/mempoolcache.go
   - mempool/monitor.go

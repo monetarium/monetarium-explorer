@@ -1,5 +1,5 @@
 domain: time-based-blocks
-anchor: b9d2b324
+anchor: 6f0ba06b
 files:
   - cmd/dcrdata/internal/explorer/explorer.go
   - cmd/dcrdata/internal/explorer/explorerroutes.go

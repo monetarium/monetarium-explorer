@@ -74,7 +74,7 @@ A new `MempoolDataSaver` implementation reads `stakeData.Anything` without nil-c
 ## Risk: `MempoolShort` field added without updating `DeepCopy` / `Trim`
 
 **Trigger:**
-Adding a new field on `MempoolShort` (or `MempoolInfo`) and forgetting to update `MempoolShort.DeepCopy` ([explorer/types/explorertypes.go:1174-1248](../../../explorer/types/explorertypes.go)) and/or `MempoolInfo.Trim` ([:905-942](../../../explorer/types/explorertypes.go)).
+Adding a new field on `MempoolShort` (or `MempoolInfo`) and forgetting to update `MempoolShort.DeepCopy` ([explorer/types/explorertypes.go:1262-1340](../../../explorer/types/explorertypes.go)) and/or `MempoolInfo.Trim` ([:1007-1032](../../../explorer/types/explorertypes.go)).
 
 **Affected flows:**
 - [/wiki/code-analysis/mempool/flow.full.md](flow.full.md)
@@ -83,7 +83,7 @@ Adding a new field on `MempoolShort` (or `MempoolInfo`) and forgetting to update
 **Failure mode:** silent.
 
 **Description:**
-`DeepCopy` is used by `TxHandler` to hand savers a detached snapshot. A missing field there means the snapshot reverts to its zero value, so the saver/WS encoder sees stale data on the incremental path while batch-path payloads (which use the live inventory directly) look correct. `Trim` is the source for `TrimmedMempoolInfo` consumed by VisualBlocks (`getmempooltrimmed`); a missing field there silently drops it from that page only.
+`DeepCopy` is used by `TxHandler` to hand savers a detached snapshot. A missing field there means the snapshot reverts to its zero value, so the saver/WS encoder sees stale data on the incremental path while batch-path payloads (which use the live inventory directly) look correct. **Note:** `MempoolInfo.DeepCopy` (`:981`) previously omitted `Ident` and `CoinFills` — this has been fixed. `Trim` is the source for `TrimmedMempoolInfo` consumed by VisualBlocks (`getmempooltrimmed`); a missing field there silently drops it from that page only.
 
 ---
 

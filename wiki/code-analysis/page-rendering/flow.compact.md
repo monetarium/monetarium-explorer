@@ -1,9 +1,9 @@
 # Page-Rendering — Compact Knowledge
 
 **Flow:**
-`blockdata fan-out → (*explorerUI).Store → pageData{BlockInfo, HomeInfo, SKACoinSupply, CBlockSubsidy, ActiveMiners, VoteRewards} → (any page handler reads pageData.RLock) → commonData(r) [GetTip] → struct{*CommonPageData, …page} → templates.exec → text/html`
+`blockdata fan-out → (*explorerUI).Store → pageData{BlockInfo, HomeInfo, SKACoinSupply, CBlockSubsidy, ActiveMiners, VoteRewards, WindowRemaining, RewardRemaining} + chartSource.SetTip(ChartTip) → (any page handler reads pageData.RLock) → commonData(r) [GetTip] → struct{*CommonPageData, …page} → templates.exec → text/html`
 
-**Parallel WS path:** `psHub.Store` transforms the same fan-out independently; no shared layer.
+**Parallel WS path:** `psHub.Store` transforms the same fan-out independently; no shared layer. Both savers call `types.RemainingWindowText` for `WindowRemaining`/`RewardRemaining`.
 
 **Key Architectural Patterns:**
 
@@ -17,11 +17,14 @@
 
 5. **Three-lock discipline.** `pageData.RWMutex` (struct contents) / `invsMtx` (invs pointer) / `MempoolInfo.RWMutex` (inv contents). `Store` nests `pageData.Lock` → `invsMtx.Lock`. All other code must not hold `invsMtx` while waiting on `pageData.Lock` (deadlock). `StoreMPData` releases `pageData.RLock` before taking `invsMtx.Lock`.
 
+6. **Chart cache tip push.** After writing `HomeInfo`, `Store` type-asserts `exp.chartSource` to `*cache.ChartData` and calls `SetTip(ChartTip{…})`. `SetTip` stores the tip and invalidates cached bytes for `TicketPrice`/`POWDifficulty` (WindowBin) and `PercentStaked` (Block+DayBin), forcing re-render on the next chart API request. The assertion silently no-ops on mocks/simnet — no error, no log.
+
 **Critical Constraints:**
 
 - **SKA precision:** SKA amounts must stay `*big.Int`-derived strings into `HomeInfo` (via `FormatSKAAtoms`). No float64 for SKA atoms at any point before the template.
 - **CBlockSubsidy vs NBlockSubsidy:** `CBlockSubsidy` is the actual vote-scaled current-block subsidy; use it for `LBlockTotal` and the home page PoW display. `NBlockSubsidy` is the next-block projected max.
 - **Saver symmetry:** Every `HomeInfo` field change in `Store` (`explorer.go`) must also be applied in `psHub.Store` (`pubsub/pubsubhub.go`). Drift is silent (HTML/WS disagree).
+- **RemainingWindowText single source:** `WindowRemaining`/`RewardRemaining` are always computed via `types.RemainingWindowText` (`explorer/types/remaining.go:17`), never inlined. Both savers call it (issue #502).
 - **agendas VoteVersion filter:** `AgendasPage` cross-filters VoteTracker via `filterAgendaSummaries`; nil voteTracker → `ExpStatusPageDisabled` (not a crash).
 
 **Mutation Checklist:**
@@ -30,3 +33,5 @@
 - Changing a `HomeInfo` field in `Store` → also update `psHub.Store`, WS JSON encoder, home templates, and JS controllers.
 - Changing `defaultExplorerRows` → all three list pages change simultaneously; verify template dropdowns include the new value.
 - Moving `HashrateSharesData` → must stay outside `withCache`; adding query-param-varying endpoints next to it follows the same rule.
+- Removing or replacing `chartSource` implementation → verify `SetTip` still fires; chart staleness (TicketPrice, POWDifficulty, PercentStaked) is silent if type assertion stops matching.
+- Changing `RemainingWindowText` signature → update both `explorer.go:568,570` and `pubsub/pubsubhub.go:734,736` together.

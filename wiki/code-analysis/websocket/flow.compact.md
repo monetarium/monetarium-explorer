@@ -28,9 +28,11 @@ reconnect/gap → authoritative rebuild from server; span capped at 400 to preve
 DoS.
 
 **Constraints:** C1 SKA precision survives only by pass-through (opaque string
-`Message`); C2 `/ws`+`/ps` symmetric (including `CBlockSubsidy`); C3/C8
-template↔WS field parity & shape asymmetry; C4 array stability; new WS reader
-commands that take a user-supplied numeric argument must cap at `maxExplorerRows`.
+`Message`); C2 `/ws`+`/ps` symmetric (`CBlockSubsidy`, `WindowRemaining`,
+`RewardRemaining` all dual-populated via `RemainingWindowText` — single source of
+truth in `explorer/types/remaining.go`); C3/C8 template↔WS field parity & shape
+asymmetry; C4 array stability; new WS reader commands that take a user-supplied
+numeric argument must cap at `maxExplorerRows`.
 
 **Mutation checklist:**
 - New push: add send-loop `case`; ensure `run()` fans the signal; register the
@@ -43,7 +45,9 @@ commands that take a user-supplied numeric argument must cap at `maxExplorerRows
   unsubscribe it in `disconnect()`.
 - `homeBlocksSpan` is shared by `Home()` and `latestExplorerBlocks()` — change
   only the constant in `explorerroutes.go`.
-- `CBlockSubsidy` in `HomeInfo` → update `explorer.go` + `pubsubhub.go` + consuming JS.
+- Dual-populate fields (`CBlockSubsidy`, `WindowRemaining`, `RewardRemaining`) → update
+  `explorer.go` **and** `pubsubhub.go` + consuming JS; `RemainingWindowText` is the
+  single source of truth for countdown strings (two call sites, both must track signature changes).
 - Never push SKA through float in the payload builder (C1).
 - `blocks_controller` wires live handlers only when `isLatestValue=true`; the Go
   template must set `IsLatest = (height == bestBlock)`.
