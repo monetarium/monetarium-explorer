@@ -40,7 +40,11 @@ vi.mock('../helpers/uplot_ranger', () => ({
   createRanger: vi.fn().mockResolvedValue(fakeRanger)
 }))
 
-const { default: AddressController, flowVisibility } = await import('./address_controller.js')
+const {
+  default: AddressController,
+  flowVisibility,
+  rangerColumn
+} = await import('./address_controller.js')
 const { amountflowDef, balanceDef } = await import('../charts/definitions/address.js')
 
 function makeBoxes(state) {
@@ -262,6 +266,36 @@ describe('address setZoom', () => {
     ctrl.chartLoaderTarget = { classList: { add() {}, remove() {} } }
     ctrl.setZoom(100, 200)
     expect(fakeHandle.setXRange).toHaveBeenCalledWith(0.1, 0.2)
+  })
+})
+
+describe('rangerColumn (ranger line covers the latest histogram bar)', () => {
+  it('sustains the last real value across a trailing null pad', () => {
+    expect(rangerColumn([10, 20, null])).toEqual([10, 20, 20])
+  })
+  it('leaves a column without a trailing null untouched (e.g. balance sustain pad)', () => {
+    expect(rangerColumn([10, 20, 30])).toEqual([10, 20, 30])
+  })
+  it('skips an interior null to find the value to sustain', () => {
+    expect(rangerColumn([10, null, null])).toEqual([10, null, 10])
+  })
+})
+
+describe('address recreateRanger (latest-bar coverage)', () => {
+  it('sustains the trailing-null primary value so the ranger line spans the full domain', async () => {
+    const c = makeRenderController('types', 0, {})
+    c.hasRangerViewTarget = true
+    c.rangerViewTarget = { clientWidth: 800 }
+    fakeRanger.setData.mockClear()
+    // cols as the histogram toColumns produces: trailing x + trailing null y.
+    await c.recreateRanger(balanceDef(0), [
+      [1, 2, 3],
+      [10, 20, null]
+    ])
+    expect(fakeRanger.setData).toHaveBeenCalledWith([
+      [1, 2, 3],
+      [10, 20, 20]
+    ])
   })
 })
 

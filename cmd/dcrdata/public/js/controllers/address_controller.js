@@ -39,6 +39,22 @@ export function flowVisibility(bitmap) {
   }
 }
 
+// The histogram toColumns pads a trailing null bucket one bin past the last bar so the main
+// chart's last (left-aligned) bar is fully visible. The ranger draws its primary series as a
+// LINE, which stops at the last real point and would leave that trailing bin — the latest bar —
+// uncovered. Sustain the last real value across the trailing null so the overview line spans
+// the full domain and traces the top of the last bar. The main chart must keep the null (a
+// sustained value there would draw a phantom duplicate bar), so this is ranger-only. No-op for
+// a column with no trailing null (the Balance chart's pad already sustains its last value).
+export function rangerColumn(col) {
+  if (!col || col.length < 2 || col[col.length - 1] != null) return col
+  const out = col.slice()
+  let i = out.length - 2
+  while (i >= 0 && out[i] == null) i-- // skip interior data gaps
+  if (i >= 0) out[out.length - 1] = out[i]
+  return out
+}
+
 let ctrl = null
 
 export default class extends Controller {
@@ -809,7 +825,7 @@ export default class extends Controller {
       rightGutter: g.right,
       onSelect: (min, max) => this.onRangerSelect(min, max)
     })
-    this.ranger.setData([cols[0], cols[1]])
+    this.ranger.setData([cols[0], rangerColumn(cols[1])])
     if (this.settings.zoom) {
       const z = Zoom.decode(this.settings.zoom)
       // Zoom.decode returns ms; convert to seconds for the ranger's posToVal scale.
