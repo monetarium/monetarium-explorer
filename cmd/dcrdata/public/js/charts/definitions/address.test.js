@@ -16,8 +16,15 @@ describe('balanceDef VAR (coin 0)', () => {
     expect(def.series).toHaveLength(1)
     expect(def.series[0].kind).toBe('stepped')
   })
-  it('toColumns maps time->seconds and balance->ys', () => {
-    expect(def.toColumns(raw)).toEqual([[1717279200], [12.5]])
+  it('toColumns maps time->seconds and balance->ys (no pad when binSize=0)', () => {
+    expect(def.toColumns(raw, { binSize: 0 })).toEqual([[1717279200], [12.5]])
+  })
+  it('toColumns appends sustain pad when binSize is provided', () => {
+    // Single point: duration=0 < binSize=86400, pad = Math.max(43200, (86400-0)/2) = 43200
+    expect(def.toColumns(raw, { binSize: 86400 })).toEqual([
+      [1717279200, 1717322400],
+      [12.5, 12.5]
+    ])
   })
   it('formatValue renders VAR with the value', () => {
     expect(def.formatValue(0, { idx: 0, payload: raw, value: 12.5 }, {})).toBe('12.5 VAR')
@@ -34,6 +41,15 @@ describe('balanceDef SKA (coin 2) — precision firewall', () => {
   })
   it('formatValue returns the EXACT 18-decimal string (no Number())', () => {
     const datum = { idx: 0, payload: raw, value: 12345.678 }
+    expect(def.formatValue(0, datum, {})).toBe('12,345.678901234567890123 SKA2')
+  })
+  it('formatValue clamps the synthetic back-sustain point (idx beyond payload)', () => {
+    // idx:1 is beyond the 1-element array — clamps to atoms[0]
+    const datum = {
+      idx: 1,
+      payload: { balance_atoms: ['12345678901234567890123'] },
+      value: 12345.678
+    }
     expect(def.formatValue(0, datum, {})).toBe('12,345.678901234567890123 SKA2')
   })
 })

@@ -636,7 +636,8 @@ export default class extends Controller {
   // requires a full recreate because uPlot fixes series at construction time.
   async renderChart() {
     const def = this.currentDef
-    const cols = def.toColumns(this.payload)
+    const binSizeMs = Zoom.mapValue(this.settings.bin) || blockDuration
+    const cols = def.toColumns(this.payload, { binSize: binSizeMs / 1000 })
     this.xExtent = cols[0].length ? [cols[0][0] * 1000, cols[0][cols[0].length - 1] * 1000] : [0, 0]
     const opts = {
       dark: darkEnabled(),

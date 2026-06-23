@@ -150,13 +150,19 @@ describe('flowVisibility', () => {
 })
 
 describe('address renderChart', () => {
-  it('calls handle.setData with the definition columns for the current payload', async () => {
+  it('calls handle.setData with the definition columns for the current payload (with sustain pad)', async () => {
+    // settings.bin = 'day' (set by makeRenderController) → Zoom.mapValue('day') = 86400000 ms
+    // → binSize = 86400 s. Single point: duration=0 < binSize → pad = 43200 s.
+    // 1717279200 + 43200 = 1717322400.
     const ctrl = makeRenderController('balance', 0, {
       time: ['2024-06-01T22:00:00Z'],
       balance: [12.5]
     })
     await ctrl.renderChart()
-    expect(fakeHandle.setData).toHaveBeenCalledWith([[1717279200], [12.5]])
+    expect(fakeHandle.setData).toHaveBeenCalledWith([
+      [1717279200, 1717322400],
+      [12.5, 12.5]
+    ])
   })
 })
 
@@ -302,9 +308,11 @@ describe('address xExtent ms units (bug 3 regression)', () => {
 
     await ctrl.renderChart()
 
-    // xExtent must now be in ms (startSec*1000, endSec*1000).
+    // xExtent[0] is in ms from the first data point.
+    // xExtent[1] is in ms from the last column value, which includes the sustain pad:
+    // binSize=86400 s, duration=30*86400 > binSize → pad=43200 s → xExtent[1]=(endSec+43200)*1000.
     expect(ctrl.xExtent[0]).toBeCloseTo(startSec * 1000, -3)
-    expect(ctrl.xExtent[1]).toBeCloseTo(endSec * 1000, -3)
+    expect(ctrl.xExtent[1]).toBeCloseTo((endSec + 43200) * 1000, -3)
 
     // chartDuration (ms) ≈ 30*86400*1000 ≈ 2.592e9 > Zoom.mapValue('week')=6.048e8.
     // Before the fix: chartDuration ≈ 30*86400 ≈ 2.592e6 — less than 6.048e8 → bug.

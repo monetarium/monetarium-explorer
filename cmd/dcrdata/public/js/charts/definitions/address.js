@@ -13,12 +13,6 @@ export function secondsFromTimes(times) {
   return times.map((t) => Math.floor(Date.parse(t) / 1000))
 }
 
-// VAR float -> display; SKA exact string from the atom payload.
-function varOrSkaValue(coinType, value, atomStr, coinLabel) {
-  if (coinType === 0) return `${value} ${coinLabel}`
-  return `${formatSkaAtomsExact(atomStr)} ${coinLabel}`
-}
-
 // Tx-type counts (coin-independent). Stacked bars matching the legacy Dygraphs
 // stackedGraph + sizedBarPlotter. Each series' raw count is read for the tooltip.
 const TYPE_SERIES = [
@@ -59,20 +53,33 @@ export function balanceDef(coinType) {
     stacked: false,
     axes: [{ label: `Balance (${coinLabel})`, scale: 'y' }],
     series: [{ label: 'Balance', scale: 'y', kind: 'stepped', colorIndex: 0, fill: true }],
-    toColumns: (raw) => {
+    toColumns: (raw, settings) => {
       const xs = secondsFromTimes(raw.time)
       const ys = isSKA
         ? (raw.balance_atoms || []).map((s) => Number(s) * SKA_ATOMS_TO_COIN) // lossy — geometry only
         : (raw.balance || []).slice()
+      // Dygraphs padPoints(sustain=true): extend the running balance flat to half a bin past
+      // the last tx so every Group By window reaches the current period. Back point only —
+      // real-point indices stay aligned with the payload (precision firewall).
+      const binSize = (settings && settings.binSize) || 0
+      if (binSize > 0 && xs.length) {
+        const lastX = xs[xs.length - 1]
+        let pad = binSize / 2
+        const duration = lastX - xs[0]
+        if (duration < binSize) pad = Math.max(pad, (binSize - duration) / 2)
+        xs.push(lastX + pad)
+        ys.push(ys[ys.length - 1])
+      }
       return [xs, ys]
     },
-    formatValue: (seriesIdx, datum) =>
-      varOrSkaValue(
-        coinType,
-        datum.value,
-        isSKA ? datum.payload.balance_atoms[datum.idx] : null,
-        coinLabel
-      )
+    formatValue: (seriesIdx, datum) => {
+      if (isSKA) {
+        const atoms = datum.payload.balance_atoms || []
+        const i = Math.min(datum.idx, atoms.length - 1) // clamp the synthetic back-sustain point
+        return `${formatSkaAtomsExact(atoms[i])} ${coinLabel}`
+      }
+      return `${datum.value} ${coinLabel}`
+    }
   }
 }
 
