@@ -1,7 +1,7 @@
 ### One-line Flow
 chi `/address/{addr}` → `AddressPathCtx` → `AddressPage` + `middleware.GetCoinCtx` → `AddressData(...coinType)` → `AddressHistory(...,coinType)` [`coinType≠255`: load full per-coin rows, **filter then `SliceAddressRows`**, + full `AddressBalance`] → mempool overlay appends coin-filtered unconfirmed rows but **not** balance → `AddressInfo{Balance.Coins, ActiveCoins, NumUnconfirmedByCoin}` → `address.tmpl` (`range .ActiveCoins`) + `extras.tmpl` (Coin column) → `address` controller (TurboQuery incl. `coin`; charts `/api/address/{addr}/{types|amountflow}/{bin}?coin=N`; table `/addresstable/{addr}?...&coin=N`).
 
-> Revised at `HEAD=a48ea0e1` (original multi-coin at `1b670255`; post-launch fixes through 2026-06-18). Delta tables: (1) `a8f641f2→1b670255` — original multi-coin; (2) `1b670255→a48ea0e1` — Refresh delta below.
+> Re-verified at `HEAD=bba67634` (2026-06-22); address flow **unchanged since `a48ea0e1`** — the interval touched only window/charts/live-tip code, no address code (two line refs corrected: `explorer.go:78→80`, `queries.go` chart parse `4285-4327→4404-4446`). Original multi-coin at `1b670255`; post-launch fixes through 2026-06-18. Delta tables: (1) `a8f641f2→1b670255` — original multi-coin; (2) `1b670255→a48ea0e1` — Refresh delta below.
 
 ### Key Architectural Patterns
 - **Filter-before-paginate (new invariant):** coin-filtered `AddressHistory` pulls the full per-coin row set (cache or `updateAddressRows`), filters by `r.CoinType`, *then* `SliceAddressRows`. Filtering after LIMIT/OFFSET = unreachable rows. Guarded by `db/dbtypes/coinfilter_test.go`.
@@ -24,7 +24,7 @@ chi `/address/{addr}` → `AddressPathCtx` → `AddressPage` + `middleware.GetCo
 - `AddressHistory(... txnView, coinType uint8)` — 6-site signature (DB, two Go interfaces, four mocks).
 
 ### Mutation Checklist
-- [ ] Change `AddressHistory` signature? Update `db/dcrpg/pgblockchain.go`, `explorer.go:78`, `apiroutes.go:58`, and mocks `noop_ds_test.go`, `explorer_test.go`, `pgblockchain_test.go`.
+- [ ] Change `AddressHistory` signature? Update `db/dcrpg/pgblockchain.go`, `explorer.go:80`, `apiroutes.go:58`, and mocks `noop_ds_test.go`, `explorer_test.go`, `pgblockchain_test.go`.
 - [ ] Per-coin field on `AddressInfo`/`CoinBalance`? Populate at `pgblockchain.go:2592` **and** `:2648` (both `ActiveCoins` branches) and `:2719` (`NumUnconfirmedByCoin`); confirm `retrieveAddressBalance` aggregate + the filter-before-paginate balance path.
 - [ ] New URL query key? Add to `address_controller.js` null-template (`:282-291`), `coinUrlSegment`/URL builders, `linkTemplate` (Go), and decide `CoinCtx` involvement.
 - [ ] `ChartsData` field rename? Update the matching JS string key in `amountFlowProcessor` — `omitempty` hides a mismatch (silent blank SKA chart).

@@ -1,9 +1,15 @@
 # Address Page — Full Flow
 
-> **Code-grounded as of `HEAD` = `a48ea0e1`** (PR #265/#266 multi-coin frontend +
-> post-launch fixes through 2026-06-18). Prior anchor `1b670255`; see §9
-> (`flow.compact.md`) for the stale-claim delta tables (both historical and the
-> `1b670255→a48ea0e1` delta added in this Refresh pass).
+> **Code-grounded as of `HEAD` = `bba67634`** (re-verified 2026-06-22). The address
+> flow is **functionally unchanged since `a48ea0e1`** (PR #265/#266 multi-coin
+> frontend + post-launch fixes). The `a48ea0e1→bba67634` interval (229 commits)
+> touched only window/charts/live-tip code — `db/dcrpg/queries.go` window-stats
+> functions, `explorer.go` #502 live-tip estimate, `extras.tmpl` bundle-chunk
+> number — **no address code**. This Refresh pass re-verified every `file:line`
+> reference and corrected two that had drifted: `explorer.go:78→80` (a #502 import
+> line shifted the interface method) and `queries.go:4285-4327→4404-4446`
+> (`parseRowsSentReceived`). Prior anchor `1b670255`; see §9 (`flow.compact.md`)
+> for the stale-claim delta tables.
 
 ---
 
@@ -136,7 +142,7 @@ no `coin_type` predicate and uses `$2` for LIMIT) → silently zero rows
 ### 3.3 Interface change — 6 sites
 
 `AddressHistory`'s new `coinType` param propagates to:
-`explorer.explorerDataSource` (`explorer.go:78`), `api.DataSource`
+`explorer.explorerDataSource` (`explorer.go:80`), `api.DataSource`
 (`apiroutes.go:58`), and mocks `noop_ds_test.go`, `explorer_test.go`,
 `pgblockchain_test.go`.
 
@@ -236,7 +242,7 @@ preserve the filter.
   `data-coin-type` matches** the row's `data-coin-type`.
 
 ### 3.7 Chart serialization (`db/dbtypes/types.go:2079-2095`,
-`db/dcrpg/internal/addrstmts.go:365-373`, `db/dcrpg/queries.go:4285-4327`)
+`db/dcrpg/internal/addrstmts.go:365-373`, `db/dcrpg/queries.go:4404-4446`)
 
 `ChartsData` json tags: `received/sent/net/balance` (VAR float64) and
 `received_atoms/sent_atoms/net_atoms/balance_atoms` (SKA string), all
@@ -368,7 +374,8 @@ When modifying *the address coin-filter / multi-coin path*, check:
 ## Section 8 — Evidence
 
 All file:line references verified against working tree at `HEAD`
-(`a48ea0e1`). Original anchor `1b670255` (PR #265/#266 multi-coin frontend).
+(`bba67634`; address code unchanged since `a48ea0e1`). Original anchor
+`1b670255` (PR #265/#266 multi-coin frontend).
 
 **Original evidence (PR #265/#266):**
 - PR #265: `8cf06854`, `8b5c3a1b`, `9f5d5a7e`, `f3e2d687`, `a4457a7a`,
