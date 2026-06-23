@@ -19,15 +19,20 @@ describe('balanceDef VAR (coin 0)', () => {
   it('toColumns maps time->seconds and balance->ys (no pad when binSize=0)', () => {
     expect(def.toColumns(raw, { binSize: 0 })).toEqual([[1717279200], [12.5]])
   })
-  it('toColumns appends sustain pad when binSize is provided', () => {
+  it('toColumns prepends leading 0-balance and appends sustain pad when binSize is provided', () => {
     // Single point: duration=0 < binSize=86400, pad = Math.max(43200, (86400-0)/2) = 43200
+    // firstX=1717279200, leading point at 1717279200-43200=1717236000 (value 0),
+    // trailing sustain at 1717279200+43200=1717322400 (value 12.5).
     expect(def.toColumns(raw, { binSize: 86400 })).toEqual([
-      [1717279200, 1717322400],
-      [12.5, 12.5]
+      [1717236000, 1717279200, 1717322400],
+      [0, 12.5, 12.5]
     ])
   })
   it('formatValue renders VAR with the value', () => {
     expect(def.formatValue(0, { idx: 0, payload: raw, value: 12.5 }, {})).toBe('12.5 VAR')
+  })
+  it('formatValue renders VAR leading-pad point (value 0) as literal 0', () => {
+    expect(def.formatValue(0, { idx: 0, payload: raw, value: 0 }, {})).toBe('0 VAR')
   })
 })
 
@@ -40,13 +45,18 @@ describe('balanceDef SKA (coin 2) — precision firewall', () => {
     expect(typeof cols[1][0]).toBe('number')
   })
   it('formatValue returns the EXACT 18-decimal string (no Number())', () => {
-    const datum = { idx: 0, payload: raw, value: 12345.678 }
+    // toColumns brackets real points with a leading pad, so uPlot idx 1 → payload idx 0.
+    const datum = { idx: 1, payload: raw, value: 12345.678 }
     expect(def.formatValue(0, datum, {})).toBe('12,345.678901234567890123 SKA2')
   })
+  it('formatValue renders the leading-pad point (idx 0, value 0) as literal 0', () => {
+    const datum = { idx: 0, payload: raw, value: 0 }
+    expect(def.formatValue(0, datum, {})).toBe('0 SKA2')
+  })
   it('formatValue clamps the synthetic back-sustain point (idx beyond payload)', () => {
-    // idx:1 is beyond the 1-element array — clamps to atoms[0]
+    // idx:2 is beyond the 1-element payload array — clamps to atoms[0]
     const datum = {
-      idx: 1,
+      idx: 2,
       payload: { balance_atoms: ['12345678901234567890123'] },
       value: 12345.678
     }

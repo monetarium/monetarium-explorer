@@ -58,27 +58,33 @@ export function balanceDef(coinType) {
       const ys = isSKA
         ? (raw.balance_atoms || []).map((s) => Number(s) * SKA_ATOMS_TO_COIN) // lossy — geometry only
         : (raw.balance || []).slice()
-      // Dygraphs padPoints(sustain=true): extend the running balance flat to half a bin past
-      // the last tx so every Group By window reaches the current period. Back point only —
-      // real-point indices stay aligned with the payload (precision firewall).
+      // Dygraphs padPoints(sustain=true): a leading 0-balance point (the address held no balance
+      // before its first tx) plus a trailing point sustaining the last balance to ~the current
+      // period. The stepped area then shows the full 0 -> balance history and reaches "now".
       const binSize = (settings && settings.binSize) || 0
       if (binSize > 0 && xs.length) {
+        const firstX = xs[0]
         const lastX = xs[xs.length - 1]
+        const lastY = ys[ys.length - 1]
         let pad = binSize / 2
-        const duration = lastX - xs[0]
+        const duration = lastX - firstX
         if (duration < binSize) pad = Math.max(pad, (binSize - duration) / 2)
+        xs.unshift(firstX - pad)
+        ys.unshift(0)
         xs.push(lastX + pad)
-        ys.push(ys[ys.length - 1])
+        ys.push(lastY)
       }
       return [xs, ys]
     },
     formatValue: (seriesIdx, datum) => {
-      if (isSKA) {
-        const atoms = datum.payload.balance_atoms || []
-        const i = Math.min(datum.idx, atoms.length - 1) // clamp the synthetic back-sustain point
-        return `${formatSkaAtomsExact(atoms[i])} ${coinLabel}`
-      }
-      return `${datum.value} ${coinLabel}`
+      if (!isSKA) return `${datum.value} ${coinLabel}`
+      // toColumns brackets the real series with a leading 0-balance point and a trailing sustain
+      // point, so the real atom for uPlot index `idx` sits at payload index `idx - 1` (clamped).
+      // A 0 plot value (the leading pad, or a genuine 0 balance) renders as a literal 0.
+      if (!datum.value) return `0 ${coinLabel}`
+      const atoms = datum.payload.balance_atoms || []
+      const i = Math.min(Math.max(datum.idx - 1, 0), atoms.length - 1)
+      return `${formatSkaAtomsExact(atoms[i])} ${coinLabel}`
     }
   }
 }
