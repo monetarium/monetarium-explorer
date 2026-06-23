@@ -165,6 +165,13 @@ export default class extends Controller {
     }
   }
 
+  _measureGutters(u) {
+    if (!u || !u.over || !u.root) return null
+    const root = u.root.getBoundingClientRect()
+    const over = u.over.getBoundingClientRect()
+    return { left: over.left - root.left, right: root.right - over.right }
+  }
+
   async renderOrUpdatePurchases(timeData, mempool) {
     const cols = ticketpoolPurchases.toColumns(timeData, mempool)
     if (this.purchasesHandle) {
@@ -202,6 +209,8 @@ export default class extends Controller {
         }
       })
       this.purchasesHandle.setData(cols)
+      const g =
+        this._measureGutters(this.purchasesHandle.uplot) || { left: 0, right: 0 }
       this.purchasesRanger = await createRanger(
         this.purchasesRangerTarget,
         { ...ticketpoolPurchases, series: [{ ...ticketpoolPurchases.series[2], colorIndex: 0 }] },
@@ -209,6 +218,8 @@ export default class extends Controller {
           dark: darkEnabled(),
           width: this.purchasesRangerTarget.clientWidth || el.clientWidth || 800,
           xTime: true,
+          leftGutter: g.left,
+          rightGutter: g.right,
           onSelect: (min, max) => this.purchasesHandle.setXRange(min, max)
         }
       )
@@ -253,6 +264,8 @@ export default class extends Controller {
         }
       })
       this.priceHandle.setData(cols)
+      const g1 =
+        this._measureGutters(this.priceHandle.uplot) || { left: 0, right: 0 }
       this.priceRanger = await createRanger(
         this.priceRangerTarget,
         { ...ticketpoolPrice, series: [{ ...ticketpoolPrice.series[2], colorIndex: 0 }] },
@@ -260,6 +273,8 @@ export default class extends Controller {
           dark: darkEnabled(),
           width: this.priceRangerTarget.clientWidth || el.clientWidth || 800,
           xTime: false,
+          leftGutter: g1.left,
+          rightGutter: g1.right,
           onSelect: (min, max) => this.priceHandle.setXRange(min, max)
         }
       )
@@ -343,6 +358,8 @@ export default class extends Controller {
       this.purchasesHandle.setData(cols)
       this.purchasesRanger?.setData([cols[0], cols[3]])
       if (this.purchasesRanger) {
+        const g = this._measureGutters(this.purchasesHandle.uplot)
+        if (g) this.purchasesRanger.setGutters(g.left, g.right)
         const ru = this.purchasesRanger.uplot
         ru.setSelect({ left: 0, top: 0, width: ru.width, height: ru.height }, false)
       }
