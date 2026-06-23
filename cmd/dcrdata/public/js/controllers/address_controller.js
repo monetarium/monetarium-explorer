@@ -637,7 +637,7 @@ export default class extends Controller {
   async renderChart() {
     const def = this.currentDef
     const cols = def.toColumns(this.payload)
-    this.xExtent = cols[0].length ? [cols[0][0], cols[0][cols[0].length - 1]] : [0, 0]
+    this.xExtent = cols[0].length ? [cols[0][0] * 1000, cols[0][cols[0].length - 1] * 1000] : [0, 0]
     const opts = {
       dark: darkEnabled(),
       width: this.chartTarget.clientWidth || 800,
@@ -732,9 +732,11 @@ export default class extends Controller {
   }
 
   setZoom(start, end) {
+    // start/end are in ms (from xExtent ms and Zoom.mapValue ms).
+    // Convert to seconds at the uPlot boundary; keep Zoom.encode in ms.
     this.chartLoaderTarget.classList.add('loading')
-    if (this.handle) this.handle.setXRange(start, end)
-    if (this.ranger) this.ranger.setSelection(start, end)
+    if (this.handle) this.handle.setXRange(start / 1000, end / 1000)
+    if (this.ranger) this.ranger.setSelection(start / 1000, end / 1000)
     this.settings.zoom = Zoom.encode(start, end)
     this.lastEnd = end
     this.query.replace(this.settings)
@@ -742,18 +744,20 @@ export default class extends Controller {
   }
 
   // Called by the adapter on a user-driven main-chart x-range change (drag-zoom).
+  // min/max arrive in seconds (uPlot x-scale); encode in ms for Zoom; ranger stays seconds.
   onChartRangeChange(min, max) {
-    ctrl.settings.zoom = Zoom.encode(min, max)
+    ctrl.settings.zoom = Zoom.encode(min * 1000, max * 1000)
     ctrl.query.replace(ctrl.settings)
     ctrl.setSelectedZoom(Zoom.mapKey(ctrl.settings.zoom, ctrl.xExtent))
     if (ctrl.ranger) ctrl.ranger.setSelection(min, max)
   }
 
   // Called by the overview strip on a grip/body drag. Drive the main chart (silent).
+  // min/max arrive in seconds (ranger posToVal); handle stays seconds; encode zoom in ms.
   onRangerSelect(min, max) {
     if (!this.handle) return
     this.handle.setXRange(min, max)
-    this.settings.zoom = Zoom.encode(min, max)
+    this.settings.zoom = Zoom.encode(min * 1000, max * 1000)
     this.query.replace(this.settings)
     this.setSelectedZoom(Zoom.mapKey(this.settings.zoom, this.xExtent))
   }
@@ -774,7 +778,8 @@ export default class extends Controller {
     this.ranger.setData([cols[0], cols[1]])
     if (this.settings.zoom) {
       const z = Zoom.decode(this.settings.zoom)
-      if (z) this.ranger.setSelection(z.start, z.end)
+      // Zoom.decode returns ms; convert to seconds for the ranger's posToVal scale.
+      if (z) this.ranger.setSelection(z.start / 1000, z.end / 1000)
     }
   }
 

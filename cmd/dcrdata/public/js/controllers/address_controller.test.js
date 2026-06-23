@@ -221,13 +221,14 @@ describe('address updateFlow', () => {
 
 describe('address setZoom', () => {
   it('drives the handle x-range and persists zoom', () => {
+    // setZoom args are ms; handle.setXRange receives seconds (÷1000).
     const ctrl = makeRenderController('balance', 0, {})
     ctrl.handle = fakeHandle
     ctrl.settings = {}
     ctrl.query = { replace: vi.fn() }
     ctrl.chartLoaderTarget = { classList: { add() {}, remove() {} } }
     ctrl.setZoom(100, 200)
-    expect(fakeHandle.setXRange).toHaveBeenCalledWith(100, 200)
+    expect(fakeHandle.setXRange).toHaveBeenCalledWith(0.1, 0.2)
   })
 })
 
@@ -260,21 +261,57 @@ describe('address ranger + theme', () => {
     // onRangerSelect now uses `this` so it can be exercised directly on the instance.
     // Verifies that after a ranger drag, setSelectedZoom is called to reconcile the
     // preset-button highlight — the fix for the stale-preset bug.
+    // Note: min/max args are seconds (ranger posToVal); xExtent is ms (post-units-fix).
     const c = makeRenderController('balance', 0, {})
     c.handle = fakeHandle
-    c.xExtent = [0, 1000]
+    // xExtent in ms (post-fix convention): 0 to 1 000 000 ms (≈16 min span).
+    c.xExtent = [0, 1000000]
     c.settings = { zoom: null }
     c.query = { replace: vi.fn() }
     // Stub zoomButtons so setSelectedZoom can iterate without DOM.
     const btn = { name: 'all', classList: { add: vi.fn(), remove: vi.fn() } }
     c.zoomButtons = [btn]
     const spy = vi.spyOn(c, 'setSelectedZoom')
+    // Ranger delivers seconds; handle.setXRange stays seconds; Zoom.encode gets ms.
     c.onRangerSelect(100, 500)
     expect(fakeHandle.setXRange).toHaveBeenCalledWith(100, 500)
     // setSelectedZoom must be called with the mapped zoom key — this is the fix.
-    // Zoom.encode(100,500) does not match any named preset against xExtent [0,1000],
-    // so mapKey returns null; setSelectedZoom(null) clears all btn-selected classes.
-    const encodedZoom = Zoom.encode(100, 500)
-    expect(spy).toHaveBeenCalledWith(Zoom.mapKey(encodedZoom, [0, 1000]))
+    // Zoom.encode(100000, 500000) does not match any named preset against xExtent
+    // [0, 1000000], so mapKey returns null; setSelectedZoom(null) clears btn-selected.
+    const encodedZoom = Zoom.encode(100 * 1000, 500 * 1000)
+    expect(spy).toHaveBeenCalledWith(Zoom.mapKey(encodedZoom, [0, 1000000]))
+  })
+})
+
+// Regression test: bug 3 (unit mismatch) — xExtent must be in ms so that chartDuration
+// (xExtent[1]-xExtent[0]) is comparable to Zoom.mapValue keys (also ms). Before the fix,
+// xExtent stored raw seconds from cols[0], so chartDuration was ~2592 for a 30-day chart
+// while Zoom.mapValue('week')=6.048e8 ms — week/day buttons were wrongly hidden.
+// After the fix, xExtent is ms, chartDuration ≈ 2.592e9 > 6.048e8 → buttons stay visible.
+describe('address xExtent ms units (bug 3 regression)', () => {
+  it('renderChart stores xExtent in ms so chartDuration exceeds zoomMap week value', async () => {
+    // Build a 30-day payload spanning seconds timestamps (as the API returns).
+    const startSec = 1700000000
+    const endSec = startSec + 30 * 86400
+    const ctrl = makeRenderController('balance', 0, {
+      time: [new Date(startSec * 1000).toISOString(), new Date(endSec * 1000).toISOString()],
+      balance: [1.0, 2.0]
+    })
+    ctrl.currentDef = balanceDef(0)
+    ctrl.hasRangerViewTarget = false
+
+    await ctrl.renderChart()
+
+    // xExtent must now be in ms (startSec*1000, endSec*1000).
+    expect(ctrl.xExtent[0]).toBeCloseTo(startSec * 1000, -3)
+    expect(ctrl.xExtent[1]).toBeCloseTo(endSec * 1000, -3)
+
+    // chartDuration (ms) ≈ 30*86400*1000 ≈ 2.592e9 > Zoom.mapValue('week')=6.048e8.
+    // Before the fix: chartDuration ≈ 30*86400 ≈ 2.592e6 — less than 6.048e8 → bug.
+    const chartDuration = ctrl.xExtent[1] - ctrl.xExtent[0]
+    expect(chartDuration).toBeGreaterThan(Zoom.mapValue('week')) // 6.048e8 ms
+    expect(chartDuration).toBeGreaterThan(Zoom.mapValue('day')) // 8.64e7 ms
+    // Sanity: must not exceed 'year' (3.154e10 ms) for a 30-day span.
+    expect(chartDuration).toBeLessThan(Zoom.mapValue('year'))
   })
 })
