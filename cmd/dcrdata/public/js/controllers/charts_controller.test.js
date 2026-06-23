@@ -652,7 +652,7 @@ describe('ChartsController viewport fit', () => {
     const c = makeController()
     c.chartsViewTarget.getBoundingClientRect = () => ({ top: 200 })
     setViewportHeight(1000)
-    expect(c.computeChartHeight()).toBe(628) // 1000 - 200 - 140 - 32
+    expect(c.computeChartHeight()).toBe(664) // 1000 - 200 - 104 - 32
   })
 
   it('computeChartHeight is scroll-independent (uses the document-absolute chart top)', () => {
@@ -663,7 +663,7 @@ describe('ChartsController viewport fit', () => {
     // the scrollY term this would over-compute to 778 and the chart would render much too tall.
     c.chartsViewTarget.getBoundingClientRect = () => ({ top: 50 })
     Object.defineProperty(window, 'scrollY', { value: 150, configurable: true })
-    expect(c.computeChartHeight()).toBe(628) // 1000 - (50 + 150) - 140 - 32
+    expect(c.computeChartHeight()).toBe(664) // 1000 - (50 + 150) - 104 - 32
   })
 
   it('computeChartHeight ignores a transient bogus innerHeight during an orientation flip', () => {
@@ -674,14 +674,14 @@ describe('ChartsController viewport fit', () => {
     // else the chart renders taller than the screen and stays stuck there.
     setViewportHeight(1000)
     Object.defineProperty(window, 'innerHeight', { value: 1952, configurable: true })
-    expect(c.computeChartHeight()).toBe(628) // 1000 - 200 - 140 - 32, NOT 1952-based (1580)
+    expect(c.computeChartHeight()).toBe(664) // 1000 - 200 - 104 - 32, NOT 1952-based (1616)
   })
 
   it('computeChartHeight clamps to the 320px readability floor on short viewports', () => {
     const c = makeController()
     c.chartsViewTarget.getBoundingClientRect = () => ({ top: 200 })
     setViewportHeight(500)
-    expect(c.computeChartHeight()).toBe(320) // 500 - 200 - 140 - 32 = 128 -> floored to 320
+    expect(c.computeChartHeight()).toBe(320) // 500 - 200 - 104 - 32 = 164 -> floored to 320
   })
 })
 
@@ -1107,7 +1107,7 @@ describe('ChartsController resize hook', () => {
     c.chartsViewTarget.clientWidth = 900
     c.rangerViewTarget.clientWidth = 900
     c.resizeChartToViewport()
-    expect(fakeHandle.resize).toHaveBeenCalledWith(900, 628) // new width, 1000-200-140-32
+    expect(fakeHandle.resize).toHaveBeenCalledWith(900, 664) // new width, 1000-200-104-32
     // ranger strip must be re-pixelled to the rangerViewTarget.clientWidth
     expect(fakeRanger.setWidth).toHaveBeenCalledWith(900)
     // selection rectangle is pixel-based → must be re-applied at the new width

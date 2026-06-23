@@ -13,11 +13,11 @@ import { classifyGesture } from '../helpers/touch_gesture'
 import { getDefinition } from '../charts/registry'
 import '../charts/definitions/index' // side-effect: register all definitions
 
-// Below-chart chrome that must stay above the fold: the ranger strip (~86px) plus the
-// Time/Blocks axis row (~46px). Both are fixed-height bands (independent of viewport width),
+// Below-chart chrome that must stay above the fold: the ranger strip (~50px incl. margin) plus
+// the Time/Blocks axis row (~46px). Both are fixed-height bands (independent of viewport width),
 // so a constant is exact enough; the chart's measured top offset absorbs the variable
 // controls height (1 vs 2 rows).
-const BELOW_CHART_RESERVE = 140
+const BELOW_CHART_RESERVE = 104
 // Breathing room kept below the Time/Blocks row, within the viewport, so it isn't flush against
 // the fold.
 const BELOW_CHART_GAP = 32
