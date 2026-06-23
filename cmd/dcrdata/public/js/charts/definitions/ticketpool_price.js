@@ -18,10 +18,18 @@ export const ticketpoolPrice = {
       if (idx >= 0) {
         mem[idx] += mempool.count
       } else {
-        prices.push(mempool.price)
-        mem.push(mempool.count)
-        imm.push(0)
-        live.push(0)
+        const insertAt = prices.findIndex((p) => p > mempool.price)
+        if (insertAt >= 0) {
+          prices.splice(insertAt, 0, mempool.price)
+          mem.splice(insertAt, 0, mempool.count)
+          imm.splice(insertAt, 0, 0)
+          live.splice(insertAt, 0, 0)
+        } else {
+          prices.push(mempool.price)
+          mem.push(mempool.count)
+          imm.push(0)
+          live.push(0)
+        }
       }
     }
     return [prices, mem, imm, live]
