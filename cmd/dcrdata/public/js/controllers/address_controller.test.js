@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 // Stub the @hotwired/stimulus import so the controller module loads in jsdom.
 vi.mock('@hotwired/stimulus', () => ({
@@ -9,48 +9,38 @@ vi.mock('@hotwired/stimulus', () => ({
   }
 }))
 
-const { default: AddressController, flowVisibility } = await import('./address_controller.js')
-
 // ---------------------------------------------------------------------------
-// Fake Dygraph that reproduces the real range-selector invariant.
-//
-// dygraphs' computeCombinedSeriesAndLimits_ does `for (t = 0; t < d[0].length;
-// t++)` where `d` only holds the *visible* series. When zero series are
-// visible, `d` is empty and `d[0]` is undefined, throwing
-// "Cannot read properties of undefined (reading 'length')". Every setVisibility
-// call triggers predraw_, so any transient all-invisible state crashes.
-//
-// This fake mirrors that: it applies visibility, then on each redraw throws if
-// no series are visible. The (idx, val) form redraws per call (the old buggy
-// path); the object-map form applies everything then redraws once (the fix).
+// Mocks for uPlot adapter + ranger (Task 9).
+// Must be declared before the dynamic import so vi.mock hoisting picks them up.
 // ---------------------------------------------------------------------------
-function makeFakeGraph(initialVisibility) {
-  const vis = [...initialVisibility]
-  const graph = {}
-  graph.vis = vis
-  graph.redrawCount = 0
-  graph.setVisibilityCalls = []
-  graph._redraw = function () {
-    graph.redrawCount++
-    // Mirror computeCombinedSeriesAndLimits_: it builds `d` from visible
-    // series only and then dereferences `d[0].length`. With zero visible
-    // series that throws "Cannot read properties of undefined".
-    const d = vis.filter((v) => v).map(() => [[0, 0]])
-    if (d.length === 0) {
-      throw new TypeError("Cannot read properties of undefined (reading 'length')")
-    }
-  }
-  graph.setVisibility = function (t, e) {
-    graph.setVisibilityCalls.push([t, e])
-    if (t !== null && typeof t === 'object' && !Array.isArray(t)) {
-      for (const n in t) vis[n] = t[n]
-    } else {
-      vis[t] = e
-    }
-    graph._redraw()
-  }
-  return graph
+const fakeHandle = {
+  uplot: { data: [[]], scales: { x: {} }, setSeries: vi.fn(), setSelect: vi.fn(), over: null },
+  setData: vi.fn(),
+  setVisibility: vi.fn(),
+  setXRange: vi.fn(),
+  setDark: vi.fn(),
+  resize: vi.fn(),
+  destroy: vi.fn()
 }
+const fakeRanger = {
+  uplot: { data: [[]] },
+  setData: vi.fn(),
+  setSelection: vi.fn(),
+  setWidth: vi.fn(),
+  setGutters: vi.fn(),
+  setDark: vi.fn(),
+  destroy: vi.fn()
+}
+vi.mock('../helpers/uplot_adapter', () => ({
+  createChart: vi.fn().mockResolvedValue(fakeHandle),
+  resolveSeriesColor: vi.fn(() => 'rgb(1,2,3)')
+}))
+vi.mock('../helpers/uplot_ranger', () => ({
+  createRanger: vi.fn().mockResolvedValue(fakeRanger)
+}))
+
+const { default: AddressController, flowVisibility } = await import('./address_controller.js')
+const { amountflowDef, balanceDef } = await import('../charts/definitions/address.js')
 
 function makeBoxes(state) {
   // state: { received, sent, net } booleans
@@ -63,81 +53,196 @@ function makeBoxes(state) {
   return boxes
 }
 
-function makeController(graph, boxes) {
+// Build a minimal controller suitable for render/zoom/flow tests.
+// chart: 'balance' | 'amountflow' | 'types'
+// coin: integer (0 = VAR)
+// payload: the raw API response object to store in retrievedData
+function makeRenderController(chart, coin, payload) {
   const ctrl = new AddressController(document.createElement('div'))
-  ctrl.graph = graph
-  ctrl.flowBoxes = boxes
-  ctrl.settings = {}
+  ctrl.settings = { chart: chart, bin: 'day', coin: String(coin), zoom: null, flow: null }
+  ctrl.state = {}
   ctrl.query = { replace: vi.fn() }
+  ctrl.retrievedData = {}
+  ctrl.effectiveCoin = () => coin
+  ctrl.payload = payload
+  // Store payload under the expected cache key.
+  const key = chart === 'balance' ? 'amountflow' : chart
+  ctrl.retrievedData[`${key}-day-${coin}`] = payload
+  ctrl.requestedChart = `${chart}-day-${coin}`
+  ctrl.coinType = coin
+  ctrl.currentDef = ctrl.defFor ? ctrl.defFor(chart, coin) : null
+  // Stub required DOM targets
+  ctrl.chartTarget = { clientWidth: 800, clientHeight: 320 }
+  ctrl.chartTitleTarget = { textContent: '' }
+  ctrl.hasChartTitleTarget = true
+  ctrl.chartLoaderTarget = { classList: { add() {}, remove() {} } }
+  ctrl.rangerViewTarget = { clientWidth: 800 }
+  ctrl.hasRangerViewTarget = false
+  ctrl.labelsTarget = document.createElement('div')
+  ctrl.flowTarget = { classList: { add() {}, remove() {} } }
+  // Stub legend helpers (filled in 9-b but needed for rendering path)
+  ctrl.legendElement = null
+  ctrl.legendEntry = (s) => {
+    const n = document.createElement('div')
+    n.textContent = s
+    return n
+  }
+  ctrl.legendMarker = () => ''
+  // Reset mocks on each controller creation
+  fakeHandle.setData.mockClear()
+  fakeHandle.setVisibility.mockClear()
+  fakeHandle.setXRange.mockClear()
+  fakeHandle.setDark.mockClear()
+  fakeHandle.resize.mockClear()
+  fakeHandle.destroy.mockClear()
+  fakeRanger.setData.mockClear()
+  fakeRanger.setSelection.mockClear()
+  fakeRanger.setDark.mockClear()
   return ctrl
 }
 
 describe('flowVisibility', () => {
   it('maps Received only (bit 1)', () => {
-    expect(flowVisibility(1)).toEqual({ 0: true, 1: false, 2: false, 3: false })
+    expect(flowVisibility(1)).toEqual({
+      Received: true,
+      Spent: false,
+      'Net Received': false,
+      'Net Spent': false
+    })
   })
-
   it('maps Sent only (bit 2)', () => {
-    expect(flowVisibility(2)).toEqual({ 0: false, 1: true, 2: false, 3: false })
+    expect(flowVisibility(2)).toEqual({
+      Received: false,
+      Spent: true,
+      'Net Received': false,
+      'Net Spent': false
+    })
   })
-
   it('maps Net only (bit 4) onto both net series', () => {
-    expect(flowVisibility(4)).toEqual({ 0: false, 1: false, 2: true, 3: true })
+    expect(flowVisibility(4)).toEqual({
+      Received: false,
+      Spent: false,
+      'Net Received': true,
+      'Net Spent': true
+    })
   })
-
-  it('maps Received + Net', () => {
-    expect(flowVisibility(5)).toEqual({ 0: true, 1: false, 2: true, 3: true })
+  it('maps Received + Net (bit 5)', () => {
+    expect(flowVisibility(5)).toEqual({
+      Received: true,
+      Spent: false,
+      'Net Received': true,
+      'Net Spent': true
+    })
   })
-
-  it('maps all three checked', () => {
-    expect(flowVisibility(7)).toEqual({ 0: true, 1: true, 2: true, 3: true })
+  it('maps all three checked (bit 7)', () => {
+    expect(flowVisibility(7)).toEqual({
+      Received: true,
+      Spent: true,
+      'Net Received': true,
+      'Net Spent': true
+    })
   })
-
-  it('returns booleans, never raw bitmask numbers', () => {
+  it('returns booleans only', () => {
     for (const v of Object.values(flowVisibility(4))) {
       expect(typeof v).toBe('boolean')
     }
   })
 })
 
-describe('updateFlow range-selector regression', () => {
-  let graph
-
-  beforeEach(() => {
-    // Default chart state: only Received (series 0) visible.
-    graph = makeFakeGraph([true, false, false, false])
+describe('address renderChart', () => {
+  it('calls handle.setData with the definition columns for the current payload', async () => {
+    const ctrl = makeRenderController('balance', 0, {
+      time: ['2024-06-01T22:00:00Z'],
+      balance: [12.5]
+    })
+    await ctrl.renderChart()
+    expect(fakeHandle.setData).toHaveBeenCalledWith([[1717279200], [12.5]])
   })
+})
 
-  it('does not change the graph when all boxes are unchecked', () => {
-    const ctrl = makeController(graph, makeBoxes({ received: false, sent: false, net: false }))
-    expect(() => ctrl.updateFlow()).not.toThrow()
-    expect(graph.vis).toEqual([true, false, false, false])
-    expect(graph.setVisibilityCalls).toHaveLength(0)
+describe('address renderLegend', () => {
+  it('formats each visible non-zero series via the definition formatter', () => {
+    const ctrl = makeRenderController('amountflow', 0, {
+      time: ['2024-06-01T22:00:00Z'],
+      received: [10],
+      sent: [0],
+      net: [10]
+    })
+    ctrl.currentDef = amountflowDef(0)
+    const entries = []
+    ctrl.legendElement = {
+      classList: { add() {}, remove() {} },
+      replaceChildren: () => {},
+      appendChild: (n) => entries.push(n.textContent)
+    }
+    ctrl.legendEntry = (txt) => ({ textContent: txt })
+    ctrl.legendMarker = () => ''
+    const u = {
+      cursor: { idx: 0 },
+      data: [[1717279200], [10], [0], [10], [0]],
+      series: [{}, { show: true }, { show: true }, { show: true }, { show: true }]
+    }
+    ctrl.positionTooltip = () => {}
+    ctrl.renderLegend(u)
+    // Received: 10 VAR present; Spent (0) and Net Spent (0) skipped
+    expect(entries.some((e) => e.includes('Received: 10 VAR'))).toBe(true)
+    expect(entries.some((e) => e.includes('Spent: 0 VAR'))).toBe(false)
   })
+})
 
-  it('uncheck Received then check Net does not crash the range selector', () => {
-    // Step 1: user unchecks Received (everything off) — early return, desync.
-    const ctrl = makeController(graph, makeBoxes({ received: false, sent: false, net: false }))
+describe('address updateFlow', () => {
+  it('applies the label-keyed visibility map to the handle', () => {
+    const ctrl = makeRenderController('amountflow', 0, {})
+    ctrl.flowBoxes = makeBoxes({ received: true, sent: false, net: true })
+    ctrl.handle = fakeHandle
+    ctrl.settings = {}
+    ctrl.query = { replace: vi.fn() }
     ctrl.updateFlow()
-    expect(graph.vis).toEqual([true, false, false, false]) // graph untouched
-
-    // Step 2: user checks Net. This is the reported crash sequence.
-    ctrl.flowBoxes = makeBoxes({ received: false, sent: false, net: true })
-    expect(() => ctrl.updateFlow()).not.toThrow()
-
-    expect(graph.vis).toEqual([false, false, true, true])
-    // Atomic: a single setVisibility call with an object map, one redraw —
-    // never a transient all-invisible predraw.
-    expect(graph.setVisibilityCalls).toHaveLength(1)
-    expect(typeof graph.setVisibilityCalls[0][0]).toBe('object')
-    expect(graph.redrawCount).toBe(1)
-  })
-
-  it('persists the bitmap to settings/query when flow changes', () => {
-    const ctrl = makeController(graph, makeBoxes({ received: true, sent: false, net: true }))
-    ctrl.updateFlow()
+    expect(fakeHandle.setVisibility).toHaveBeenCalledWith({
+      Received: true,
+      Spent: false,
+      'Net Received': true,
+      'Net Spent': true
+    })
     expect(ctrl.settings.flow).toBe(5)
-    expect(ctrl.query.replace).toHaveBeenCalledWith(ctrl.settings)
-    expect(graph.vis).toEqual([true, false, true, true])
+  })
+})
+
+describe('address setZoom', () => {
+  it('drives the handle x-range and persists zoom', () => {
+    const ctrl = makeRenderController('balance', 0, {})
+    ctrl.handle = fakeHandle
+    ctrl.settings = {}
+    ctrl.query = { replace: vi.fn() }
+    ctrl.chartLoaderTarget = { classList: { add() {}, remove() {} } }
+    ctrl.setZoom(100, 200)
+    expect(fakeHandle.setXRange).toHaveBeenCalledWith(100, 200)
+  })
+})
+
+describe('address ranger + theme', () => {
+  it('creates a ranger seeded with the x + primary series columns', async () => {
+    const { createRanger } = await import('../helpers/uplot_ranger')
+    const ctrl = makeRenderController('balance', 0, {})
+    ctrl.currentDef = balanceDef(0)
+    ctrl.hasRangerViewTarget = true
+    ctrl.rangerViewTarget = { clientWidth: 800 }
+    await ctrl.recreateRanger(balanceDef(0), [
+      [1, 2],
+      [10, 20]
+    ])
+    expect(createRanger).toHaveBeenCalled()
+    expect(fakeRanger.setData).toHaveBeenCalledWith([
+      [1, 2],
+      [10, 20]
+    ])
+  })
+  it('redrawTheme pushes dark state to handle and ranger', () => {
+    const ctrl = makeRenderController('balance', 0, {})
+    ctrl.handle = fakeHandle
+    ctrl.ranger = fakeRanger
+    ctrl.redrawTheme()
+    expect(fakeHandle.setDark).toHaveBeenCalled()
+    expect(fakeRanger.setDark).toHaveBeenCalled()
   })
 })

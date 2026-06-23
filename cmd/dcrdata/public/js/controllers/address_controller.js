@@ -1,146 +1,21 @@
 import { Controller } from '@hotwired/stimulus'
 import dompurify from 'dompurify'
-import { isEmpty } from 'lodash-es'
+import { debounce, isEmpty } from 'lodash-es'
 import { animationFrame, fadeIn } from '../helpers/animation_helper'
 import txInBlock from '../helpers/block_helper'
-import { padPoints, sizedBarPlotter } from '../helpers/chart_helper'
 import { requestJSON } from '../helpers/http'
 import humanize from '../helpers/humanize_helper'
 import { getDefault } from '../helpers/module_helper'
-import { renderCoinType, splitSkaAtomsNoTrailing } from '../helpers/ska_helper'
+import { renderCoinType } from '../helpers/ska_helper'
 import TurboQuery from '../helpers/turbolinks_helper'
 import Zoom from '../helpers/zoom_helper'
 import globalEventBus from '../services/event_bus_service'
+import { darkEnabled } from '../services/theme_service'
+import { createChart, resolveSeriesColor } from '../helpers/uplot_adapter'
+import { createRanger } from '../helpers/uplot_ranger'
+import { balanceDef, typesDef, amountflowDef } from '../charts/definitions/address'
 
 const blockDuration = 5 * 60000
-let Dygraph // lazy loaded on connect
-
-function txTypesFunc(d, binSize) {
-  const p = []
-
-  d.time.forEach((n, i) => {
-    p.push([new Date(n), d.sentRtx[i], d.receivedRtx[i], d.tickets[i], d.votes[i], d.revokeTx[i]])
-  })
-
-  padPoints(p, binSize)
-
-  return p
-}
-
-function amountFlowProcessor(d, binSize, coinType, atomsByTime) {
-  const flowData = []
-  const balanceData = []
-  atomsByTime.clear()
-  const isVAR = coinType === 0
-
-  d.time.forEach((n, i) => {
-    const time = new Date(n)
-    if (isVAR) {
-      const v = d.net[i]
-      let netReceived = 0
-      let netSent = 0
-      v > 0 ? (netReceived = v) : (netSent = v * -1)
-      flowData.push([time, d.received[i], d.sent[i], netReceived, netSent])
-      // Server precomputes the cumulative VAR balance per bin (`*big.Int`
-      // accumulator at db/dcrpg/queries.go); reading it here removes the
-      // JS-side Number accumulator that lost precision at high balances.
-      balanceData.push([time, d.balance[i]])
-    } else {
-      const receivedStr = (d.received_atoms && d.received_atoms[i]) || '0'
-      const sentStr = (d.sent_atoms && d.sent_atoms[i]) || '0'
-      const netStr = (d.net_atoms && d.net_atoms[i]) || '0'
-      const balStr = (d.balance_atoms && d.balance_atoms[i]) || '0'
-      // Sign split happens on the string — no BigInt arithmetic.
-      const isNeg = netStr.charAt(0) === '-'
-      const netReceivedStr = isNeg ? '0' : netStr
-      const netSentStr = isNeg ? netStr.slice(1) : '0'
-      // Number() conversion is lossy at 18 decimals but acceptable for
-      // pixel positioning. Legend reads the original atom strings below.
-      flowData.push([
-        time,
-        Number(receivedStr),
-        Number(sentStr),
-        Number(netReceivedStr),
-        Number(netSentStr)
-      ])
-      balanceData.push([time, Number(balStr)])
-      atomsByTime.set(time.getTime(), {
-        Received: receivedStr,
-        Spent: sentStr,
-        'Net Received': netReceivedStr,
-        'Net Spent': netSentStr,
-        Balance: balStr
-      })
-    }
-  })
-
-  padPoints(flowData, binSize)
-  padPoints(balanceData, binSize, true)
-
-  return {
-    flow: flowData,
-    balance: balanceData
-  }
-}
-
-function formatter(data) {
-  let xHTML = ''
-  if (data.xHTML !== undefined) {
-    xHTML = humanize.date(data.x, false, true)
-  }
-  let html = `${this.getLabels()[0]}: ${xHTML}`
-  data.series.forEach((series) => {
-    if (series.color === undefined) return
-    // Skip display of zeros
-    if (series.y === 0) return
-    const l = `<span style="color: ${series.color};"> ${series.labelHTML}`
-    html = `<span style="color:#2d2d2d;">${html}</span>`
-    html += `<br>${series.dashHTML}${l}: ${isNaN(series.y) ? '' : series.y}</span>`
-  })
-  return html
-}
-
-function formatSkaAtoms(atomStr) {
-  const parts = splitSkaAtomsNoTrailing(atomStr)
-  let frac = `${parts.bold}${parts.rest}`
-  // Drop trailing zeros from the bold prefix only when rest is empty so the
-  // legend never shows a stray ".00" tail.
-  if (parts.rest === '') frac = frac.replace(/0+$/, '')
-  return frac.length === 0 ? parts.intPart : `${parts.intPart}.${frac}`
-}
-
-function makeAmountFormatter(coinType, atomsByTime) {
-  const isVAR = coinType === 0
-  const coinLabel = renderCoinType(coinType)
-  return function (data) {
-    let xHTML = ''
-    if (data.xHTML !== undefined) {
-      xHTML = humanize.date(data.x, false, true)
-    }
-    let html = `${this.getLabels()[0]}: ${xHTML}`
-    const atoms = isVAR ? null : atomsByTime.get(data.x)
-    data.series.forEach((series) => {
-      if (series.color === undefined) return
-      if (series.y === 0) return
-      const l = `<span style="color: ${series.color};"> ${series.labelHTML}`
-      html = `<span style="color:#2d2d2d;">${html}</span>`
-      let valueStr = ''
-      if (isVAR) {
-        valueStr = isNaN(series.y) ? '' : `${series.y} ${coinLabel}`
-      } else {
-        const atomStr = atoms ? atoms[series.labelHTML] : null
-        if (atomStr) {
-          valueStr = `${formatSkaAtoms(atomStr)} ${coinLabel}`
-        } else if (!isNaN(series.y)) {
-          // Fall back for padPoints synthetic boundary points (no atoms map entry).
-          valueStr = `${series.y} ${coinLabel}`
-        }
-      }
-      html += `<br>${series.dashHTML}${l}: ${valueStr}</span> `
-    })
-    return html
-  }
-}
 
 function setTxnCountText(el, count) {
   if (el.dataset.formatted) {
@@ -150,68 +25,17 @@ function setTxnCountText(el, count) {
   }
 }
 
-let commonOptions, typesGraphOptions, amountFlowGraphOptions, balanceGraphOptions
-// Cannot set these until DyGraph is fetched.
-function createOptions() {
-  commonOptions = {
-    axes: { y: { axisLabelWidth: 70 } },
-    digitsAfterDecimal: 8,
-    showRangeSelector: true,
-    rangeSelectorHeight: 20,
-    rangeSelectorForegroundStrokeColor: '#999',
-    rangeSelectorBackgroundStrokeColor: '#777',
-    legend: 'follow',
-    fillAlpha: 0.9,
-    labelsKMB: true,
-    labelsUTC: true,
-    stepPlot: false,
-    rangeSelectorPlotFillColor: 'rgba(128, 128, 128, 0.3)',
-    rangeSelectorPlotFillGradientColor: 'transparent',
-    rangeSelectorPlotStrokeColor: 'rgba(128, 128, 128, 0.7)',
-    rangeSelectorPlotLineWidth: 2
-  }
-
-  typesGraphOptions = {
-    labels: ['Date', 'Sending (regular)', 'Receiving (regular)', 'Tickets', 'Votes', 'Revocations'],
-    colors: ['#69D3F5', '#2971FF', '#41BF53', 'darkorange', '#FF0090'],
-    visibility: [true, true, true, true, true],
-    legendFormatter: formatter,
-    stackedGraph: true,
-    fillGraph: false
-  }
-
-  // ylabel and legendFormatter are coin-dependent; built per-fetch in popChartCache.
-  amountFlowGraphOptions = {
-    labels: ['Date', 'Received', 'Spent', 'Net Received', 'Net Spent'],
-    colors: ['#2971FF', '#2ED6A1', '#41BF53', '#FF0090'],
-    visibility: [true, false, false, false],
-    stackedGraph: true,
-    fillGraph: false
-  }
-
-  balanceGraphOptions = {
-    labels: ['Date', 'Balance'],
-    colors: ['#41BF53'],
-    plotter: [Dygraph.Plotters.linePlotter, Dygraph.Plotters.fillPlotter],
-    stackedGraph: false,
-    visibility: [true],
-    fillGraph: true,
-    stepPlot: true
-  }
-}
-
-// Map an amount-flow bitmap to a Dygraph visibility object.
-// Flow bits: 1 = Received, 2 = Sent, 4 = Net. The amountflow chart has four
-// series — Dygraph indices 0 received, 1 sent, 2 & 3 net — so the single Net
-// bit drives both net series. Values are real booleans: Dygraph's object-form
-// setVisibility assigns them verbatim, and other range-selector code paths
-// expect booleans, not raw bitmask numbers.
+// Map an amount-flow bitmap to a uPlot label-keyed visibility map. Flow bits:
+// 1 = Received, 2 = Sent, 4 = Net. The Net bit drives BOTH net series (the address
+// flow control exposes one "Net" checkbox over the two signed net series). The
+// adapter's setVisibility is keyed by series label, so keys are labels, not indices.
 export function flowVisibility(bitmap) {
+  const net = (bitmap & 4) !== 0
   return {
-    0: (bitmap & 1) !== 0,
-    1: (bitmap & 2) !== 0,
-    2: (bitmap & 4) !== 0,
-    3: (bitmap & 4) !== 0
+    Received: (bitmap & 1) !== 0,
+    Spent: (bitmap & 2) !== 0,
+    'Net Received': net,
+    'Net Spent': net
   }
 }
 
@@ -257,20 +81,25 @@ export default class extends Controller {
       'tablePagination',
       'paginationheader',
       'coinFilter',
-      'coin'
+      'coin',
+      'rangerView',
+      'labels',
+      'legendEntry',
+      'legendMarker'
     ]
   }
 
   async connect() {
     ctrl = this
     ctrl.retrievedData = {}
-    ctrl.skaAtomsByTime = new Map()
     ctrl.ajaxing = false
     ctrl.qrCode = false
     ctrl.requestedChart = false
-    // Bind functions that are passed as callbacks
-    ctrl.zoomCallback = ctrl._zoomCallback.bind(ctrl)
-    ctrl.drawCallback = ctrl._drawCallback.bind(ctrl)
+    ctrl.handle = null
+    ctrl.ranger = null
+    ctrl.payload = null
+    ctrl.currentDef = null
+    ctrl.xExtent = [0, 0]
     ctrl.lastEnd = 0
     ctrl.confirmMempoolTxs = ctrl._confirmMempoolTxs.bind(ctrl)
     ctrl.bindElements()
@@ -325,25 +154,71 @@ export default class extends Controller {
       settings.chart = ctrl.chartType
     }
 
-    Dygraph = await getDefault(
-      import(/* webpackChunkName: "dygraphs" */ '../vendor/dygraphs.min.js')
-    )
+    // Legend element generators (cloned from the template seed nodes in the markup).
+    if (ctrl.hasLabelsTarget) {
+      ctrl.legendElement = ctrl.labelsTarget
+    } else {
+      ctrl.legendElement = null
+    }
+    if (ctrl.hasLegendMarkerTarget) {
+      const lm = ctrl.legendMarkerTarget
+      lm.remove()
+      lm.removeAttribute('data-address-target')
+      ctrl.legendMarker = (color) => {
+        const node = document.createElement('div')
+        const marker = lm.cloneNode()
+        if (color) marker.style.borderBottomColor = color
+        node.appendChild(marker)
+        return node.innerHTML
+      }
+    } else {
+      ctrl.legendMarker = (_color) => ''
+    }
+    if (ctrl.hasLegendEntryTarget) {
+      const le = ctrl.legendEntryTarget
+      le.remove()
+      le.removeAttribute('data-address-target')
+      ctrl.legendEntry = (s) => {
+        const node = le.cloneNode()
+        node.innerHTML = s
+        return node
+      }
+    } else {
+      ctrl.legendEntry = (s) => {
+        const node = document.createElement('div')
+        node.textContent = s
+        return node
+      }
+    }
+
+    // Night-mode + window-resize listeners (cleaned up in disconnect).
+    ctrl.processNightMode = () => ctrl.redrawTheme()
+    globalEventBus.on('NIGHT_MODE', ctrl.processNightMode)
+
+    ctrl.onWindowResize = debounce(() => ctrl.resizeChart(), 150)
+    window.addEventListener('resize', ctrl.onWindowResize)
 
     ctrl.initializeChart()
     ctrl.drawGraph()
   }
 
   disconnect() {
-    if (this.graph !== undefined) {
-      this.graph.destroy()
+    if (this.handle) {
+      this.handle.destroy()
+      this.handle = null
+    }
+    if (this.ranger) {
+      this.ranger.destroy()
+      this.ranger = null
     }
     globalEventBus.off('BLOCK_RECEIVED', this.confirmMempoolTxs)
+    globalEventBus.off('NIGHT_MODE', this.processNightMode)
+    window.removeEventListener('resize', this.onWindowResize)
     this.retrievedData = {}
   }
 
-  // Request the initial chart data, grabbing the Dygraph script if necessary.
+  // Request the initial chart data.
   initializeChart() {
-    createOptions()
     // If no chart data has been requested, e.g. when initially on the
     // list tab, then fetch the initial chart data.
     if (!this.requestedChart) {
@@ -379,7 +254,7 @@ export default class extends Controller {
       })
       this.qrimgTarget.innerHTML = `<img src="${qrCodeImg}"/>`
       await fadeIn(this.qrimgTarget)
-      if (this.graph) this.graph.resize()
+      this.resizeChart()
     }
     this.qriconTarget.classList.add('d-hide')
   }
@@ -389,7 +264,7 @@ export default class extends Controller {
     this.qrboxTarget.classList.add('d-hide')
     this.qrimgTarget.style.opacity = 0
     await animationFrame()
-    if (this.graph) this.graph.resize()
+    this.resizeChart()
   }
 
   makeTableUrl(txType, count, offset) {
@@ -550,10 +425,6 @@ export default class extends Controller {
     } of ${rowMax.toLocaleString()} transaction${suffix}`
   }
 
-  createGraph(processedData, otherOptions) {
-    return new Dygraph(this.chartTarget, processedData, { ...commonOptions, ...otherOptions })
-  }
-
   setTablePaginationLinks() {
     const tablePagesLink = ctrl.tablePaginationParams
     if (tablePagesLink.length === 0) return ctrl.tablePaginationTarget.classList.add('d-hide')
@@ -649,84 +520,137 @@ export default class extends Controller {
     ctrl.chartLoaderTarget.classList.remove('loading')
   }
 
+  // Store the raw API payload per cache key. amountflow + balance share one
+  // endpoint so both chart types key under 'amountflow-<bin>-<coin>'.
   processData(chart, bin, data) {
     if (isEmpty(data)) {
       ctrl.noDataAvailable()
       return
     }
-
     const coin = ctrl.effectiveCoin()
-    const binSize = Zoom.mapValue(bin) || blockDuration
-    if (chart === 'types') {
-      ctrl.retrievedData[`types-${bin}-${coin}`] = txTypesFunc(data, binSize)
-    } else if (chart === 'amountflow' || chart === 'balance') {
-      const processed = amountFlowProcessor(data, binSize, coin, ctrl.skaAtomsByTime)
-      ctrl.retrievedData[`amountflow-${bin}-${coin}`] = processed.flow
-      ctrl.retrievedData[`balance-${bin}-${coin}`] = processed.balance
-    } else return
-    setTimeout(() => {
-      ctrl.popChartCache(chart, bin)
-    }, 0)
+    const key = chart === 'balance' ? 'amountflow' : chart
+    ctrl.retrievedData[`${key}-${bin}-${coin}`] = data
+    setTimeout(() => ctrl.popChartCache(chart, bin), 0)
   }
 
-  popChartCache(chart, bin) {
+  // Return the definition factory for a chart type + coin combination.
+  defFor(chart, coin) {
+    if (chart === 'types') return typesDef()
+    if (chart === 'balance') return balanceDef(coin)
+    return amountflowDef(coin)
+  }
+
+  async popChartCache(chart, bin) {
     const coin = ctrl.effectiveCoin()
-    const cacheKey = `${chart}-${bin}-${coin}`
-    const binSize = Zoom.mapValue(bin) || blockDuration
-    if (!ctrl.retrievedData[cacheKey] || ctrl.requestedChart !== cacheKey) {
+    const dataKey = `${chart === 'balance' ? 'amountflow' : chart}-${bin}-${coin}`
+    if (!ctrl.retrievedData[dataKey] || ctrl.requestedChart !== `${chart}-${bin}-${coin}`) return
+    ctrl.payload = ctrl.retrievedData[dataKey]
+    ctrl.coinType = coin
+    ctrl.currentDef = ctrl.defFor(chart, coin)
+    const coinLabel = renderCoinType(coin)
+    ctrl.flowTarget.classList.add('d-hide')
+    if (chart === 'amountflow') ctrl.flowTarget.classList.remove('d-hide')
+    const titles = {
+      types: 'Tx Count',
+      amountflow: `Total (${coinLabel})`,
+      balance: `Balance (${coinLabel})`
+    }
+    if (ctrl.hasChartTitleTarget) ctrl.chartTitleTarget.textContent = titles[chart]
+    await ctrl.renderChart()
+    if (chart === 'amountflow') ctrl.updateFlow()
+    ctrl.chartLoaderTarget.classList.remove('loading')
+    ctrl.validateZoom(Zoom.mapValue(bin) || blockDuration)
+  }
+
+  // Build chart hooks for the tooltip (ready + setCursor).
+  buildHooks() {
+    return {
+      ready: [(u) => this.installTooltip(u)],
+      setCursor: [(u) => this.renderLegend(u)]
+    }
+  }
+
+  // Create the on-plot hover tooltip inside the uPlot overlay div.
+  installTooltip(u) {
+    if (!u || !u.over) return
+    const tt = document.createElement('div')
+    tt.className = 'chart-tooltip d-hide'
+    u.over.appendChild(tt)
+    this.legendElement = tt
+    u.over.addEventListener('mouseenter', () => tt.classList.remove('d-hide'))
+    u.over.addEventListener('mouseleave', () => {
+      if (!u.cursor || !u.cursor._lock) tt.classList.add('d-hide')
+    })
+  }
+
+  // Position the tooltip near the cursor, flipping when near the edge.
+  positionTooltip(u) {
+    const tt = this.legendElement
+    if (!u.over || !tt || !tt.style) return
+    const pad = 12
+    let left = u.cursor.left + pad
+    let top = u.cursor.top + pad
+    if (left + tt.offsetWidth > u.over.clientWidth) left = u.cursor.left - tt.offsetWidth - pad
+    if (top + tt.offsetHeight > u.over.clientHeight) top = u.cursor.top - tt.offsetHeight - pad
+    tt.style.left = `${Math.max(0, left)}px`
+    tt.style.top = `${Math.max(0, top)}px`
+  }
+
+  // Render the tooltip content at the current cursor index.
+  // Zero-valued series are skipped (parity with the old Dygraphs legendFormatter).
+  // For stacked charts, datum.value is the cumulative stack total — NOT the raw
+  // per-series value. formatValue reads the raw payload to avoid this.
+  renderLegend(u) {
+    const idx = u.cursor.idx
+    if (!this.legendElement) return
+    if (idx == null) {
+      this.legendElement.classList.add('d-hide')
       return
     }
-    const data = ctrl.retrievedData[cacheKey]
-    let options = null
-    const coinLabel = renderCoinType(coin)
-    const amountFormatter = makeAmountFormatter(coin, ctrl.skaAtomsByTime)
-    ctrl.flowTarget.classList.add('d-hide')
-    let title = ''
-    switch (chart) {
-      case 'types':
-        options = {
-          ...typesGraphOptions,
-          legendFormatter: formatter,
-          plotter: sizedBarPlotter(binSize)
-        }
-        title = 'Tx Count'
-        break
+    this.legendElement.classList.remove('d-hide')
+    this.legendElement.replaceChildren()
 
-      case 'amountflow':
-        options = {
-          ...amountFlowGraphOptions,
-          legendFormatter: amountFormatter,
-          plotter: sizedBarPlotter(binSize)
-        }
-        title = `Total (${coinLabel})`
-        ctrl.flowTarget.classList.remove('d-hide')
-        break
+    // X label (address charts always use a time axis).
+    const x = u.data[0][idx]
+    this.legendElement.appendChild(
+      this.legendEntry(`Date: ${humanize.date(x * 1000, false, true)}`)
+    )
 
-      case 'balance':
-        options = {
-          ...balanceGraphOptions,
-          legendFormatter: amountFormatter
-        }
-        title = `Balance (${coinLabel})`
-        break
+    const def = this.currentDef
+    def.series.forEach((s, i) => {
+      if (u.series && u.series[i + 1] && u.series[i + 1].show === false) return
+      const value = u.data[i + 1][idx]
+      if (value == null) return // gap — skip
+      const text = def.formatValue(i, { idx: idx, payload: this.payload, value: value }, {})
+      // Skip zero-valued series (parity with old legendFormatter: if (series.y === 0) return).
+      if (/^0(\s|$)/.test(text)) return
+      const color = resolveSeriesColor(s, i, darkEnabled())
+      this.legendElement.appendChild(
+        this.legendEntry(`${this.legendMarker(color)} ${s.label}: ${text}`)
+      )
+    })
+
+    this.positionTooltip(u)
+  }
+
+  // Create or recreate the main uPlot chart. A def swap (chart-type or coin change)
+  // requires a full recreate because uPlot fixes series at construction time.
+  async renderChart() {
+    const def = this.currentDef
+    const cols = def.toColumns(this.payload)
+    this.xExtent = cols[0].length ? [cols[0][0], cols[0][cols[0].length - 1]] : [0, 0]
+    const opts = {
+      dark: darkEnabled(),
+      width: this.chartTarget.clientWidth || 800,
+      height: this.chartTarget.clientHeight || 320,
+      xTime: true,
+      hooks: this.buildHooks(),
+      onRangeChange: (min, max) => this.onChartRangeChange(min, max)
     }
-    if (ctrl.hasChartTitleTarget) ctrl.chartTitleTarget.textContent = title
-    options.zoomCallback = null
-    options.drawCallback = null
-    if (ctrl.graph === undefined) {
-      ctrl.graph = ctrl.createGraph(data, options)
-    } else {
-      ctrl.graph.updateOptions({
-        ...{ file: data },
-        ...options
-      })
-    }
-    if (chart === 'amountflow') {
-      ctrl.updateFlow()
-    }
-    ctrl.chartLoaderTarget.classList.remove('loading')
-    ctrl.xRange = ctrl.graph.xAxisExtremes()
-    ctrl.validateZoom(binSize)
+    if (this.handle) this.handle.destroy()
+    this.handle = await createChart(this.chartTarget, def, opts)
+    this.handle.setData(cols)
+    await this.recreateRanger(def, cols)
   }
 
   noDataAvailable() {
@@ -750,12 +674,8 @@ export default class extends Controller {
 
   validateZoom(binSize) {
     ctrl.setButtonVisibility()
-    const zoom = Zoom.validate(ctrl.activeZoomKey || ctrl.settings.zoom, ctrl.xRange, binSize)
+    const zoom = Zoom.validate(ctrl.activeZoomKey || ctrl.settings.zoom, ctrl.xExtent, binSize)
     ctrl.setZoom(zoom.start, zoom.end)
-    ctrl.graph.updateOptions({
-      zoomCallback: ctrl.zoomCallback,
-      drawCallback: ctrl.drawCallback
-    })
   }
 
   changeGraph(_e) {
@@ -786,13 +706,7 @@ export default class extends Controller {
     }
     this.settings.flow = bitmap
     this.setGraphQuery()
-    // Apply the whole visibility map in a single setVisibility call. Dygraph
-    // runs predraw_ on every setVisibility, so toggling indices one at a time
-    // can leave the chart transiently with zero visible series, which crashes
-    // the range selector (computeCombinedSeriesAndLimits_ dereferences an
-    // empty array). The object form applies all indices, then redraws once;
-    // bitmap is non-zero here, so at least one series is always visible.
-    this.graph.setVisibility(flowVisibility(bitmap))
+    if (this.handle) this.handle.setVisibility(flowVisibility(bitmap))
   }
 
   setFlowChecks() {
@@ -809,25 +723,76 @@ export default class extends Controller {
       button.classList.remove('btn-selected')
     })
     target.classList.add('btn-selected')
-    if (ctrl.graph === undefined) {
+    if (!ctrl.handle) {
       return
     }
     const duration = ctrl.activeZoomDuration
-
-    const end = ctrl.xRange[1]
-    const start = duration === 0 ? ctrl.xRange[0] : end - duration
+    const end = ctrl.xExtent[1]
+    const start = duration === 0 ? ctrl.xExtent[0] : end - duration
     ctrl.setZoom(start, end)
   }
 
   setZoom(start, end) {
-    ctrl.chartLoaderTarget.classList.add('loading')
-    ctrl.graph.updateOptions({
-      dateWindow: [start, end]
-    })
-    ctrl.settings.zoom = Zoom.encode(start, end)
-    ctrl.lastEnd = end
+    this.chartLoaderTarget.classList.add('loading')
+    if (this.handle) this.handle.setXRange(start, end)
+    if (this.ranger) this.ranger.setSelection(start, end)
+    this.settings.zoom = Zoom.encode(start, end)
+    this.lastEnd = end
+    this.query.replace(this.settings)
+    this.chartLoaderTarget.classList.remove('loading')
+  }
+
+  // Called by the adapter on a user-driven main-chart x-range change (drag-zoom).
+  onChartRangeChange(min, max) {
+    ctrl.settings.zoom = Zoom.encode(min, max)
     ctrl.query.replace(ctrl.settings)
-    ctrl.chartLoaderTarget.classList.remove('loading')
+    ctrl.setSelectedZoom(Zoom.mapKey(ctrl.settings.zoom, ctrl.xExtent))
+    if (ctrl.ranger) ctrl.ranger.setSelection(min, max)
+  }
+
+  // Called by the overview strip on a grip/body drag. Drive the main chart (silent).
+  onRangerSelect(min, max) {
+    if (!ctrl.handle) return
+    ctrl.handle.setXRange(min, max)
+    ctrl.settings.zoom = Zoom.encode(min, max)
+    ctrl.query.replace(ctrl.settings)
+  }
+
+  // Create or recreate the ranger strip with the primary series data.
+  async recreateRanger(def, cols) {
+    if (this.ranger) {
+      this.ranger.destroy()
+      this.ranger = null
+    }
+    if (!this.hasRangerViewTarget) return
+    this.ranger = await createRanger(this.rangerViewTarget, def, {
+      dark: darkEnabled(),
+      width: this.rangerViewTarget.clientWidth || 800,
+      xTime: true,
+      onSelect: (min, max) => this.onRangerSelect(min, max)
+    })
+    this.ranger.setData([cols[0], cols[1]])
+    if (this.settings.zoom) {
+      const z = Zoom.decode(this.settings.zoom)
+      if (z) this.ranger.setSelection(z.start, z.end)
+    }
+  }
+
+  // Push the current dark/light theme state to the handle and ranger.
+  redrawTheme() {
+    const dark = darkEnabled()
+    if (this.handle) this.handle.setDark(dark)
+    if (this.ranger) this.ranger.setDark(dark)
+  }
+
+  // Resize the chart and ranger strip after a window resize.
+  resizeChart() {
+    if (!ctrl.handle) return
+    const width = ctrl.chartTarget.clientWidth || 800
+    ctrl.handle.resize(width, ctrl.chartTarget.clientHeight || 320)
+    if (ctrl.ranger && ctrl.hasRangerViewTarget) {
+      ctrl.ranger.setWidth(ctrl.rangerViewTarget.clientWidth || width)
+    }
   }
 
   getBin() {
@@ -872,26 +837,6 @@ export default class extends Controller {
         button.classList.remove('btn-selected')
       }
     })
-  }
-
-  _drawCallback(graph, first) {
-    if (first) return
-    const [start, end] = ctrl.graph.xAxisRange()
-    if (start === end) return
-    if (end === this.lastEnd) return // Only handle slide event.
-    this.lastEnd = end
-    ctrl.settings.zoom = Zoom.encode(start, end)
-    ctrl.query.replace(ctrl.settings)
-    ctrl.setSelectedZoom(Zoom.mapKey(ctrl.settings.zoom, ctrl.graph.xAxisExtremes()))
-  }
-
-  _zoomCallback(start, end) {
-    ctrl.zoomButtons.forEach((button) => {
-      button.classList.remove('btn-selected')
-    })
-    ctrl.settings.zoom = Zoom.encode(start, end)
-    ctrl.query.replace(ctrl.settings)
-    ctrl.setSelectedZoom(Zoom.mapKey(ctrl.settings.zoom, ctrl.graph.xAxisExtremes()))
   }
 
   setButtonVisibility() {
@@ -982,7 +927,7 @@ export default class extends Controller {
     } else {
       this.putChartBack()
     }
-    if (this.graph) this.graph.resize()
+    this.resizeChart()
   }
 
   putChartBack() {
@@ -991,7 +936,7 @@ export default class extends Controller {
     btn.classList.remove('monicon-collapse')
     this.littlechartTarget.appendChild(this.chartboxTarget)
     this.fullscreenTarget.classList.add('d-none')
-    if (this.graph) this.graph.resize()
+    this.resizeChart()
   }
 
   exitFullscreen(e) {
@@ -1022,7 +967,7 @@ export default class extends Controller {
   }
 
   get chartDuration() {
-    return this.xRange[1] - this.xRange[0]
+    return this.xExtent[1] - this.xExtent[0]
   }
 
   get activeBin() {
