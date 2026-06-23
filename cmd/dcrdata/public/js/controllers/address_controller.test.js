@@ -206,6 +206,32 @@ describe('address renderLegend', () => {
     // Net Spent=0 is zero-skipped
     expect(entries.some((e) => e.includes('Net Spent'))).toBe(false)
   })
+
+  it('shows a 0 value on the non-stacked balance chart (zero-skip is stacked-only)', () => {
+    // The leading 0-baseline point (balance was 0 before the first tx) must be visible in the
+    // tooltip — unlike the stacked amount charts, a 0 balance is meaningful.
+    const ctrl = makeRenderController('balance', 0, {
+      time: ['2024-06-01T22:00:00Z'],
+      balance: [0]
+    })
+    ctrl.currentDef = balanceDef(0)
+    const entries = []
+    ctrl.legendElement = {
+      classList: { add() {}, remove() {} },
+      replaceChildren: () => {},
+      appendChild: (n) => entries.push(n.textContent)
+    }
+    ctrl.legendEntry = (txt) => ({ textContent: txt })
+    ctrl.legendMarker = () => ''
+    const u = {
+      cursor: { idx: 0 },
+      data: [[1717236000], [0]],
+      series: [{}, { show: true }]
+    }
+    ctrl.positionTooltip = () => {}
+    ctrl.renderLegend(u)
+    expect(entries.some((e) => e.includes('Balance: 0 VAR'))).toBe(true)
+  })
 })
 
 describe('address updateFlow', () => {

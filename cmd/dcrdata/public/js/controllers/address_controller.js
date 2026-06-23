@@ -621,8 +621,11 @@ export default class extends Controller {
       const value = u.data[i + 1][idx]
       if (value == null) return // gap — skip
       const text = def.formatValue(i, { idx: idx, payload: this.payload, value: value }, {})
-      // Skip zero-valued series (parity with old legendFormatter: if (series.y === 0) return).
-      if (/^0(\s|$)/.test(text)) return
+      // Skip zero-valued series on the stacked amount charts (Tx Type / Sent-Received) so the
+      // tooltip isn't cluttered with each bin's many 0 series (parity with the old
+      // legendFormatter's `if (series.y === 0) return`). The single-series Balance chart is NOT
+      // stacked: a 0 balance is meaningful, so always show it.
+      if (def.stacked && /^0(\s|$)/.test(text)) return
       const color = resolveSeriesColor(s, i, darkEnabled())
       this.legendElement.appendChild(
         this.legendEntry(`${this.legendMarker(color)} ${s.label}: ${text}`)
