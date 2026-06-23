@@ -489,20 +489,34 @@ export async function createChart(el, def, opts = {}) {
     })
   }
   const userHooks = opts.hooks || {}
+  // Last-known per-series visibility (series label -> show). A fresh uPlot defaults
+  // every series to shown, so this is re-applied after each rebuild to keep a hidden
+  // series hidden across mode/scale changes. Seeded from opts so buildOpts bands and
+  // the initial displayData() agree with the caller's starting visibility.
+  const visibility = {}
+  if (opts.visibility) Object.assign(visibility, opts.visibility)
+  // Merge the adapter's internal setScale hook (trackXRange) into any caller-provided
+  // hooks. This computed hooks object is also what gets spread into state below so that
+  // buildOpts (called on every rebuild) receives the merged hook set.
+  const hooks = { ...userHooks, setScale: [...(userHooks.setScale || []), trackXRange] }
   let state = {
     ...opts,
-    hooks: { ...userHooks, setScale: [...(userHooks.setScale || []), trackXRange] }
+    visibility, // buildOpts reads this for stacked bands
+    hooks // overrides opts.hooks with the merged set; shorthand matches visibility above
   }
 
-  // Plotted data for the current scale, derived from the raw columns (applies any logFloor).
-  const displayData = () => applyLogFloors(rawColumns, currentDef.series, state.scaleType === 'log')
+  // Plotted data for the current scale/stacking, derived from the raw columns.
+  const displayData = () => {
+    if (!rawColumns) return uplot.data
+    if (currentDef.stacked) {
+      const omit = (i) => visibility[currentDef.series[i - 1].label] === false
+      return stack(rawColumns, omit).data
+    }
+    return applyLogFloors(rawColumns, currentDef.series, state.scaleType === 'log')
+  }
 
   let uplot = new UPlot(buildOpts(UPlot, currentDef, state), [[]], el)
   let destroyed = false
-  // Last-known per-series visibility (series label -> show). A fresh uPlot defaults
-  // every series to shown, so this is re-applied after each rebuild to keep a hidden
-  // series hidden across mode/scale changes.
-  const visibility = {}
 
   function applyVisibility() {
     currentDef.series.forEach((s, i) => {
@@ -580,9 +594,19 @@ export async function createChart(el, def, opts = {}) {
     },
     setVisibility(map) {
       if (destroyed) return
+      Object.keys(map).forEach((label) => {
+        visibility[label] = !!map[label]
+      })
+      if (currentDef.stacked) {
+        // Restack: bands + accumulation must recompute for the new visible set, which
+        // is baked into opts at construction — so rebuild, then re-apply hidden flags
+        // and re-feed the restacked data.
+        rebuild()
+        if (rawColumns) withProgrammaticScale(() => uplot.setData(displayData()))
+        return
+      }
       currentDef.series.forEach((s, i) => {
         if (Object.prototype.hasOwnProperty.call(map, s.label)) {
-          visibility[s.label] = !!map[s.label]
           uplot.setSeries(i + 1, { show: visibility[s.label] })
         }
       })

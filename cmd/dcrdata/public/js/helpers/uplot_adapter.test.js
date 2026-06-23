@@ -912,3 +912,45 @@ describe('buildOpts stacking', () => {
     expect(opts.bands).toBeUndefined()
   })
 })
+
+describe('createChart stacking', () => {
+  const def = {
+    name: 'flow',
+    label: 'Flow',
+    stacked: true,
+    axes: [{ label: 'Total', scale: 'y' }],
+    series: [
+      { label: 'A', scale: 'y', kind: 'bars', colorIndex: 0 },
+      { label: 'B', scale: 'y', kind: 'bars', colorIndex: 1 }
+    ]
+  }
+  let el
+  beforeEach(() => {
+    el = document.createElement('div')
+  })
+
+  it('plots cumulative columns for a stacked def', async () => {
+    const handle = await createChart(el, def, {})
+    handle.setData([
+      [1, 2],
+      [10, 20],
+      [1, 2]
+    ])
+    // last setData call on the fake records the data it received
+    const plotted = handle.uplot.data
+    expect(plotted[1]).toEqual([10, 20]) // A
+    expect(plotted[2]).toEqual([11, 22]) // B = A + B (cumulative)
+  })
+
+  it('rebuilds and restacks when a series is hidden', async () => {
+    const handle = await createChart(el, def, {})
+    handle.setData([[1], [10], [5]])
+    const before = handle.uplot
+    handle.setVisibility({ A: false })
+    expect(handle.uplot).not.toBe(before) // rebuilt
+    // A omitted → B no longer adds A; B column = 5 (its own value, A excluded)
+    expect(handle.uplot.data[2]).toEqual([5])
+    // hidden series is also setSeries(show:false)
+    expect(handle.uplot.setSeries).toHaveBeenCalledWith(1, { show: false })
+  })
+})
