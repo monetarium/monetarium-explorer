@@ -172,11 +172,23 @@ export default class extends Controller {
     return { left: over.left - root.left, right: root.right - over.right }
   }
 
+  _syncRangerWidth(chartHandle, rangerEl) {
+    const g = this._measureGutters(chartHandle.uplot)
+    if (!g) return
+    const parentW = rangerEl.parentElement.clientWidth
+    const w = parentW - g.left - g.right
+    rangerEl.style.marginLeft = `${g.left}px`
+    rangerEl.style.width = `${w}px`
+    return w
+  }
+
   async renderOrUpdatePurchases(timeData, mempool) {
     const cols = ticketpoolPurchases.toColumns(timeData, mempool)
     if (this.purchasesHandle) {
       this.purchasesHandle.setData(cols)
       if (this.purchasesRanger) {
+        const w = this._syncRangerWidth(this.purchasesHandle, this.purchasesRangerTarget)
+        if (w) this.purchasesRanger.setWidth(w)
         this.purchasesRanger.setData([cols[0], cols[3]])
         const ru = this.purchasesRanger.uplot
         ru.setSelect({ left: 0, top: 0, width: ru.width, height: ru.height }, false)
@@ -209,7 +221,7 @@ export default class extends Controller {
         }
       })
       this.purchasesHandle.setData(cols)
-      const g = this._measureGutters(this.purchasesHandle.uplot) || { left: 0, right: 0 }
+      this._syncRangerWidth(this.purchasesHandle, this.purchasesRangerTarget)
       this.purchasesRanger = await createRanger(
         this.purchasesRangerTarget,
         { ...ticketpoolPurchases, series: [{ ...ticketpoolPurchases.series[2], colorIndex: 0 }] },
@@ -217,8 +229,6 @@ export default class extends Controller {
           dark: darkEnabled(),
           width: this.purchasesRangerTarget.clientWidth || el.clientWidth || 800,
           xTime: true,
-          leftGutter: g.left,
-          rightGutter: g.right,
           onSelect: (min, max) => this.purchasesHandle.setXRange(min, max)
         }
       )
@@ -234,7 +244,11 @@ export default class extends Controller {
     const cols = ticketpoolPrice.toColumns(priceData, mempool)
     if (this.priceHandle) {
       this.priceHandle.setData(cols)
-      if (this.priceRanger) this.priceRanger.setData([cols[0], cols[3]])
+      if (this.priceRanger) {
+        const w = this._syncRangerWidth(this.priceHandle, this.priceRangerTarget)
+        if (w) this.priceRanger.setWidth(w)
+        this.priceRanger.setData([cols[0], cols[3]])
+      }
       return
     }
     if (this._creatingPrice) return
@@ -263,7 +277,7 @@ export default class extends Controller {
         }
       })
       this.priceHandle.setData(cols)
-      const g1 = this._measureGutters(this.priceHandle.uplot) || { left: 0, right: 0 }
+      this._syncRangerWidth(this.priceHandle, this.priceRangerTarget)
       this.priceRanger = await createRanger(
         this.priceRangerTarget,
         { ...ticketpoolPrice, series: [{ ...ticketpoolPrice.series[2], colorIndex: 0 }] },
@@ -271,8 +285,6 @@ export default class extends Controller {
           dark: darkEnabled(),
           width: this.priceRangerTarget.clientWidth || el.clientWidth || 800,
           xTime: false,
-          leftGutter: g1.left,
-          rightGutter: g1.right,
           onSelect: (min, max) => this.priceHandle.setXRange(min, max)
         }
       )
@@ -299,6 +311,10 @@ export default class extends Controller {
       this.purchasesRanger.setDark(dark)
       queueMicrotask(() => {
         if (!this.purchasesRanger) return
+        if (this.purchasesHandle) {
+          const w = this._syncRangerWidth(this.purchasesHandle, this.purchasesRangerTarget)
+          if (w) this.purchasesRanger.setWidth(w)
+        }
         const xs = this.purchasesRanger.uplot.data[0]
         if (range0) this.purchasesRanger.setSelection(range0[0], range0[1])
         else if (xs?.length) this.purchasesRanger.setSelection(xs[0], xs[xs.length - 1])
@@ -309,6 +325,10 @@ export default class extends Controller {
       this.priceRanger.setDark(dark)
       queueMicrotask(() => {
         if (!this.priceRanger) return
+        if (this.priceHandle) {
+          const w = this._syncRangerWidth(this.priceHandle, this.priceRangerTarget)
+          if (w) this.priceRanger.setWidth(w)
+        }
         const xs = this.priceRanger.uplot.data[0]
         if (range1) this.priceRanger.setSelection(range1[0], range1[1])
         else if (xs?.length) this.priceRanger.setSelection(xs[0], xs[xs.length - 1])
@@ -356,8 +376,8 @@ export default class extends Controller {
       this.purchasesHandle.setData(cols)
       this.purchasesRanger?.setData([cols[0], cols[3]])
       if (this.purchasesRanger) {
-        const g = this._measureGutters(this.purchasesHandle.uplot)
-        if (g) this.purchasesRanger.setGutters(g.left, g.right)
+        const w = this._syncRangerWidth(this.purchasesHandle, this.purchasesRangerTarget)
+        if (w) this.purchasesRanger.setWidth(w)
         const ru = this.purchasesRanger.uplot
         ru.setSelect({ left: 0, top: 0, width: ru.width, height: ru.height }, false)
       }
