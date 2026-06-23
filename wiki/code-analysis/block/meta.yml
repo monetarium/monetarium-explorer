@@ -1,5 +1,5 @@
 domain: block
-anchor: ad1ab357
+anchor: b9c5bb31
 files:
   - blockdata/blockdata.go
   - blockdata/chainmonitor.go
@@ -11,9 +11,12 @@ files:
   - cmd/dcrdata/public/js/controllers/home_latest_blocks_controller.js
   - cmd/dcrdata/public/js/controllers/mining_controller.js
   - cmd/dcrdata/public/js/controllers/supply_controller.js
+  - cmd/dcrdata/public/js/controllers/voting_controller.js
   - cmd/dcrdata/views/block.tmpl
+  - db/cache/charts.go
   - db/dbtypes/conversion.go
   - db/dcrpg/pgblockchain.go
   - explorer/types/explorertypes.go
+  - explorer/types/remaining.go
   - pubsub/pubsubhub.go
   - txhelpers/ssfee.go

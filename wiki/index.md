@@ -37,7 +37,7 @@ _Code-grounded analysis of data flows, cross-layer dependencies, and hidden cons
 
 ### Block
 
-_Data flow for block rendering, including headers, metrics, and block content parsing. Covers: BlockDataSaver fan-out, value-conservation MiningFee, CBlockSubsidy (vote-scaled), ActiveMiners live count, getlatestblocks pull pattern. Revised at `HEAD=ad1ab357`._
+_Data flow for block rendering, including headers, metrics, and block content parsing. Covers: BlockDataSaver fan-out, value-conservation MiningFee, CBlockSubsidy (vote-scaled), ActiveMiners live count, getlatestblocks pull pattern, `WindowRemaining`/`RewardRemaining` live countdown via `RemainingWindowText` (single source for template + WS, issue #502), chart tip alignment push from `explorerUI.Store()` → `cache.ChartData.SetTip`. Revised at `HEAD=b9c5bb31`._
 
 - flow (compact): code-analysis/block/flow.compact.md — high-level summary of the push + pull data paths, key constraints, and mutation checklist
 - flow (full): code-analysis/block/flow.full.md — detailed, step-by-step function trace covering push path (ingestion→fan-out), pull path (getlatestblocks WS), CBlockSubsidy/ActiveMiners sub-flows, and mutation impact
