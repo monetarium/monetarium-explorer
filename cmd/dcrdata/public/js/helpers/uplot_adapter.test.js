@@ -883,3 +883,32 @@ describe('stack (uPlot stacking transform)', () => {
     expect(data[2]).toEqual([11, 2]) // null counted as 0 in the running total
   })
 })
+
+describe('buildOpts stacking', () => {
+  const def = {
+    name: 'flow',
+    label: 'Flow',
+    stacked: true,
+    axes: [{ label: 'Total', scale: 'y' }],
+    series: [
+      { label: 'A', scale: 'y', kind: 'bars', colorIndex: 0 },
+      { label: 'B', scale: 'y', kind: 'bars', colorIndex: 1 },
+      { label: 'C', scale: 'y', kind: 'bars', colorIndex: 2 }
+    ]
+  }
+
+  it('emits consecutive bands when all series are visible', () => {
+    const opts = buildOpts(fakeUPlot, def, {})
+    expect(opts.bands).toEqual([{ series: [2, 1] }, { series: [3, 2] }])
+  })
+
+  it('skips a hidden series when computing bands', () => {
+    const opts = buildOpts(fakeUPlot, def, { visibility: { B: false } })
+    expect(opts.bands).toEqual([{ series: [3, 1] }])
+  })
+
+  it('omits bands entirely for a non-stacked def', () => {
+    const opts = buildOpts(fakeUPlot, { ...def, stacked: false }, {})
+    expect(opts.bands).toBeUndefined()
+  })
+})

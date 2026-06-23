@@ -326,12 +326,23 @@ export function buildOpts(UPlot, def, opts = {}) {
   const cursor = {}
   if (syncKey) cursor.sync = { key: syncKey, setSeries: true }
 
+  let bands
+  if (def.stacked) {
+    const visibility = opts.visibility || {}
+    const omit = (i) => visibility[def.series[i - 1].label] === false
+    // stack() only needs the shape to derive bands; feed a 1-row stub so the band
+    // computation runs without the real data (data is stacked separately in the handle).
+    const stub = [[0], ...def.series.map(() => [0])]
+    bands = stack(stub, omit).bands
+  }
+
   const out = {
     width: width,
     height: height,
     scales: scales,
     axes: axes,
     series: series,
+    bands: bands,
     cursor: cursor,
     legend: { show: false }
   }
