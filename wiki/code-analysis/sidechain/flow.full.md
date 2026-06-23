@@ -78,7 +78,7 @@ views/sidechains.tmpl  →  HTML response
 
 ### DataSource interface
 
-- **Location:** [cmd/dcrdata/internal/explorer/explorer.go:85](../../../cmd/dcrdata/internal/explorer/explorer.go#L85) — `SideChainBlocks(context.Context) ([]*dbtypes.BlockStatus, error)`
+- **Location:** [cmd/dcrdata/internal/explorer/explorer.go:86](../../../cmd/dcrdata/internal/explorer/explorer.go#L86) — `SideChainBlocks(context.Context) ([]*dbtypes.BlockStatus, error)`
 - **Test mock:** [cmd/dcrdata/internal/explorer/explorer_test.go:76](../../../cmd/dcrdata/internal/explorer/explorer_test.go#L76) — fan-out point if the signature ever changes (see [address/impact.md](../address/impact.md) for the analogous coin-filter signature fan-out lesson).
 
 ### ChainDB read method
@@ -96,7 +96,7 @@ views/sidechains.tmpl  →  HTML response
       WHERE is_mainchain = FALSE
       ORDER BY height DESC;`
   ```
-- **Scan:** [db/dcrpg/queries.go:4085-4097](../../../db/dcrpg/queries.go#L4085-L4097)
+- **Scan:** [db/dcrpg/queries.go:4091-4113](../../../db/dcrpg/queries.go#L4091-L4113)
   ```go
   err = rows.Scan(&bs.IsValid, &bs.Height, &bs.PrevHash, &bs.Hash, &bs.NextHash)
   ```
@@ -117,8 +117,8 @@ views/sidechains.tmpl  →  HTML response
   ```
 - **Reused by 4 SQL queries with different column subsets:**
   - `SelectSideChainBlocks` (this flow) — 5 cols, skips `is_mainchain`. See [db/dcrpg/internal/blockstmts.go:180-184](../../../db/dcrpg/internal/blockstmts.go#L180-L184).
-  - `SelectBlockStatus` — 6 cols, all fields. See [db/dcrpg/internal/blockstmts.go:186-190](../../../db/dcrpg/internal/blockstmts.go#L186-L190) and [db/dcrpg/queries.go:4152-4157](../../../db/dcrpg/queries.go#L4152-L4157).
-  - `SelectBlockStatuses` — 3 cols (height-keyed status lookup). See [db/dcrpg/internal/blockstmts.go:191-198](../../../db/dcrpg/internal/blockstmts.go#L191-L198) and the Scan around [db/dcrpg/queries.go:4160-4170](../../../db/dcrpg/queries.go#L4160-L4170).
+  - `SelectBlockStatus` — 6 cols, all fields. See [db/dcrpg/internal/blockstmts.go:186-190](../../../db/dcrpg/internal/blockstmts.go#L186-L190) and [db/dcrpg/queries.go:4168-4172](../../../db/dcrpg/queries.go#L4168-L4172).
+  - `SelectBlockStatuses` — 3 cols (height-keyed status lookup). See [db/dcrpg/internal/blockstmts.go:191-198](../../../db/dcrpg/internal/blockstmts.go#L191-L198) and the Scan around [db/dcrpg/queries.go:4176-4190](../../../db/dcrpg/queries.go#L4176-L4190).
   - `SelectDisapprovedBlocks` (`/disapproved` page) — 5 cols, skips `is_valid` (the WHERE already filters `is_valid=false`). See [db/dcrpg/internal/blockstmts.go:199-204](../../../db/dcrpg/internal/blockstmts.go#L199-L204).
 - **Implication:** any reordering or addition of fields on `BlockStatus`, or any column reordering in any of these four queries, breaks at least one positional `Scan` silently (wrong field gets the value) or loudly (`sql.Scan: expected N destinations, got M`).
 
@@ -148,7 +148,7 @@ There are **two and only two** writer paths that populate the rows /side reads:
 
 ## Section 4 — Cross-Layer Dependencies
 
-- **Handler ↔ DataSource interface:** the `SideChainBlocks(ctx)` method is one of ~30 methods on the `dataSource` interface ([cmd/dcrdata/internal/explorer/explorer.go:80-110](../../../cmd/dcrdata/internal/explorer/explorer.go#L80-L110)). The test mock at [cmd/dcrdata/internal/explorer/explorer_test.go:76](../../../cmd/dcrdata/internal/explorer/explorer_test.go#L76) must track the signature.
+- **Handler ↔ DataSource interface:** the `SideChainBlocks(ctx)` method is one of ~30 methods on the `dataSource` interface ([cmd/dcrdata/internal/explorer/explorer.go:72-130](../../../cmd/dcrdata/internal/explorer/explorer.go#L72-L130)). The test mock at [cmd/dcrdata/internal/explorer/explorer_test.go:76](../../../cmd/dcrdata/internal/explorer/explorer_test.go#L76) must track the signature.
 - **SQL ↔ Scan ↔ Struct:** **three independent files** must stay in lockstep — `blockstmts.go` (SELECT column list), `queries.go` (`rows.Scan` destinations), `db/dbtypes/types.go` (struct field order/types). Positional binding means a one-line edit in any of the three can silently rewire data into the wrong field.
 - **Struct ↔ Sibling readers:** because `BlockStatus` is the return type of four different SQL functions with four different column subsets, a struct change ripples into `SideChainBlocks`, `DisapprovedBlocks`, `BlockStatus(hash)`, and `BlockStatuses(height)`. Two of those are page handlers (`/side`, `/disapproved`), two feed the `/block/{hash}` rendering and stakeholder approval checks (see [cmd/dcrdata/internal/explorer/explorerroutes.go:730](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L730)).
 - **Writer races:** a reorg can flip `is_mainchain` on rows mid-request. The page is best-effort consistent (each row reflects its current `is_mainchain`/`next_hash` state). No locking ties the read against `TipToSideChain`. Because the query is short, the practical window is small, but `next_hash` may briefly point at a hash whose own `is_mainchain` has just been flipped.
@@ -208,7 +208,7 @@ When modifying anything in this flow, check:
 - Test mock — [cmd/dcrdata/internal/explorer/explorer_test.go:76](../../../cmd/dcrdata/internal/explorer/explorer_test.go#L76)
 - ChainDB read method — [db/dcrpg/pgblockchain.go:852-857](../../../db/dcrpg/pgblockchain.go#L852-L857)
 - SQL — [db/dcrpg/internal/blockstmts.go:180-204](../../../db/dcrpg/internal/blockstmts.go#L180-L204)
-- Scan — [db/dcrpg/queries.go:4075-4097](../../../db/dcrpg/queries.go#L4075-L4097)
+- Scan — [db/dcrpg/queries.go:4091-4113](../../../db/dcrpg/queries.go#L4091-L4113)
 - Struct — [db/dbtypes/types.go:2274-2282](../../../db/dbtypes/types.go#L2274-L2282)
 - Template — [cmd/dcrdata/views/sidechains.tmpl](../../../cmd/dcrdata/views/sidechains.tmpl)
 - Startup import — [cmd/dcrdata/main.go:855-927](../../../cmd/dcrdata/main.go#L855-L927); [cmd/dcrdata/config.go:147](../../../cmd/dcrdata/config.go#L147)
@@ -218,7 +218,7 @@ When modifying anything in this flow, check:
 - `updateLastBlock` side-chain guard — [db/dcrpg/pgblockchain.go:4056-4085](../../../db/dcrpg/pgblockchain.go#L4056-L4085)
 - Reorg handler chain — [cmd/dcrdata/main.go:1036-1038](../../../cmd/dcrdata/main.go#L1036-L1038); [db/dcrpg/chainmonitor.go:139-175](../../../db/dcrpg/chainmonitor.go#L139-L175)
 - `TipToSideChain` — [db/dcrpg/pgblockchain.go:3689](../../../db/dcrpg/pgblockchain.go#L3689)
-- `setMainchainByBlockHash` — [db/dcrpg/queries.go:4301-4304](../../../db/dcrpg/queries.go#L4301-L4304); UpdateBlockMainchain SQL — [db/dcrpg/internal/blockstmts.go:214](../../../db/dcrpg/internal/blockstmts.go#L214)
+- `setMainchainByBlockHash` — [db/dcrpg/queries.go:4317-4322](../../../db/dcrpg/queries.go#L4317-L4322); UpdateBlockMainchain SQL — [db/dcrpg/internal/blockstmts.go:214](../../../db/dcrpg/internal/blockstmts.go#L214)
 
 See also:
 
