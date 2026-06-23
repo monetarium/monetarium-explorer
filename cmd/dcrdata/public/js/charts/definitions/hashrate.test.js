@@ -2,10 +2,10 @@ import { describe, it, expect } from 'vitest'
 import { hashrate } from './hashrate'
 
 describe('hashrate.toColumns', () => {
-  it('single series when no active_miners: [x, rate] (block bin → 1-based, offset ignored)', () => {
+  it('single series when no active_miners: [x, rate] (block bin → 0-based)', () => {
     const raw = { axis: 'height', bin: 'block', rate: [100, 200], offset: 0 }
     expect(hashrate.toColumns(raw, {})).toEqual([
-      [1, 2],
+      [0, 1],
       [100, 200]
     ])
   })
@@ -18,7 +18,7 @@ describe('hashrate.toColumns', () => {
       offset: 0
     }
     expect(hashrate.toColumns(raw, {})).toEqual([
-      [1, 2],
+      [0, 1],
       [100, 200],
       [3, 4]
     ])

@@ -2,10 +2,10 @@ import { describe, it, expect } from 'vitest'
 import { durationBtwBlocks, chainwork } from './duration_chainwork'
 
 describe('durationBtwBlocks.toColumns', () => {
-  it('height/block axis with offset 1', () => {
+  it('height/block axis → 0-based index', () => {
     const raw = { axis: 'height', bin: 'block', duration: [10, 20] }
     expect(durationBtwBlocks.toColumns(raw, {})).toEqual([
-      [1, 2],
+      [0, 1],
       [10, 20]
     ])
   })
