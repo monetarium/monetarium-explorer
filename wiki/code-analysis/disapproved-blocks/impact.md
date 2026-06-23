@@ -13,8 +13,8 @@ Blast radius for changes touching the `/disapproved` page, its SQL, its shared s
 | `updateLastBlock` vote-bit logic | The whole page | Silent (no rows) | Sole writer of `blocks.is_valid=false` |
 | `UpdateLastBlockValid` SQL | Same | Loud (SQL error) | Renaming column breaks both SELECTs too |
 | `disapproved.tmpl` field references | Page render | Loud at request time | Templates have no compile-time type check |
-| `dataSource.DisapprovedBlocks` signature | `explorerUI` + mock | Loud at build | Update `explorer_test.go:73` mock |
-| `"disapproved"` in template-name slice | Template lookup | Loud at request time | [explorer.go:392](../../../cmd/dcrdata/internal/explorer/explorer.go#L392) |
+| `dataSource.DisapprovedBlocks` signature | `explorerUI` + mock | Loud at build | Update `explorer_test.go:79` mock |
+| `"disapproved"` in template-name slice | Template lookup | Loud at request time | [explorer.go:397](../../../cmd/dcrdata/internal/explorer/explorer.go#L397) |
 | Move `/disapproved` off `withCache` | ETag/Last-Modified disappear | Silent (correctness fine; throughput regresses) | OK to do; document why |
 | Remove `/rejects` redirect | External bookmarks | Loud for users (404) | Permanent redirect = stable contract |
 | Add WS push or Stimulus controller | Imports C3/C6/C8 | Silent without reconciliation | See [/wiki/core/constraints.md](../../core/constraints.md) |
@@ -30,8 +30,8 @@ Blast radius for changes touching the `/disapproved` page, its SQL, its shared s
 
 **Affected files (must be edited in lockstep):**
 - [db/dbtypes/types.go:2275-2282](../../../db/dbtypes/types.go#L2275-L2282) (struct)
-- [db/dcrpg/internal/blockstmts.go:177-200](../../../db/dcrpg/internal/blockstmts.go#L177-L200) (4 SELECTs)
-- [db/dcrpg/queries.go:3974-4077](../../../db/dcrpg/queries.go#L3974-L4077) (4 Scans)
+- [db/dcrpg/internal/blockstmts.go:180-203](../../../db/dcrpg/internal/blockstmts.go#L180-L203) (4 SELECTs)
+- [db/dcrpg/queries.go:4091-4198](../../../db/dcrpg/queries.go#L4091-L4198) (4 Scans)
 - [cmd/dcrdata/views/disapproved.tmpl](../../../cmd/dcrdata/views/disapproved.tmpl) + [cmd/dcrdata/views/sidechains.tmpl](../../../cmd/dcrdata/views/sidechains.tmpl) (field references)
 
 **See also:** [/wiki/code-analysis/sidechain/impact.md](../sidechain/impact.md) — same risk, mirrored on `IsMainchain`; [/wiki/code-analysis/time-based-blocks/impact.md](../time-based-blocks/impact.md) — same pattern in a different domain.
@@ -50,7 +50,7 @@ Blast radius for changes touching the `/disapproved` page, its SQL, its shared s
 
 ## Risk 3 — `updateLastBlock` is the sole writer of `is_valid=false`
 
-**Trigger:** any refactor of [db/dcrpg/pgblockchain.go:3976-4083](../../../db/dcrpg/pgblockchain.go#L3976-L4083) — including reordering the cascade, short-circuiting on partial failure, or moving the vote-bit check.
+**Trigger:** any refactor of [db/dcrpg/pgblockchain.go:4062-4180](../../../db/dcrpg/pgblockchain.go#L4062-L4180) — including reordering the cascade, short-circuiting on partial failure, or moving the vote-bit check.
 
 **Failure mode:**
 - **Silent (page side):** the page renders an empty table on new disapprovals while the chain continues. No SQL error, no log line beyond the existing `Infof("Previous block %s was DISAPPROVED ...")` failing to fire.
@@ -106,7 +106,7 @@ Blast radius for changes touching the `/disapproved` page, its SQL, its shared s
 
 - **`/side` vs `/disapproved` asymmetry on ETag caching** is discretionary, not a bug. Don't "normalize" the two routes without first verifying that `/side`'s writer events (`TipToSideChain`) also reset the shared ETag store.
 - **`BlockStatus`-as-external-contract.** Treat the struct as an external contract across 4 query functions, 2 list pages, and the `/block/{hash}` status display. Do not "clean up" field naming/ordering without coordinated edits.
-- **No upstream sync.** This codebase was squashed from `decred/dcrdata` with no git upstream. The `POSExplanation` link in [explorer.go:166](../../../cmd/dcrdata/internal/explorer/explorer.go#L166) still points at Decred docs — cosmetic, but worth flagging when refactoring the `Links` struct.
+- **No upstream sync.** This codebase was squashed from `decred/dcrdata` with no git upstream. The `POSExplanation` link in [explorer.go:171](../../../cmd/dcrdata/internal/explorer/explorer.go#L171) still points at Decred docs — cosmetic, but worth flagging when refactoring the `Links` struct.
 
 See also:
 

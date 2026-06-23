@@ -70,7 +70,7 @@ views/disapproved.tmpl  →  HTML response
 The same data is also reachable indirectly:
 
 - `/rejects` → `http.Redirect(..., "/disapproved", 308)` ([cmd/dcrdata/main.go:736-738](../../../cmd/dcrdata/main.go#L736-L738)). Legacy alias; permanent redirect.
-- `/blocks` template links to `/disapproved` for users looking for PoS-invalidated blocks ([cmd/dcrdata/views/blocks.tmpl:179](../../../cmd/dcrdata/views/blocks.tmpl#L179)).
+- `/blocks` template links to `/disapproved` for users looking for PoS-invalidated blocks ([cmd/dcrdata/views/blocks.tmpl:174](../../../cmd/dcrdata/views/blocks.tmpl#L174)).
 
 ## Section 3 — Per-Layer Breakdown
 
@@ -90,16 +90,16 @@ The same data is also reachable indirectly:
 
 - **Location:** [cmd/dcrdata/internal/explorer/explorerroutes.go:323-353](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L323-L353)
 - **Logic:** call `dataSource.DisapprovedBlocks(ctx)`; on context-deadline error, render the timeout error page via `exp.timeoutErrorPage`; on any other error, render `StatusPage(defaultErrorCode, "failed to retrieve stakeholder disapproved blocks", ...)`; otherwise execute the `"disapproved"` template with `{ *CommonPageData, Data []*dbtypes.BlockStatus }`.
-- **No mutation, no derived fields, no per-coin handling.** Thin pass-through. Identical shape to `SideChains` handler ([explorerroutes.go:274-303](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L274-L303)).
+- **No mutation, no derived fields, no per-coin handling.** Thin pass-through. Identical shape to `SideChains` handler ([explorerroutes.go:274-305](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L274-L305)).
 
 ### DataSource interface
 
-- **Location:** [cmd/dcrdata/internal/explorer/explorer.go:86](../../../cmd/dcrdata/internal/explorer/explorer.go#L86) — `DisapprovedBlocks(context.Context) ([]*dbtypes.BlockStatus, error)`
+- **Location:** [cmd/dcrdata/internal/explorer/explorer.go:87](../../../cmd/dcrdata/internal/explorer/explorer.go#L87) — `DisapprovedBlocks(context.Context) ([]*dbtypes.BlockStatus, error)`
 - **Test mock:** [cmd/dcrdata/internal/explorer/explorer_test.go:79](../../../cmd/dcrdata/internal/explorer/explorer_test.go#L79) — fan-out point if the signature changes.
 
 ### ChainDB read method
 
-- **Location:** [db/dcrpg/pgblockchain.go:865-871](../../../db/dcrpg/pgblockchain.go#L865-L871)
+- **Location:** [db/dcrpg/pgblockchain.go:869-875](../../../db/dcrpg/pgblockchain.go#L869-L875)
 - **Behavior:** wraps `retrieveDisapprovedBlocks` in a `context.WithTimeout(ctx, pgb.queryTimeout)` and routes cancellation through `pgb.replaceCancelError`. Identical shape to `SideChainBlocks`.
 
 ### SQL query + Scan
@@ -112,7 +112,7 @@ The same data is also reachable indirectly:
       WHERE is_valid = FALSE
       ORDER BY height DESC;`
   ```
-- **Scan:** [db/dcrpg/queries.go:4126-4148](../../../db/dcrpg/queries.go#L4126-L4148)
+- **Scan:** [db/dcrpg/queries.go:4142-4164](../../../db/dcrpg/queries.go#L4142-L4164)
   ```go
   err = rows.Scan(&bs.IsMainchain, &bs.Height, &bs.PrevHash, &bs.Hash, &bs.NextHash)
   ```
@@ -140,7 +140,7 @@ The same data is also reachable indirectly:
   | `retrieveBlockStatus` | 6 | `is_valid, is_mainchain, height, previous_hash, hash, next_hash` — all fields |
   | `retrieveBlockStatuses` | 3 | `is_valid, is_mainchain, hash` — `Height` set externally from query input |
 
-  See [db/dcrpg/internal/blockstmts.go:180-203](../../../db/dcrpg/internal/blockstmts.go#L180-L203) and [db/dcrpg/queries.go:4075-4180](../../../db/dcrpg/queries.go#L4075-L4180).
+  See [db/dcrpg/internal/blockstmts.go:180-203](../../../db/dcrpg/internal/blockstmts.go#L180-L203) and [db/dcrpg/queries.go:4091-4198](../../../db/dcrpg/queries.go#L4091-L4198).
 - **Implication:** the two list endpoints (`/side`, `/disapproved`) each pre-trim one different filter column. Symmetric in shape; asymmetric in *which* field is unreliable.
 
 ### Template
@@ -148,9 +148,9 @@ The same data is also reachable indirectly:
 - **Location:** [cmd/dcrdata/views/disapproved.tmpl](../../../cmd/dcrdata/views/disapproved.tmpl)
 - **Columns rendered:** `Height` (link to `/block/{hash}`), `Main Chain` (`.IsMainchain`, populated by Scan), `Parent` (`.PrevHash` → `/block/{prev}`), `Child` (`.NextHash` if set → `/block/{next}`; otherwise `none` with `title="This block is the tip of its chain."`).
 - **Does NOT render `IsValid`.** This is the field that Scan leaves zero, so omitting it from the template is what keeps the page coherent. Adding `{{.IsValid}}` to the template without first reading the column would silently render `false` for every row.
-- **External link:** `.Links.POSExplanation` points at `https://docs.decred.org/proof-of-stake/overview/` ([cmd/dcrdata/internal/explorer/explorer.go:169](../../../cmd/dcrdata/internal/explorer/explorer.go#L169)) — a residual Decred doc link (stale for Monetarium; the URL still resolves to upstream Decred). Cosmetic.
+- **External link:** `.Links.POSExplanation` points at `https://docs.decred.org/proof-of-stake/overview/` ([cmd/dcrdata/internal/explorer/explorer.go:171](../../../cmd/dcrdata/internal/explorer/explorer.go#L171)) — a residual Decred doc link (stale for Monetarium; the URL still resolves to upstream Decred). Cosmetic.
 - **No JS controller bound** beyond `data-controller="time"` (navbar helpers). Table id `disapprovedblockstable` is decorative — nothing selects on it.
-- **Template registration:** [cmd/dcrdata/internal/explorer/explorer.go:396](../../../cmd/dcrdata/internal/explorer/explorer.go#L396) — the literal string `"disapproved"` is in the `tmpls` slice; mismatched template name is a registration-time failure.
+- **Template registration:** [cmd/dcrdata/internal/explorer/explorer.go:397](../../../cmd/dcrdata/internal/explorer/explorer.go#L397) — the literal string `"disapproved"` is in the `tmpls` slice; mismatched template name is a registration-time failure.
 
 ### Writer path (how rows reach `is_valid=false`)
 
@@ -177,7 +177,7 @@ There is **one and only one** writer path, embedded in the normal block-connect 
 
 ## Section 4 — Cross-Layer Dependencies
 
-- **Handler ↔ DataSource interface:** `DisapprovedBlocks(ctx)` is one of ~30 methods on `dataSource` ([explorer.go:71-129](../../../cmd/dcrdata/internal/explorer/explorer.go#L71-L129)). Mock must track signature.
+- **Handler ↔ DataSource interface:** `DisapprovedBlocks(ctx)` is one of ~30 methods on `dataSource` ([explorer.go:72-130](../../../cmd/dcrdata/internal/explorer/explorer.go#L72-L130)). Mock must track signature.
 - **SQL ↔ Scan ↔ Struct:** three independent files must stay in lockstep — `blockstmts.go` (SELECT column list), `queries.go` (`rows.Scan` destinations), `db/dbtypes/types.go` (struct field order/types). Positional binding means a one-line edit in any of the three can silently rewire data into the wrong field.
 - **Struct ↔ Sibling readers:** because `BlockStatus` is the return type of four different SQL functions, a struct change ripples into `DisapprovedBlocks`, `SideChainBlocks`, `BlockStatus(hash)`, and `BlockStatuses(height)`. Two are list-page handlers (`/disapproved`, `/side`), one feeds `/block/{hash}` status rendering, one feeds height-keyed approval checks (see [explorerroutes.go:793](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L793)).
 - **Writer race:** between a `StoreBlock` mid-disapproval (flipping `is_valid=false`) and a concurrent `/disapproved` request, the page is best-effort consistent. The SELECT may pick up rows mid-cascade (e.g., `blocks.is_valid` flipped but `transactions.is_valid` not yet) — for this page it doesn't matter because only `blocks.is_valid` is queried. Other readers consuming the same parent block during the cascade window may see inconsistent state.
@@ -225,7 +225,7 @@ When modifying anything in this flow, check:
 
 - Removing `is_valid` from the `blocks` table, or the `block_chain.next_hash` column, or the JOIN: SQL error on every request to `/disapproved`, `/side`, and any `BlockStatus` lookup.
 - Renaming `BlockStatus` fields without updating `disapproved.tmpl` / `sidechains.tmpl`: template-execute error rendered as `StatusPage(defaultErrorCode, ...)`.
-- Misspelling `"disapproved"` in the template registration slice ([explorer.go:396](../../../cmd/dcrdata/internal/explorer/explorer.go#L396)): template lookup failure at request time.
+- Misspelling `"disapproved"` in the template registration slice ([explorer.go:397](../../../cmd/dcrdata/internal/explorer/explorer.go#L397)): template lookup failure at request time.
 - `queryTimeout` set too low for an indexed scan over a large `blocks` table: `timeoutErrorPage` triggers.
 
 ## Section 7 — Common Pitfalls
@@ -242,18 +242,18 @@ When modifying anything in this flow, check:
 - Handler — [cmd/dcrdata/internal/explorer/explorerroutes.go:323-353](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L323-L353)
 - Interface — [cmd/dcrdata/internal/explorer/explorer.go:86](../../../cmd/dcrdata/internal/explorer/explorer.go#L86)
 - Test mock — [cmd/dcrdata/internal/explorer/explorer_test.go:79](../../../cmd/dcrdata/internal/explorer/explorer_test.go#L79)
-- Template name registration — [cmd/dcrdata/internal/explorer/explorer.go:396](../../../cmd/dcrdata/internal/explorer/explorer.go#L396)
-- POSExplanation link — [cmd/dcrdata/internal/explorer/explorer.go:169](../../../cmd/dcrdata/internal/explorer/explorer.go#L169)
-- ChainDB read method — [db/dcrpg/pgblockchain.go:865-871](../../../db/dcrpg/pgblockchain.go#L865-L871)
+- Template name registration — [cmd/dcrdata/internal/explorer/explorer.go:397](../../../cmd/dcrdata/internal/explorer/explorer.go#L397)
+- POSExplanation link — [cmd/dcrdata/internal/explorer/explorer.go:171](../../../cmd/dcrdata/internal/explorer/explorer.go#L171)
+- ChainDB read method — [db/dcrpg/pgblockchain.go:869-875](../../../db/dcrpg/pgblockchain.go#L869-L875)
 - SQL — [db/dcrpg/internal/blockstmts.go:199-203](../../../db/dcrpg/internal/blockstmts.go#L199-L203)
-- Scan — [db/dcrpg/queries.go:4126-4148](../../../db/dcrpg/queries.go#L4126-L4148)
+- Scan — [db/dcrpg/queries.go:4142-4164](../../../db/dcrpg/queries.go#L4142-L4164)
 - Shared struct — [db/dbtypes/types.go:2274-2282](../../../db/dbtypes/types.go#L2274-L2282)
 - Template — [cmd/dcrdata/views/disapproved.tmpl](../../../cmd/dcrdata/views/disapproved.tmpl)
-- Entry link from `/blocks` — [cmd/dcrdata/views/blocks.tmpl:179](../../../cmd/dcrdata/views/blocks.tmpl#L179)
+- Entry link from `/blocks` — [cmd/dcrdata/views/blocks.tmpl:174](../../../cmd/dcrdata/views/blocks.tmpl#L174)
 - Writer cascade `updateLastBlock` — [db/dcrpg/pgblockchain.go:4062-4180](../../../db/dcrpg/pgblockchain.go#L4062-L4180)
 - Writer SQL `UpdateLastBlockValid` — [db/dcrpg/internal/blockstmts.go:213](../../../db/dcrpg/internal/blockstmts.go#L213)
 - ETag middleware — [cmd/dcrdata/internal/explorer/explorermiddleware.go:193](../../../cmd/dcrdata/internal/explorer/explorermiddleware.go#L193)
-- Sibling `BlockStatus` SELECTs — [db/dcrpg/internal/blockstmts.go:180-203](../../../db/dcrpg/internal/blockstmts.go#L180-L203); sibling Scans — [db/dcrpg/queries.go:4075-4180](../../../db/dcrpg/queries.go#L4075-L4180)
+- Sibling `BlockStatus` SELECTs — [db/dcrpg/internal/blockstmts.go:180-203](../../../db/dcrpg/internal/blockstmts.go#L180-L203); sibling Scans — [db/dcrpg/queries.go:4091-4198](../../../db/dcrpg/queries.go#L4091-L4198)
 
 See also:
 
