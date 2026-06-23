@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import Zoom from '../helpers/zoom_helper'
 
 // Stub the @hotwired/stimulus import so the controller module loads in jsdom.
 vi.mock('@hotwired/stimulus', () => ({
@@ -254,5 +255,26 @@ describe('address ranger + theme', () => {
     ctrl.redrawTheme()
     expect(fakeHandle.setDark).toHaveBeenCalled()
     expect(fakeRanger.setDark).toHaveBeenCalled()
+  })
+  it('onRangerSelect clears stale zoom-preset button via setSelectedZoom', () => {
+    // onRangerSelect now uses `this` so it can be exercised directly on the instance.
+    // Verifies that after a ranger drag, setSelectedZoom is called to reconcile the
+    // preset-button highlight — the fix for the stale-preset bug.
+    const c = makeRenderController('balance', 0, {})
+    c.handle = fakeHandle
+    c.xExtent = [0, 1000]
+    c.settings = { zoom: null }
+    c.query = { replace: vi.fn() }
+    // Stub zoomButtons so setSelectedZoom can iterate without DOM.
+    const btn = { name: 'all', classList: { add: vi.fn(), remove: vi.fn() } }
+    c.zoomButtons = [btn]
+    const spy = vi.spyOn(c, 'setSelectedZoom')
+    c.onRangerSelect(100, 500)
+    expect(fakeHandle.setXRange).toHaveBeenCalledWith(100, 500)
+    // setSelectedZoom must be called with the mapped zoom key — this is the fix.
+    // Zoom.encode(100,500) does not match any named preset against xExtent [0,1000],
+    // so mapKey returns null; setSelectedZoom(null) clears all btn-selected classes.
+    const encodedZoom = Zoom.encode(100, 500)
+    expect(spy).toHaveBeenCalledWith(Zoom.mapKey(encodedZoom, [0, 1000]))
   })
 })

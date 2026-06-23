@@ -751,10 +751,11 @@ export default class extends Controller {
 
   // Called by the overview strip on a grip/body drag. Drive the main chart (silent).
   onRangerSelect(min, max) {
-    if (!ctrl.handle) return
-    ctrl.handle.setXRange(min, max)
-    ctrl.settings.zoom = Zoom.encode(min, max)
-    ctrl.query.replace(ctrl.settings)
+    if (!this.handle) return
+    this.handle.setXRange(min, max)
+    this.settings.zoom = Zoom.encode(min, max)
+    this.query.replace(this.settings)
+    this.setSelectedZoom(Zoom.mapKey(this.settings.zoom, this.xExtent))
   }
 
   // Create or recreate the ranger strip with the primary series data.
