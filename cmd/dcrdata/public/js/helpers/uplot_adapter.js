@@ -81,6 +81,7 @@ const TIME_AXIS_VALUES = (() => {
  * @property {number[]} [dash]      // dashed-line pattern
  * @property {number} [width]       // stroke width in px (uPlot default is 1)
  * @property {boolean} [spanGaps]   // draw the line across null gaps
+ * @property {boolean} [fill]  // force a translucent area fill (e.g. a filled stepped line)
  *
  * @typedef {Object} ChartDefinition
  * @property {string} name
@@ -307,7 +308,7 @@ export function buildOpts(UPlot, def, opts = {}) {
   const series = [
     {},
     ...def.series.map((s, i) => {
-      const filled = s.kind === 'area' || s.kind === 'bars'
+      const filled = s.kind === 'area' || s.kind === 'bars' || s.fill
       const entry = {
         label: s.label,
         scale: s.scale || 'y',

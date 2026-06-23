@@ -242,6 +242,24 @@ describe('buildOpts — options', () => {
     const opts = buildOpts(fakeUPlot, def, {})
     expect(opts.series[1].width).toBe(2)
   })
+
+  it('produces a non-null fill for a stepped series with fill: true', () => {
+    const def = {
+      ...lineDef,
+      series: [{ label: 'Balance', scale: 'y', kind: 'stepped', colorIndex: 0, fill: true }]
+    }
+    const opts = buildOpts(fakeUPlot, def, {})
+    expect(opts.series[1].fill).not.toBeNull()
+  })
+
+  it('produces a null fill for a stepped series without fill (opt-in only)', () => {
+    const def = {
+      ...lineDef,
+      series: [{ label: 'Balance', scale: 'y', kind: 'stepped', colorIndex: 0 }]
+    }
+    const opts = buildOpts(fakeUPlot, def, {})
+    expect(opts.series[1].fill).toBeNull()
+  })
 })
 
 describe('logRange', () => {

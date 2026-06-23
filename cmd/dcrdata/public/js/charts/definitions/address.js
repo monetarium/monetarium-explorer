@@ -58,7 +58,7 @@ export function balanceDef(coinType) {
     label: `Balance (${coinLabel})`,
     stacked: false,
     axes: [{ label: `Balance (${coinLabel})`, scale: 'y' }],
-    series: [{ label: 'Balance', scale: 'y', kind: 'stepped', colorIndex: 0 }],
+    series: [{ label: 'Balance', scale: 'y', kind: 'stepped', colorIndex: 0, fill: true }],
     toColumns: (raw) => {
       const xs = secondsFromTimes(raw.time)
       const ys = isSKA
