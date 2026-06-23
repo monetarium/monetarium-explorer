@@ -9,9 +9,10 @@ export const ticketpoolPrice = {
   ],
   toColumns: (data, mempool) => {
     const prices = data.price ? data.price.slice() : []
-    const mem = data.mempool ? data.mempool.slice() : []
-    const imm = data.immature ? data.immature.slice() : []
-    const live = data.live ? data.live.slice() : []
+    const n = prices.length
+    const mem = data.mempool ? data.mempool.slice() : new Array(n).fill(0)
+    const imm = data.immature ? data.immature.slice() : new Array(n).fill(0)
+    const live = data.live ? data.live.slice() : new Array(n).fill(0)
     if (mempool) {
       const lastPrice = prices.length ? prices[prices.length - 1] : -1
       if (mempool.price !== lastPrice) {
