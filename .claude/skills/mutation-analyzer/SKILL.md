@@ -280,21 +280,27 @@ diff-driven tiering below.
    `origin/develop`**: Refresh must diff against the same ref `wiki-staleness.sh` uses, or a
    domain could read `FRESH` in the detector yet be re-traced against a different tree (the
    working branch routinely sits ahead of `origin/develop`). Let `<files>` be the covered paths
-   from `meta.yml` and `<dirs>` their unique directories (`dirname` of each, de-duplicated):
+   from `meta.yml`; `<chgdirs>` (used by (c)) are the immediate directories of the *changed*
+   files from (a):
 
    ```sh
    # a. Status of each covered file — Tier 0/1 split, plus delete/rename signals
    git diff --name-status --find-renames <anchor>..HEAD -- <files>
    # b. Tier 0 gate — whitespace-only check (empty output ⇒ whitespace-only diff)
    git diff -w --ignore-blank-lines <anchor>..HEAD -- <files>
-   # c. Blind-spot probe — files ADDED in the covered files' directories
-   git diff --name-status --diff-filter=A <anchor>..HEAD -- <dirs>
+   # c. Blind-spot probe — files ADDED as direct siblings of a *changed* covered file.
+   #    <chgdirs> = immediate dirs of the M/R files from (a); the awk keeps only additions whose
+   #    exact parent is one of those, so a top-level covered path (e.g. cmd/dcrdata/main.go)
+   #    cannot pull in its whole subtree.
+   git diff --name-only --diff-filter=A <anchor>..HEAD -- <chgdirs> \
+     | awk -v d="<chgdirs>" 'BEGIN{n=split(d,a," ");for(i=1;i<=n;i++)ok[a[i]]=1}
+           {p=$0;sub("/[^/]*$","",p);if(p in ok)print}'
    ```
 
    **Tier 0** if (b) is empty, or its residual hunks are exclusively comment lines. Otherwise
-   **Tier 1**: the `M` files from (a) are re-traced; `D`/`R` files from (a) and added files from
-   (c) that a *changed* covered file imports/calls are **widened** into. An explicit `--full`
-   request skips classification and runs a full Explore (step 3).
+   **Tier 1**: the `M` files from (a) are re-traced; `D`/`R` files from (a), and added siblings
+   from (c) that a *changed* covered file imports/calls, are **widened** into. An explicit
+   `--full` request skips classification and runs a full Explore (step 3).
 3. **Execute the tier.**
    - **Tier 0:** confirm (b) is whitespace/comment-only, then skip to step 4 with no flow
      re-trace — only `meta.yml.anchor` moves.
