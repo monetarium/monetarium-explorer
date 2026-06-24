@@ -420,6 +420,13 @@ input ~ .checkmark {
   background-color: #2971ff;
 }
 
+// Received is colorIndex 0, the only theme-aware series stroke: on the dark canvas it
+// swaps to the primary mint (chart_theme PRIMARY.dark), so the swatch must too — same
+// value the .tickets-price / .coin-supply dark rules below use.
+body.darkBG .customcheck input:checked ~ .received {
+  background-color: #2dd8a3;
+}
+
 .customcheck input:checked ~ .sent {
   // Matches the Spent series stroke on the chart: PALETTE[1] (colorIndex 1, theme-agnostic)
   // in chart_theme.js. Was a stale legacy Dygraphs mint that no longer matched the bar.
