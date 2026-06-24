@@ -401,21 +401,19 @@ export default class extends Controller {
   }
 
   async onZoom(e) {
-    const target = e.srcElement || e.target
-    this.zoomTargets.forEach((zoomTarget) => {
-      zoomTarget.classList.remove('btn-active')
-    })
-    target.classList.add('btn-active')
-    this.zoom = e.target.name
+    const target = e.currentTarget
+    this.zoomTargets.forEach((zt) => zt.classList.remove('active'))
+    target.classList.add('active')
+    this.zoom = target.dataset.option
 
     const barsOrder = { all: 0, day: 1, wk: 2, mo: 3 }
     const zoomOrder = { day: 1, wk: 2, mo: 3, all: 4 }
     if (barsOrder[this.bars] > zoomOrder[this.zoom]) {
       const newBars = zoomOrder[this.zoom] === 1 ? 'day' : 'wk'
       this.bars = newBars
-      this.barsTargets.forEach((bt) => bt.classList.remove('btn-active'))
-      const activeBar = Array.from(this.barsTargets).find((bt) => bt.name === newBars)
-      if (activeBar) activeBar.classList.add('btn-active')
+      this.barsTargets.forEach((bt) => bt.classList.remove('active'))
+      const activeBar = Array.from(this.barsTargets).find((bt) => bt.dataset.option === newBars)
+      if (activeBar) activeBar.classList.add('active')
 
       this.wrapperTarget.classList.add('loading')
       const url = `/api/ticketpool/bydate/${this.bars}`
@@ -446,12 +444,12 @@ export default class extends Controller {
   }
 
   async onBarsChange(e) {
-    const target = e.srcElement || e.target
+    const target = e.currentTarget
     this.barsTargets.forEach((barsTarget) => {
-      barsTarget.classList.remove('btn-active')
+      barsTarget.classList.remove('active')
     })
-    this.bars = e.target.name
-    target.classList.add('btn-active')
+    target.classList.add('active')
+    this.bars = target.dataset.option
     this.wrapperTarget.classList.add('loading')
     const url = `/api/ticketpool/bydate/${this.bars}`
     const ticketPoolResponse = await requestJSON(url)

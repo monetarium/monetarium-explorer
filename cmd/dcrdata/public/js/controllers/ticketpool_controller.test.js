@@ -210,8 +210,11 @@ describe('ticketpool reconnect resync', () => {
     const c = makeController()
     c.bars = 'day'
     c.zoomTargets = []
-    const target = { name: 'day', classList: { add: vi.fn(), remove: vi.fn() } }
-    await c.onZoom({ target })
+    const currentTarget = {
+      dataset: { option: 'day' },
+      classList: { add: vi.fn(), remove: vi.fn() }
+    }
+    await c.onZoom({ currentTarget })
     expect(c.purchasesRanger.setSelection).toHaveBeenCalled()
     const args = c.purchasesRanger.setSelection.mock.calls[0]
     expect(args[1] - args[0]).toBeCloseTo(86400, 0) // one day window in seconds
@@ -235,7 +238,9 @@ describe('ticketpool reconnect resync', () => {
       c.purchasesHandle.uplot.data = cols
     })
 
-    await c.onZoom({ target: { name: 'wk', classList: { add: vi.fn(), remove: vi.fn() } } })
+    await c.onZoom({
+      currentTarget: { dataset: { option: 'wk' }, classList: { add: vi.fn(), remove: vi.fn() } }
+    })
 
     // Auto-switch extended the week data: synthetic point at +604800
     expect(c.purchasesHandle.uplot.data[0]).toEqual([weekTs, weekTs + 604800])
@@ -256,8 +261,11 @@ describe('onBarsChange', () => {
     })
     ticketpoolPurchases.toColumns.mockReturnValueOnce(cols)
 
-    const target = { name: 'mo', classList: { add: vi.fn(), remove: vi.fn() } }
-    await c.onBarsChange({ target })
+    const currentTarget = {
+      dataset: { option: 'mo' },
+      classList: { add: vi.fn(), remove: vi.fn() }
+    }
+    await c.onBarsChange({ currentTarget })
 
     // The mock's initial x-range is { min: 1780963200, max: 1782172800 } from makeController.
     // The range is preserved: month data's original extent [1780963200, 1780963200]
@@ -286,8 +294,11 @@ describe('onBarsChange', () => {
       })
       ticketpoolPurchases.toColumns.mockReturnValueOnce(cols)
 
-      const target = { name: barMode, classList: { add: vi.fn(), remove: vi.fn() } }
-      await c.onBarsChange({ target })
+      const currentTarget = {
+        dataset: { option: barMode },
+        classList: { add: vi.fn(), remove: vi.fn() }
+      }
+      await c.onBarsChange({ currentTarget })
 
       // Synthetic period-end point appended
       expect(cols[0].length).toBe(2)
@@ -336,7 +347,9 @@ describe('onBarsChange', () => {
     ticketpoolPurchases.toColumns.mockReturnValueOnce(monthCols).mockReturnValueOnce(blocksCols)
 
     // Switch to month — month's original extent is within viewport, range preserved
-    await c.onBarsChange({ target: { name: 'mo', classList: { add: vi.fn(), remove: vi.fn() } } })
+    await c.onBarsChange({
+      currentTarget: { dataset: { option: 'mo' }, classList: { add: vi.fn(), remove: vi.fn() } }
+    })
     expect(c.purchasesHandle.setXRange).toHaveBeenCalledWith(1780963200, 1782172800)
     expect(c.purchasesRanger.setSelection).toHaveBeenCalledWith(1780963200, 1782172800)
 
@@ -344,7 +357,9 @@ describe('onBarsChange', () => {
     c.purchasesRanger.setSelection.mockClear()
 
     // Switch back to blocks — range expands right to include new data past viewport
-    await c.onBarsChange({ target: { name: 'all', classList: { add: vi.fn(), remove: vi.fn() } } })
+    await c.onBarsChange({
+      currentTarget: { dataset: { option: 'all' }, classList: { add: vi.fn(), remove: vi.fn() } }
+    })
     expect(c.purchasesHandle.setXRange).toHaveBeenCalledWith(1780963200, 1782259200)
     expect(c.purchasesRanger.setSelection).toHaveBeenCalledWith(1780963200, 1782259200)
   })
@@ -370,7 +385,9 @@ describe('onBarsChange', () => {
     })
     ticketpoolPurchases.toColumns.mockReturnValueOnce(blocksCols)
 
-    await c.onBarsChange({ target: { name: 'all', classList: { add: vi.fn(), remove: vi.fn() } } })
+    await c.onBarsChange({
+      currentTarget: { dataset: { option: 'all' }, classList: { add: vi.fn(), remove: vi.fn() } }
+    })
 
     // Range must cover the full blocks extent — left clamped to first block,
     // right expanded to last block. No gap at either end.
@@ -392,7 +409,9 @@ describe('onBarsChange', () => {
       time_chart: { time: ['2026-06-08T00:00:00Z'], price: [282.1], immature: [79], live: [5162] }
     })
     ticketpoolPurchases.toColumns.mockReturnValueOnce(monthCols)
-    await c.onBarsChange({ target: { name: 'mo', classList: { add: vi.fn(), remove: vi.fn() } } })
+    await c.onBarsChange({
+      currentTarget: { dataset: { option: 'mo' }, classList: { add: vi.fn(), remove: vi.fn() } }
+    })
 
     // Clear mocks so we can see what onZoom calls fresh
     c.purchasesHandle.setXRange.mockClear()
@@ -400,7 +419,9 @@ describe('onBarsChange', () => {
 
     // Zoom=month — should be a no-op: blocks data span (14d) <= month (30.42d) → full data
     c.zoomTargets = []
-    await c.onZoom({ target: { name: 'mo', classList: { add: vi.fn(), remove: vi.fn() } } })
+    await c.onZoom({
+      currentTarget: { dataset: { option: 'mo' }, classList: { add: vi.fn(), remove: vi.fn() } }
+    })
 
     // Range must stay exactly the same — month is wider than what we have
     expect(c.purchasesHandle.setXRange).toHaveBeenCalledWith(1780963200, 1782172800)
@@ -434,7 +455,9 @@ describe('onBarsChange', () => {
       time_chart: { time: ['2026-06-08T00:00:00Z'], price: [282.1], immature: [79], live: [5162] }
     })
     ticketpoolPurchases.toColumns.mockReturnValueOnce(monthCols)
-    await c.onBarsChange({ target: { name: 'mo', classList: { add: vi.fn(), remove: vi.fn() } } })
+    await c.onBarsChange({
+      currentTarget: { dataset: { option: 'mo' }, classList: { add: vi.fn(), remove: vi.fn() } }
+    })
 
     // After Bars=month: range restored via expand-only union
     // _origDataExtent.max = DMIN (< DMAX), so restoreMax = Math.max(DMAX, DMIN) = DMAX
@@ -449,7 +472,9 @@ describe('onBarsChange', () => {
 
     // Zoom=month: ranger data span (14d) <= 30d → return full ranger extent
     c.zoomTargets = []
-    await c.onZoom({ target: { name: 'mo', classList: { add: vi.fn(), remove: vi.fn() } } })
+    await c.onZoom({
+      currentTarget: { dataset: { option: 'mo' }, classList: { add: vi.fn(), remove: vi.fn() } }
+    })
     expect(c.purchasesHandle.setXRange).toHaveBeenCalledWith(DMIN, DMAX)
 
     // Zoom=weeks: ranger data span (14d) > 7d → compute zoom anchored at DMAX
@@ -459,7 +484,9 @@ describe('onBarsChange', () => {
       c.purchasesHandle.uplot.scales.x = { min, max }
     })
     c.purchasesRanger.setSelection = vi.fn()
-    await c.onZoom({ target: { name: 'wk', classList: { add: vi.fn(), remove: vi.fn() } } })
+    await c.onZoom({
+      currentTarget: { dataset: { option: 'wk' }, classList: { add: vi.fn(), remove: vi.fn() } }
+    })
 
     expect(c.purchasesRanger.setSelection).toHaveBeenCalledWith(1781568000, DMAX)
   })
@@ -477,7 +504,9 @@ describe('onBarsChange', () => {
 
     c.zoomTargets = []
     c.bars = 'wk'
-    await c.onZoom({ target: { name: 'all', classList: { add: vi.fn(), remove: vi.fn() } } })
+    await c.onZoom({
+      currentTarget: { dataset: { option: 'all' }, classList: { add: vi.fn(), remove: vi.fn() } }
+    })
 
     // Zoom=all must show the chart's data extent, not the ranger's wider extent
     expect(c.purchasesHandle.setXRange).toHaveBeenCalledWith(1781568000, 1782086400)
