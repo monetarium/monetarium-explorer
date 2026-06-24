@@ -534,6 +534,15 @@ export async function createChart(el, def, opts = {}) {
     })
   }
 
+  // Apply the seeded visibility to the fresh instance's series show flags. buildOpts already
+  // consumed opts.visibility for the stacked bands, but a brand-new uPlot starts every series
+  // show:true — so without this a seed-hidden series (e.g. the address amount-flow chart built
+  // with Net selected, where Received/Spent are seeded off) is still DRAWN. The render path then
+  // calls setVisibility with that same seeded state, which no-ops (unchanged), so the build is the
+  // only chance to hide it. No-op when opts.visibility is absent (applyVisibility skips unset
+  // labels); rebuild() re-applies this on its own.
+  applyVisibility()
+
   // uPlot fixes a series' paths and a scale's distribution at construction, so a
   // mode (line<->stepped) or scale (linear<->log) change rebuilds. Data carries over
   // via uplot.data (the initial [[]] seed persists if rebuilt before the first

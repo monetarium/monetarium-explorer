@@ -1037,4 +1037,19 @@ describe('createChart stacking', () => {
     handle.setVisibility({ A: true, B: true })
     expect(handle.uplot).toBe(before) // not rebuilt
   })
+
+  it('applies seed-hidden visibility to the series show flags on the initial build', async () => {
+    // Repro of the address amount-flow group-by-change bug: renderChart seeds opts.visibility
+    // with a deselected flow series hidden (e.g. Net selected → Received/Spent off). buildOpts
+    // uses the seed for the stacked bands, but a fresh uPlot starts every series show:true — so
+    // the build must ALSO push the seed onto the series show flags. The immediately-following
+    // updateFlow() re-asserts the same bitmap and no-ops (no rebuild), so if the build doesn't
+    // hide the series here, it stays drawn until an unrelated toggle forces a rebuild.
+    const handle = await createChart(el, def, { visibility: { A: false, B: true } })
+    handle.setData([[1], [10], [5]])
+    const before = handle.uplot
+    expect(handle.uplot.setSeries).toHaveBeenCalledWith(1, { show: false }) // A hidden at build
+    handle.setVisibility({ A: false, B: true })
+    expect(handle.uplot).toBe(before) // re-assert is a no-op, no rebuild
+  })
 })
