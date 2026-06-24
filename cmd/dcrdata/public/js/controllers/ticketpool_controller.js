@@ -307,12 +307,24 @@ export default class extends Controller {
   async renderOrUpdatePrice(priceData, mempool) {
     const cols = ticketpoolPrice.toColumns(priceData, mempool)
     if (this.priceHandle) {
+      const sx = this.priceHandle.uplot.scales.x
+      const prevMin = sx.min
+      const prevMax = sx.max
+
       this.priceHandle.setData(cols)
+
+      if (prevMin != null && prevMax != null && isFinite(prevMin) && isFinite(prevMax)) {
+        this.priceHandle.setXRange(prevMin, prevMax)
+      }
+
       await new Promise((resolve) => queueMicrotask(resolve))
       if (this.priceRanger) {
         const w = this._syncRangerWidth('tickets-by-purchase-price', this.priceRangerTarget)
         if (w) this.priceRanger.setWidth(w)
         this.priceRanger.setData([cols[0], cols[3]])
+        if (prevMin != null && prevMax != null && isFinite(prevMin) && isFinite(prevMax)) {
+          this.priceRanger.setSelection(prevMin, prevMax)
+        }
         await new Promise((resolve) => queueMicrotask(resolve))
       }
       return
@@ -355,6 +367,8 @@ export default class extends Controller {
           onSelect: (min, max) => this.priceHandle.setXRange(min, max)
         }
       )
+      this.priceRanger.setData([cols[0], cols[3]])
+      await new Promise((resolve) => queueMicrotask(resolve))
       const ru1 = this.priceRanger.uplot
       ru1.setSelect({ left: 0, top: 0, width: ru1.width, height: ru1.height }, false)
     } finally {

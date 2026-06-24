@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { requestJSON } from '../helpers/http'
 import { ticketpoolPurchases } from '../charts/definitions/ticketpool_purchases'
+import { ticketpoolPrice } from '../charts/definitions/ticketpool_price'
 
 vi.mock('@hotwired/stimulus', () => ({
   Controller: class {
@@ -533,5 +534,31 @@ describe('onBarsChange', () => {
 
     // renderOrUpdatePurchases must be called with mempool=false in bar mode
     expect(spy).toHaveBeenCalledWith(expect.any(Object), false)
+  })
+
+  it('preserves the price chart x-range and syncs the ranger on websocket update', async () => {
+    const c = makeController()
+
+    // Simulate a zoomed viewport on the price chart
+    c.priceHandle.uplot.scales.x = { min: 150, max: 280 }
+
+    // Price data that toColumns should transform
+    ticketpoolPrice.toColumns.mockReturnValueOnce([
+      [100, 200, 300],
+      [0, 5, 8],
+      [5, 8, 12],
+      [50, 60, 70],
+      [50, 60, 70]
+    ])
+
+    await c.renderOrUpdatePrice(
+      { price: [100, 200, 300], immature: [5, 8, 12], live: [50, 60, 70] },
+      false
+    )
+
+    // The x-range must be restored after setData (which would auto-scale)
+    expect(c.priceHandle.setXRange).toHaveBeenCalledWith(150, 280)
+    // The ranger selection must be synced to match
+    expect(c.priceRanger.setSelection).toHaveBeenCalledWith(150, 280)
   })
 })
