@@ -239,18 +239,24 @@ export default class extends Controller {
       onSelect: (min, max) => this.onRangerSelect(spec, min, max)
     })
     spec.ranger.setData([cols[0], cols[1]])
-    // Seed the strip's selection window to the full data extent so a range rectangle is
-    // visible on load (the agenda page has no zoom state to drive setSelection). Deferred to
-    // a microtask: uPlot commits the fresh strip's scales/layout asynchronously, so
-    // setSelection's valToPos is not ready synchronously (mirrors redrawTheme/resizeCharts).
+    // Now that the ranger exists, align its plot insets to the main chart's and seed the
+    // selection window to the full data extent. Both are deferred because uPlot commits the
+    // fresh chart/strip layout asynchronously: (1) the gutter seed in this method ran before
+    // the main chart had its real (data-driven) y-axis width, and the corrective `draw`-hook
+    // sync fired while the ranger was still being constructed (spec.ranger was null) — the
+    // agenda page, unlike address, has no post-render setXRange to trigger another draw, so
+    // without this the strip spans the full container width and ignores the y-axis gutter;
+    // (2) setSelection's valToPos needs the strip's post-gutter layout, so it waits one more
+    // microtask after the gutter relayout (mirrors resizeCharts). Otherwise the strip shows
+    // no range window on load.
     const xs = cols[0]
-    if (xs && xs.length) {
-      const min = xs[0]
-      const max = xs[xs.length - 1]
+    queueMicrotask(() => {
+      if (!spec.ranger) return
+      this.syncRangerGutters(spec.handle.uplot, spec)
       queueMicrotask(() => {
-        if (spec.ranger) spec.ranger.setSelection(min, max)
+        if (spec.ranger && xs && xs.length) spec.ranger.setSelection(xs[0], xs[xs.length - 1])
       })
-    }
+    })
   }
 
   // Main-chart drag-zoom -> mirror onto the ranger window (ephemeral; not persisted).
