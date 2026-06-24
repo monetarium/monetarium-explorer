@@ -7,7 +7,7 @@
         <div class="container main">
             <div class="row justify-content-between">
                 <div class="col-lg-14 col-sm-12 d-flex">
-                    <a class="small row" href="/agendas">All Agendas</a>
+                    <a class="small ms-2" href="/agendas">All Agendas</a>
                 </div>
                 <div class="col-lg-14 col-sm-12 d-flex">
                     <h4 class="mb-2">{{.ID}}
@@ -134,18 +134,13 @@
               </tbody>
             </table>
             {{end}}
-            <div data-controller="agenda" data-agenda-id="{{.ID}}" class="position-relative">
+            <div data-controller="agenda" data-agenda-id="{{.ID}}" class="position-relative agenda-charts">
               <div class="modal position-absolute"></div>
-              <div
-                  data-agenda-target="cumulativeVoteChoices"
-                  style="width:100%; height:300px; margin:0 auto;"
-              ></div>
+              <div class="text-center fs14 fw-bold text-secondary mt-1">Cumulative Vote Choices</div>
+              <div data-agenda-target="cumulativeVoteChoices" class="agenda-chart agenda-chart--cumulative"></div>
               <div data-agenda-target="cumulativeRanger" class="chart-ranger"></div>
-              <br>
-              <div
-                  data-agenda-target="voteChoicesByBlock"
-                  style="width:100%; height:250px; margin:0 auto;"
-              ></div>
+              <div class="text-center fs14 fw-bold text-secondary mt-3">Vote Choices By Block</div>
+              <div data-agenda-target="voteChoicesByBlock" class="agenda-chart agenda-chart--block"></div>
               <div data-agenda-target="blockRanger" class="chart-ranger"></div>
               <div class="d-hide">
                   <div class="pe-3" data-agenda-target="legendEntry"><div class="dygraph-legend-line" data-agenda-target="legendMarker"></div></div>
