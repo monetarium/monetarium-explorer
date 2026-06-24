@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import Zoom from '../helpers/zoom_helper'
 
 // Stub the @hotwired/stimulus import so the controller module loads in jsdom.
@@ -39,6 +39,14 @@ vi.mock('../helpers/uplot_adapter', () => ({
 vi.mock('../helpers/uplot_ranger', () => ({
   createRanger: vi.fn().mockResolvedValue(fakeRanger)
 }))
+
+// Reset shared singleton mock state that individual tests mutate, so a thrown assertion
+// mid-test can't leak it into later tests (order-dependent failures). makeRenderController
+// clears the per-call mocks; this restores the shared uplot scale object the theme/resize
+// tests poke at, regardless of whether their test body reached its trailing restore.
+afterEach(() => {
+  fakeHandle.uplot.scales.x = {}
+})
 
 const {
   default: AddressController,
@@ -601,8 +609,6 @@ describe('address ranger + theme', () => {
     // setSelection is deferred to a microtask — flush it.
     await Promise.resolve()
     expect(fakeRanger.setSelection).toHaveBeenCalledWith(100, 200)
-    // Restore shared mock to neutral state so other tests are unaffected.
-    fakeHandle.uplot.scales.x = {}
   })
   it('resizeChart re-applies the ranger selection after width change', async () => {
     // Regression: before the fix, setWidth invalidated the pixel-based selection rectangle
@@ -622,8 +628,6 @@ describe('address ranger + theme', () => {
     // setSelection is deferred to a microtask — flush it.
     await Promise.resolve()
     expect(fakeRanger.setSelection).toHaveBeenCalledWith(100, 200)
-    // Restore shared mock to neutral state.
-    fakeHandle.uplot.scales.x = {}
   })
 })
 
