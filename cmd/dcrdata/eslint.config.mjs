@@ -23,6 +23,8 @@ export default [
         window: 'readonly',
         document: 'readonly',
         console: 'readonly',
+        performance: 'readonly',
+        MouseEvent: 'readonly',
         setTimeout: 'readonly',
         clearTimeout: 'readonly',
         setInterval: 'readonly',

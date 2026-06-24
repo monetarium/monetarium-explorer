@@ -155,6 +155,7 @@ describe('ChartPanel touch-scrub', () => {
       clientHeight: 300,
       getBoundingClientRect: () => ({ left: 0, top: 0, width: 800, height: 300 }),
       appendChild: vi.fn(),
+      dispatchEvent: vi.fn(),
       addEventListener: (type, fn) => {
         ;(listeners[type] ||= []).push(fn)
       },
@@ -177,6 +178,49 @@ describe('ChartPanel touch-scrub', () => {
     over._fire('touchstart', { touches: [{ clientX: 100, clientY: 100 }] })
     over._fire('touchmove', { touches: [{ clientX: 102, clientY: 140 }], preventDefault: () => {} }) // dy dominant
     expect(u.setCursor).not.toHaveBeenCalled()
+  })
+  it('two quick taps in the same spot dispatch a dblclick (zoom reset)', async () => {
+    const p = createChartPanel(document.createElement('div'), {})
+    await p.render(defA, payload1, {})
+    const over = overStub()
+    const u = { over: over, cursor: {}, setCursor: vi.fn() }
+    p.installTooltip(u)
+    // tap 1
+    over._fire('touchstart', { touches: [{ clientX: 100, clientY: 100 }] })
+    over._fire('touchend', {})
+    // tap 2 (same spot, immediately) -> double-tap
+    over._fire('touchstart', { touches: [{ clientX: 100, clientY: 100 }] })
+    over._fire('touchend', {})
+    expect(over.dispatchEvent).toHaveBeenCalledTimes(1)
+    expect(over.dispatchEvent.mock.calls[0][0].type).toBe('dblclick')
+  })
+  it('a single tap does not dispatch a dblclick', async () => {
+    const p = createChartPanel(document.createElement('div'), {})
+    await p.render(defA, payload1, {})
+    const over = overStub()
+    const u = { over: over, cursor: {}, setCursor: vi.fn() }
+    p.installTooltip(u)
+    over._fire('touchstart', { touches: [{ clientX: 100, clientY: 100 }] })
+    over._fire('touchend', {})
+    expect(over.dispatchEvent).not.toHaveBeenCalled()
+  })
+  it('a scroll between two taps breaks the double-tap sequence (no false reset)', async () => {
+    const p = createChartPanel(document.createElement('div'), {})
+    await p.render(defA, payload1, {})
+    const over = overStub()
+    const u = { over: over, cursor: {}, setCursor: vi.fn() }
+    p.installTooltip(u)
+    // tap 1
+    over._fire('touchstart', { touches: [{ clientX: 100, clientY: 100 }] })
+    over._fire('touchend', {})
+    // a vertical scroll gesture (locks to 'scroll') then lifts
+    over._fire('touchstart', { touches: [{ clientX: 100, clientY: 100 }] })
+    over._fire('touchmove', { touches: [{ clientX: 102, clientY: 160 }], preventDefault: () => {} })
+    over._fire('touchend', {})
+    // tap 2 in the same spot — must NOT pair with tap 1 across the scroll
+    over._fire('touchstart', { touches: [{ clientX: 100, clientY: 100 }] })
+    over._fire('touchend', {})
+    expect(over.dispatchEvent).not.toHaveBeenCalled()
   })
 })
 
