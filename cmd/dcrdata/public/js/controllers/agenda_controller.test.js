@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-// Stub Stimulus so the controller module loads in jsdom.
 vi.mock('@hotwired/stimulus', () => ({
   Controller: class {
     constructor(element) {
@@ -9,225 +8,62 @@ vi.mock('@hotwired/stimulus', () => ({
   }
 }))
 
-// Mock the adapter + ranger (no real uPlot). createChart/createRanger return a fresh fake
-// each call and push it onto a list so the tests can assert per-chart calls.
-const makeFakeHandle = () => ({
-  uplot: { data: [[]], scales: { x: {} }, over: null, root: null },
-  setData: vi.fn(),
-  setXRange: vi.fn(),
-  setDark: vi.fn(),
-  resize: vi.fn(),
-  destroy: vi.fn()
-})
-const makeFakeRanger = () => ({
-  uplot: { data: [[]] },
-  setData: vi.fn(),
-  setSelection: vi.fn(),
-  setWidth: vi.fn(),
-  setGutters: vi.fn(),
-  setDark: vi.fn(),
-  destroy: vi.fn()
-})
-let fakeHandles = []
-let fakeRangers = []
-vi.mock('../helpers/uplot_adapter', () => ({
-  createChart: vi.fn(() => {
-    const h = makeFakeHandle()
-    fakeHandles.push(h)
-    return Promise.resolve(h)
-  }),
-  resolveSeriesColor: vi.fn(() => 'rgb(1,2,3)')
+const fakePanels = []
+const makeFakePanel = () => ({ render: vi.fn().mockResolvedValue(undefined), destroy: vi.fn() })
+vi.mock('../helpers/chart_panel', () => ({
+  createChartPanel: vi.fn((el, opts) => {
+    const p = makeFakePanel()
+    p._el = el
+    p._opts = opts
+    fakePanels.push(p)
+    return p
+  })
 }))
-vi.mock('../helpers/uplot_ranger', () => ({
-  createRanger: vi.fn(() => {
-    const r = makeFakeRanger()
-    fakeRangers.push(r)
-    return Promise.resolve(r)
+vi.mock('../helpers/http', () => ({
+  requestJSON: vi.fn().mockResolvedValue({
+    by_time: { time: ['2024-06-01T22:00:00Z'], yes: [1], abstain: [2], no: [3] },
+    by_height: { height: [4096], yes: [1], abstain: [0], no: [0] }
   })
 }))
 
 afterEach(() => {
-  fakeHandles = []
-  fakeRangers = []
+  fakePanels.length = 0
+  vi.clearAllMocks()
 })
 
 const { default: AgendaController } = await import('./agenda_controller.js')
+const { createChartPanel } = await import('../helpers/chart_panel.js')
 
-function targetStub() {
-  return { clientWidth: 800, clientHeight: 300 }
-}
-
-// Build a controller wired with stub targets and the two chart specs, bypassing connect().
 function makeController() {
-  const ctrl = new AgendaController(document.createElement('div'))
-  ctrl.cumulativeVoteChoicesTarget = targetStub()
-  ctrl.voteChoicesByBlockTarget = targetStub()
-  ctrl.cumulativeRangerTarget = targetStub()
-  ctrl.blockRangerTarget = targetStub()
+  const el = document.createElement('div')
+  const ctrl = new AgendaController(el)
+  ctrl.cumulativeVoteChoicesTarget = document.createElement('div')
+  ctrl.voteChoicesByBlockTarget = document.createElement('div')
+  ctrl.cumulativeRangerTarget = document.createElement('div')
+  ctrl.blockRangerTarget = document.createElement('div')
   ctrl.hasCumulativeRangerTarget = true
   ctrl.hasBlockRangerTarget = true
-  ctrl.legendEntry = (s) => {
-    const n = document.createElement('div')
-    n.textContent = s
-    return n
-  }
-  ctrl.legendMarker = () => ''
-  ctrl.charts = ctrl.buildChartSpecs()
+  ctrl.data = { get: () => 'activateska2' }
   return ctrl
 }
 
-const payloadByTime = {
-  time: ['2024-06-01T22:00:00Z', '2024-06-02T22:00:00Z'],
-  yes: [10, 30],
-  abstain: [5, 5],
-  no: [5, 15]
-}
-const payloadByHeight = { height: [4096, 4097], yes: [2, 0], abstain: [1, 0], no: [1, 0] }
-
-describe('buildChartSpecs', () => {
-  it('builds two specs: cumulative (time) and by-block (height)', () => {
+describe('agenda controller', () => {
+  it('connect builds two panels (time + block height) and renders each', async () => {
     const ctrl = makeController()
-    expect(ctrl.charts).toHaveLength(2)
-    expect(ctrl.charts[0].key).toBe('cumulative')
-    expect(ctrl.charts[0].xTime).toBe(true)
-    expect(ctrl.charts[0].def.name).toBe('cumulative-vote-choices')
-    expect(ctrl.charts[1].key).toBe('byBlock')
-    expect(ctrl.charts[1].xTime).toBe(false)
-    expect(ctrl.charts[1].def.name).toBe('vote-choices-by-block')
+    await ctrl.connect()
+    expect(createChartPanel).toHaveBeenCalledTimes(2)
+    expect(fakePanels[0]._opts.xTime).toBe(true)
+    expect(fakePanels[1]._opts.xTime).toBe(false)
+    expect(fakePanels[0].render).toHaveBeenCalledTimes(1)
+    expect(fakePanels[1].render).toHaveBeenCalledTimes(1)
+    // formatX wiring: time panel formats a date, block panel formats a height
+    expect(fakePanels[0]._opts.formatX(1717279200)).toContain('Date:')
+    expect(fakePanels[1]._opts.formatX(4096)).toContain('Block Height: 4,096')
   })
-})
-
-describe('renderChart', () => {
-  it('creates a handle, sets data from the def, and creates a ranger', async () => {
+  it('disconnect destroys every panel', async () => {
     const ctrl = makeController()
-    const spec = ctrl.charts[0]
-    spec.payload = payloadByTime
-    await ctrl.renderChart(spec)
-    expect(spec.handle).toBeTruthy()
-    expect(spec.handle.setData).toHaveBeenCalledTimes(1)
-    // setData fed the def's columns: [secs, yes, abstain, no]
-    const cols = spec.handle.setData.mock.calls[0][0]
-    expect(cols[1]).toEqual([10, 30])
-    expect(spec.ranger).toBeTruthy()
-    expect(spec.ranger.setData).toHaveBeenCalledTimes(1)
-  })
-
-  it('destroys an existing handle before recreating (no leak on re-render)', async () => {
-    const ctrl = makeController()
-    const spec = ctrl.charts[1]
-    spec.payload = payloadByHeight
-    await ctrl.renderChart(spec)
-    const first = spec.handle
-    await ctrl.renderChart(spec)
-    expect(first.destroy).toHaveBeenCalledTimes(1)
-  })
-
-  it('initializes the ranger selection to the full data extent on load', async () => {
-    // Regression: without this the strip's .u-select window has zero width on load (no
-    // visible range rectangle). The agenda page has no zoom state to drive setSelection, so
-    // the controller seeds the full extent itself (deferred — uPlot commits layout async).
-    const ctrl = makeController()
-    const spec = ctrl.charts[0]
-    spec.payload = payloadByTime
-    await ctrl.renderChart(spec)
-    await new Promise((resolve) => setTimeout(resolve, 0)) // flush the queued microtask
-    expect(spec.ranger.setSelection).toHaveBeenCalledWith(1717279200, 1717365600)
-  })
-})
-
-describe('renderLegend tooltip', () => {
-  it('renders the date x-label and per-series count+pct for the cumulative chart', async () => {
-    const ctrl = makeController()
-    const spec = ctrl.charts[0]
-    spec.payload = payloadByTime
-    await ctrl.renderChart(spec)
-    spec.legendElement = document.createElement('div')
-    const u = {
-      cursor: { idx: 1 },
-      data: [
-        [1717279200, 1717365600],
-        [10, 30],
-        [5, 5],
-        [5, 15]
-      ],
-      series: [{}, { show: true }, { show: true }, { show: true }],
-      over: { clientWidth: 800, clientHeight: 300 }
-    }
-    ctrl.renderLegend(u, spec)
-    const text = spec.legendElement.textContent
-    expect(text).toContain('Date: 2024-06-02')
-    expect(text).toContain('Yes: 30 (60.00%)')
-    expect(text).toContain('No: 15 (30.00%)')
-  })
-
-  it('renders the block-height x-label for the by-block chart', async () => {
-    const ctrl = makeController()
-    const spec = ctrl.charts[1]
-    spec.payload = payloadByHeight
-    await ctrl.renderChart(spec)
-    spec.legendElement = document.createElement('div')
-    const u = {
-      cursor: { idx: 0 },
-      data: [
-        [4096, 4097],
-        [2, 0],
-        [1, 0],
-        [1, 0]
-      ],
-      series: [{}, { show: true }, { show: true }, { show: true }],
-      over: { clientWidth: 800, clientHeight: 300 }
-    }
-    ctrl.renderLegend(u, spec)
-    expect(spec.legendElement.textContent).toContain('Block Height: 4,096')
-    expect(spec.legendElement.textContent).toContain('Yes: 2 (50.00%)')
-  })
-
-  it('hides the tooltip when the cursor leaves the plot (idx null)', () => {
-    const ctrl = makeController()
-    const spec = ctrl.charts[0]
-    spec.legendElement = document.createElement('div')
-    ctrl.renderLegend({ cursor: { idx: null }, data: [[]] }, spec)
-    expect(spec.legendElement.classList.contains('d-hide')).toBe(true)
-  })
-})
-
-describe('disconnect', () => {
-  it('destroys every chart handle and ranger', async () => {
-    const ctrl = makeController()
-    for (const spec of ctrl.charts) {
-      spec.payload = spec.xTime ? payloadByTime : payloadByHeight
-      await ctrl.renderChart(spec)
-    }
-    const handles = ctrl.charts.map((c) => c.handle)
-    const rangers = ctrl.charts.map((c) => c.ranger)
-    // disconnect uses event-bus + window APIs; stub the parts it touches.
-    ctrl.processNightMode = () => {}
-    ctrl.onWindowResize = () => {}
+    await ctrl.connect()
     ctrl.disconnect()
-    handles.forEach((h) => expect(h.destroy).toHaveBeenCalledTimes(1))
-    rangers.forEach((r) => expect(r.destroy).toHaveBeenCalledTimes(1))
-    expect(ctrl.charts.every((c) => c.handle === null && c.ranger === null)).toBe(true)
-  })
-})
-
-describe('onRangerSelect', () => {
-  it('drives the main handle x-range from a ranger drag', async () => {
-    const ctrl = makeController()
-    const spec = ctrl.charts[0]
-    spec.payload = payloadByTime
-    await ctrl.renderChart(spec)
-    ctrl.onRangerSelect(spec, 100, 200)
-    expect(spec.handle.setXRange).toHaveBeenCalledWith(100, 200)
-  })
-})
-
-describe('onChartRangeChange', () => {
-  it('mirrors a main-chart drag-zoom onto the ranger selection', async () => {
-    const ctrl = makeController()
-    const spec = ctrl.charts[0]
-    spec.payload = payloadByTime
-    await ctrl.renderChart(spec)
-    ctrl.onChartRangeChange(spec, 100, 200)
-    expect(spec.ranger.setSelection).toHaveBeenCalledWith(100, 200)
+    fakePanels.forEach((p) => expect(p.destroy).toHaveBeenCalledTimes(1))
   })
 })
