@@ -427,7 +427,10 @@ input ~ .checkmark {
 }
 
 .customcheck input:checked ~ .net {
-  background-color: #ff0090;
+  // The Net toggle drives two series (Net Received green / Net Spent orange); the swatch
+  // takes the Net Received stroke: PALETTE[2] (colorIndex 2) in chart_theme.js. Was a
+  // stale legacy pink that read as the same hue as the Sent (red) checkmark.
+  background-color: #2db35e;
 }
 
 .customcheck input:checked ~ .tickets-price,
