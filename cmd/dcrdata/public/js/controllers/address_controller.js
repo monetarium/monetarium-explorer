@@ -686,6 +686,14 @@ export default class extends Controller {
       hooks: this.buildHooks(),
       onRangeChange: (min, max) => this.onChartRangeChange(min, max)
     }
+    // Seed the amount-flow chart's starting visibility so the first stacked build already omits
+    // the hidden series. Without it the chart is built with all four flow series visible (a
+    // double-counted stacked total) and the immediately-following updateFlow() forces a throwaway
+    // destroy+rebuild to restack. flowVisibility maps the current flow bitmap to per-series show;
+    // the adapter's setVisibility then no-ops because the state is unchanged.
+    if (def.name === 'amountflow' && this.flowBoxes) {
+      opts.visibility = flowVisibility(this.flow)
+    }
     if (this.handle) this.handle.destroy()
     this.handle = await createChart(this.chartTarget, def, opts)
     this.handle.setData(cols)

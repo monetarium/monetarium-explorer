@@ -1026,4 +1026,15 @@ describe('createChart stacking', () => {
     // hidden series is also setSeries(show:false)
     expect(handle.uplot.setSeries).toHaveBeenCalledWith(1, { show: false })
   })
+
+  it('does not rebuild when setVisibility re-asserts the seeded visibility', async () => {
+    // The address amount-flow path seeds opts.visibility at construction, then popChartCache
+    // immediately calls updateFlow() with the same bitmap. Re-asserting an unchanged state must
+    // not trigger a throwaway destroy+rebuild.
+    const handle = await createChart(el, def, { visibility: { A: true, B: true } })
+    handle.setData([[1], [10], [5]])
+    const before = handle.uplot
+    handle.setVisibility({ A: true, B: true })
+    expect(handle.uplot).toBe(before) // not rebuilt
+  })
 })

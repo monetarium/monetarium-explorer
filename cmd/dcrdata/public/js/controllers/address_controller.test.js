@@ -228,6 +228,29 @@ describe('address renderChart', () => {
       [0, 12.5, 12.5]
     ])
   })
+
+  it('seeds amountflow visibility from the flow bitmap so the first build is not double-stacked', async () => {
+    // Without the seed the chart is built with all four flow series visible (a double-counted
+    // stacked total), then updateFlow() forces a throwaway restack rebuild. The seed makes the
+    // first build already correct.
+    const { createChart } = await import('../helpers/uplot_adapter')
+    createChart.mockClear()
+    const ctrl = makeRenderController('amountflow', 0, {
+      time: ['2024-06-01T22:00:00Z'],
+      received: [10],
+      sent: [3],
+      net: [7]
+    })
+    ctrl.flowBoxes = makeBoxes({ received: true, sent: true, net: false }) // bitmap 3
+    await ctrl.renderChart()
+    const opts = createChart.mock.calls.at(-1)[2]
+    expect(opts.visibility).toEqual({
+      Received: true,
+      Spent: true,
+      'Net Received': false,
+      'Net Spent': false
+    })
+  })
 })
 
 describe('address renderLegend', () => {

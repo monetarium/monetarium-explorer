@@ -602,9 +602,18 @@ export async function createChart(el, def, opts = {}) {
     },
     setVisibility(map) {
       if (destroyed) return
+      // Skip the work when nothing actually toggled. A stacked chart seeded with its starting
+      // visibility (createChart opts.visibility) would otherwise eat a full destroy+rebuild on
+      // the first post-build setVisibility call that merely re-asserts that same state — the
+      // address amount-flow render path, where popChartCache builds then immediately calls
+      // updateFlow() with the same bitmap.
+      let changed = false
       Object.keys(map).forEach((label) => {
-        visibility[label] = !!map[label]
+        const next = !!map[label]
+        if (visibility[label] !== next) changed = true
+        visibility[label] = next
       })
+      if (!changed) return
       if (currentDef.stacked) {
         // Restack: bands + accumulation must recompute for the new visible set, which
         // is baked into opts at construction — so rebuild (which feeds restacked data
