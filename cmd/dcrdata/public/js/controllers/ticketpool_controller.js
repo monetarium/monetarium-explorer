@@ -166,11 +166,14 @@ export default class extends Controller {
   }
 
   _syncRangerWidth(chartId, rangerEl) {
-    const over = document.getElementById(chartId)?.querySelector('.u-over')
+    const chartEl = document.getElementById(chartId)
+    if (!chartEl) return
+    const over = chartEl.querySelector('.u-over')
     if (!over) return
-    const s = over.style
-    const left = parseFloat(s.left) || 0
-    const width = parseFloat(s.width) || 0
+    const chartRect = chartEl.getBoundingClientRect()
+    const overRect = over.getBoundingClientRect()
+    const left = Math.round(overRect.left - chartRect.left) || 0
+    const width = Math.round(overRect.width) || 0
     if (!width) return
     rangerEl.style.marginLeft = `${left}px`
     rangerEl.style.width = `${width}px`
@@ -181,6 +184,7 @@ export default class extends Controller {
     const cols = ticketpoolPurchases.toColumns(timeData, mempool)
     if (this.purchasesHandle) {
       this.purchasesHandle.setData(cols)
+      await new Promise((resolve) => queueMicrotask(resolve))
       if (this.purchasesRanger) {
         const w = this._syncRangerWidth('tickets-by-purchase-date', this.purchasesRangerTarget)
         if (w) this.purchasesRanger.setWidth(w)
@@ -216,6 +220,7 @@ export default class extends Controller {
         }
       })
       this.purchasesHandle.setData(cols)
+      await new Promise((resolve) => queueMicrotask(resolve))
       this._syncRangerWidth('tickets-by-purchase-date', this.purchasesRangerTarget)
       this.purchasesRanger = await createRanger(
         this.purchasesRangerTarget,
@@ -239,6 +244,7 @@ export default class extends Controller {
     const cols = ticketpoolPrice.toColumns(priceData, mempool)
     if (this.priceHandle) {
       this.priceHandle.setData(cols)
+      await new Promise((resolve) => queueMicrotask(resolve))
       if (this.priceRanger) {
         const w = this._syncRangerWidth('tickets-by-purchase-price', this.priceRangerTarget)
         if (w) this.priceRanger.setWidth(w)
@@ -272,6 +278,7 @@ export default class extends Controller {
         }
       })
       this.priceHandle.setData(cols)
+      await new Promise((resolve) => queueMicrotask(resolve))
       this._syncRangerWidth('tickets-by-purchase-price', this.priceRangerTarget)
       this.priceRanger = await createRanger(
         this.priceRangerTarget,
@@ -369,6 +376,7 @@ export default class extends Controller {
     const cols = ticketpoolPurchases.toColumns(ticketPoolResponse.time_chart)
     if (this.purchasesHandle) {
       this.purchasesHandle.setData(cols)
+      await new Promise((resolve) => queueMicrotask(resolve))
       this.purchasesRanger?.setData([cols[0], cols[3]])
       if (this.purchasesRanger) {
         const w = this._syncRangerWidth('tickets-by-purchase-date', this.purchasesRangerTarget)

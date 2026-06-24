@@ -1,11 +1,15 @@
 export const ticketpoolPrice = {
   name: 'ticketpool-price',
   label: 'Ticket Price Distribution',
-  axes: [{ label: 'Number of Tickets', scale: 'y' }],
+  axes: [
+    { label: 'Number of Tickets', scale: 'y' },
+    { label: '\u00A0', scale: 'y2' }
+  ],
   series: [
     { label: 'Mempool Tickets', scale: 'y', kind: 'bars', colorIndex: 0 },
     { label: 'Immature Tickets', scale: 'y', kind: 'bars', colorIndex: 1 },
-    { label: 'Live Tickets', scale: 'y', kind: 'bars', colorIndex: 2 }
+    { label: 'Live Tickets', scale: 'y', kind: 'bars', colorIndex: 2 },
+    { label: '', scale: 'y2', kind: 'line', colorIndex: 2, width: 0, show: false }
   ],
   toColumns: (data, mempool) => {
     const prices = data.price ? data.price.slice() : []
@@ -32,7 +36,7 @@ export const ticketpoolPrice = {
         }
       }
     }
-    return [prices, mem, imm, live]
+    return [prices, mem, imm, live, live]
   },
   formatValue: (seriesIdx, datum) => {
     if (!Number.isFinite(datum.value)) return 'n/a'
