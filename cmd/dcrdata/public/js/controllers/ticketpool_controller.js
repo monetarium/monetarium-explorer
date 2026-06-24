@@ -232,14 +232,27 @@ export default class extends Controller {
     const cols = ticketpoolPurchases.toColumns(timeData, mempool)
     this._extendToPeriodEnd(cols)
     if (this.purchasesHandle) {
+      const sx = this.purchasesHandle.uplot.scales.x
+      const prevMin = sx.min
+      const prevMax = sx.max
+
       this.purchasesHandle.uplot._barMode = this.bars
       this.purchasesHandle.setData(cols)
+
+      if (prevMin != null && prevMax != null && isFinite(prevMin) && isFinite(prevMax)) {
+        this.purchasesHandle.setXRange(prevMin, prevMax)
+      }
+
       await new Promise((resolve) => queueMicrotask(resolve))
       if (this.purchasesRanger) {
         const w = this._syncRangerWidth('tickets-by-purchase-date', this.purchasesRangerTarget)
         if (w) this.purchasesRanger.setWidth(w)
-        const ru = this.purchasesRanger.uplot
-        ru.setSelect({ left: 0, top: 0, width: ru.width, height: ru.height }, false)
+        if (prevMin != null && prevMax != null && isFinite(prevMin) && isFinite(prevMax)) {
+          this.purchasesRanger.setSelection(prevMin, prevMax)
+        } else {
+          const ru = this.purchasesRanger.uplot
+          ru.setSelect({ left: 0, top: 0, width: ru.width, height: ru.height }, false)
+        }
       }
       return
     }
