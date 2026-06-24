@@ -4,7 +4,10 @@
 // docs/superpowers/specs/2026-06-24-reusable-chart-panel-design.md.
 
 import { darkEnabled } from '../services/theme_service'
+import { classifyGesture } from './touch_gesture'
 import { createChart, resolveSeriesColor } from './uplot_adapter'
+
+const SCRUB_THRESHOLD = 8 // px a touch must travel horizontally to lock into a scrub (mirrors charts)
 
 export function createChartPanel(chartEl, opts = {}) {
   return new ChartPanel(chartEl, opts)
@@ -93,6 +96,57 @@ class ChartPanel {
     u.over.addEventListener('mouseleave', () => {
       if (!u.cursor || !u.cursor._lock) tt.classList.add('d-hide')
     })
+    this.installTouchScrub(u, tt)
+  }
+
+  // Touch parity for the hover tooltip: a horizontal finger drag scrubs the cursor (same
+  // setCursor -> renderLegend path as the mouse); a vertical drag yields to page scroll.
+  // pending -> scrub | scroll, terminal until touchend/cancel. Ported from charts_controller.
+  installTouchScrub(u, tt) {
+    let startX = 0
+    let startY = 0
+    let state = 'pending'
+    this.touchActive = false
+    u.over.style.touchAction = 'pan-y' // self-contained: no per-page CSS
+    u.over.addEventListener(
+      'touchstart',
+      (e) => {
+        const t = e.touches && e.touches[0]
+        if (!t) return
+        startX = t.clientX
+        startY = t.clientY
+        state = 'pending'
+      },
+      { passive: true }
+    )
+    u.over.addEventListener(
+      'touchmove',
+      (e) => {
+        const t = e.touches && e.touches[0]
+        if (!t) return
+        if (state === 'pending') {
+          state = classifyGesture(t.clientX - startX, t.clientY - startY, SCRUB_THRESHOLD)
+        }
+        if (state !== 'scrub') return
+        this.touchActive = true
+        e.preventDefault()
+        const rect = u.over.getBoundingClientRect()
+        const left = Math.max(0, Math.min(t.clientX - rect.left, rect.width))
+        const top = Math.max(0, Math.min(t.clientY - rect.top, rect.height))
+        u.setCursor({ left: left, top: top })
+      },
+      { passive: false }
+    )
+    const end = () => {
+      if (state === 'scrub') {
+        tt.classList.add('d-hide')
+        u.setCursor({ left: -10, top: -10 })
+      }
+      state = 'pending'
+      this.touchActive = false
+    }
+    u.over.addEventListener('touchend', end)
+    u.over.addEventListener('touchcancel', end)
   }
 
   // Build a legend row node. Self-contained marker reusing the global .dygraph-legend-line CSS.

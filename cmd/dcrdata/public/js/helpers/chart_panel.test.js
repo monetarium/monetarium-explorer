@@ -138,3 +138,37 @@ describe('ChartPanel tooltip', () => {
     expect(p.legendElement.textContent).not.toContain('Yes:')
   })
 })
+
+describe('ChartPanel touch-scrub', () => {
+  function overStub() {
+    const listeners = {}
+    return {
+      style: {},
+      clientWidth: 800,
+      clientHeight: 300,
+      getBoundingClientRect: () => ({ left: 0, top: 0, width: 800, height: 300 }),
+      appendChild: vi.fn(),
+      addEventListener: (type, fn) => {
+        ;(listeners[type] ||= []).push(fn)
+      },
+      _fire: (type, ev) => (listeners[type] || []).forEach((fn) => fn(ev)),
+      _listeners: listeners
+    }
+  }
+  it('a horizontal touch drag scrubs the cursor; a vertical one does not', async () => {
+    const p = createChartPanel(document.createElement('div'), {})
+    await p.render(defA, payload1, {})
+    const over = overStub()
+    const u = { over: over, cursor: {}, setCursor: vi.fn() }
+    p.installTooltip(u) // installs touch listeners on over
+    over._fire('touchstart', { touches: [{ clientX: 100, clientY: 100 }] })
+    over._fire('touchmove', { touches: [{ clientX: 140, clientY: 102 }], preventDefault: () => {} }) // dx=40 horizontal
+    expect(u.setCursor).toHaveBeenCalledTimes(1)
+    expect(over.style.touchAction).toBe('pan-y')
+    // vertical drag from a fresh gesture
+    u.setCursor.mockClear()
+    over._fire('touchstart', { touches: [{ clientX: 100, clientY: 100 }] })
+    over._fire('touchmove', { touches: [{ clientX: 102, clientY: 140 }], preventDefault: () => {} }) // dy dominant
+    expect(u.setCursor).not.toHaveBeenCalled()
+  })
+})
