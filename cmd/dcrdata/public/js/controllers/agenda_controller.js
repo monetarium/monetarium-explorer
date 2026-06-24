@@ -39,7 +39,11 @@ export default class extends Controller {
       }
     ]
     const res = await requestJSON(`/api/agenda/${this.agendaId}`)
-    for (const p of this.panels) await p.panel.render(p.def, (res && res[p.field]) || {}, {})
+    // Render both panels in parallel — they are independent, so serializing their
+    // createChart/loadUPlot calls would just double the wall-clock time.
+    await Promise.all(
+      this.panels.map((p) => p.panel.render(p.def, (res && res[p.field]) || {}, {}))
+    )
     this.element.classList.remove('loading')
   }
 
