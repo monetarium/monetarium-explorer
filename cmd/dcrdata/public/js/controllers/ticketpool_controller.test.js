@@ -31,8 +31,9 @@ vi.mock('../helpers/uplot_ranger', () => ({
       setData: vi.fn(),
       setSelection: vi.fn(),
       setDark: vi.fn(),
+      setWidth: vi.fn(),
       destroy: vi.fn(),
-      uplot: { data: [[]] }
+      uplot: { data: [[]], setSelect: vi.fn() }
     })
   )
 }))
