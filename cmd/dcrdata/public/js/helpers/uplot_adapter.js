@@ -81,6 +81,9 @@ const TIME_AXIS_VALUES = (() => {
  * @property {number[]} [dash]      // dashed-line pattern
  * @property {number} [width]       // stroke width in px (uPlot default is 1)
  * @property {boolean} [spanGaps]   // draw the line across null gaps
+ * @property {boolean} [fill]  // force a translucent area fill (e.g. a filled stepped line)
+ * @property {number} [barAlign]   // bars: 0 center (default), 1 left edge at x, -1 right edge at x
+ * @property {number[]} [barSize]  // bars: uPlot size [widthFactor, maxPx?, minPx?]; default [0.6, 100]
  *
  * @typedef {Object} ChartDefinition
  * @property {string} name
@@ -94,10 +97,13 @@ const TIME_AXIS_VALUES = (() => {
  * @property {(seriesIdx:number, rawDatum:*, settings:object)=>string} [formatValue]
  */
 
-function pathsFor(UPlot, kind) {
-  switch (kind) {
+function pathsFor(UPlot, s) {
+  switch (s.kind) {
     case 'bars':
-      return UPlot.paths.bars({ size: [0.6, 100], align: 0 })
+      // Per-series bar geometry. Default: centered, 60% width, capped at 100px (the /charts
+      // bar charts). Histograms opt in to barAlign:1 (left edge at the bucket start) and a
+      // full-width, uncapped barSize so each bar spans its bin — see address.js.
+      return UPlot.paths.bars({ size: s.barSize || [0.6, 100], align: s.barAlign ?? 0 })
     case 'stepped':
       return UPlot.paths.stepped({ align: 1 })
     default: // 'line' and 'area' share the linear path; 'area' adds a fill
@@ -280,13 +286,15 @@ export function buildOpts(UPlot, def, opts = {}) {
       const axisColor = si >= 0 ? seriesColors[si] : c.axis
       const axis = {
         scale: scale,
-        label: a.label,
-        labelFont: AXIS_LABEL_FONT,
-        labelSize: AXIS_LABEL_SIZE,
-        labelGap: AXIS_LABEL_GAP,
         stroke: axisColor,
         grid: { stroke: scale === 'y' ? c.grid : 'transparent' },
         side: scale === 'y2' ? 1 : 3 // 3 = left, 1 = right
+      }
+      if (a.label) {
+        axis.label = a.label
+        axis.labelFont = AXIS_LABEL_FONT
+        axis.labelSize = AXIS_LABEL_SIZE
+        axis.labelGap = AXIS_LABEL_GAP
       }
       if (isLog && scale === 'y') {
         // Adaptive ticks for the (tight) log y-scale — see logSplits / adaptiveLogValues.
@@ -307,13 +315,13 @@ export function buildOpts(UPlot, def, opts = {}) {
   const series = [
     {},
     ...def.series.map((s, i) => {
-      const filled = s.kind === 'area' || s.kind === 'bars'
+      const filled = s.kind === 'area' || s.kind === 'bars' || s.fill
       const entry = {
         label: s.label,
         scale: s.scale || 'y',
         stroke: seriesColors[i],
         fill: filled ? fillForStroke(seriesColors[i], dark) : null,
-        paths: pathsFor(UPlot, s.kind),
+        paths: pathsFor(UPlot, s),
         points: { show: false },
         spanGaps: !!s.spanGaps
       }
@@ -326,12 +334,23 @@ export function buildOpts(UPlot, def, opts = {}) {
   const cursor = {}
   if (syncKey) cursor.sync = { key: syncKey, setSeries: true }
 
+  let bands
+  if (def.stacked) {
+    const visibility = opts.visibility || {}
+    const omit = (i) => visibility[def.series[i - 1].label] === false
+    // stack() only needs the shape to derive bands; feed a 1-row stub so the band
+    // computation runs without the real data (data is stacked separately in the handle).
+    const stub = [[0], ...def.series.map(() => [0])]
+    bands = stack(stub, omit).bands
+  }
+
   const out = {
     width: width,
     height: height,
     scales: scales,
     axes: axes,
     series: series,
+    bands: bands,
     cursor: cursor,
     legend: { show: false }
   }
@@ -346,6 +365,74 @@ export async function loadUPlot() {
     uPlotCtor = await getDefault(import(/* webpackChunkName: "uplot" */ 'uplot'))
   }
   return uPlotCtor
+}
+
+/**
+ * uPlot stacking transform (port of uPlot's demos/stack.js). Accumulates each
+ * non-omitted series into a running per-row total and emits `bands` so uPlot fills
+ * each visible series down to the next visible one above it — the canonical way to
+ * render stacked area/bar charts. Pure; never mutates the input.
+ *
+ * Null/NaN y-values count as 0 in the running total but stay null in their own
+ * column (rendered as a gap). `omit(i)` (1-based series index) excludes a hidden
+ * series from both accumulation and bands, so a visibility toggle restacks exactly.
+ * @param {Array<Array<number|null>>} columns  [xs, ...ys]
+ * @param {(seriesIdx1Based:number)=>boolean} omit
+ * @returns {{ data: Array<Array<number|null>>, bands: Array<{series:[number,number]}> }}
+ */
+export function stack(columns, omit) {
+  const xs = columns[0]
+  const len = xs.length
+  const accum = new Array(len).fill(0)
+  const data = [xs.slice()]
+  for (let i = 1; i < columns.length; i++) {
+    const col = columns[i]
+    if (omit(i)) {
+      data.push(col.slice()) // hidden: passed through, not drawn, not accumulated
+      continue
+    }
+    data.push(
+      col.map((v, r) => {
+        if (v == null || !isFinite(v)) return v // keep the gap in this column
+        accum[r] += v
+        return accum[r]
+      })
+    )
+  }
+  const bands = []
+  for (let i = 1; i < columns.length; i++) {
+    if (omit(i)) continue
+    let above = -1
+    for (let j = i + 1; j < columns.length; j++) {
+      if (!omit(j)) {
+        above = j
+        break
+      }
+    }
+    if (above > -1) bands.push({ series: [above, i] })
+  }
+  return { data, bands }
+}
+
+/**
+ * On a log scale, raise each series' sub-`logFloor` plot values up to its floor so the
+ * line stays plottable (log10(0) = -Inf) and the log axis does not collapse onto the
+ * floor (the SKA coin-supply zeros-then-plateau case). Off log, or when no series
+ * declares a floor, the columns are returned unchanged (same reference). Null is
+ * preserved (a geometry-nulled point stays a gap). Never mutates the input — the exact
+ * value still reaches the tooltip via the raw payload.
+ * @param {Array<Array<number|null>>} columns  [xs, ...ys] (columns[i] -> series[i-1])
+ * @param {Array<{logFloor?:number}>} series
+ * @param {boolean} isLog
+ */
+export function applyLogFloors(columns, series, isLog) {
+  if (!isLog || !columns || !series.some((s) => s && s.logFloor != null)) return columns
+  return columns.map((col, i) => {
+    if (i === 0) return col // x column
+    const floor = series[i - 1] && series[i - 1].logFloor
+    if (floor == null) return col
+    return col.map((v) => (v != null && v < floor ? floor : v))
+  })
 }
 
 /**
@@ -372,27 +459,6 @@ export async function loadUPlot() {
  *   reset) — never for programmatic setData/setXRange/rebuild.
  * @returns {Promise<ChartHandle>}
  */
-/**
- * On a log scale, raise each series' sub-`logFloor` plot values up to its floor so the
- * line stays plottable (log10(0) = -Inf) and the log axis does not collapse onto the
- * floor (the SKA coin-supply zeros-then-plateau case). Off log, or when no series
- * declares a floor, the columns are returned unchanged (same reference). Null is
- * preserved (a geometry-nulled point stays a gap). Never mutates the input — the exact
- * value still reaches the tooltip via the raw payload.
- * @param {Array<Array<number|null>>} columns  [xs, ...ys] (columns[i] -> series[i-1])
- * @param {Array<{logFloor?:number}>} series
- * @param {boolean} isLog
- */
-export function applyLogFloors(columns, series, isLog) {
-  if (!isLog || !columns || !series.some((s) => s && s.logFloor != null)) return columns
-  return columns.map((col, i) => {
-    if (i === 0) return col // x column
-    const floor = series[i - 1] && series[i - 1].logFloor
-    if (floor == null) return col
-    return col.map((v) => (v != null && v < floor ? floor : v))
-  })
-}
-
 export async function createChart(el, def, opts = {}) {
   const UPlot = await loadUPlot()
   let currentDef = def
@@ -431,20 +497,34 @@ export async function createChart(el, def, opts = {}) {
     })
   }
   const userHooks = opts.hooks || {}
+  // Last-known per-series visibility (series label -> show). A fresh uPlot defaults
+  // every series to shown, so this is re-applied after each rebuild to keep a hidden
+  // series hidden across mode/scale changes. Seeded from opts so buildOpts bands and
+  // the initial displayData() agree with the caller's starting visibility.
+  const visibility = {}
+  if (opts.visibility) Object.assign(visibility, opts.visibility)
+  // Merge the adapter's internal setScale hook (trackXRange) into any caller-provided
+  // hooks. This computed hooks object is also what gets spread into state below so that
+  // buildOpts (called on every rebuild) receives the merged hook set.
+  const hooks = { ...userHooks, setScale: [...(userHooks.setScale || []), trackXRange] }
   let state = {
     ...opts,
-    hooks: { ...userHooks, setScale: [...(userHooks.setScale || []), trackXRange] }
+    visibility, // buildOpts reads this for stacked bands
+    hooks // overrides opts.hooks with the merged set; shorthand matches visibility above
   }
 
-  // Plotted data for the current scale, derived from the raw columns (applies any logFloor).
-  const displayData = () => applyLogFloors(rawColumns, currentDef.series, state.scaleType === 'log')
+  // Plotted data for the current scale/stacking, derived from the raw columns.
+  const displayData = () => {
+    if (!rawColumns) return uplot.data
+    if (currentDef.stacked) {
+      const omit = (i) => visibility[currentDef.series[i - 1].label] === false
+      return stack(rawColumns, omit).data
+    }
+    return applyLogFloors(rawColumns, currentDef.series, state.scaleType === 'log')
+  }
 
   let uplot = new UPlot(buildOpts(UPlot, currentDef, state), [[]], el)
   let destroyed = false
-  // Last-known per-series visibility (series label -> show). A fresh uPlot defaults
-  // every series to shown, so this is re-applied after each rebuild to keep a hidden
-  // series hidden across mode/scale changes.
-  const visibility = {}
 
   function applyVisibility() {
     currentDef.series.forEach((s, i) => {
@@ -453,6 +533,15 @@ export async function createChart(el, def, opts = {}) {
       }
     })
   }
+
+  // Apply the seeded visibility to the fresh instance's series show flags. buildOpts already
+  // consumed opts.visibility for the stacked bands, but a brand-new uPlot starts every series
+  // show:true — so without this a seed-hidden series (e.g. the address amount-flow chart built
+  // with Net selected, where Received/Spent are seeded off) is still DRAWN. The render path then
+  // calls setVisibility with that same seeded state, which no-ops (unchanged), so the build is the
+  // only chance to hide it. No-op when opts.visibility is absent (applyVisibility skips unset
+  // labels); rebuild() re-applies this on its own.
+  applyVisibility()
 
   // uPlot fixes a series' paths and a scale's distribution at construction, so a
   // mode (line<->stepped) or scale (linear<->log) change rebuilds. Data carries over
@@ -522,9 +611,27 @@ export async function createChart(el, def, opts = {}) {
     },
     setVisibility(map) {
       if (destroyed) return
+      // Skip the work when nothing actually toggled. A stacked chart seeded with its starting
+      // visibility (createChart opts.visibility) would otherwise eat a full destroy+rebuild on
+      // the first post-build setVisibility call that merely re-asserts that same state — the
+      // address amount-flow render path, where popChartCache builds then immediately calls
+      // updateFlow() with the same bitmap.
+      let changed = false
+      Object.keys(map).forEach((label) => {
+        const next = !!map[label]
+        if (visibility[label] !== next) changed = true
+        visibility[label] = next
+      })
+      if (!changed) return
+      if (currentDef.stacked) {
+        // Restack: bands + accumulation must recompute for the new visible set, which
+        // is baked into opts at construction — so rebuild (which feeds restacked data
+        // derived from rawColumns via displayData() to the new uPlot constructor).
+        rebuild()
+        return
+      }
       currentDef.series.forEach((s, i) => {
         if (Object.prototype.hasOwnProperty.call(map, s.label)) {
-          visibility[s.label] = !!map[s.label]
           uplot.setSeries(i + 1, { show: visibility[s.label] })
         }
       })

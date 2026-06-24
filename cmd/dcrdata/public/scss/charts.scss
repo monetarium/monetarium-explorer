@@ -275,23 +275,6 @@ body.darkBG .chartview .dygraph-y2label {
   font-weight: bold;
 }
 
-.address_chart_wrap {
-  background-color: white;
-  border-radius: 3px;
-  flex: auto;
-  position: relative;
-  min-height: 200px;
-  border: 1px solid rgba(128 128 128 / 50%);
-}
-
-.address_chart {
-  position: absolute;
-  left: 1em;
-  right: 2em;
-  top: 2.5em;
-  bottom: 1em;
-}
-
 /* chart theme */
 .chart-wrapper {
   position: relative;
@@ -437,12 +420,24 @@ input ~ .checkmark {
   background-color: #2971ff;
 }
 
+// Received is colorIndex 0, the only theme-aware series stroke: on the dark canvas it
+// swaps to the primary mint (chart_theme PRIMARY.dark), so the swatch must too — same
+// value the .tickets-price / .coin-supply dark rules below use.
+body.darkBG .customcheck input:checked ~ .received {
+  background-color: #2dd8a3;
+}
+
 .customcheck input:checked ~ .sent {
-  background-color: #2ed6a1;
+  // Matches the Spent series stroke on the chart: PALETTE[1] (colorIndex 1, theme-agnostic)
+  // in chart_theme.js. Was a stale legacy Dygraphs mint that no longer matched the bar.
+  background-color: #e03131;
 }
 
 .customcheck input:checked ~ .net {
-  background-color: #ff0090;
+  // The Net toggle drives two series (Net Received green / Net Spent orange); the swatch
+  // takes the Net Spent stroke: PALETTE[3] (colorIndex 3) in chart_theme.js. Was a stale
+  // legacy pink that read as the same hue as the Sent (red) checkmark.
+  background-color: #f08c00;
 }
 
 .customcheck input:checked ~ .tickets-price,
@@ -595,10 +590,6 @@ body.darkBG .customcheck input:checked ~ .hashrate-miners {
 }
 
 body.darkBG {
-  .address_chart_wrap {
-    background-color: #333;
-  }
-
   .btn-set {
     border-color: #ddd;
   }

@@ -252,7 +252,7 @@
               <div class="row flex-nowrap d-inline-flex d-hide mx-2 mb-2" data-address-target="flow"
                   data-action="change->address#updateFlow">
                   <label class="customcheck ms-2 d-inline-flex">Sent
-                      <input type="checkbox" value="2">
+                      <input type="checkbox" checked="checked" value="2">
                       <span class="checkmark sent"></span>
                   </label>
                   <label class="customcheck ms-2 d-inline-flex">Received
@@ -270,6 +270,10 @@
               <div class="py-5 fs16 d-none" data-address-target="noconfirms"></div>
               <div class="text-start fs14 fw-bold text-secondary mt-n1 mb-1" data-address-target="chartTitle"></div>
               <div data-address-target="chart" class="address_chart"></div>
+              <div data-address-target="rangerView" class="chart-ranger"></div>
+              <div class="d-hide">
+                  <div class="pe-3" data-address-target="legendEntry"><div class="dygraph-legend-line" data-address-target="legendMarker"></div></div>
+              </div>
             </div>
           </div>
         </div>

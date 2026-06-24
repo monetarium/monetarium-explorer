@@ -12,7 +12,7 @@ export const BOUNDARY_LEFT = 0
 export const BOUNDARY_RIGHT = 1
 export const BOUNDARY_BOTH = 2
 
-const RANGER_HEIGHT = 80
+const RANGER_HEIGHT = 44 // overview strip height (px), uniform across all chart routes
 const RANGER_VPAD = 6 // top/bottom plot padding (px); left/right mirror the main chart's gutters
 
 /**
