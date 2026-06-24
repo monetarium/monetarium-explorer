@@ -741,7 +741,11 @@ export default class extends Controller {
     this.query.replace(this.settings)
   }
 
-  updateFlow() {
+  updateFlow(e) {
+    // Net is a derived (Received − Spent) view, so stacking it on top of Received/Spent
+    // double-counts. Enforce Net <-> Sent/Received mutual exclusivity on user toggles; the
+    // programmatic call from popChartCache passes no event and just reflects the boxes.
+    if (e && e.target) this.enforceFlowExclusivity(e.target)
     const bitmap = this.flow
     if (bitmap === 0) {
       // If all boxes are unchecked, just leave the last view
@@ -751,6 +755,23 @@ export default class extends Controller {
     this.settings.flow = bitmap
     this.setGraphQuery()
     if (this.handle) this.handle.setVisibility(flowVisibility(bitmap))
+  }
+
+  // Net is mutually exclusive with Sent/Received — it would double-count if stacked on
+  // them. When the user checks one side, clear the other; unchecking imposes nothing.
+  // `changed` is the checkbox just toggled. Setting `.checked` here fires no change event,
+  // so updateFlow is not re-entered.
+  enforceFlowExclusivity(changed) {
+    if (!changed.checked) return
+    const NET = '4'
+    const clearNet = changed.value !== NET
+    this.flowBoxes.forEach((box) => {
+      if (clearNet) {
+        if (box.value === NET) box.checked = false
+      } else if (box.value !== NET) {
+        box.checked = false
+      }
+    })
   }
 
   setFlowChecks() {

@@ -315,6 +315,58 @@ describe('address updateFlow', () => {
   })
 })
 
+describe('address flow Net exclusivity (finding #2)', () => {
+  it('checking Net clears Sent and Received', () => {
+    const ctrl = makeRenderController('amountflow', 0, {})
+    ctrl.flowBoxes = makeBoxes({ sent: true, received: true, net: true })
+    const net = ctrl.flowBoxes.find((b) => b.value === '4')
+    ctrl.enforceFlowExclusivity(net)
+    expect(ctrl.flowBoxes.find((b) => b.value === '2').checked).toBe(false) // Sent
+    expect(ctrl.flowBoxes.find((b) => b.value === '1').checked).toBe(false) // Received
+    expect(net.checked).toBe(true)
+  })
+  it('checking Received clears Net', () => {
+    const ctrl = makeRenderController('amountflow', 0, {})
+    ctrl.flowBoxes = makeBoxes({ sent: false, received: true, net: true })
+    const received = ctrl.flowBoxes.find((b) => b.value === '1')
+    ctrl.enforceFlowExclusivity(received)
+    expect(ctrl.flowBoxes.find((b) => b.value === '4').checked).toBe(false) // Net
+    expect(received.checked).toBe(true)
+  })
+  it('checking Sent clears Net', () => {
+    const ctrl = makeRenderController('amountflow', 0, {})
+    ctrl.flowBoxes = makeBoxes({ sent: true, received: false, net: true })
+    const sent = ctrl.flowBoxes.find((b) => b.value === '2')
+    ctrl.enforceFlowExclusivity(sent)
+    expect(ctrl.flowBoxes.find((b) => b.value === '4').checked).toBe(false) // Net
+    expect(sent.checked).toBe(true)
+  })
+  it('unchecking a box clears nothing', () => {
+    const ctrl = makeRenderController('amountflow', 0, {})
+    ctrl.flowBoxes = makeBoxes({ sent: true, received: true, net: false })
+    const sent = ctrl.flowBoxes.find((b) => b.value === '2')
+    sent.checked = false
+    ctrl.enforceFlowExclusivity(sent)
+    expect(ctrl.flowBoxes.find((b) => b.value === '1').checked).toBe(true) // Received untouched
+  })
+  it('updateFlow enforces exclusivity on a Net toggle and shows only Net', () => {
+    const ctrl = makeRenderController('amountflow', 0, {})
+    ctrl.flowBoxes = makeBoxes({ sent: true, received: true, net: true })
+    ctrl.handle = fakeHandle
+    ctrl.settings = {}
+    ctrl.query = { replace: vi.fn() }
+    const net = ctrl.flowBoxes.find((b) => b.value === '4')
+    ctrl.updateFlow({ target: net })
+    expect(ctrl.settings.flow).toBe(4)
+    expect(fakeHandle.setVisibility).toHaveBeenCalledWith({
+      Received: false,
+      Spent: false,
+      'Net Received': true,
+      'Net Spent': true
+    })
+  })
+})
+
 describe('address setZoom', () => {
   it('drives the handle x-range and persists zoom', () => {
     // setZoom args are ms; handle.setXRange receives seconds (÷1000).
