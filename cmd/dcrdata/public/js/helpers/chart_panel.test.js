@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import globalEventBus from '../services/event_bus_service'
 
 // Mock the adapter + ranger so no real uPlot is needed. Factories push each fake onto a
 // list so tests can inspect per-render instances. References are lazy (inside the vi.fn
@@ -214,5 +215,34 @@ describe('ChartPanel ranger', () => {
     p.setXRange(100, 200)
     expect(p.handle.setXRange).toHaveBeenCalledWith(100, 200)
     expect(p.ranger.setSelection).toHaveBeenCalledWith(100, 200)
+  })
+})
+
+describe('ChartPanel theme + resize + destroy cleanup', () => {
+  it('registers and removes NIGHT_MODE + resize listeners across its lifecycle', async () => {
+    const addSpy = vi.spyOn(window, 'addEventListener')
+    const removeSpy = vi.spyOn(window, 'removeEventListener')
+    const p = createChartPanel(document.createElement('div'), {})
+    expect(globalEventBus.on).toHaveBeenCalledWith('NIGHT_MODE', expect.any(Function))
+    expect(addSpy).toHaveBeenCalledWith('resize', expect.any(Function))
+    await p.render(defA, payload1, {})
+    p.destroy()
+    expect(globalEventBus.off).toHaveBeenCalledWith('NIGHT_MODE', expect.any(Function))
+    expect(removeSpy).toHaveBeenCalledWith('resize', expect.any(Function))
+    addSpy.mockRestore()
+    removeSpy.mockRestore()
+  })
+  it('_setDark recolors the handle and re-applies the ranger selection', async () => {
+    const p = createChartPanel(document.createElement('div'), {
+      rangerEl: document.createElement('div')
+    })
+    await p.render(defWithRanger, payload1, {}) // panel starts light (darkEnabled mock -> false)
+    p.handle.uplot.scales.x = { min: 1, max: 2 }
+    p.ranger.setSelection.mockClear()
+    p._setDark(true)
+    expect(p.handle.setDark).toHaveBeenCalledWith(true)
+    expect(p.ranger.setDark).toHaveBeenCalledWith(true)
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(p.ranger.setSelection).toHaveBeenCalledWith(1, 2)
   })
 })

@@ -3,12 +3,15 @@
 // not a Stimulus base — a controller creates one panel per chart. See
 // docs/superpowers/specs/2026-06-24-reusable-chart-panel-design.md.
 
+import { debounce } from 'lodash-es'
+import globalEventBus from '../services/event_bus_service'
 import { darkEnabled } from '../services/theme_service'
 import { classifyGesture } from './touch_gesture'
 import { createChart, resolveSeriesColor } from './uplot_adapter'
 import { createRanger } from './uplot_ranger'
 
 const SCRUB_THRESHOLD = 8 // px a touch must travel horizontally to lock into a scrub (mirrors charts)
+const RESIZE_DEBOUNCE_MS = 150
 
 export function createChartPanel(chartEl, opts = {}) {
   return new ChartPanel(chartEl, opts)
@@ -30,6 +33,11 @@ class ChartPanel {
     this.epoch = 0
     this._dark = dark != null ? dark : darkEnabled()
     this._destroyed = false
+    // Page-level listeners (removed in destroy() — the mandatory-destroy invariant).
+    this._onNightMode = () => this._setDark(darkEnabled())
+    globalEventBus.on('NIGHT_MODE', this._onNightMode)
+    this._onWindowResize = debounce(() => this._resize(), RESIZE_DEBOUNCE_MS)
+    window.addEventListener('resize', this._onWindowResize)
   }
 
   get handle() {
@@ -287,9 +295,52 @@ class ChartPanel {
     tt.style.top = `${Math.max(0, top)}px`
   }
 
+  // Theme rebuild bumps the epoch (it schedules deferred re-apply work). Capture the live
+  // x-range BEFORE setDark (uPlot commits async), re-apply it to the freshly-rebuilt ranger.
+  _setDark(dark) {
+    if (this._destroyed || !!this._dark === !!dark) return
+    this._dark = dark
+    const epoch = ++this.epoch
+    const sx = this._handle && this._handle.uplot.scales.x
+    const range = sx && sx.min != null && sx.max != null ? [sx.min, sx.max] : null
+    if (this._handle) this._handle.setDark(dark)
+    if (this._ranger) {
+      this._ranger.setDark(dark)
+      queueMicrotask(() => {
+        if (epoch !== this.epoch || this._destroyed || !this._ranger) return
+        if (range) this._ranger.setSelection(range[0], range[1])
+        else {
+          const xs = this._ranger.uplot.data[0]
+          if (xs && xs.length) this._ranger.setSelection(xs[0], xs[xs.length - 1])
+        }
+      })
+    }
+  }
+
+  // Resize does not rebuild, so it does NOT bump the epoch, but it captures+checks it so a
+  // later render/theme rebuild invalidates this pending re-apply.
+  _resize() {
+    if (this._destroyed || !this._handle) return
+    const epoch = this.epoch
+    this._handle.resize(this.chartEl.clientWidth || 800, this.chartEl.clientHeight || 300)
+    if (!this._ranger || !this.rangerEl) return
+    this._ranger.setWidth(this.rangerEl.clientWidth || 800)
+    const sx = this._handle.uplot.scales.x
+    if (sx && sx.min != null && sx.max != null) {
+      const min = sx.min
+      const max = sx.max
+      queueMicrotask(() => {
+        if (epoch !== this.epoch || this._destroyed || !this._ranger) return
+        this._ranger.setSelection(min, max)
+      })
+    }
+  }
+
   destroy() {
     if (this._destroyed) return
     this._destroyed = true
+    globalEventBus.off('NIGHT_MODE', this._onNightMode)
+    window.removeEventListener('resize', this._onWindowResize)
     if (this._handle) {
       this._handle.destroy()
       this._handle = null
