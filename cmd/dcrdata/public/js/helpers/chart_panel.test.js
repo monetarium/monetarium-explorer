@@ -251,4 +251,22 @@ describe('ChartPanel theme + resize + destroy cleanup', () => {
     await new Promise((resolve) => setTimeout(resolve, 0))
     expect(p.ranger.setSelection).toHaveBeenCalledWith(1, 2)
   })
+  it('a theme toggle during an in-flight render does not blank the panel and reconciles the theme', async () => {
+    const { createChart } = await import('./uplot_adapter.js')
+    const handle = makeFakeHandle()
+    let resolveCreate
+    createChart.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveCreate = () => resolve(handle)
+        })
+    )
+    const p = createChartPanel(document.createElement('div'), {}) // starts light
+    const pending = p.render(defA, payload1, {}) // createChart is in flight (awaiting loadUPlot)
+    p._setDark(true) // theme toggle lands mid-render
+    resolveCreate()
+    await pending
+    expect(p.handle).toBe(handle) // NOT blanked — the theme epoch must not abort the render
+    expect(handle.setDark).toHaveBeenCalledWith(true) // chart reconciled to the new theme
+  })
 })

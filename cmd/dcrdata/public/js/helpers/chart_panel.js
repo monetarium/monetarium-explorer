@@ -30,7 +30,8 @@ class ChartPanel {
     this.payload = null
     this.legendElement = null
     this.touchActive = false
-    this.epoch = 0
+    this.epoch = 0 // render generation (overlapping renders + their deferred work)
+    this._themeEpoch = 0 // theme generation — kept separate so a theme toggle can't abort a render
     this._dark = dark != null ? dark : darkEnabled()
     this._destroyed = false
     // Page-level listeners (removed in destroy() — the mandatory-destroy invariant).
@@ -72,8 +73,9 @@ class ChartPanel {
       this._handle.destroy()
       this._handle = null
     }
+    const darkAtBuild = this._dark
     const handle = await createChart(this.chartEl, def, {
-      dark: this._dark,
+      dark: darkAtBuild,
       width: this.chartEl.clientWidth || 800,
       height: this.chartEl.clientHeight || 300,
       xTime: this.xTime,
@@ -86,6 +88,9 @@ class ChartPanel {
     }
     this._handle = handle
     this.currentDef = def
+    // A theme toggle that landed while createChart was awaiting loadUPlot() couldn't reach the
+    // not-yet-assigned handle; reconcile so the chart matches the current theme.
+    if (this._dark !== darkAtBuild) handle.setDark(this._dark)
   }
 
   _buildHooks() {
@@ -295,19 +300,21 @@ class ChartPanel {
     tt.style.top = `${Math.max(0, top)}px`
   }
 
-  // Theme rebuild bumps the epoch (it schedules deferred re-apply work). Capture the live
-  // x-range BEFORE setDark (uPlot commits async), re-apply it to the freshly-rebuilt ranger.
+  // Recolor on a theme change. Guards its deferred re-apply with a SEPARATE theme epoch (not
+  // the render epoch): a toggle landing during an in-flight render() must not bump the render
+  // epoch, or _ensureChart would abort the just-built handle and blank the panel. Capture the
+  // live x-range BEFORE setDark (uPlot commits async), re-apply it to the freshly-rebuilt ranger.
   _setDark(dark) {
     if (this._destroyed || !!this._dark === !!dark) return
     this._dark = dark
-    const epoch = ++this.epoch
+    const themeEpoch = ++this._themeEpoch
     const sx = this._handle && this._handle.uplot.scales.x
     const range = sx && sx.min != null && sx.max != null ? [sx.min, sx.max] : null
     if (this._handle) this._handle.setDark(dark)
     if (this._ranger) {
       this._ranger.setDark(dark)
       queueMicrotask(() => {
-        if (epoch !== this.epoch || this._destroyed || !this._ranger) return
+        if (themeEpoch !== this._themeEpoch || this._destroyed || !this._ranger) return
         if (range) this._ranger.setSelection(range[0], range[1])
         else {
           const xs = this._ranger.uplot.data[0]
@@ -318,7 +325,7 @@ class ChartPanel {
   }
 
   // Resize does not rebuild, so it does NOT bump the epoch, but it captures+checks it so a
-  // later render/theme rebuild invalidates this pending re-apply.
+  // later render invalidates this pending re-apply.
   _resize() {
     if (this._destroyed || !this._handle) return
     const epoch = this.epoch
