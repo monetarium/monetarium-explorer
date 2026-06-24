@@ -19,10 +19,11 @@
   // Span the overview strip to the chart's full width (the shared default is 96% centered,
   // which leaves it narrower than these full-width charts). syncRangerGutters then mirrors
   // the main chart's plot-box insets onto the strip so the inner plot areas line up under
-  // the x-axis — same approach as the address page.
+  // the x-axis — same approach as the address page. No top margin: the strip's uPlot already
+  // reserves RANGER_VPAD (6px) above its plot, so a container margin-top double-spaces it.
   .chart-ranger {
     width: 100%;
-    margin: 0.35rem 0 0;
+    margin: 0;
   }
 }
 
