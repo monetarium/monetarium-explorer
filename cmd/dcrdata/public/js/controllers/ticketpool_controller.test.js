@@ -115,12 +115,16 @@ function makeController({ handlesLoaded = true } = {}) {
     c.purchasesRanger = {
       setData: vi.fn(),
       setSelection: vi.fn(),
+      setWidth: vi.fn(),
+      setDark: vi.fn(),
       destroy: vi.fn(),
       uplot: { data: [[]], setSelect: vi.fn() }
     }
     c.priceRanger = {
       setData: vi.fn(),
       setSelection: vi.fn(),
+      setWidth: vi.fn(),
+      setDark: vi.fn(),
       destroy: vi.fn(),
       uplot: { data: [[]], setSelect: vi.fn() }
     }
