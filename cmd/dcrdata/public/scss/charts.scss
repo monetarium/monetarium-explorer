@@ -608,6 +608,21 @@ body.darkBG {
   .proposal-chart-legend {
     background-color: #333a;
   }
+
+  .btn_sm {
+    color: #333 !important;
+  }
+
+  .btn_sm:focus,
+  .btn_sm:hover {
+    color: #333 !important;
+    background-color: #ddd !important;
+  }
+
+  .btn-active,
+  .btn:active {
+    color: #fff !important;
+  }
 }
 
 .proposal-charts:hover .proposal-chart-legend {
