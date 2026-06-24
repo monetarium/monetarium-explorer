@@ -98,6 +98,9 @@ const TIME_AXIS_VALUES = (() => {
  */
 
 function pathsFor(UPlot, s) {
+  // Per-series paths factory override — lets specific charts supply custom bar/line
+  // path logic (e.g. granularity-aware bar widths) without touching this switch.
+  if (s.paths) return s.paths(UPlot, s)
   switch (s.kind) {
     case 'bars':
       // Per-series bar geometry. Default: centered, 60% width, capped at 100px (the /charts

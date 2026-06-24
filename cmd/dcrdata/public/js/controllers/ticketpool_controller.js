@@ -81,18 +81,34 @@ function renderTooltip(u, tt, def) {
 }
 
 function computeZoomWindow(val, xs) {
-  const max = xs.length ? xs[xs.length - 1] : Date.now() / 1000
-  const min = xs.length ? xs[0] : max - 86400
+  const dataMin = xs.length ? xs[0] : 0
+  const dataMax = xs.length ? xs[xs.length - 1] : Date.now() / 1000
+  const dataSpan = dataMax - dataMin
+  let lo, hi
   switch (val) {
     case 'day':
-      return [Math.max(max - 86400, min), max]
+      lo = dataMax - 86400
+      hi = dataMax
+      break
     case 'wk':
-      return [Math.max(max - 604800, min), max]
+      lo = dataMax - 604800
+      hi = dataMax
+      break
     case 'mo':
-      return [Math.max(max - 2628000, min), max]
+      lo = dataMax - 2628000
+      hi = dataMax
+      break
     default:
-      return [min, max]
+      return [dataMin, dataMax]
   }
+  if (dataSpan <= hi - lo) return [dataMin, dataMax]
+  return clampWindow(lo, hi, dataMin)
+}
+
+function clampWindow(lo, hi, dataMin) {
+  const duration = hi - lo
+  if (lo < dataMin) return [dataMin, dataMin + duration]
+  return [lo, hi]
 }
 
 export default class extends Controller {
@@ -151,7 +167,8 @@ export default class extends Controller {
       this.tipHeight = data.height
     }
     if (data.time_chart) {
-      const mempool = this.tipHeight === data.height ? this.mempool : false
+      const matchHeight = this.tipHeight === data.height
+      const mempool = matchHeight && this.bars === 'all' ? this.mempool : false
       this.renderOrUpdatePurchases(data.time_chart, mempool)
     }
     if (data.price_chart) {
@@ -180,15 +197,47 @@ export default class extends Controller {
     return width
   }
 
+  // For week/month bucketed modes, append a period-end point after the last data
+  // point so the line doesn't stop at the bucket start — it extends to the period
+  // boundary. The added point has null bar values (no extra bar) and carries the
+  // last line value forward (horizontal segment).
+  _extendToPeriodEnd(cols) {
+    if (this.bars !== 'day' && this.bars !== 'wk' && this.bars !== 'mo') {
+      this._origDataExtent = null
+      return
+    }
+    if (!cols[0].length) return
+    this._origDataExtent = { min: cols[0][0], max: cols[0][cols[0].length - 1] }
+    const lastTs = cols[0][cols[0].length - 1]
+    let endTs
+    if (this.bars === 'day') {
+      endTs = lastTs + 86400
+    } else if (this.bars === 'wk') {
+      endTs = lastTs + 604800
+    } else {
+      const d = new Date(lastTs * 1000)
+      const y = d.getUTCFullYear()
+      const m = d.getUTCMonth()
+      endTs = m === 11 ? Date.UTC(y + 1, 0, 1) / 1000 : Date.UTC(y, m + 1, 1) / 1000
+    }
+    if (endTs <= lastTs) return
+    cols[0].push(endTs)
+    cols[1].push(null)
+    cols[2].push(null)
+    cols[3].push(null)
+    cols[4].push(cols[4][cols[4].length - 1])
+  }
+
   async renderOrUpdatePurchases(timeData, mempool) {
     const cols = ticketpoolPurchases.toColumns(timeData, mempool)
+    this._extendToPeriodEnd(cols)
     if (this.purchasesHandle) {
+      this.purchasesHandle.uplot._barMode = this.bars
       this.purchasesHandle.setData(cols)
       await new Promise((resolve) => queueMicrotask(resolve))
       if (this.purchasesRanger) {
         const w = this._syncRangerWidth('tickets-by-purchase-date', this.purchasesRangerTarget)
         if (w) this.purchasesRanger.setWidth(w)
-        this.purchasesRanger.setData([cols[0], cols[3]])
         const ru = this.purchasesRanger.uplot
         ru.setSelect({ left: 0, top: 0, width: ru.width, height: ru.height }, false)
       }
@@ -219,6 +268,7 @@ export default class extends Controller {
           ]
         }
       })
+      this.purchasesHandle.uplot._barMode = this.bars
       this.purchasesHandle.setData(cols)
       await new Promise((resolve) => queueMicrotask(resolve))
       this._syncRangerWidth('tickets-by-purchase-date', this.purchasesRangerTarget)
@@ -233,6 +283,7 @@ export default class extends Controller {
         }
       )
       this.purchasesRanger.setData([cols[0], cols[3]])
+      await new Promise((resolve) => queueMicrotask(resolve))
       const ru0 = this.purchasesRanger.uplot
       ru0.setSelect({ left: 0, top: 0, width: ru0.width, height: ru0.height }, false)
     } finally {
@@ -249,6 +300,7 @@ export default class extends Controller {
         const w = this._syncRangerWidth('tickets-by-purchase-price', this.priceRangerTarget)
         if (w) this.priceRanger.setWidth(w)
         this.priceRanger.setData([cols[0], cols[3]])
+        await new Promise((resolve) => queueMicrotask(resolve))
       }
       return
     }
@@ -290,7 +342,6 @@ export default class extends Controller {
           onSelect: (min, max) => this.priceHandle.setXRange(min, max)
         }
       )
-      this.priceRanger.setData([cols[0], cols[3]])
       const ru1 = this.priceRanger.uplot
       ru1.setSelect({ left: 0, top: 0, width: ru1.width, height: ru1.height }, false)
     } finally {
@@ -370,20 +421,25 @@ export default class extends Controller {
       const url = `/api/ticketpool/bydate/${this.bars}`
       const ticketPoolResponse = await requestJSON(url)
       const cols = ticketpoolPurchases.toColumns(ticketPoolResponse.time_chart)
+      this._extendToPeriodEnd(cols)
       if (this.purchasesHandle) {
         this.purchasesHandle.setData(cols)
         await new Promise((resolve) => queueMicrotask(resolve))
-        this.purchasesRanger?.setData([cols[0], cols[3]])
         if (this.purchasesRanger) {
           const w = this._syncRangerWidth('tickets-by-purchase-date', this.purchasesRangerTarget)
           if (w) this.purchasesRanger.setWidth(w)
+          await new Promise((resolve) => queueMicrotask(resolve))
         }
       }
       this.wrapperTarget.classList.remove('loading')
     }
 
     if (!this.purchasesHandle) return
-    const xs = this.purchasesHandle.uplot.data[0]
+    const chartXs = this.purchasesHandle.uplot.data[0]
+    const rangerXs = this.purchasesRanger?.uplot.data[0]
+    // 'all' uses chart data so the viewport matches the visible bars extent;
+    // day/wk/mo use ranger (blocks) as anchor so the right grip lands at data far right.
+    const xs = this.zoom === 'all' ? chartXs : rangerXs && rangerXs.length ? rangerXs : chartXs
     const [lo, hi] = computeZoomWindow(this.zoom, xs)
     this.purchasesHandle.setXRange(lo, hi)
     if (this.purchasesRanger) this.purchasesRanger.setSelection(lo, hi)
@@ -400,23 +456,40 @@ export default class extends Controller {
     const url = `/api/ticketpool/bydate/${this.bars}`
     const ticketPoolResponse = await requestJSON(url)
     const cols = ticketpoolPurchases.toColumns(ticketPoolResponse.time_chart)
+    this._extendToPeriodEnd(cols)
+
     if (this.purchasesHandle) {
+      const sx = this.purchasesHandle.uplot.scales.x
+      const prevMin = sx.min
+      const prevMax = sx.max
+
+      // Tell the paths function which bar mode to render (before setData triggers redraw)
+      this.purchasesHandle.uplot._barMode = this.bars
+
       this.purchasesHandle.setData(cols)
-      await new Promise((resolve) => queueMicrotask(resolve))
-      this.purchasesRanger?.setData([cols[0], cols[3]])
+
       if (this.purchasesRanger) {
         const w = this._syncRangerWidth('tickets-by-purchase-date', this.purchasesRangerTarget)
         if (w) this.purchasesRanger.setWidth(w)
-        const ru = this.purchasesRanger.uplot
-        ru.setSelect({ left: 0, top: 0, width: ru.width, height: ru.height }, false)
+      }
+
+      // Expand-only union: never clip data, only expand if the new data's original
+      // extent (before any _extendToPeriodEnd synthetic point) falls outside the
+      // saved viewport. This avoids clipping latest blocks when coming from a
+      // truncated bar mode (day/week/month) whose max is rounded down.
+      if (prevMin != null && prevMax != null && isFinite(prevMin) && isFinite(prevMax)) {
+        const newXs = cols[0]
+        const orig = this._origDataExtent
+        const dataMin = orig?.min ?? (newXs.length ? newXs[0] : prevMin)
+        const dataMax = orig?.max ?? (newXs.length ? newXs[newXs.length - 1] : prevMax)
+        const restoreMin = Math.max(prevMin, dataMin)
+        const restoreMax = Math.max(prevMax, dataMax)
+        this.purchasesHandle.setXRange(restoreMin, restoreMax)
+        if (this.purchasesRanger) {
+          this.purchasesRanger.setSelection(restoreMin, restoreMax)
+        }
       }
     }
-    // Reset zoom to full extent — bar aggregation changes the data's x-range,
-    // and the old zoom window no longer corresponds to the same time span.
-    this.zoom = 'all'
-    this.zoomTargets.forEach((zt) => zt.classList.remove('btn-active'))
-    const allZoom = Array.from(this.zoomTargets).find((zt) => zt.name === 'all')
-    if (allZoom) allZoom.classList.add('btn-active')
     this.wrapperTarget.classList.remove('loading')
   }
 }

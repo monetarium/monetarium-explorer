@@ -1,3 +1,29 @@
+// Granularity-aware bar paths. The controller sets uplot._barMode before each setData
+// so the path function renders bars appropriate for the current binning mode.
+function granularBarPaths(UPlot, s) {
+  const defaultSize = s.barSize || [0.6, 100]
+  const defaultAlign = s.barAlign ?? 0
+
+  return (u, seriesIdx, idx0, idx1) => {
+    switch (u._barMode) {
+      case 'day':
+      case 'wk':
+      case 'mo':
+        // Bucketed bin modes: full column width, left-aligned at the bucket start
+        // (date_trunc gives the period boundary, e.g. 1st of month).
+        return UPlot.paths.bars({ size: [1], align: 1 })(u, seriesIdx, idx0, idx1)
+      default:
+        // 'blocks' (individual ticket purchases) + fallback: centered capped bars
+        return UPlot.paths.bars({ size: defaultSize, align: defaultAlign })(
+          u,
+          seriesIdx,
+          idx0,
+          idx1
+        )
+    }
+  }
+}
+
 export const ticketpoolPurchases = {
   name: 'ticketpool-purchases',
   label: 'Tickets Purchase Distribution',
@@ -6,9 +32,9 @@ export const ticketpoolPurchases = {
     { label: 'Avg Ticket Value (VAR)', scale: 'y2' }
   ],
   series: [
-    { label: 'Mempool Tickets', scale: 'y', kind: 'bars', colorIndex: 0 },
-    { label: 'Immature Tickets', scale: 'y', kind: 'bars', colorIndex: 1 },
-    { label: 'Live Tickets', scale: 'y', kind: 'bars', colorIndex: 2 },
+    { label: 'Mempool Tickets', scale: 'y', kind: 'bars', colorIndex: 0, paths: granularBarPaths },
+    { label: 'Immature Tickets', scale: 'y', kind: 'bars', colorIndex: 1, paths: granularBarPaths },
+    { label: 'Live Tickets', scale: 'y', kind: 'bars', colorIndex: 2, paths: granularBarPaths },
     { label: 'Ticket Value', scale: 'y2', kind: 'line', colorIndex: 3, width: 2 }
   ],
   toColumns: (data, mempool) => {
