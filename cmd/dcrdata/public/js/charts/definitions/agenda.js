@@ -57,7 +57,9 @@ export function cumulativeVoteChoicesDef() {
     name: 'cumulative-vote-choices',
     label: 'Cumulative Vote Choices Cast',
     stacked: true,
-    axes: [{ label: 'Cumulative Vote Choices Cast', scale: 'y', intTicks: true }],
+    // No rotated y-axis title: the chart title (in the template) already names the chart, and
+    // a long vertical label clips on the compact large-screen height. Matches the address page.
+    axes: [{ label: '', scale: 'y', intTicks: true }],
     series: VOTE_SERIES.map((s) => ({
       label: s.label,
       scale: 'y',
@@ -77,7 +79,7 @@ export function voteChoicesByBlockDef() {
     name: 'vote-choices-by-block',
     label: 'Vote Choices Cast',
     stacked: true,
-    axes: [{ label: 'Vote Choices Cast', scale: 'y', intTicks: true }],
+    axes: [{ label: '', scale: 'y', intTicks: true }],
     series: VOTE_SERIES.map((s) => ({
       label: s.label,
       scale: 'y',

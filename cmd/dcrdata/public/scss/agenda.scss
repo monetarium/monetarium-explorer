@@ -26,18 +26,20 @@
   }
 }
 
-// Largest app breakpoint (xl container = 1260px, see scss/_variables.scss): compress the
-// charts to viewport-relative heights so both charts + their strips fit on one screen
-// without scrolling. uPlot re-reads clientHeight on the debounced window-resize handler,
-// so the canvases track these heights.
+// Largest app breakpoint (xl container = 1260px, see scss/_variables.scss): make the two
+// charts split the viewport height left over after the fixed page chrome (navbar, agenda
+// metadata, choices table, the two titles, both 44px ranger strips, footer ≈ 545px) so the
+// whole page fits on one screen without scrolling. The cumulative chart keeps the larger
+// share (~58/42, matching the prior 300/250 ratio). uPlot re-reads clientHeight on the
+// debounced window-resize handler, so the canvases track these heights.
 @media (min-width: $breakpoint-xl) {
   .agenda-charts {
     .agenda-chart--cumulative {
-      height: 30vh;
+      height: calc((100vh - 545px) * 0.58);
     }
 
     .agenda-chart--block {
-      height: 22vh;
+      height: calc((100vh - 545px) * 0.42);
     }
   }
 }
