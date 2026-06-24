@@ -349,13 +349,39 @@ export default class extends Controller {
     this.priceRanger?.destroy()
   }
 
-  onZoom(e) {
+  async onZoom(e) {
     const target = e.srcElement || e.target
     this.zoomTargets.forEach((zoomTarget) => {
       zoomTarget.classList.remove('btn-active')
     })
     target.classList.add('btn-active')
     this.zoom = e.target.name
+
+    const barsOrder = { all: 0, day: 1, wk: 2, mo: 3 }
+    const zoomOrder = { day: 1, wk: 2, mo: 3, all: 4 }
+    if (barsOrder[this.bars] > zoomOrder[this.zoom]) {
+      const newBars = zoomOrder[this.zoom] === 1 ? 'day' : 'wk'
+      this.bars = newBars
+      this.barsTargets.forEach((bt) => bt.classList.remove('btn-active'))
+      const activeBar = Array.from(this.barsTargets).find((bt) => bt.name === newBars)
+      if (activeBar) activeBar.classList.add('btn-active')
+
+      this.wrapperTarget.classList.add('loading')
+      const url = `/api/ticketpool/bydate/${this.bars}`
+      const ticketPoolResponse = await requestJSON(url)
+      const cols = ticketpoolPurchases.toColumns(ticketPoolResponse.time_chart)
+      if (this.purchasesHandle) {
+        this.purchasesHandle.setData(cols)
+        await new Promise((resolve) => queueMicrotask(resolve))
+        this.purchasesRanger?.setData([cols[0], cols[3]])
+        if (this.purchasesRanger) {
+          const w = this._syncRangerWidth('tickets-by-purchase-date', this.purchasesRangerTarget)
+          if (w) this.purchasesRanger.setWidth(w)
+        }
+      }
+      this.wrapperTarget.classList.remove('loading')
+    }
+
     if (!this.purchasesHandle) return
     const xs = this.purchasesHandle.uplot.data[0]
     const [lo, hi] = computeZoomWindow(this.zoom, xs)

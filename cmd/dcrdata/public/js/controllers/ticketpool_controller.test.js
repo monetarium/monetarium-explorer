@@ -99,6 +99,8 @@ function makeController({ handlesLoaded = true } = {}) {
   c.wrapperTarget = { classList: { add: vi.fn(), remove: vi.fn() } }
   c.purchasesRangerTarget = { clientWidth: 800 }
   c.priceRangerTarget = { clientWidth: 800 }
+  c.zoomTargets = []
+  c.barsTargets = []
   if (handlesLoaded) {
     c.purchasesHandle = {
       setData: vi.fn(),
@@ -199,11 +201,12 @@ describe('ticketpool reconnect resync', () => {
     expect(c.priceRanger.destroy).toHaveBeenCalledTimes(1)
   })
 
-  it('syncs the ranger selection when a zoom button is pressed', () => {
+  it('syncs the ranger selection when a zoom button is pressed', async () => {
     const c = makeController()
+    c.bars = 'day'
     c.zoomTargets = []
     const target = { name: 'day', classList: { add: vi.fn(), remove: vi.fn() } }
-    c.onZoom({ target })
+    await c.onZoom({ target })
     expect(c.purchasesRanger.setSelection).toHaveBeenCalled()
     const args = c.purchasesRanger.setSelection.mock.calls[0]
     expect(args[1] - args[0]).toBeCloseTo(86400, 0) // one day window in seconds
