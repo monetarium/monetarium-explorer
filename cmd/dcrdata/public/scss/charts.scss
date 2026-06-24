@@ -37,9 +37,10 @@
 
 .tp-charts {
   width: 100%;
-  height: 25vh;
-  margin: 0 auto;
+  min-height: 25vh;
+  margin: 0;
   font-size: 14px;
+  position: relative;
 }
 
 .modal {
@@ -607,6 +608,21 @@ body.darkBG {
   .proposal-chart-legend {
     background-color: #333a;
   }
+
+  .btn_sm {
+    color: #333 !important;
+  }
+
+  .btn_sm:focus,
+  .btn_sm:hover {
+    color: #333 !important;
+    background-color: #ddd !important;
+  }
+
+  .btn-active,
+  .btn:active {
+    color: #fff !important;
+  }
 }
 
 .proposal-charts:hover .proposal-chart-legend {
@@ -639,7 +655,8 @@ body.darkBG {
   display: none; /* the shell renders its own fixed legend below the chart */
 }
 
-.chart-ranger .u-axis {
+.chart-ranger .u-axis,
+.tp-chart-ranger .u-axis {
   pointer-events: none;
 }
 
@@ -647,17 +664,7 @@ body.darkBG .chartview .u-axis {
   color: #c8c8c8;
 }
 
-.chart-ranger {
-  position: relative;
-
-  // Must match `.chartview`'s horizontal box (width + side margins) so the strip's plot area
-  // lines up under the main chart's — each uPlot is sized to its own container's clientWidth.
-  width: 96%;
-  margin: 0.35rem 2% 0;
-
-  // The drag-to-pan selection window. These blue values are the light-theme fallback;
-  // uplot_ranger.js (paintSelection) overrides the colors inline to match the strip's
-  // current primary line color, so the selection + grips track the theme.
+@mixin ranger-select-styles {
   .u-select {
     pointer-events: all;
     cursor: grab;
@@ -703,6 +710,25 @@ body.darkBG .chartview .u-axis {
   .u-grip-r {
     right: -4px;
   }
+}
+
+.chart-ranger {
+  position: relative;
+
+  // Must match `.chartview`'s horizontal box (width + side margins) so the strip's plot area
+  // lines up under the main chart's — each uPlot is sized to its own container's clientWidth.
+  width: 96%;
+  margin: 0.35rem 2% 0;
+
+  @include ranger-select-styles;
+}
+
+.tp-chart-ranger {
+  position: relative;
+  width: 100%;
+  margin-top: 0;
+
+  @include ranger-select-styles;
 }
 
 // On-plot hover tooltip (replaces the external legend band). Lives inside .u-over.

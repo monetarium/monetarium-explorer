@@ -161,6 +161,25 @@ describe('createRanger.setSelection', () => {
     expect(call[0]).toMatchObject({ left: 10, width: 30 })
     expect(call[1]).toBe(false)
   })
+
+  it('clamps min/max to data bounds when values exceed the dataset extent', async () => {
+    const h = await createRanger(document.createElement('div'), rangerDef, {})
+    h.setData([
+      [100, 200, 300, 400, 500],
+      [1, 2, 3, 4, 5]
+    ])
+    h.setSelection(50, 700)
+    expect(h.uplot.setSelect).toHaveBeenCalled()
+    const call = h.uplot.setSelect.mock.calls.at(-1)
+    expect(call[0]).toMatchObject({ left: 100, width: 400 })
+  })
+
+  it('no-ops setSelect when clamped min >= max (single data point)', async () => {
+    const h = await createRanger(document.createElement('div'), rangerDef, {})
+    h.setData([[300], [5]])
+    h.setSelection(50, 150)
+    expect(h.uplot.setSelect).not.toHaveBeenCalled()
+  })
 })
 
 describe('createRanger grip drag', () => {
