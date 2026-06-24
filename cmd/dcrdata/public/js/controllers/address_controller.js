@@ -714,6 +714,15 @@ export default class extends Controller {
   validateZoom(binSize) {
     this.setButtonVisibility()
     const zoom = Zoom.validate(this.activeZoomKey || this.settings.zoom, this.xExtent, binSize)
+    // Zoom.validate returns false (or, for a dashless ?zoom= that isn't a preset key, the bare
+    // string itself) on a malformed value; either way zoom.start/zoom.end are undefined. Guard
+    // so a crafted URL can't drive setZoom(undefined) -> setXRange(NaN), which blanks the chart
+    // and persists a 'NaN-NaN' range. Fall back to the full extent (the 'all' preset).
+    if (!zoom || typeof zoom !== 'object' || !isFinite(zoom.start) || !isFinite(zoom.end)) {
+      this.setZoom(this.xExtent[0], this.xExtent[1])
+      this.setSelectedZoom('all')
+      return
+    }
     this.setZoom(zoom.start, zoom.end)
     // setZoom drives the chart + persists an encoded range but selects no button. On load
     // connect() has deselected every zoom button, so without this the control reads as

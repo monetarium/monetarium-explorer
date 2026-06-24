@@ -452,6 +452,25 @@ describe('address validateZoom (load-time preset restore)', () => {
     // Full extent → mapKey 'all' → the All button gets re-selected.
     expect(spy).toHaveBeenCalledWith('all')
   })
+
+  it('falls back to the full extent for a malformed ?zoom= param (finding #2)', () => {
+    // A dashless ?zoom=foo that isn't a preset key makes Zoom.validate return the bare string,
+    // whose .start/.end are undefined. Without the guard this drove setZoom(undefined) ->
+    // setXRange(NaN), blanking the chart and persisting a 'NaN-NaN' range.
+    const c = makeRenderController('types', 0, {})
+    c.xExtent = [0, 1000000] // ms
+    c.settings = { zoom: 'foo' }
+    c.zoomTarget = { getElementsByClassName: () => [] } // activeZoomKey → null
+    c.setButtonVisibility = vi.fn()
+    c.setZoom = vi.fn()
+    const spy = vi.spyOn(c, 'setSelectedZoom').mockImplementation(() => {})
+
+    c.validateZoom(1000)
+
+    // No NaN reaches setZoom: it gets the full extent, and the 'all' preset is re-selected.
+    expect(c.setZoom).toHaveBeenCalledWith(0, 1000000)
+    expect(spy).toHaveBeenCalledWith('all')
+  })
 })
 
 describe('address ranger gutter alignment (issue 4)', () => {
