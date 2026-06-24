@@ -324,6 +324,9 @@ export default class extends Controller {
         this.priceRanger.setData([cols[0], cols[3]])
         if (prevMin != null && prevMax != null && isFinite(prevMin) && isFinite(prevMax)) {
           this.priceRanger.setSelection(prevMin, prevMax)
+        } else {
+          const ru = this.priceRanger.uplot
+          ru.setSelect({ left: 0, top: 0, width: ru.width, height: ru.height }, false)
         }
         await new Promise((resolve) => queueMicrotask(resolve))
       }
@@ -448,6 +451,7 @@ export default class extends Controller {
       const cols = ticketpoolPurchases.toColumns(ticketPoolResponse.time_chart)
       this._extendToPeriodEnd(cols)
       if (this.purchasesHandle) {
+        this.purchasesHandle.uplot._barMode = this.bars
         this.purchasesHandle.setData(cols)
         await new Promise((resolve) => queueMicrotask(resolve))
         if (this.purchasesRanger) {
