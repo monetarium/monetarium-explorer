@@ -743,9 +743,12 @@ export default class extends Controller {
 
   updateFlow(e) {
     // Net is a derived (Received − Spent) view, so stacking it on top of Received/Spent
-    // double-counts. Enforce Net <-> Sent/Received mutual exclusivity on user toggles; the
-    // programmatic call from popChartCache passes no event and just reflects the boxes.
+    // double-counts. Enforce Net <-> Sent/Received mutual exclusivity on user toggles. The
+    // programmatic call from popChartCache passes no event, so it can't key off a just-clicked
+    // box — but the boxes may come from a saved/crafted ?flow= that sets Net alongside
+    // Sent/Received, so clamp that state before reading the bitmap (else the stack double-counts).
     if (e && e.target) this.enforceFlowExclusivity(e.target)
+    else this.clampFlowExclusivity()
     const bitmap = this.flow
     if (bitmap === 0) {
       // If all boxes are unchecked, just leave the last view
@@ -774,11 +777,30 @@ export default class extends Controller {
     })
   }
 
+  // Programmatic counterpart to enforceFlowExclusivity: with no "just toggled" box to key on,
+  // resolve a Net + Sent/Received conflict (only reachable from a saved/crafted ?flow=) in
+  // Net's favour — clear Sent/Received whenever Net is checked. A bitmap without Net is left
+  // untouched. Setting `.checked` here fires no change event, so updateFlow is not re-entered.
+  clampFlowExclusivity() {
+    const NET = '4'
+    let netChecked = false
+    this.flowBoxes.forEach((box) => {
+      if (box.value === NET && box.checked) netChecked = true
+    })
+    if (!netChecked) return
+    this.flowBoxes.forEach((box) => {
+      if (box.value !== NET) box.checked = false
+    })
+  }
+
   setFlowChecks() {
     const bitmap = this.settings.flow
     this.flowBoxes.forEach((box) => {
       box.checked = bitmap & parseInt(box.value)
     })
+    // A crafted ?flow= can set Net alongside Sent/Received; collapse to Net-only so the
+    // restored checkboxes match the (clamped) view the chart will draw.
+    this.clampFlowExclusivity()
   }
 
   onZoom(e) {

@@ -300,18 +300,40 @@ describe('address renderLegend', () => {
 describe('address updateFlow', () => {
   it('applies the label-keyed visibility map to the handle', () => {
     const ctrl = makeRenderController('amountflow', 0, {})
-    ctrl.flowBoxes = makeBoxes({ received: true, sent: false, net: true })
+    ctrl.flowBoxes = makeBoxes({ received: true, sent: true, net: false })
     ctrl.handle = fakeHandle
     ctrl.settings = {}
     ctrl.query = { replace: vi.fn() }
     ctrl.updateFlow()
     expect(fakeHandle.setVisibility).toHaveBeenCalledWith({
       Received: true,
+      Spent: true,
+      'Net Received': false,
+      'Net Spent': false
+    })
+    expect(ctrl.settings.flow).toBe(3)
+  })
+
+  it('clamps a Net + Sent/Received bitmap to Net-only on the programmatic path (finding #1)', () => {
+    // A saved/crafted ?flow=7 leaves Net checked alongside Sent + Received; updateFlow() with no
+    // event must not stack Net on top of them (double-count). Net wins.
+    const ctrl = makeRenderController('amountflow', 0, {})
+    ctrl.flowBoxes = makeBoxes({ received: true, sent: true, net: true })
+    ctrl.handle = fakeHandle
+    ctrl.settings = {}
+    ctrl.query = { replace: vi.fn() }
+    ctrl.updateFlow() // programmatic — no event
+    expect(ctrl.settings.flow).toBe(4)
+    expect(fakeHandle.setVisibility).toHaveBeenCalledWith({
+      Received: false,
       Spent: false,
       'Net Received': true,
       'Net Spent': true
     })
-    expect(ctrl.settings.flow).toBe(5)
+    // The conflicting boxes are cleared so the control reflects the clamped view.
+    expect(ctrl.flowBoxes.find((b) => b.value === '1').checked).toBe(false) // Received
+    expect(ctrl.flowBoxes.find((b) => b.value === '2').checked).toBe(false) // Sent
+    expect(ctrl.flowBoxes.find((b) => b.value === '4').checked).toBe(true) // Net
   })
 })
 
