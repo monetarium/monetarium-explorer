@@ -239,6 +239,18 @@ export default class extends Controller {
       onSelect: (min, max) => this.onRangerSelect(spec, min, max)
     })
     spec.ranger.setData([cols[0], cols[1]])
+    // Seed the strip's selection window to the full data extent so a range rectangle is
+    // visible on load (the agenda page has no zoom state to drive setSelection). Deferred to
+    // a microtask: uPlot commits the fresh strip's scales/layout asynchronously, so
+    // setSelection's valToPos is not ready synchronously (mirrors redrawTheme/resizeCharts).
+    const xs = cols[0]
+    if (xs && xs.length) {
+      const min = xs[0]
+      const max = xs[xs.length - 1]
+      queueMicrotask(() => {
+        if (spec.ranger) spec.ranger.setSelection(min, max)
+      })
+    }
   }
 
   // Main-chart drag-zoom -> mirror onto the ranger window (ephemeral; not persisted).

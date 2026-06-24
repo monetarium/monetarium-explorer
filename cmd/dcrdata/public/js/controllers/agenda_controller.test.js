@@ -121,6 +121,18 @@ describe('renderChart', () => {
     await ctrl.renderChart(spec)
     expect(first.destroy).toHaveBeenCalledTimes(1)
   })
+
+  it('initializes the ranger selection to the full data extent on load', async () => {
+    // Regression: without this the strip's .u-select window has zero width on load (no
+    // visible range rectangle). The agenda page has no zoom state to drive setSelection, so
+    // the controller seeds the full extent itself (deferred — uPlot commits layout async).
+    const ctrl = makeController()
+    const spec = ctrl.charts[0]
+    spec.payload = payloadByTime
+    await ctrl.renderChart(spec)
+    await new Promise((resolve) => setTimeout(resolve, 0)) // flush the queued microtask
+    expect(spec.ranger.setSelection).toHaveBeenCalledWith(1717279200, 1717365600)
+  })
 })
 
 describe('renderLegend tooltip', () => {
