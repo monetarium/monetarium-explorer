@@ -122,6 +122,12 @@ describe('ChartPanel tooltip', () => {
     expect(txt).toContain('X: 2')
     expect(txt).toContain('Yes: 30')
   })
+  it('renderLegend no-ops before the def is set (currentDef-null gap)', () => {
+    const p = createChartPanel(document.createElement('div'), {})
+    p.legendElement = document.createElement('div')
+    // currentDef is still null (a setCursor hook can fire before createChart resolves)
+    expect(() => p.renderLegend({ cursor: { idx: 0 }, data: [[1], [2]] })).not.toThrow()
+  })
   it('renderLegend hides the tooltip when idx is null', async () => {
     const p = createChartPanel(document.createElement('div'), {})
     await p.render(defA, payload1, {})

@@ -247,7 +247,7 @@ class ChartPanel {
   // Reads the retained raw payload via def.formatValue (firewall), never the plotted columns.
   renderLegend(u) {
     const tt = this.legendElement
-    if (!tt) return
+    if (!tt || !this.currentDef) return // a setCursor hook can fire before createChart resolves
     const idx = u.cursor.idx
     if (idx == null) {
       tt.classList.add('d-hide')
