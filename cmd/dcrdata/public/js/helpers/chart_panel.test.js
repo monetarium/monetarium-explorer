@@ -172,3 +172,47 @@ describe('ChartPanel touch-scrub', () => {
     expect(u.setCursor).not.toHaveBeenCalled()
   })
 })
+
+const defWithRanger = { ...defA }
+
+describe('ChartPanel ranger', () => {
+  it('render creates a ranger and seeds the full-extent selection (epoch-guarded, deferred)', async () => {
+    const p = createChartPanel(document.createElement('div'), {
+      rangerEl: document.createElement('div')
+    })
+    await p.render(defWithRanger, payload1, {})
+    expect(p.ranger).toBeTruthy()
+    expect(p.ranger.setData).toHaveBeenCalledWith([
+      [1, 2],
+      [10, 30]
+    ])
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(p.ranger.setSelection).toHaveBeenCalledWith(1, 2)
+  })
+  it('no ranger when rangerEl is omitted', async () => {
+    const p = createChartPanel(document.createElement('div'), {})
+    await p.render(defWithRanger, payload1, {})
+    expect(p.ranger).toBeNull()
+  })
+  it('a superseded render leaves only the latest ranger seeded (epoch guard)', async () => {
+    const p = createChartPanel(document.createElement('div'), {
+      rangerEl: document.createElement('div')
+    })
+    const r1 = p.render(defWithRanger, payload1, {})
+    const r2 = p.render({ ...defWithRanger }, { x: [5, 6], yes: [1, 2] }, {})
+    await Promise.all([r1, r2])
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    const latest = fakeRangers[fakeRangers.length - 1]
+    expect(latest.setSelection).toHaveBeenCalledWith(5, 6)
+    fakeRangers.slice(0, -1).forEach((r) => expect(r.setSelection).not.toHaveBeenCalledWith(1, 2))
+  })
+  it('setXRange drives both handle and ranger', async () => {
+    const p = createChartPanel(document.createElement('div'), {
+      rangerEl: document.createElement('div')
+    })
+    await p.render(defWithRanger, payload1, {})
+    p.setXRange(100, 200)
+    expect(p.handle.setXRange).toHaveBeenCalledWith(100, 200)
+    expect(p.ranger.setSelection).toHaveBeenCalledWith(100, 200)
+  })
+})

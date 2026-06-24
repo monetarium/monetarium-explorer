@@ -6,6 +6,7 @@
 import { darkEnabled } from '../services/theme_service'
 import { classifyGesture } from './touch_gesture'
 import { createChart, resolveSeriesColor } from './uplot_adapter'
+import { createRanger } from './uplot_ranger'
 
 const SCRUB_THRESHOLD = 8 // px a touch must travel horizontally to lock into a scrub (mirrors charts)
 
@@ -50,6 +51,7 @@ class ChartPanel {
     if (epoch !== this.epoch || this._destroyed) return
     this.payload = payload
     this._handle.setData(cols)
+    await this._ensureRanger(def, cols, epoch)
   }
 
   async _ensureChart(def, epoch) {
@@ -67,7 +69,8 @@ class ChartPanel {
       width: this.chartEl.clientWidth || 800,
       height: this.chartEl.clientHeight || 300,
       xTime: this.xTime,
-      hooks: this._buildHooks()
+      hooks: this._buildHooks(),
+      onRangeChange: (min, max) => this._onChartRangeChange(min, max)
     })
     if (epoch !== this.epoch || this._destroyed) {
       handle.destroy()
@@ -80,8 +83,76 @@ class ChartPanel {
   _buildHooks() {
     return {
       ready: [(u) => this.installTooltip(u)],
-      setCursor: [(u) => this.renderLegend(u)]
+      setCursor: [(u) => this.renderLegend(u)],
+      draw: [(u) => this.syncRangerGutters(u)]
     }
+  }
+
+  async _ensureRanger(def, cols, epoch) {
+    if (!this.rangerEl) return
+    if (!this._ranger) {
+      const g = (this._handle && this.measureGutters(this._handle.uplot)) || { left: 0, right: 0 }
+      const ranger = await createRanger(this.rangerEl, def, {
+        dark: this._dark,
+        width: this.rangerEl.clientWidth || 800,
+        xTime: this.xTime,
+        leftGutter: g.left,
+        rightGutter: g.right,
+        onSelect: (min, max) => this._onRangerSelect(min, max)
+      })
+      if (epoch !== this.epoch || this._destroyed) {
+        ranger.destroy()
+        return
+      }
+      this._ranger = ranger
+      this._ranger.setData([cols[0], cols[1]])
+    } else {
+      this._ranger.setData([cols[0], cols[1]])
+    }
+    this._seedRangerSelection(cols, epoch)
+  }
+
+  // Deferred (uPlot commits layout async) + epoch-guarded: align the strip's plot insets to
+  // the main chart, then seed the full-extent selection one microtask later.
+  _seedRangerSelection(cols, epoch) {
+    const xs = cols[0]
+    queueMicrotask(() => {
+      if (epoch !== this.epoch || this._destroyed || !this._ranger) return
+      this.syncRangerGutters(this._handle && this._handle.uplot)
+      queueMicrotask(() => {
+        if (epoch !== this.epoch || this._destroyed || !this._ranger) return
+        if (xs && xs.length) this._ranger.setSelection(xs[0], xs[xs.length - 1])
+      })
+    })
+  }
+
+  measureGutters(u) {
+    if (!u || !u.over || !u.root) return null
+    const root = u.root.getBoundingClientRect()
+    const over = u.over.getBoundingClientRect()
+    return { left: over.left - root.left, right: root.right - over.right }
+  }
+
+  syncRangerGutters(u) {
+    if (!this._ranger) return
+    const g = this.measureGutters(u)
+    if (g) this._ranger.setGutters(g.left, g.right)
+  }
+
+  setXRange(min, max) {
+    if (this._handle) this._handle.setXRange(min, max)
+    if (this._ranger) this._ranger.setSelection(min, max)
+  }
+
+  // Main-chart drag-zoom: mirror to the strip + notify the controller (URL persistence).
+  _onChartRangeChange(min, max) {
+    if (this._ranger) this._ranger.setSelection(min, max)
+    if (this.onRangeChange) this.onRangeChange(min, max)
+  }
+
+  // Ranger grip/body drag: drive the main chart (which mirrors back via _onChartRangeChange).
+  _onRangerSelect(min, max) {
+    if (this._handle) this._handle.setXRange(min, max)
   }
 
   // Self-contained on-plot tooltip: a div appended to u.over, shown on cursor-enter,
