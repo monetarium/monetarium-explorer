@@ -9,7 +9,7 @@ import globalEventBus from '../services/event_bus_service'
 import { darkEnabled } from '../services/theme_service'
 import { createChart, resolveSeriesColor } from '../helpers/uplot_adapter'
 import { createRanger } from '../helpers/uplot_ranger'
-import { classifyGesture } from '../helpers/touch_gesture'
+import { classifyGesture, isDoubleTap } from '../helpers/touch_gesture'
 import { getDefinition } from '../charts/registry'
 import '../charts/definitions/index' // side-effect: register all definitions
 
@@ -506,6 +506,7 @@ export default class extends Controller {
     let startX = 0
     let startY = 0
     let state = 'pending'
+    let lastTap = null
     this.touchActive = false
 
     u.over.addEventListener(
@@ -545,6 +546,17 @@ export default class extends Controller {
         // Reset uPlot's cursor off-plot so the crosshair doesn't freeze at the last scrub
         // position — touch has no uPlot mouseleave to do this, unlike desktop.
         u.setCursor({ left: -10, top: -10 })
+        lastTap = null // a scrub is not a tap; never pair it with a later tap
+      } else if (state === 'pending') {
+        // A still finger (never locked to scrub/scroll) is a tap. A second tap close in time
+        // and space re-synthesizes the dblclick iOS Safari omits, so uPlot's own reset runs.
+        const tap = { t: performance.now(), x: startX, y: startY }
+        if (isDoubleTap(lastTap, tap)) {
+          u.over.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true }))
+          lastTap = null
+        } else {
+          lastTap = tap
+        }
       }
       state = 'pending'
       this.touchActive = false
