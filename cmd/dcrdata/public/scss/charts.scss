@@ -421,7 +421,9 @@ input ~ .checkmark {
 }
 
 .customcheck input:checked ~ .sent {
-  background-color: #2ed6a1;
+  // Matches the Spent series stroke on the chart: PALETTE[1] (colorIndex 1, theme-agnostic)
+  // in chart_theme.js. Was a stale legacy Dygraphs mint that no longer matched the bar.
+  background-color: #e03131;
 }
 
 .customcheck input:checked ~ .net {
