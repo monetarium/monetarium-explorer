@@ -59,6 +59,13 @@ div.expando {
   }
 }
 
+// The shared `select.dropdown` base is 100px (navigation.scss), too narrow for this
+// selector's longest option, "Sent/Received", which clips. Widen just the chart-type
+// control; the ID beats `select.dropdown` on specificity regardless of import order.
+#address-chart-type {
+  width: 110px;
+}
+
 .fullscreen {
   position: fixed;
   top: 0;
