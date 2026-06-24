@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { classifyGesture } from './touch_gesture'
+import { classifyGesture, isDoubleTap } from './touch_gesture'
 
 describe('classifyGesture', () => {
   const T = 8
@@ -31,5 +31,40 @@ describe('classifyGesture', () => {
   it('sub-threshold movement is pending', () => {
     expect(classifyGesture(3, 3, T)).toBe('pending')
     expect(classifyGesture(0, 0, T)).toBe('pending')
+  })
+})
+
+describe('isDoubleTap', () => {
+  const at = (t, x = 100, y = 100) => ({ t, x, y })
+
+  it('two close taps within the window are a double-tap', () => {
+    expect(isDoubleTap(at(0), at(150))).toBe(true)
+  })
+
+  it('no prior tap is never a double-tap', () => {
+    expect(isDoubleTap(null, at(150))).toBe(false)
+    expect(isDoubleTap(undefined, at(150))).toBe(false)
+  })
+
+  it('exactly at the window still counts; just past it does not', () => {
+    expect(isDoubleTap(at(0), at(300))).toBe(true)
+    expect(isDoubleTap(at(0), at(301))).toBe(false)
+  })
+
+  it('exactly at the move threshold counts; just past it does not (each axis)', () => {
+    expect(isDoubleTap(at(0, 100, 100), at(150, 130, 100))).toBe(true)
+    expect(isDoubleTap(at(0, 100, 100), at(150, 131, 100))).toBe(false)
+    expect(isDoubleTap(at(0, 100, 100), at(150, 100, 130))).toBe(true)
+    expect(isDoubleTap(at(0, 100, 100), at(150, 100, 131))).toBe(false)
+  })
+
+  it('movement is sign-agnostic', () => {
+    expect(isDoubleTap(at(0, 100, 100), at(150, 70, 70))).toBe(true)
+    expect(isDoubleTap(at(0, 100, 100), at(150, 69, 100))).toBe(false)
+  })
+
+  it('respects custom window and moveThreshold', () => {
+    expect(isDoubleTap(at(0), at(400), { windowMs: 500 })).toBe(true)
+    expect(isDoubleTap(at(0, 0, 0), at(150, 10, 0), { moveThreshold: 5 })).toBe(false)
   })
 })
