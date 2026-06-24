@@ -37,7 +37,7 @@ _Code-grounded analysis of data flows, cross-layer dependencies, and hidden cons
 
 ### Block
 
-_Data flow for block rendering, including headers, metrics, and block content parsing. Covers: BlockDataSaver fan-out, value-conservation MiningFee, CBlockSubsidy (vote-scaled), ActiveMiners live count, getlatestblocks pull pattern. Revised at `HEAD=ad1ab357`._
+_Data flow for block rendering, including headers, metrics, and block content parsing. Covers: BlockDataSaver fan-out, value-conservation MiningFee, CBlockSubsidy (vote-scaled), ActiveMiners live count, getlatestblocks pull pattern, `WindowRemaining`/`RewardRemaining` live countdown via `RemainingWindowText` (single source for template + WS, issue #502), chart tip alignment push from `explorerUI.Store()` → `cache.ChartData.SetTip`. Revised at `HEAD=b9c5bb31`._
 
 - flow (compact): code-analysis/block/flow.compact.md — high-level summary of the push + pull data paths, key constraints, and mutation checklist
 - flow (full): code-analysis/block/flow.full.md — detailed, step-by-step function trace covering push path (ingestion→fan-out), pull path (getlatestblocks WS), CBlockSubsidy/ActiveMiners sub-flows, and mutation impact
@@ -47,7 +47,7 @@ _Data flow for block rendering, including headers, metrics, and block content pa
 
 ### Transaction
 
-_End-to-end pipeline for transaction processing, decoding, and rendering inputs/outputs. SSFee (Stake Fee) txs have their own rendering path: `FeeRaw` is semantically overloaded (net reward for SSFee, fee for regular txs); coinbase/vote use `FeeReward()` float; SSFee use `coinDecimalParts .FeeRaw .CoinType` (VAR or SKA). Mempool ticket purchases carry `TicketStage` ("Ready"/"Staging"). Revised at `HEAD=2d4b64ac`._
+_End-to-end pipeline for transaction processing, decoding, and rendering inputs/outputs. SSFee (Stake Fee) txs have their own rendering path: `FeeRaw` is semantically overloaded (net reward for SSFee, fee for regular txs); coinbase/vote use `FeeReward()` float (now guards SKA with early-return 0); SSFee use `coinDecimalParts .FeeRaw .CoinType` (VAR or SKA). `MempoolTx.Hash` removed — use `TxID`/`"txid"`. Tx type strings canonical home is `txhelpers.TxTypeXxx`. Revised at `HEAD=1bc57372`._
 
 - flow (compact): code-analysis/transaction/flow.compact.md — high-level summary of how transaction inputs/outputs and SSFee/coinbase/vote fee-reward paths are processed
 - flow (full): code-analysis/transaction/flow.full.md — detailed step-by-step trace including SSFee net-reward overload, TicketStage, FeeRateRaw unification, and MiningFee scope
@@ -83,7 +83,7 @@ _Aggregation and grouping of blocks over specific time intervals (days, weeks, m
 
 ### Mempool
 
-_Multi-coin aggregation (CoinStats + derived CoinFills), dual collection paths (batch ParseTxns at block boundary vs. incremental addTxToCoinStats per tx), multi-saver fan-out, dual-transport WS delivery, and live indicator rendering._
+_Multi-coin aggregation (CoinStats + derived CoinFills), dual collection paths (batch ParseTxns at block boundary vs. incremental addTxToCoinStats per tx), multi-saver fan-out, dual-transport WS delivery, and live indicator rendering. **Refreshed at `HEAD=3837b7b8`**: `MempoolTx.Hash` field removed (json:"hash" gone; sole identifier is `TxID`/`json:"txid"`); `MempoolInfo.DeepCopy` now copies `Ident`+`CoinFills` (bug fix); `addAtomStrings` VAR path uses `strconv.ParseInt`; `mpoolInfo` field narrowed to `CollectState`; `BytesString` removed in favour of `humanize.Bytes`; saver goroutines now panic-recovered; `FeeReward` SKA guard; `UnspentOutputIndices` SKA fix; `HomeInfo.WindowRemaining`/`RewardRemaining` added via new `explorer/types/remaining.go`._
 
 - flow (compact): code-analysis/mempool/flow.compact.md — high-level summary of mempool state aggregation, fan-out, and WS delivery
 - flow (full): code-analysis/mempool/flow.full.md — detailed, step-by-step function trace covering monitor/collector, savers, CoinFills derivation, WS encoders, templates, and JS controller
@@ -92,12 +92,12 @@ _Multi-coin aggregation (CoinStats + derived CoinFills), dual collection paths (
 
 ### Charts
 
-_Historical data fetching, cache aggregation, and payload serialization for UI charts. Covers the legacy VAR `coin-supply` pipeline alongside the per-coin SKA `coin-supply/{N}` pipeline (lazy load, `*big.Int` cumulation, exact-precision legend). **Revised at `HEAD=09696541`**: hashrate-shares cross-page navigation pattern (`Turbolinks.visit` from chart `<select>`), `chart-hashrate` CSS class gate for Active Miners y2label color, Month interval button addition, updated line refs throughout._
+_Historical data fetching, cache aggregation, and payload serialization for UI charts. Covers the legacy VAR `coin-supply` pipeline alongside the per-coin SKA `coin-supply/{N}` pipeline (lazy load, `*big.Int` cumulation, exact-precision legend). **Refreshed at `HEAD=4649d1bf`**: uPlot definition-registry replaces all Dygraphs frontend logic (definitions in `public/js/charts/definitions/`, registry in `registry.js`, adapter in `uplot_adapter.js`, format helpers in `format.js`); `ChartTip`/`SetTip()` mechanism for live-tip override on window-edge charts (ticket-price, pow-difficulty, stake-participation); `fetchGeneration` stale-fetch race guard; window-aware `ReorgHandler`; `chart_theme.js` as single color source; dark secondary `#4dabf7`; new patterns: uPlot definition-registry, `ChartTip` live-tip override, `fetchGeneration` race guard, `chart_theme.js` single color source; new impact risks: tip-reading maker not registered in `invalidateTipCharts`, lock ordering deadlock, `def.series` length mismatch, `logFloor` removal._
 
-- flow (compact): code-analysis/charts/flow.compact.md — high-level summary of both VAR and SKA chart pipelines, cross-page navigation pattern, CSS class gate pattern, mutation checklist
-- flow (full): code-analysis/charts/flow.full.md — detailed, step-by-step function trace covering RPC/SQL → cache → API → controller → Dygraphs for both pipelines; updated line numbers, `hashrate-shares` early-return and `chart-hashrate` class toggle in `selectChart()`
-- patterns: code-analysis/charts/patterns.md — reusable architecture: dual VAR/SKA coin-supply pipelines under one chart-ID namespace, string-precision SKA path, uint8↔string ID coupling, contractual `h` height field, cache-write asymmetry, lockless first-load, TurboQuery+Zoom projection, **cross-page navigation from chart selector (new)**, **`chart-hashrate` CSS class gate for y2label color (new)**
-- impact: code-analysis/charts/impact.md — mutation blast radius: `accumulate`/`uint64` misuse on SKA, legend `float64` precision loss, missing `h` on time-axis, `coinType==0` loader path, concurrent first-load race, `coin-supply`/`coin-supply/0` endpoint duality, `DataSource` mock fan-out, `ActiveSKATypes` dropdown drift
+- flow (compact): code-analysis/charts/flow.compact.md — high-level summary of both VAR and SKA chart pipelines, live-tip override, uPlot definition-registry, fetchGeneration race guard, mutation checklist
+- flow (full): code-analysis/charts/flow.full.md — detailed, step-by-step function trace covering RPC/SQL → cache → API → uPlot definitions → controller for all pipelines; ChartTip/SetTip mechanism; window-aware ReorgHandler; chart_theme.js color resolution; fetchGeneration race guard
+- patterns: code-analysis/charts/patterns.md — reusable architecture: uPlot definition-registry, ChartTip live-tip override, fetchGeneration race guard, dual VAR/SKA coin-supply pipelines, string-precision SKA path, uint8↔string ID coupling, `h` height field convention, cache-write asymmetry, mismatched mutex race, chart_theme.js single color source, TurboQuery+Zoom with ranger strip, cross-page navigation, `chart-hashrate` CSS class gate
+- impact: code-analysis/charts/impact.md — mutation blast radius: `accumulate`/`uint64` misuse on SKA, legend `float64` precision loss, missing `h` on time-axis, `coinType==0` loader path, mismatched-lock race, `coin-supply`/`coin-supply/0` duality, `DataSource` mock fan-out, `ActiveSKATypes` dropdown drift, tip-reading maker missing from `invalidateTipCharts`, lock ordering deadlock, `def.series` length mismatch, `logFloor` removal
 
 ### VisualBlocks
 
@@ -110,12 +110,12 @@ _The `/visualblocks` page: latest-N blocks plus mempool rendered as 3-row tiles 
 
 ### Attack-Cost
 
-_The `/attack-cost` majority-attack calculator: a no-compute Go handler reads a shared VAR-only `HomeInfo` snapshot into `data-*` attributes; all PoW/PoS math runs client-side in `attackcost_controller.js`. VAR-only by construction (legacy flat `CoinSupply`/`DCR` labels); not portable to SKA without a BigInt rewrite._
+_The `/attack-cost` majority-attack calculator: a no-compute Go handler reads a shared VAR-only `HomeInfo` snapshot into `data-*` attributes; all PoW/PoS math runs client-side in `attackcost_controller.js`; live hashrate pushed via `BLOCK_RECEIVED`. VAR-only by construction (legacy flat `CoinSupply`); not portable to SKA without a BigInt rewrite._
 
-- flow (compact): code-analysis/attack-cost/flow.compact.md — high-level summary of the no-compute handler, VAR-only snapshot, untyped Go→JS contract, and client-side math
-- flow (full): code-analysis/attack-cost/flow.full.md — detailed trace: node→Store→HomeInfo→handler→template→Stimulus, exchange-bot price-zero trap, snapshot staleness, SKA precision boundary
-- patterns: code-analysis/attack-cost/patterns.md — no-compute handler, VAR-only legacy snapshot, untyped `data-*`↔Stimulus contract, vendored-Dygraphs private override
-- impact: code-analysis/attack-cost/impact.md — SKA-through-VAR-pipeline corruption, shared `HomeInfo` blast radius, silently-zero exchange price, stale snapshot, Go→JS drift; mostly silent failure modes
+- flow (compact): code-analysis/attack-cost/flow.compact.md — high-level summary of the no-compute handler, VAR-only snapshot, BLOCK_RECEIVED live hashrate, untyped Go→JS contract, and client-side math
+- flow (full): code-analysis/attack-cost/flow.full.md — detailed trace: node→Store→HomeInfo→handler→template→Stimulus, BLOCK_RECEIVED subscription, hashrate parseFloat/8dp, noComma exchange-rate pattern, snapshot staleness, SKA precision boundary
+- patterns: code-analysis/attack-cost/patterns.md — no-compute handler, VAR-only legacy snapshot, manual-only inputs (no max on exchange rate, noComma setter rule), untyped `data-*`↔Stimulus contract, vendored-Dygraphs private override
+- impact: code-analysis/attack-cost/impact.md — SKA-through-VAR-pipeline corruption, shared `HomeInfo` blast radius, stale snapshot, Go→JS drift; locale-comma/noComma and parseInt/parseFloat hazards documented as resolved
 
 ### Parameters
 

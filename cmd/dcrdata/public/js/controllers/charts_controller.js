@@ -9,15 +9,15 @@ import globalEventBus from '../services/event_bus_service'
 import { darkEnabled } from '../services/theme_service'
 import { createChart, resolveSeriesColor } from '../helpers/uplot_adapter'
 import { createRanger } from '../helpers/uplot_ranger'
-import { classifyGesture } from '../helpers/touch_gesture'
+import { classifyGesture, isDoubleTap } from '../helpers/touch_gesture'
 import { getDefinition } from '../charts/registry'
 import '../charts/definitions/index' // side-effect: register all definitions
 
-// Below-chart chrome that must stay above the fold: the ranger strip (~86px) plus the
-// Time/Blocks axis row (~46px). Both are fixed-height bands (independent of viewport width),
+// Below-chart chrome that must stay above the fold: the ranger strip (~50px incl. margin) plus
+// the Time/Blocks axis row (~46px). Both are fixed-height bands (independent of viewport width),
 // so a constant is exact enough; the chart's measured top offset absorbs the variable
 // controls height (1 vs 2 rows).
-const BELOW_CHART_RESERVE = 140
+const BELOW_CHART_RESERVE = 104
 // Breathing room kept below the Time/Blocks row, within the viewport, so it isn't flush against
 // the fold.
 const BELOW_CHART_GAP = 32
@@ -506,6 +506,7 @@ export default class extends Controller {
     let startX = 0
     let startY = 0
     let state = 'pending'
+    let lastTap = null
     this.touchActive = false
 
     u.over.addEventListener(
@@ -545,6 +546,19 @@ export default class extends Controller {
         // Reset uPlot's cursor off-plot so the crosshair doesn't freeze at the last scrub
         // position — touch has no uPlot mouseleave to do this, unlike desktop.
         u.setCursor({ left: -10, top: -10 })
+        lastTap = null // an intervening gesture breaks the double-tap sequence
+      } else if (state === 'pending') {
+        // A still finger (never locked to scrub/scroll) is a tap. A second tap close in time
+        // and space re-synthesizes the dblclick iOS Safari omits, so uPlot's own reset runs.
+        const tap = { t: performance.now(), x: startX, y: startY }
+        if (isDoubleTap(lastTap, tap)) {
+          u.over.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true }))
+          lastTap = null
+        } else {
+          lastTap = tap
+        }
+      } else {
+        lastTap = null // a scroll between taps also breaks the double-tap sequence
       }
       state = 'pending'
       this.touchActive = false

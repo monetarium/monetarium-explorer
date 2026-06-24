@@ -59,7 +59,7 @@ monetarium-node
 
 ### Capture at startup
 
-- **Location:** `cmd/dcrdata/internal/explorer/explorer.go:343-345`
+- **Location:** `cmd/dcrdata/internal/explorer/explorer.go:344-346`
 - **Data structures:** `exp.ChainParams *chaincfg.Params`, `exp.NetName`
 - **Transformations:** `exp.ChainParams = exp.dataSource.GetChainParams()` once;
   `exp.NetName = netName(exp.ChainParams)`. **Process-lifetime constant.**
@@ -76,8 +76,8 @@ monetarium-node
 
 ### Store into pageData
 
-- **Location:** `cmd/dcrdata/internal/explorer/explorer.go:553-555`
-- **Data structures:** `pageData` (struct `explorer.go:210-215`,
+- **Location:** `cmd/dcrdata/internal/explorer/explorer.go:554-556`
+- **Data structures:** `pageData` (struct `explorer.go:211-215`,
   `RWMutex`-guarded), field `BlockchainInfo *chainjson.GetBlockChainInfoResult`
 - **Transformations:** under `p.Lock()`: `p.BlockchainInfo = blockData.BlockchainInfo`.
 
@@ -433,10 +433,10 @@ When modifying `/parameters` data, check:
   (`db/dcrpg/pgblockchain.go`) + `SelectSKACoinEmissionHeights` SQL
   (`db/dcrpg/internal/vinoutstmts.go`)
 - SKA per-coin badge cascade: `cmd/dcrdata/views/parameters.tmpl:329`
-- ChainParams capture: `cmd/dcrdata/internal/explorer/explorer.go:343-345`
+- ChainParams capture: `cmd/dcrdata/internal/explorer/explorer.go:344-346`
 - `pageData` struct: `explorer.go:210-215`
-- `Store` (writes `BlockchainInfo`): `explorer.go:508 (BlockchainInfo assignment at :555)`
-- `StoreMPData` (other reader): `explorer.go:476-478`
+- `Store` (writes `BlockchainInfo`): `explorer.go:509 (BlockchainInfo assignment at :556)`
+- `StoreMPData` (other reader): `explorer.go:477-479`
 - RPC source / tip-nil gate: `blockdata/blockdata.go:38,331-357` (`:335-337`)
 - `GetChainParams`: `db/dcrpg/pgblockchain.go:6419-6421`
 - `GetTip`: `db/dcrpg/pgblockchain.go:7431-7450`

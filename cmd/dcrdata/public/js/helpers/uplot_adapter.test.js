@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import uPlot from 'uplot'
 import {
   applyLogFloors,
@@ -7,6 +7,7 @@ import {
   createSyncKey,
   logRange,
   niceLinearTicks,
+  stack,
   trimTrailingZeros
 } from './uplot_adapter'
 import { getDefault } from './module_helper'
@@ -124,6 +125,42 @@ describe('buildOpts — dual-axis with a bars series', () => {
   })
 })
 
+describe('buildOpts — per-series bars geometry', () => {
+  it('passes barSize/barAlign through to paths.bars and defaults when unset', () => {
+    const calls = []
+    const recUPlot = {
+      paths: {
+        bars: (o) => {
+          calls.push(o)
+          return 'BARS'
+        },
+        stepped: () => 'STEP',
+        linear: () => 'LINE'
+      }
+    }
+    const def = {
+      name: 'x',
+      label: 'X',
+      stacked: false,
+      axes: [{ label: '', scale: 'y' }],
+      series: [
+        { label: 'Default bar', scale: 'y', kind: 'bars', colorIndex: 0 },
+        {
+          label: 'Histogram bar',
+          scale: 'y',
+          kind: 'bars',
+          colorIndex: 1,
+          barAlign: 1,
+          barSize: [1]
+        }
+      ]
+    }
+    buildOpts(recUPlot, def, {})
+    expect(calls[0]).toEqual({ size: [0.6, 100], align: 0 }) // default preserved (e.g. /charts bars)
+    expect(calls[1]).toEqual({ size: [1], align: 1 }) // per-series histogram opt-in
+  })
+})
+
 describe('buildOpts — options', () => {
   it('switches the y scale to log when scaleType is log', () => {
     const opts = buildOpts(fakeUPlot, lineDef, { scaleType: 'log' })
@@ -197,7 +234,7 @@ describe('buildOpts — options', () => {
     expect(hi).toBeGreaterThan(1e9)
   })
 
-  it('sets a 16px axis label font on the y axis', () => {
+  it('sets a 16px axis label font on the y axis when a label is present', () => {
     const opts = buildOpts(fakeUPlot, lineDef, {})
     expect(opts.axes[1].labelFont).toContain('16px')
   })
@@ -215,6 +252,25 @@ describe('buildOpts — options', () => {
     const opts = buildOpts(fakeUPlot, dualAxisDef, {})
     const y2 = opts.axes.find((a) => a.scale === 'y2')
     expect(y2.labelGap).toBeGreaterThan(0)
+  })
+
+  it('omits label, labelFont, labelSize, labelGap when axis label is empty', () => {
+    const noLabelDef = {
+      ...lineDef,
+      axes: [{ label: '', scale: 'y' }]
+    }
+    const opts = buildOpts(fakeUPlot, noLabelDef, {})
+    // axis index 0 is x, index 1 is the first y-axis
+    expect(opts.axes[1].label).toBeUndefined()
+    expect('labelSize' in opts.axes[1]).toBe(false)
+    expect('labelFont' in opts.axes[1]).toBe(false)
+    expect('labelGap' in opts.axes[1]).toBe(false)
+  })
+
+  it('keeps label, labelFont, labelSize, labelGap when axis label is non-empty', () => {
+    const opts = buildOpts(fakeUPlot, lineDef, {})
+    expect(opts.axes[1].label).toBe('Difficulty')
+    expect('labelSize' in opts.axes[1]).toBe(true)
   })
 
   it('renders integer-only ticks for an intTicks axis', () => {
@@ -240,6 +296,24 @@ describe('buildOpts — options', () => {
     }
     const opts = buildOpts(fakeUPlot, def, {})
     expect(opts.series[1].width).toBe(2)
+  })
+
+  it('produces a non-null fill for a stepped series with fill: true', () => {
+    const def = {
+      ...lineDef,
+      series: [{ label: 'Balance', scale: 'y', kind: 'stepped', colorIndex: 0, fill: true }]
+    }
+    const opts = buildOpts(fakeUPlot, def, {})
+    expect(opts.series[1].fill).not.toBeNull()
+  })
+
+  it('produces a null fill for a stepped series without fill (opt-in only)', () => {
+    const def = {
+      ...lineDef,
+      series: [{ label: 'Balance', scale: 'y', kind: 'stepped', colorIndex: 0 }]
+    }
+    const opts = buildOpts(fakeUPlot, def, {})
+    expect(opts.series[1].fill).toBeNull()
   })
 })
 
@@ -829,5 +903,153 @@ describe('buildOpts — colorIndex 0 is theme-aware (primary series)', () => {
     }
     const opts = buildOpts(fakeUPlot, colorKeyDef, { dark: true })
     expect(opts.series[1].stroke).toBe('#2dd8a3') // from SERIES_COLORS, not colorForIndex
+  })
+})
+
+describe('stack (uPlot stacking transform)', () => {
+  const none = () => false
+
+  it('accumulates each series into a running per-row total', () => {
+    const cols = [
+      [1, 2, 3], // xs
+      [10, 20, 30], // s1
+      [1, 2, 3], // s2
+      [100, 200, 300] // s3
+    ]
+    const { data } = stack(cols, none)
+    expect(data[0]).toEqual([1, 2, 3]) // xs untouched
+    expect(data[1]).toEqual([10, 20, 30]) // s1 = s1
+    expect(data[2]).toEqual([11, 22, 33]) // s2 = s1 + s2
+    expect(data[3]).toEqual([111, 222, 333]) // s3 = s1 + s2 + s3
+  })
+
+  it('emits bands linking each series to the next one above it', () => {
+    const cols = [[1], [1], [1], [1]]
+    const { bands } = stack(cols, none)
+    // series indices are 1-based uPlot data indices
+    expect(bands).toEqual([{ series: [2, 1] }, { series: [3, 2] }])
+  })
+
+  it('omits a hidden series from accumulation AND from bands', () => {
+    const cols = [
+      [1, 2],
+      [10, 10], // s1 visible
+      [5, 5], // s2 HIDDEN
+      [1, 1] // s3 visible
+    ]
+    const omit = (i) => i === 2
+    const { data, bands } = stack(cols, omit)
+    expect(data[1]).toEqual([10, 10]) // s1
+    expect(data[2]).toEqual([5, 5]) // s2 passed through unchanged (hidden, not drawn)
+    expect(data[3]).toEqual([11, 11]) // s3 = s1 + s3 (s2 skipped)
+    expect(bands).toEqual([{ series: [3, 1] }]) // s1 fills up to s3, s2 skipped
+  })
+
+  it('treats null/NaN as 0 in the total but keeps the gap in its own column', () => {
+    const cols = [
+      [1, 2],
+      [10, null],
+      [1, 2]
+    ]
+    const { data } = stack(cols, none)
+    expect(data[1]).toEqual([10, null]) // own column keeps the gap
+    expect(data[2]).toEqual([11, 2]) // null counted as 0 in the running total
+  })
+})
+
+describe('buildOpts stacking', () => {
+  const def = {
+    name: 'flow',
+    label: 'Flow',
+    stacked: true,
+    axes: [{ label: 'Total', scale: 'y' }],
+    series: [
+      { label: 'A', scale: 'y', kind: 'bars', colorIndex: 0 },
+      { label: 'B', scale: 'y', kind: 'bars', colorIndex: 1 },
+      { label: 'C', scale: 'y', kind: 'bars', colorIndex: 2 }
+    ]
+  }
+
+  it('emits consecutive bands when all series are visible', () => {
+    const opts = buildOpts(fakeUPlot, def, {})
+    expect(opts.bands).toEqual([{ series: [2, 1] }, { series: [3, 2] }])
+  })
+
+  it('skips a hidden series when computing bands', () => {
+    const opts = buildOpts(fakeUPlot, def, { visibility: { B: false } })
+    expect(opts.bands).toEqual([{ series: [3, 1] }])
+  })
+
+  it('omits bands entirely for a non-stacked def', () => {
+    const opts = buildOpts(fakeUPlot, { ...def, stacked: false }, {})
+    expect(opts.bands).toBeUndefined()
+  })
+})
+
+describe('createChart stacking', () => {
+  const def = {
+    name: 'flow',
+    label: 'Flow',
+    stacked: true,
+    axes: [{ label: 'Total', scale: 'y' }],
+    series: [
+      { label: 'A', scale: 'y', kind: 'bars', colorIndex: 0 },
+      { label: 'B', scale: 'y', kind: 'bars', colorIndex: 1 }
+    ]
+  }
+  let el
+  beforeEach(() => {
+    el = document.createElement('div')
+  })
+
+  it('plots cumulative columns for a stacked def', async () => {
+    const handle = await createChart(el, def, {})
+    handle.setData([
+      [1, 2],
+      [10, 20],
+      [1, 2]
+    ])
+    // last setData call on the fake records the data it received
+    const plotted = handle.uplot.data
+    expect(plotted[1]).toEqual([10, 20]) // A
+    expect(plotted[2]).toEqual([11, 22]) // B = A + B (cumulative)
+  })
+
+  it('rebuilds and restacks when a series is hidden', async () => {
+    const handle = await createChart(el, def, {})
+    handle.setData([[1], [10], [5]])
+    const before = handle.uplot
+    handle.setVisibility({ A: false })
+    expect(handle.uplot).not.toBe(before) // rebuilt
+    // A omitted → B no longer adds A; B column = 5 (its own value, A excluded)
+    expect(handle.uplot.data[2]).toEqual([5])
+    // hidden series is also setSeries(show:false)
+    expect(handle.uplot.setSeries).toHaveBeenCalledWith(1, { show: false })
+  })
+
+  it('does not rebuild when setVisibility re-asserts the seeded visibility', async () => {
+    // The address amount-flow path seeds opts.visibility at construction, then popChartCache
+    // immediately calls updateFlow() with the same bitmap. Re-asserting an unchanged state must
+    // not trigger a throwaway destroy+rebuild.
+    const handle = await createChart(el, def, { visibility: { A: true, B: true } })
+    handle.setData([[1], [10], [5]])
+    const before = handle.uplot
+    handle.setVisibility({ A: true, B: true })
+    expect(handle.uplot).toBe(before) // not rebuilt
+  })
+
+  it('applies seed-hidden visibility to the series show flags on the initial build', async () => {
+    // Repro of the address amount-flow group-by-change bug: renderChart seeds opts.visibility
+    // with a deselected flow series hidden (e.g. Net selected → Received/Spent off). buildOpts
+    // uses the seed for the stacked bands, but a fresh uPlot starts every series show:true — so
+    // the build must ALSO push the seed onto the series show flags. The immediately-following
+    // updateFlow() re-asserts the same bitmap and no-ops (no rebuild), so if the build doesn't
+    // hide the series here, it stays drawn until an unrelated toggle forces a rebuild.
+    const handle = await createChart(el, def, { visibility: { A: false, B: true } })
+    handle.setData([[1], [10], [5]])
+    const before = handle.uplot
+    expect(handle.uplot.setSeries).toHaveBeenCalledWith(1, { show: false }) // A hidden at build
+    handle.setVisibility({ A: false, B: true })
+    expect(handle.uplot).toBe(before) // re-assert is a no-op, no rebuild
   })
 })

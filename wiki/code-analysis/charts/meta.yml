@@ -1,10 +1,17 @@
 domain: charts
-anchor: 09696541
+anchor: 4649d1bf
 files:
   - cmd/dcrdata/internal/api/apiroutes.go
+  - cmd/dcrdata/internal/explorer/explorer.go
   - cmd/dcrdata/internal/explorer/explorerroutes.go
+  - cmd/dcrdata/public/js/charts/definitions/coin_supply.js
+  - cmd/dcrdata/public/js/charts/format.js
+  - cmd/dcrdata/public/js/charts/registry.js
   - cmd/dcrdata/public/js/controllers/charts_controller.js
+  - cmd/dcrdata/public/js/helpers/chart_theme.js
   - cmd/dcrdata/public/js/helpers/ska_helper.js
+  - cmd/dcrdata/public/js/helpers/uplot_adapter.js
+  - cmd/dcrdata/public/js/helpers/uplot_ranger.js
   - cmd/dcrdata/public/scss/charts.scss
   - cmd/dcrdata/views/charts.tmpl
   - db/cache/charts.go

@@ -1181,13 +1181,6 @@ func (charts *ChartData) PoolSizeTip() int32 {
 	return int32(len(charts.Blocks.PoolSize)) - 1
 }
 
-// MissedVotesTip is the height of the MissedVotes data.
-func (charts *ChartData) MissedVotesTip() int32 {
-	charts.mtx.RLock()
-	defer charts.mtx.RUnlock()
-	return int32(len(charts.Windows.MissedVotes))*charts.DiffInterval - 1
-}
-
 // AddUpdater adds a ChartUpdater to the Updaters slice. Updaters are run
 // sequentially during (*ChartData).Update.
 func (charts *ChartData) AddUpdater(updater ChartUpdater) {

@@ -1,0 +1,46 @@
+// Agenda page (/agenda/{id}) chart layout. The two vote-choice charts migrated from
+// Dygraphs to uPlot (see controllers/agenda_controller.js); heights live here (not inline)
+// so the largest breakpoint can compress them to fit one screen.
+
+.agenda-charts {
+  .agenda-chart {
+    width: 100%;
+    margin: 0 auto;
+  }
+
+  .agenda-chart--cumulative {
+    height: 300px;
+  }
+
+  .agenda-chart--block {
+    height: 250px;
+  }
+
+  // Span the overview strip to the chart's full width (the shared default is 96% centered,
+  // which leaves it narrower than these full-width charts). syncRangerGutters then mirrors
+  // the main chart's plot-box insets onto the strip so the inner plot areas line up under
+  // the x-axis — same approach as the address page. No top margin: the strip's uPlot already
+  // reserves RANGER_VPAD (6px) above its plot, so a container margin-top double-spaces it.
+  .chart-ranger {
+    width: 100%;
+    margin: 0;
+  }
+}
+
+// Largest app breakpoint (xl container = 1260px, see scss/_variables.scss): make the two
+// charts split the viewport height left over after the fixed page chrome (navbar, agenda
+// metadata, choices table, the two titles, both 44px ranger strips, footer ≈ 545px) so the
+// whole page fits on one screen without scrolling. The cumulative chart keeps the larger
+// share (~58/42, matching the prior 300/250 ratio). uPlot re-reads clientHeight on the
+// debounced window-resize handler, so the canvases track these heights.
+@media (min-width: $breakpoint-xl) {
+  .agenda-charts {
+    .agenda-chart--cumulative {
+      height: calc((100vh - 545px) * 0.58);
+    }
+
+    .agenda-chart--block {
+      height: calc((100vh - 545px) * 0.42);
+    }
+  }
+}

@@ -1,5 +1,5 @@
 domain: websocket
-anchor: f1f2bc89
+anchor: 5765cb68
 files:
   - cmd/dcrdata/internal/explorer/websocket.go
   - cmd/dcrdata/internal/explorer/websockethandlers.go

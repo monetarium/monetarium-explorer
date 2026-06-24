@@ -1,5 +1,5 @@
 domain: ticketpool
-anchor: 37d7a992
+anchor: f78c0a4e
 files:
   - api/types/apitypes.go
   - cmd/dcrdata/internal/api/apiroutes.go

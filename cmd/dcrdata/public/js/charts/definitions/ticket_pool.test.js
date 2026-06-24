@@ -22,10 +22,10 @@ describe('ticketPoolSize.series', () => {
 })
 
 describe('ticketPoolValue.toColumns', () => {
-  it('height/block axis: [1+i, poolval*1e-8]', () => {
+  it('height/block axis: [i, poolval*1e-8] (0-based)', () => {
     const raw = { axis: 'height', bin: 'block', poolval: [100000000, 200000000] }
     expect(ticketPoolValue.toColumns(raw, {})).toEqual([
-      [1, 2],
+      [0, 1],
       [1, 2]
     ])
   })

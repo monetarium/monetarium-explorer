@@ -61,7 +61,7 @@ Maturity boundary is computed in Go, not SQL: `bestBlock - chainParams.TicketMat
 
 ### 3.2 Scan / shaping into `dbtypes.PoolTicketsData`
 
-**Location:** [db/dcrpg/queries.go:1138-1236](../../../db/dcrpg/queries.go#L1138-L1236).
+**Location:** [db/dcrpg/queries.go:1106-1200](../../../db/dcrpg/queries.go#L1106-L1200).
 
 `dbtypes.PoolTicketsData` ([db/dbtypes/types.go:2120-2128](../../../db/dbtypes/types.go#L2120-L2128)) is a flat-arrays-of-equal-length struct (`Time`, `Price`, `Mempool`, `Immature`, `Live`, `Outputs`, `Count`). One struct, three different population shapes:
 
@@ -73,7 +73,7 @@ Maturity boundary is computed in Go, not SQL: `bestBlock - chainParams.TicketMat
 
 Critical detail: `retrieveTicketsByDate` does `uint64(price*1e8) / (live+immature)` — the `*1e8` round-trip via `float64` is a VAR-only path; safe per C1. **Do not extend this routine to SKA atoms** without rewriting to `*big.Int`.
 
-`toCoin(amt) = float64(amt)/1e8` ([db/dcrpg/queries.go:4297-4299](../../../db/dcrpg/queries.go#L4297-L4299)) — generic over `int64|uint64`, VAR-only.
+`toCoin(amt) = float64(amt)/1e8` ([db/dcrpg/queries.go:4400-4402](../../../db/dcrpg/queries.go#L4400-L4402)) — generic over `int64|uint64`, VAR-only.
 
 ### 3.3 Cache layer
 
@@ -126,7 +126,7 @@ WS `getticketpooldata` ([cmd/dcrdata/internal/explorer/websockethandlers.go](../
 Mempool: exp.dataSource.GetMempoolPriceCountTime(),
 ```
 
-Both calls dispatch to `*ChainDB.GetMempoolPriceCountTime` ([db/dcrpg/pgblockchain.go:6402-6406](../../../db/dcrpg/pgblockchain.go#L6402-L6406)) → [mempool/mempoolcache.go:192-214](../../../mempool/mempoolcache.go#L192-L214):
+Both calls dispatch to `*ChainDB.GetMempoolPriceCountTime` ([db/dcrpg/pgblockchain.go:6414](../../../db/dcrpg/pgblockchain.go#L6414)) → `DataCache.GetTicketPriceCountTime` ([mempool/mempoolcache.go:197-218](../../../mempool/mempoolcache.go#L197-L218)):
 
 ```go
 return &apitypes.PriceCountTime{
@@ -137,6 +137,8 @@ return &apitypes.PriceCountTime{
 ```
 
 `Price` is therefore always the **predicted next-block ticket price** (`stakeDiff + feeAvg`) regardless of which transport delivered it; `Count` is the number of fees averaged into the cache; `Time` is the cache update timestamp. The cache helper locks its own state, so neither caller takes `MempoolInventory().RLock()`.
+
+`c.stakeDiff` is written by `StoreMPData` ([mempool/mempoolcache.go:46-76](../../../mempool/mempoolcache.go#L46-L76)). As of the current codebase, `StoreMPData` uses fail-soft semantics: if `dcrutil.NewAmount(stakeData.StakeDiff)` returns an error (invalid stake diff value from the node), it logs a warning and **leaves `c.stakeDiff` at its previous value** rather than resetting it to zero. Consequently, the mempool overlay `Price` on the ticketpool chart continues to show the last valid tick-diff estimate rather than collapsing to `feeAvg` alone on a transient bad value.
 
 > **History note.** Pre-PR #290 the WS branch reimplemented this overlay manually as `mp.Price = inv.Tickets[0].TotalOut` / `mp.Count = len(inv.Tickets)` / `mp.Time = NewTimeDefFromUNIX(inv.Tickets[0].Time)`. Same JSON shape, different semantics: the `/ticketpool` Dygraph dot visibly jumped between the initial HTTP load (REST) and every `newblock` refresh (WS). Issue [#290](https://github.com/monetarium/monetarium-explorer/issues/290) collapsed both paths onto `DataSource.GetMempoolPriceCountTime` via the new package-local helper `(*explorerUI).buildTicketPoolChartsData`.
 
@@ -224,6 +226,7 @@ When modifying `/ticketpool`, check:
 - **Adding SKA support in the wrong place.** Tickets are VAR by chain design. The temptation to "make this multi-coin" would corrupt SKA precision (C1) and produce nonsense data — tickets do not exist for SKA coins.
 - **Forgetting that `/api/ticketpool/bydate/{tp}` returns no `mempool` field.** A future refactor that unifies the two REST handlers via the same response struct must either backfill `Mempool` or leave it nil and document the asymmetry. The JS `onBarsChange` does *not* call `processData`; it goes straight to `purchasesGraph.updateOptions`, bypassing the mempool-overlay logic.
 - **Reintroducing a separate mempool overlay producer for WS.** The WS path must keep delegating to `DataSource.GetMempoolPriceCountTime` via `buildTicketPoolChartsData` — historically a hand-rolled `inv.Tickets[0].TotalOut` block at `websockethandlers.go` produced a different `mempool.{price,count,time}` than REST and caused the mempool dot to jump on every `newblock` refresh ([#290](https://github.com/monetarium/monetarium-explorer/issues/290)).
+- **Expecting stakeDiff to reset to zero on a bad node value.** `StoreMPData` now uses fail-soft semantics: an invalid `StakeDiff` from the node logs a warning and leaves `c.stakeDiff` unchanged (not zeroed). The mempool overlay therefore shows the last valid stake difficulty — not `feeAvg` alone — until a good value arrives. Tests asserting a zero-Price after a bad StakeDiff call will fail; this is correct behavior.
 - **Cache + height-changed-mid-query.** `ticketPoolVisualization` retries the three SQL queries if `pgb.Height()` advanced between first and last query; do not remove this retry loop ([db/dcrpg/pgblockchain.go:1909-1940](../../../db/dcrpg/pgblockchain.go#L1909-L1940)) — without it the three charts could disagree by one block on rapid reorgs / fast tip advance.
 
 ## Section 8 — Evidence
@@ -236,9 +239,9 @@ When modifying `/ticketpool`, check:
 - Middleware: [cmd/dcrdata/internal/middleware/apimiddleware.go:691-699](../../../cmd/dcrdata/internal/middleware/apimiddleware.go#L691-L699)
 - WS handler: [cmd/dcrdata/internal/explorer/websockethandlers.go:169-231](../../../cmd/dcrdata/internal/explorer/websockethandlers.go#L169-L231)
 - DB cache: [db/dcrpg/pgblockchain.go:74-132](../../../db/dcrpg/pgblockchain.go#L74-L132), [db/dcrpg/pgblockchain.go:1830-1943](../../../db/dcrpg/pgblockchain.go#L1830-L1943)
-- DB queries: [db/dcrpg/queries.go:1138-1236](../../../db/dcrpg/queries.go#L1138-L1236), [db/dcrpg/queries.go:4297-4299](../../../db/dcrpg/queries.go#L4297-L4299)
+- DB queries: [db/dcrpg/queries.go:1106-1200](../../../db/dcrpg/queries.go#L1106-L1200), [db/dcrpg/queries.go:4400-4402](../../../db/dcrpg/queries.go#L4400-L4402)
 - DB SQL: [db/dcrpg/internal/stakestmts.go:106-122](../../../db/dcrpg/internal/stakestmts.go#L106-L122), [db/dcrpg/internal/stakestmts.go:509-512](../../../db/dcrpg/internal/stakestmts.go#L509-L512), [db/dcrpg/internal/txstmts.go:165-170](../../../db/dcrpg/internal/txstmts.go#L165-L170)
-- Mempool overlay: [mempool/mempoolcache.go:192-214](../../../mempool/mempoolcache.go#L192-L214), [db/dcrpg/pgblockchain.go:6402-6406](../../../db/dcrpg/pgblockchain.go#L6402-L6406)
+- Mempool overlay: [mempool/mempoolcache.go:46-76](../../../mempool/mempoolcache.go#L46-L76) (`StoreMPData`, fail-soft stakeDiff), [mempool/mempoolcache.go:197-218](../../../mempool/mempoolcache.go#L197-L218) (`GetTicketPriceCountTime`), [db/dcrpg/pgblockchain.go:6414](../../../db/dcrpg/pgblockchain.go#L6414) (`GetMempoolPriceCountTime`)
 - Types: [api/types/apitypes.go:931-960](../../../api/types/apitypes.go#L931-L960), [db/dbtypes/types.go:2118-2128](../../../db/dbtypes/types.go#L2118-L2128), [db/dbtypes/types.go:827-857](../../../db/dbtypes/types.go#L827-L857)
 
 See also:

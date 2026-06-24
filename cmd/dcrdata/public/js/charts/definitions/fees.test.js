@@ -11,8 +11,19 @@ describe('fees VAR (coinType 0)', () => {
     const raw = { axis: 'time', t: [1000], fees: [300000000] }
     expect(def.toColumns(raw, {})).toEqual([[1000], [3]])
   })
-  it('formatValue renders VAR integer', () => {
-    expect(def.formatValue(0, { value: 3 }, {})).toBe('3 VAR')
+  it('formatValue keeps decimal precision (does not round via intComma)', () => {
+    expect(def.formatValue(0, { value: 0.0001346 })).toBe('0.0001346 VAR')
+    expect(def.formatValue(0, { value: 1.23456789 })).toBe('1.23456789 VAR')
+  })
+  it('formatValue groups thousands without introducing float artifacts', () => {
+    expect(def.formatValue(0, { value: 1234567.89 })).toBe('1,234,567.89 VAR')
+  })
+  it('formatValue blanks non-finite values', () => {
+    expect(def.formatValue(0, { value: null })).toBe('')
+    expect(def.formatValue(0, { value: NaN })).toBe('')
+  })
+  it('formatValue renders a whole number cleanly', () => {
+    expect(def.formatValue(0, { value: 7000 })).toBe('7,000 VAR')
   })
 })
 

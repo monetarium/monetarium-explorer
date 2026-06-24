@@ -32,9 +32,8 @@ export function formatSkaAtomsExact(atomStr) {
   return p.rest ? `${p.intPart}.${p.rest}` : p.intPart
 }
 
-// X column for a chart payload, mirroring legacy zip2D x-axis semantics EXACTLY:
-//  - block bin   → 1-based index (zip2D calls zipIvY WITHOUT forwarding offset,
-//                  so offset is ignored; the genesis-height-0 quirk = always 1).
+// X column for a chart payload:
+//  - block bin   → 0-based index (block heights are 0-based; genesis=0).
 //  - other height bin → offset + h[i] (zipHvY; offset defaults to 1; the only
 //                  caller passing a non-1 offset is hashrate = HashrateAvgLength).
 //  - time axis   → raw.t seconds.
@@ -42,7 +41,7 @@ export function formatSkaAtomsExact(atomStr) {
 export function xColumn(raw, n, offset = 1) {
   if (raw.axis === 'height') {
     if (raw.bin === 'block') {
-      return Array.from({ length: n }, (_, i) => i + 1)
+      return Array.from({ length: n }, (_, i) => i)
     }
     return Array.from({ length: n }, (_, i) => offset + raw.h[i])
   }

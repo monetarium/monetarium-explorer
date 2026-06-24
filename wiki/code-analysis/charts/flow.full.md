@@ -1,22 +1,26 @@
 ### 1. Overview
 
-End-to-end trace of the `/charts` page after the SKA-supply rollout. Two chart pipelines now coexist for "coin supply":
+End-to-end trace of the `/charts` page after the uPlot migration and live-tip override rollout. Three major pipelines now coexist:
 
-- **VAR / legacy `coin-supply`** — pre-loaded delta cache (`ChartData.Blocks.NewAtoms`, `[]uint64`), accumulated on demand with `accumulate()`, and rendered through `circulationFunc` (Dygraphs float). This is the original Decred path; its design assumes 8-decimal atoms fit in `uint64` and `float64`.
-- **SKA `coin-supply/{N}` (1 ≤ N ≤ 255)** — lazy, per-request load through a different code path: SQL returns per-block deltas, Go computes the running cumulative as `*big.Int` strings, the result is held in `ChartData.SKASupply[uint8]SKASupplyChartData`, and the JSON response carries exact 18-decimal strings (`supply: []string`) plus aligned block heights (`h`). The Dygraphs line still uses float (acceptable per spec §5), but the legend pulls the original string and renders it via `splitSkaAtomsNoTrailing`.
+- **VAR `coin-supply/0` / legacy `coin-supply`** — pre-loaded delta cache (`ChartData.Blocks.NewAtoms`, `[]uint64`), accumulated on demand with `accumulate()`, cached JSON, served by `coinSupplyChart`. Frontend definition: `coinSupplyDef(0)` (`toColumns` converts `*1e-8`, `formatValue` uses `intComma`).
+- **SKA `coin-supply/{N}` (1 ≤ N ≤ 255)** — lazy, per-request load via `LoadSKASupplyForCoin`; cumulative `*big.Int` strings stored in `ChartData.SKASupply[uint8]`. No JSON cache. Frontend definition: `coinSupplyDef(N)` (`toColumns` converts `Number(s)*1e-18` for geometry, `formatValue` reads `datum.payload.supply[datum.idx]` for exact 18-decimal legend). SKA series has `logFloor: 1` to prevent log-axis collapse on zero-prefix supply.
+- **Window-edge live tip** — `explorer.Store()` pushes `ChartTip{Height, Time, TicketPrice, Difficulty, PoolValue, CoinSupply}` to `ChartData.SetTip()` on every new block. Chart makers for `ticketPriceChart`, `powDifficultyChart`, and `stakedCoinsChart` read `Tip` under `tipMtx.RLock()` to override or append a live data point at the series tail.
 
-The `/api/chart/coin-supply/0` route (introduced for path-uniformity) maps internally back to the legacy VAR path. The dropdown is now driven by `ActiveSKATypes` from `HomeInfo.SKACoinSupply`, so only coins with non-zero supply appear.
+The entire frontend JavaScript layer was migrated from Dygraphs to uPlot with a definition-registry architecture. Per-chart logic that used to live inline in `charts_controller.js` now lives in per-chart definition modules under `public/js/charts/definitions/`. The controller is chart-type-agnostic.
 
 ### 2. End-to-End Data Flow
 
-**Common entry:**
+**Common API entry:**
 chi `GET /api/chart/{charttype}` → `m.ChartTypeCtx` (or `m.CoinSupplyChartTypeCtx` for `/coin-supply/{n}`) → `appContext.ChartTypeData` → `(*ChartData).Chart(chartID, bin, axis)`.
 
 **VAR path (`coin-supply` or `coin-supply/0`):**
-PostgreSQL `vins.value_in` deltas → `pgb.coinSupply` fetcher (registered as a chartSource) populates `ChartData.Blocks.NewAtoms` (`ChartUints` / `[]uint64`) → `chartMakers["coin-supply"] = coinSupplyChart` → `accumulate(NewAtoms)` + `encode(...)` JSON → cached in `cachedCharts` → `writeJSONBytes` → `charts_controller.js` → `circulationFunc` (`v * 1e-8`) → Dygraphs.
+PostgreSQL `vins.value_in` deltas → `pgb.coinSupply` fetcher populates `ChartData.Blocks.NewAtoms` (`ChartUints / []uint64`) → `chartMakers["coin-supply"] = coinSupplyChart` → `accumulate(NewAtoms)` + `encode(...)` JSON → cached in `cachedCharts` → `writeJSONBytes` → `charts_controller.js`: `getDefinition('coin-supply/0')` → `coinSupplyDef(0).toColumns(raw)` (`supply.map(s => s * ATOMS_TO_VAR)`, `xColumn(raw, n)`) → uPlot series data. Legend: `formatValue` returns `intComma(datum.value) + ' VAR'`.
 
 **SKA path (`coin-supply/{N}`, N ≥ 1):**
-`ChartTypeData` checks `IsSKASupplyChart(chartType)`; if `!SKASupplyExists(coinType)` it calls `DataSource.LoadSKASupplyForCoin(ctx, charts, coinType)` → SQL `SelectSKACoinSupplyPerBlock` (returns `block_height`, `block_time`, `total::text` per block) → Go scans into `[]int64`/`[]int64`/`[]string` → running `*big.Int` accumulator → stored in `charts.SKASupply[coinType]` (`{Heights, Timestamps, Values}`) → `(*ChartData).Chart` falls through to `charts.skaSupplyChart(...)` → emits `{bin, axis, h, [t,] supply: []string}` JSON via `json.Marshal` (no `accumulate`, no cache write) → frontend `plotGraph case 'coin-supply'` `isSKA` branch maps `data.supply` to floats for the line and stashes the raw strings in `this._skaSupplyRaw` for the exact-precision legend.
+`ChartTypeData` checks `IsSKASupplyChart(chartType)`; triggers `LoadSKASupplyForCoin(ctx, charts, coinType)` when `!SKASupplyExists(coinType)` or series is stale (`currHeight - cachedHeight > 10`) → SQL `SelectSKACoinSupplyPerBlock` (returns `block_height`, `block_time`, `total::text` per block) → Go `*big.Int` running accumulator → stored in `charts.SKASupply[coinType]` (`{Heights, Timestamps, Values []string}`) under `SKASupplyMtx.Lock()` → `(*ChartData).Chart` falls through to `skaSupplyChart` → emits `{bin, axis, h, [t,] supply: []string}` (no cache write) → `charts_controller.js`: `getDefinition('coin-supply/N')` → `coinSupplyDef(N).toColumns(raw)` (`supply.map(s => Number(s)*1e-18)`, `xColumn(raw, n)`) → uPlot series data. Legend: `formatValue` returns `formatSkaAtomsExact(datum.payload.supply[datum.idx]) + ' SKA{n}'`.
+
+**Live-tip override (ticket-price, pow-difficulty, stake-participation):**
+`explorer.Store()` ([cmd/dcrdata/internal/explorer/explorer.go:657](../../../cmd/dcrdata/internal/explorer/explorer.go)) calls `cd.SetTip(cache.ChartTip{...})` on every new block. `SetTip()` ([db/cache/charts.go:908](../../../db/cache/charts.go)) acquires `tipMtx.Lock()`, stores the struct, calls `invalidateTipCharts()` (acquires `cacheMtx.Lock()`), drops cached JSON for `TicketPrice`, `POWDifficulty`, and `PercentStaked` across all axis/bin combos. On next request, the maker runs fresh, reads `tip` under `tipMtx.RLock()`, and applies the override (same-window → mutate last point; newer window → append partial-window point with computed window-start height/time; block/day bin → unconditional last-point override when `tip.CoinSupply > 0`).
 
 ### 3. Per-Layer Breakdown
 
@@ -24,64 +28,98 @@ PostgreSQL `vins.value_in` deltas → `pgb.coinSupply` fetcher (registered as a 
   - **Data Structures:** PostgreSQL `vouts(value INT8, ska_value TEXT, coin_type)`, `transactions(block_height, block_time, is_mainchain, is_valid)`.
   - **Transformations:**
     - `SelectCoinSupply` (line 132) — sums `vins.value_in` per block (legacy VAR delta query).
-    - `SelectSKACoinSupplyPerBlock` (line 262) — `sum(vouts.ska_value::numeric)::text` per `(block_height, block_time)` for `coin_type = $2`, filtered to mainchain & valid, ordered by height. Per-block values; cumulation happens in Go.
-    - `SelectVARCoinSupplyPerBlock` (line 295) — `sum(vouts.value::numeric * 10000000000)::text` (multiplies by 10^10 so VAR values share SKA's 18-decimal scale). **Returns 2 columns** (`block_time, total`) — note the schema mismatch with `LoadSKASupplyForCoin`'s 3-column scan; reachable only if a future caller invokes the loader with `coinType == 0`, which the current handler short-circuits.
+    - `SelectSKACoinSupplyPerBlock` (line 262) — `sum(vouts.ska_value::numeric)::text` per `(block_height, block_time)` for `coin_type = $2`, mainchain & valid, ordered by height. Per-block values; cumulation in Go.
+    - `SelectVARCoinSupplyPerBlock` (line 295) — 2-column query; only reaches `LoadSKASupplyForCoin` if caller bypasses the `coinType > 0` guard, in which case the 3-target `Scan` fails per-row (logged, continued) → empty result → HTTP 503.
 
-- **Location:** `db/dcrpg/pgblockchain.go:1087-1147` (`LoadSKASupplyForCoin`), `:3418-…` (`coinSupply` fetcher for the legacy VAR path).
-  - **Data Structures:** `*sql.Rows` → `[]int64 blockHeights, []int64 timestamps, []string blockValues` → `*big.Int runningTotal` → `cache.SKASupplyChartData{Heights, Timestamps, Values: cumulativeValues}`.
-  - **Transformations:** Streaming scan; on each row `runningTotal.Add(blockValue)`; the cumulative `runningTotal.String()` is appended to `cumulativeValues`. The completed three slices are written to `charts.SKASupply[coinType]` under `charts.SKASupplyMtx.Lock()` ([db/dcrpg/pgblockchain.go:1136-1142](../../../db/dcrpg/pgblockchain.go)). **Lock caveat:** the gate readers `SKASupplyExists`/`SKASupplyHeight` also use `SKASupplyMtx`, but the actual chart reader `skaSupplyChart` reads the map under the *different* `charts.mtx.RLock()` ([db/cache/charts.go:1801-1807](../../../db/cache/charts.go)) — so a write does **not** exclude a `skaSupplyChart` read. Combined with the stale-height reload path (§3 API layer), a reload can run concurrently with a render of the same coin → a latent `concurrent map read and map write` hazard. See impact.md → "SKA supply map read/write under mismatched locks".
+- **Location:** `db/dcrpg/pgblockchain.go` (`LoadSKASupplyForCoin`, `coinSupply` fetcher)
+  - **Data Structures:** `*sql.Rows` → `[]int64 blockHeights, []int64 timestamps, []string blockValues` → `*big.Int runningTotal` → `cache.SKASupplyChartData{Heights, Timestamps, Values}`.
+  - **Transformations:** Streaming scan; `runningTotal.Add(blockValue)` per row; cumulative `runningTotal.String()` appended. Written to `charts.SKASupply[coinType]` under `charts.SKASupplyMtx.Lock()`. **Lock caveat:** `skaSupplyChart` reads under `charts.mtx.RLock()` — a different mutex → latent concurrent map race (see impact.md).
 
 - **Location:** `db/cache/charts.go`
   - **Data Structures:**
     - VAR path: `ChartData.Blocks zoomSet` (`Height, Time, NewAtoms ChartUints`) + `Days zoomSet`. `ChartUints = []uint64`.
-    - SKA path: `ChartData.SKASupply SKASupplyData = map[uint8]SKASupplyChartData{Heights []int64; Timestamps []int64; Values []string}`. Cumulative values are stored, not deltas.
+    - SKA path: `ChartData.SKASupply SKASupplyData = map[uint8]SKASupplyChartData{Heights []int64; Timestamps []int64; Values []string}`.
+    - Live tip: `ChartData.Tip ChartTip` guarded by `tipMtx sync.RWMutex` (separate from `charts.mtx` and `SKASupplyMtx`).
   - **Transformations:**
-    - `(*ChartData).Chart` (line 1093) — looks up `chartMakers[chartID]`; if absent and `IsSKASupplyChart(chartID)`, dispatches to `skaSupplyChart(...)` **without consulting or writing the JSON cache** (`cacheChart` is only called for `chartMakers` hits). VAR continues to be cached.
-    - `coinSupplyChart` (line 1349) — VAR-only; uses `accumulate(charts.Blocks.NewAtoms)` (line 1356) for `BlockBin` and `accumulate(charts.Days.NewAtoms)` (line 1371) for `DayBin`; emits `{h, supply}` or `{h, t, supply}` via `encode`.
-    - `skaSupplyChart` (line 1789) — coinType-0 short-circuits to `coinSupplyChart`. Otherwise reads `charts.SKASupply[coinType]` under `RLock`. For `BlockBin` it returns the per-block series verbatim; for `DayBin` it calls `aggregateSKASupply(timestamps, heights, values)` (line 1846), which buckets by `t / 86400`, keeps the **last** sample per day, and re-emits `(timestamp, height, value)` triples sorted ascending by day. The block-bin response always carries `h`; the day-bin time-axis response also carries `h` per fix `a9db4b3b`.
-    - `accumulate` (line 1148) is **VAR-only**: `uint64` accumulator overflows for SKA atoms.
+    - `(*ChartData).Chart` (line 1093) — `chartMakers[chartID]` lookup; if absent and `IsSKASupplyChart`, dispatches to `skaSupplyChart` outside the cache. VAR is cached.
+    - `coinSupplyChart` — VAR-only; `accumulate(Blocks.NewAtoms)` for BlockBin, `accumulate(Days.NewAtoms)` for DayBin.
+    - `skaSupplyChart` (line 2228) — coinType-0 short-circuits to `coinSupplyChart`; otherwise reads `charts.SKASupply[coinType]` under `charts.mtx.RLock()` (mismatch — see §5). For BlockBin returns verbatim; for DayBin calls `aggregateSKASupply`.
+    - `powDifficultyChart` (line 1831) / `ticketPriceChart` (line 1901) — read `charts.Tip` under `tipMtx.RLock()`; override last window point if `tip.Height` is in the same window as the last stored window, or append a live partial-window point (with window-start height and a time found by scanning `Blocks.Height` backwards, falling back to projection from last-window duration, falling back to `tip.Time`) if tip is in a newer window.
+    - `stakedCoinsChart` (line 2162) — reads `charts.Tip` under `tipMtx.RLock()`; override guard is `tip.CoinSupply > 0` (not a window test, because block/day bins have no window concept); overrides last point of both `circulation` and `poolVal`.
+    - `SetTip()` (line 908) — holds `tipMtx.Lock()` while calling `invalidateTipCharts()`, which acquires `cacheMtx.Lock()` to delete cached JSON. **Lock ordering:** `tipMtx` → `cacheMtx`; never reverse.
+    - `invalidateTipCharts()` (line 919) — deletes cache keys for `TicketPrice` and `POWDifficulty` (both axes × WindowBin) and `PercentStaked` (both axes × BlockBin and DayBin).
+    - `ReorgHandler` (line 748) — window-aware: scans `Windows.Height` and snips only windows whose start height exceeds `commonAncestorHeight`. Windows at or before the ancestor are kept (their data is unaffected by the reorg). Block-bin is snipped to `commonAncestorHeight + 1`; days drop the last two (keep ≥ 1).
+    - `accumulate` — VAR-only `uint64` accumulator. MUST NOT be applied to SKA supply values (already cumulative; overflow).
 
-- **Location:** `cmd/dcrdata/internal/api/apiroutes.go:1942-1975` (`ChartTypeData`), router at `cmd/dcrdata/internal/api/apirouter.go:240-243` and middleware at `cmd/dcrdata/internal/middleware/apimiddleware.go:796-815`.
-  - **Data Structures:** `c.charts *cache.ChartData`, `c.DataSource.LoadSKASupplyForCoin(...)`.
-  - **Transformations:**
-    - `r.With(m.CoinSupplyChartTypeCtx).Get("/coin-supply/{charttype}", app.ChartTypeData)` — for `coin-supply/N`, the middleware re-prefixes the URL param, putting `"coin-supply/" + charttype` into `ctxChartType`. The fallthrough `r.With(m.ChartTypeCtx).Get("/{charttype}", app.ChartTypeData)` covers everything else.
-    - `ChartTypeData` triggers `LoadSKASupplyForCoin` for `IsSKASupplyChart(chartType) && coinType > 0` when **either** the coin is not yet loaded (`!SKASupplyExists(coinType)`) **or** the cached series is stale: `currHeight - cachedHeight > skaSupplyStaleHeightThreshold` (=10 blocks), comparing `SKASupplyHeight(coinType)` against `DataSource.GetHeight` ([cmd/dcrdata/internal/api/apiroutes.go:1888, 1901-1912](../../../cmd/dcrdata/internal/api/apiroutes.go)). So reloads now also fire for already-loaded coins, not just on first request — this is what makes the mismatched-lock hazard (§3 DB layer) reachable. If load fails it logs `Warnf` and continues; downstream `Chart(...)` then returns `"no SKA supply data found"`, which the handler maps to HTTP 503. Pure VAR requests skip the load entirely.
+- **Location:** `cmd/dcrdata/internal/api/apiroutes.go:1942-1975` (`ChartTypeData`)
+  - Triggers `LoadSKASupplyForCoin` when `IsSKASupplyChart && coinType > 0` and (`!SKASupplyExists` or staleness > 10 blocks). Load failure → `Warnf` + continue → `Chart()` returns "no SKA supply data found" → HTTP 503.
+  - `coinType == 0` guard ensures the VAR path is not routed through `LoadSKASupplyForCoin`.
 
-- **Location:** `cmd/dcrdata/internal/explorer/explorerroutes.go:1911-1943` (`Charts` handler).
-  - **Data Structures:** `pageData.HomeInfo.SKACoinSupply []SKACoinSupplyEntry`, page payload `{*CommonPageData, Premine, TargetPoolSize, ActiveSKATypes []uint8}`.
-  - **Transformations:** Reads home-info SKA supply under the existing `RLock`, projects active coin types into `ActiveSKATypes`, hands to template. Chart options for SKA exist only for coins with non-zero supply.
+- **Location:** `cmd/dcrdata/internal/explorer/explorerroutes.go:1911-1943` (`Charts` handler)
+  - Reads `pageData.HomeInfo.SKACoinSupply` under `RLock`, projects `ActiveSKATypes []uint8`, hands to template. Only coins with non-zero supply appear.
+
+- **Location:** `cmd/dcrdata/internal/explorer/explorer.go:648-665` (`Store` → `SetTip`)
+  - Calls `cd.SetTip(cache.ChartTip{...})` on every new block, sourcing values from `blockData.Header`, `blockData.CurrentStakeDiff`, and `blockData.PoolInfo`. `PoolValue` is converted from float VAR to atoms (`uint64(poolValAtoms)`).
 
 - **Location:** `cmd/dcrdata/views/charts.tmpl:33-41`
-  - **Transformations:** `<option value="coin-supply/0">Circulation (VAR)</option>` (line 33) followed by a `range $t := .ActiveSKATypes` loop emitting `<option value="coin-supply/{{$t}}">Circulation (SKA{{$t}})</option>` (line 34). A separate fees loop at line 36. Line 41 adds `<option value="hashrate-shares">Hashrate Shares</option>` — the only option that triggers cross-page navigation via `Turbolinks.visit` instead of a data fetch. The legacy bare `coin-supply` value is **deprecated** in favor of `coin-supply/0`. Lines 197–205 contain the hashrate `intervalSelector` (hidden unless `hashrate` is selected), now including a Month button (line 203) that was previously absent.
+  - `<option value="coin-supply/0">` (VAR), `range .ActiveSKATypes` loop for SKA coins, `range .ActiveSKATypes` loop for `fees/N`, `<option value="hashrate-shares">` (cross-page navigation, no data load). Line 41: hashrate-shares → the only option triggering `Turbolinks.visit`.
+
+- **Location:** `cmd/dcrdata/public/js/charts/registry.js`
+  - `register(def)` stores static definitions by `def.name`.
+  - `registerCoinFactories(supplyFactory, feesFactoryFn)` stores the coin-type factories.
+  - `getDefinition(name)` resolves: `coin-supply/{N}` → `coinSupplyFactory(N)`, `fees/{N}` → `feesFactory(N)`, everything else → `staticDefs[name]`.
+  - `coinTypeFromName(name)` parses `coin-supply/{N}` or `fees/{N}` → integer 1–255, else 0.
+
+- **Location:** `cmd/dcrdata/public/js/charts/format.js`
+  - `xColumn(raw, n, offset=1)` — canonical x-column builder: block-bin height → 1-based index (`Array.from({length:n}, (_,i) => i+1)`); other height-bin → `offset + raw.h[i]`; time → `raw.t.slice(0, n)`.
+  - `formatSkaAtomsExact(atomStr)` → `splitSkaAtomsNoTrailing` for exact 18-decimal display.
+  - `ATOMS_TO_VAR = 1e-8`, `intComma`, `withBigUnits`, `unitPrefix`.
+
+- **Location:** `cmd/dcrdata/public/js/charts/definitions/coin_supply.js`
+  - `coinSupplyDef(coinType)` factory: `isSKA = coinType > 0`. `toColumns(raw)` → `xColumn(raw, ys.length)` + supply converted to float (SKA: `Number(s)*1e-18`; VAR: `s * ATOMS_TO_VAR`). `formatValue(seriesIdx, datum)` → for SKA reads `datum.payload.supply[datum.idx]` (exact atom string); for VAR uses `intComma(datum.value)`. SKA series carries `logFloor: 1` to prevent log-axis collapse during zero-supply prefix.
+  - `register(coinSupplyDef(0))` at module load registers the VAR definition as a static def. SKA definitions are produced dynamically from `coinSupplyFactory` registered in `definitions/index.js`.
+
+- **Location:** `cmd/dcrdata/public/js/helpers/chart_theme.js`
+  - `PALETTE` — 25-entry categorical palette. Index 0 is theme-aware (`PRIMARY`): light `#2970FF`, dark `#2DD8A3` (mint).
+  - `SERIES_COLORS` — named overrides: `tickets-price`, `tickets-bought` (light `#006666`, dark `#4dabf7`), `hashrate-rate`, `hashrate-miners` (light `#cc6600`, dark `#4dabf7`). Dark secondary uses `#4dabf7` (~4.3:1) instead of `#2970ff` (~2.4:1) for contrast.
+  - `colorForIndex(i, dark)`, `seriesColorByKey(key, dark)` — resolution functions used by `uplot_adapter.js`.
+
+- **Location:** `cmd/dcrdata/public/js/helpers/uplot_adapter.js`
+  - `createChart(el, def, opts)` — builds a uPlot opts object from a `ChartDefinition` + config and attaches a live instance to the DOM element. Returns a handle with `setData()`, `setXRange()`, `setMode()`, `destroy()`, `.uplot` direct access.
+  - `buildOpts(def, opts)` — pure (no DOM), the unit under test. Translates `def.series[i].kind` (`line`, `area`, `bars`, `stepped`) and color resolution into uPlot series descriptors. Respects `logFloor` on individual series.
+  - `resolveSeriesColor(s, i, dark)` — resolves in order: `s.color` (explicit), `seriesColorByKey(s.colorKey)` (named), `colorForIndex(s.colorIndex ?? i)` (palette).
+
+- **Location:** `cmd/dcrdata/public/js/helpers/uplot_ranger.js`
+  - `createRanger(el, def, opts)` — creates the overview/zoom-navigator strip below the main chart. Shows the full primary series; grip-drag and body-drag drive `opts.onSelect(min, max)` on the controller.
 
 - **Location:** `cmd/dcrdata/public/js/controllers/charts_controller.js`
-  - **Data Structures:** Dygraph `[x, y, …]` rows. SKA: `this._skaSupplyRaw: string[]` retains the original 18-decimal atom strings; `coinLabel` from `renderCoinType(coinType)` (`'VAR'` / `'SKA{n}'`).
-  - **Transformations:**
-    - `skaCoinTypeFromChart(name)` (line 58) — parses `coin-supply/{N}` → 0 if not 1..255.
-    - `isCoinSupplyChart(name)` (line 68) — collapses both legacy `coin-supply` and `coin-supply/{N}` for the switch dispatch (`switchKey`).
-    - `selectChart()` (line 853) — **`hashrate-shares` short-circuit**: when the `<select>` resolves to `'hashrate-shares'`, the handler calls `Turbolinks.visit('/hashrate-shares')` (line 856) and returns immediately without loading any chart data. Every other selection proceeds to fetch `/api/chart/{type}`. This is the only `<select>` option that navigates cross-page rather than loading data in the current page.
-    - `selectChart()` (lines 878–883) — **`chart-hashrate` CSS class toggle**: adds the class `chart-hashrate` to `chartsViewTarget` when the `hashrate` chart is selected; removes it for every other chart. This class-gates the SCSS rule `.chartview.chart-hashrate .dygraph-y2label { color: #c60 }` ([cmd/dcrdata/public/scss/charts.scss:260](../../../cmd/dcrdata/public/scss/charts.scss)) so the Active Miners y2-axis label inherits the series line color in light mode. Dark mode inherits the generic `.chartview .dygraph-y2label { color: #2970ff }` rule ([:264](../../../cmd/dcrdata/public/scss/charts.scss)), so no second hashrate-specific dark rule is needed.
-    - VAR branch (line 685) — `circulationFunc(data)` (line 308) does `supplies[i] * atomsToVAR` (i.e. `*1e-8`), tracks `inflation` via `blockReward(h)` per block, projects 6 months into the future. Legend uses `intComma(y)` + 'VAR'.
-    - SKA branch (lines 659–683) — multiplies the supply string by `1e-18` via `Number(s) * 1e-18` for the plotted line (precision-lossy, accepted by spec §5), but for the **legend** it pulls `this._skaSupplyRaw[i]` (line 660) and renders via `formatSkaAtomsExact(raw)` (line 675–676, which calls `splitSkaAtomsNoTrailing` from `ska_helper.js`). The legend therefore preserves all 18 decimals (spec §4); the plotted Y value does not.
-    - `legendFormatter` — logs `console.warn` for unknown chart types (added by `ddf17358`'s `default:` case).
+  - `this.fetchGeneration` — monotonic counter bumped by `selectChart()` on every chart selection. After each `await` (fetch, `createChart`), if the counter has advanced, the stale result is discarded. Prevents stale-fetch clobbering `this.payload` and orphaned uPlot instances.
+  - `selectChart()` (line 236) — `hashrate-shares` early-return via `Turbolinks.visit`; all others: `getDefinition(name)` → fetch (if needed) → `renderChart(def)`.
+  - `renderChart(def)` (line 292) — calls `def.toColumns(this.payload, this.settingsForDef())` → `createChart()` (if chart type/axis/series count changed, else `handle.setData(cols)`) → `recreateRanger()` → `applyZoom()`.
+  - `renderLegend(u)` (line 591) — builds hover tooltip from `def.series` + `def.formatValue(i, {idx, payload, value}, settings)`. Passes `payload: this.payload` in the datum so `formatValue` can reach exact atom strings.
+  - `applyControlVisibility(def)` (line 635) — reads `def.controls.{bin, scale, mode, zoom, interval, windowUnits, visibility}` to show/hide UI controls; also toggles `chart-hashrate` CSS class on `chartsViewTarget` for hashrate selection (gates `.chartview.chart-hashrate .dygraph-y2label { color: #c60 }` in charts.scss).
+  - `onChartRangeChange(min, max)` / `onRangerSelect(min, max)` / `setMainXRange(min, max)` — range persistence and strip sync. Zoom presets snap to trailing windows; custom ranges encode as base-36 via `Zoom.encode/decode`.
 
 ### 4. Cross-Layer Dependencies
 
-- **Two truth sources for "coin supply"**: legacy `Blocks.NewAtoms`/`Days.NewAtoms` (VAR deltas) versus per-coin-type `SKASupply` (SKA cumulative). They are populated by independent code paths and must stay in sync only insofar as the dropdown labels and chart formats are concerned. There is no shared lengthening / append code between them.
-- **Cache symmetry break**: `chartMakers` results go through `cacheChart`; `skaSupplyChart` does not. SKA responses are recomputed (and re-marshaled) on every request. JS-level changes that depend on cache invalidation semantics (e.g. cache-busting in `pubsubhub.go`) need explicit handling for SKA charts if they are ever wired.
-- **`uint8` ↔ string coupling**: chart ID parsing in Go (`SkaCoinType`) and JS (`skaCoinTypeFromChart`) must agree on `1..255`, the `coin-supply/` prefix, and the integer encoding. They are duplicated implementations.
-- **Aggregation differs from the VAR pipeline.** VAR uses `accumulate()` over `[]uint64` once at chart time. SKA uses `*big.Int.Add` over the result set in `LoadSKASupplyForCoin` (per-load, once); the cached `Values` are already cumulative. `accumulate` MUST NOT be called on `SKASupply.Values`.
-- **Dropdown composition**: `ActiveSKATypes` is computed from `HomeInfo.SKACoinSupply` at page render. If a coin has zero supply at the moment of render, it is hidden from the dropdown — the `/api/chart/coin-supply/{N}` endpoint, however, still works and returns 503 ("no SKA supply data found") for unknown types.
-- **Cumulative+height alignment** (`19a114c1`): block-axis SKA responses always include `h`, and the block-bin frontend uses `i` (not `h`) as the X for block-bin requests but `h[i]` for day-bin (`xFunc` selection at lines 314-319). `t` is omitted on the height-axis path. Misnaming `h` will silently align the chart to the wrong heights.
+- **Definition registry is the new untyped boundary.** `getDefinition(name)` returns a plain object; the controller treats every definition identically. Mismatch between `def.series.length` and `toColumns(...)` column count silently renders the wrong series against wrong data (no error at runtime).
+- **Two truth sources for "coin supply"**: `Blocks.NewAtoms`/`Days.NewAtoms` (VAR deltas) versus per-coin-type `SKASupply` (SKA cumulative). They share only the chart-ID namespace and the `coinSupplyDef` factory.
+- **Cache symmetry break**: `chartMakers` hits → `cacheChart`; `skaSupplyChart` → no cache. SKA responses are recomputed (and re-marshaled) on every request. `invalidateTipCharts` only flushes `chartMakers`-cached charts (TicketPrice, POWDifficulty, PercentStaked).
+- **`uint8` ↔ string coupling**: Go `IsSKASupplyChart`/`SkaCoinType` and JS `coinTypeFromName`/`isCoinSupplyName` in `registry.js` must agree on `coin-supply/` prefix and `1..255` range — no shared parser.
+- **`chart_theme.js` ↔ `charts.scss` color sync.** `SERIES_COLORS` keys in `chart_theme.js` must stay in sync with the `.vSelector .checkmark` background-color rules in `charts.scss` (visibility toggle swatches). The dark-mode secondary color `#4dabf7` appears in both.
+- **Tip override ↔ cache invalidation coupling.** `SetTip()` must invalidate every chart whose maker reads `Tip`. Adding a new tip-reading maker without updating `invalidateTipCharts()` silently serves stale cached data until the next window boundary.
+- **Lock ordering: `tipMtx` → `cacheMtx`.** `SetTip` holds `tipMtx.Lock()` while calling `invalidateTipCharts()` which acquires `cacheMtx.Lock()`. The opposite order risks deadlock.
 
 ### 5. Critical Constraints
 
 - **VAR uses `[]uint64`**, accumulated via `accumulate()`; this overflows for SKA atoms (18 decimals). Never reuse `accumulate` or `ChartUints` for SKA.
-- **SKA atoms travel as strings end-to-end**: SQL `::text`, Go `[]string` + `*big.Int`, JSON `"supply": []string`, JS `Number(...) * 1e-18` ONLY for the chart line, **never** for the legend. The legend MUST use `splitSkaAtomsNoTrailing` (or equivalent BigInt-safe helper) on the original raw string.
-- **The `h` field is contractual** for time-axis SKA responses (regression-fixed in `a9db4b3b`); `19a114c1` made `h` and cumulation invariants. Any new SKA chart endpoint must keep them.
-- **`SKASupply` is guarded by two *different* mutexes** — the loader writes under `charts.SKASupplyMtx.Lock()` and the gate readers (`SKASupplyExists`/`SKASupplyHeight`) use `SKASupplyMtx.RLock()`, but the chart reader `skaSupplyChart` reads under `charts.mtx.RLock()`. The writer therefore does **not** exclude the chart reader; with the stale-height reload path a reload can run concurrently with a render → latent `concurrent map read and map write`. This is a real defect (see impact.md); a refactor should unify all `SKASupply` access on `SKASupplyMtx` rather than rely on load idempotence.
-- **Cache absent for SKA**: the JSON byte cache (`cacheChart`) is bypassed for `skaSupplyChart`. A future optimization that flips this on must invalidate per coin type when a new block arrives.
-- **VAR-circulation endpoint duality**: `/api/chart/coin-supply` and `/api/chart/coin-supply/0` resolve to the same data via two different code paths. If the legacy `coin-supply` route is ever removed, the `circulationFunc` projection / inflation logic must follow it through.
+- **SKA atoms travel as strings end-to-end**: SQL `::text`, Go `[]string` + `*big.Int`, JSON `"supply": []string`, JS `Number(...)*1e-18` ONLY for chart geometry (uPlot `toColumns`), **never** for the legend. The legend MUST use `formatSkaAtomsExact(datum.payload.supply[datum.idx])` (or equivalent) in `formatValue`.
+- **The `h` field is contractual** for time-axis SKA responses; `aggregateSKASupply` carries heights through day-bucketing. Any new SKA chart endpoint must include `h`.
+- **`SKASupply` is guarded by two *different* mutexes** — loader writes under `SKASupplyMtx.Lock()`; chart reader `skaSupplyChart` reads under `charts.mtx.RLock()`. A stale-height reload can run concurrently with a render → latent `concurrent map read and map write` fatal error. Fix: unify all `SKASupply` access on `SKASupplyMtx`.
+- **`logFloor: 1` on SKA coin-supply series** prevents log-axis collapse for zero-prefix supply data. The `uplot_adapter` must apply this floor before passing data to uPlot's log scale. Removing it re-introduces the axis collapse bug (fixed in #499/#507).
+- **Lock ordering: `tipMtx` → `cacheMtx`** — never reverse. `SetTip()` already couples these; a refactor that moves cache invalidation into a path that first holds `cacheMtx` while calling `SetTip()` is a deadlock.
+- **Cache absent for SKA**: the JSON byte cache (`cacheChart`) is bypassed for `skaSupplyChart`. A future optimization that adds SKA caching must invalidate per coin type when a new block arrives (the VAR cache is invalidated via `cacheID`; `invalidateTipCharts` targets named charts, not coin-typed ones).
+- **VAR-circulation endpoint duality**: `/api/chart/coin-supply` and `/api/chart/coin-supply/0` resolve to the same data via two different code paths. Removing one without re-pointing the consumer produces an `UnknownChartErr` 404.
 
 ### 6. Mutation Impact
 
@@ -89,59 +127,80 @@ When modifying chart data structures or pipelines, check ALL of:
 
 - **Direct dependencies:**
   - VAR: `db/cache/charts.go:zoomSet.NewAtoms`, `coinSupplyChart`, `accumulate`.
-  - SKA: `db/cache/charts.go:SKASupplyChartData`, `SKASupplyData`, `skaSupplyChart`, `aggregateSKASupply`; `db/dcrpg/pgblockchain.go:LoadSKASupplyForCoin`; SQL `SelectSKACoinSupplyPerBlock` / `SelectVARCoinSupplyPerBlock`.
+  - SKA: `db/cache/charts.go:SKASupplyChartData`, `SKASupplyData`, `skaSupplyChart`, `aggregateSKASupply`; `db/dcrpg/pgblockchain.go:LoadSKASupplyForCoin`; SQL `SelectSKACoinSupplyPerBlock`.
+  - Live tip: `ChartTip`, `SetTip`, `invalidateTipCharts`, `tipMtx`. All three tip-reading chart makers: `powDifficultyChart`, `ticketPriceChart`, `stakedCoinsChart`.
   - API: `cmd/dcrdata/internal/api/apiroutes.go:ChartTypeData`, `appContext.charts`, `DataSource.LoadSKASupplyForCoin`.
-  - Routing: `apirouter.go:240-243` and middleware `CoinSupplyChartTypeCtx` / `ChartTypeCtx`.
+  - Frontend: `public/js/charts/registry.js` (`getDefinition`, `registerCoinFactories`), `public/js/charts/format.js` (`xColumn`, `formatSkaAtomsExact`), `public/js/charts/definitions/coin_supply.js` (`coinSupplyDef`), per-chart definition modules, `public/js/helpers/uplot_adapter.js`, `public/js/helpers/uplot_ranger.js`, `public/js/helpers/chart_theme.js`.
 - **Indirect dependencies:**
-  - `cmd/dcrdata/internal/explorer/explorerroutes.go:Charts` builds `ActiveSKATypes` from `HomeInfo.SKACoinSupply` — any change in how SKA supply is tracked propagates here.
-  - `cmd/dcrdata/views/charts.tmpl:40-41` consumes `ActiveSKATypes` to render the dropdown.
-  - `charts_controller.js` `skaCoinTypeFromChart`, `isCoinSupplyChart`, the SKA branch of `case 'coin-supply'`, and `formatSkaAtomsExact` (which depends on `splitSkaAtomsNoTrailing`).
-  - `cmd/dcrdata/internal/api/noop_ds_test.go:131` mock implements `LoadSKASupplyForCoin` — interface signature change requires mock update.
+  - `cmd/dcrdata/internal/explorer/explorerroutes.go:Charts` builds `ActiveSKATypes`.
+  - `cmd/dcrdata/views/charts.tmpl:33-41` consumes `ActiveSKATypes`.
+  - `cmd/dcrdata/internal/explorer/explorer.go:657` calls `SetTip()` — any `ChartTip` struct field change requires updating here.
+  - `cmd/dcrdata/internal/api/noop_ds_test.go` mock implements `LoadSKASupplyForCoin`.
 - **Serialization boundaries:**
   - VAR JSON: `{bin, axis, h, [t,] supply: []uint64}` (numbers).
   - SKA JSON: `{bin, axis, h, [t,] supply: []string}` (strings, 18-decimal atoms, cumulative).
-- **Rendering layers:** Dygraphs Y-axis (`Number`), legend formatter (string-precision for SKA), Y-axis label `Coin Supply (${coinLabel})`.
+  - Tip charts JSON: window charts add an extra point when `tip.Height` is in a newer window; the `h` array is then **explicit** (not empty) for height-axis responses — frontend `toColumns` must handle this (`raw.h` present → use it, else derive from window index).
+- **Rendering layers:** uPlot geometry (`toColumns`), on-hover legend (`formatValue` + `renderLegend`), axis labels (from `def.axes`), series visibility toggles (`def.controls.visibility`).
 - **Silent failures:**
-  - Coercing `data.supply` strings via `parseFloat` / `Number(...)` directly into the legend rather than into the line drops precision past 15 digits.
+  - `def.series.length` mismatching the column count from `toColumns` — uPlot silently renders undefined values or drops series.
+  - Coercing `data.supply` strings via `Number` for the legend rather than the geometry path drops precision past 15 digits (SKA values above ~10¹⁵ atoms).
   - Calling `accumulate()` on already-cumulative SKA data double-cumulates.
-  - Forgetting `h` on a SKA time-axis response leaves the frontend with no per-point block alignment, breaking `xFunc(i) = heights[i]` for the day bin.
-  - Stale `?zoom=` after switching between VAR and SKA charts — the `charts` controller calls `Zoom.project(...)` across data-range changes (line 901), unlike the address controller; behavior is OK but worth understanding before changing.
+  - Forgetting `h` on a SKA time-axis response breaks `xColumn` for day-bin.
+  - Adding a tip-reading chart maker without updating `invalidateTipCharts()` → stale cached JSON served until next window boundary.
+  - Removing `logFloor: 1` from a SKA coin-supply series spec → log-axis collapse when supply has a zero-prefix.
 - **Hard failures:**
-  - `LoadSKASupplyForCoin` with `coinType == 0` issues the 2-column `SelectVARCoinSupplyPerBlock` but `Scan(&h, &t, &v)` expects 3 targets. This does **not** panic: the per-row scan error is logged and `continue`d ([db/dcrpg/pgblockchain.go:1111-1113](../../../db/dcrpg/pgblockchain.go#L1111-L1113)), so **every** row is skipped and the result is empty → downstream "no data" → HTTP 503 (loud but degraded, not a crash). Currently unreachable because the API handler short-circuits coinType=0; reachable if a refactor removes that guard.
+  - `LoadSKASupplyForCoin` with `coinType == 0` → 3-target `Scan` on 2-column result → every row skipped → empty → HTTP 503.
   - `uint64` overflow if a future change pushes SKA values into `ChartUints`.
-  - 503 response for `coin-supply/{N}` when no rows exist — handler returns `"chart data not available"`; chart UI shows the loading spinner indefinitely if not handled in JS.
+  - `concurrent map read and map write` fatal if `skaSupplyChart` reads concurrently with a stale-height reload of `SKASupply`.
+  - Deadlock if any code path acquires `cacheMtx` then attempts `SetTip()` (which takes `tipMtx` → `cacheMtx`).
 
 ### 7. Common Pitfalls
 
-- Reusing the VAR pipeline (`Blocks.NewAtoms`, `accumulate`, `*atomsToVAR`) for SKA coins — it overflows, loses precision, and bypasses the per-coin map.
-- Adding a new chart format that omits `h` for time-axis SKA responses (regression risk; `a9db4b3b` was a fix for exactly this).
-- Computing cumulative supply on the frontend — already done in Go, doing it again in JS produces a double-summed series.
-- Mutating `SKASupply[coinType]` from outside `LoadSKASupplyForCoin` without holding `charts.SKASupplyMtx` — and note the existing reader `skaSupplyChart` reads under the *wrong* mutex (`charts.mtx`), so even correctly locking `SKASupplyMtx` does not make a concurrent render safe today (real defect — see impact.md).
-- Adding a new VAR-supply variant on the legacy `coin-supply` chart ID instead of `coin-supply/0` — the legacy ID is on the deprecation path; add to the prefixed namespace.
-- Building a Y-axis label with a hardcoded "DCR" or "VAR" — use `coinLabel = isSKA ? renderCoinType(coinType) : 'VAR'`.
-- Wrapping `Number(s) * 1e-18` and using it for the legend — the legend MUST go through `formatSkaAtomsExact` / `splitSkaAtomsNoTrailing`.
+- Reusing the VAR pipeline (`Blocks.NewAtoms`, `accumulate`, `*ATOMS_TO_VAR`) for SKA coins — overflows, loses precision, bypasses the per-coin map.
+- Adding a new chart format that omits `h` for time-axis SKA responses (regression risk).
+- Computing cumulative supply on the frontend — already done in Go.
+- Adding a new named series color to `chart_theme.js` without adding the matching `.checkmark` background in `charts.scss` — visibility toggle swatch shows the wrong color.
+- Adding a tip-reading chart maker (`ticketPriceChart`-style) without registering its cache key in `invalidateTipCharts()` — stale data served after each new block until the next periodic update.
+- Reversing lock order (`cacheMtx` → `tipMtx`) anywhere in `ChartData` — deadlock.
+- Building a `toColumns` that returns a different column count than `def.series.length` — silent rendering corruption (uPlot maps column N to series N-1; extras are ignored, missing cause `undefined`).
+- Using `datum.value` (the float) rather than `datum.payload.supply[datum.idx]` (the atom string) for SKA legend formatting in `formatValue` — precision loss past ~15 significant digits.
+- Adding a new VAR-supply variant on the legacy `coin-supply` chart ID instead of `coin-supply/0` — the bare ID is on the deprecation path.
+- Building a Y-axis label with a hardcoded "DCR" or "VAR" — use `renderCoinType(coinType)` from `ska_helper.js`.
 
 ### 8. Evidence
 
-- **Chart key constants:** `db/cache/charts.go:29` (`CoinSupply = "coin-supply"`), `:64` (`SKASupplyPrefix = "coin-supply/"`), `:92-109` (`IsSKASupplyChart`, `SkaCoinType`).
-- **Cache types:** `db/cache/charts.go:301-308` (`SKASupplyChartData`, `SKASupplyData`); `:461` (`charts.SKASupply` field).
-- **Chart entry:** `db/cache/charts.go:1050-1078` (`(*ChartData).Chart`); SKA dispatch at `:1063-1064`.
-- **VAR chart maker:** `db/cache/charts.go:1262` (`coinSupplyChart`), accumulator at `:1269` and `:1284`.
-- **SKA chart maker:** `db/cache/charts.go:1692-1783` (`skaSupplyChart`, height/time emit, day aggregation).
-- **Day aggregator:** `db/cache/charts.go:1812-1855+` (`aggregateSKASupply`).
-- **DB loader:** `db/dcrpg/pgblockchain.go:1078-1138` (`LoadSKASupplyForCoin`); `*big.Int` cumulation at `:1117-1133`.
+- **Chart key constants:** `db/cache/charts.go:29` (`CoinSupply = "coin-supply"`), `:64` (`SKASupplyPrefix = "coin-supply/"`), `:32-33` (`POWDifficulty`, `TicketPrice`), `:40` (`PercentStaked`).
+- **ChartTip struct:** `db/cache/charts.go:490`.
+- **ChartData struct:** `db/cache/charts.go:567`; `Tip ChartTip` at `:586`, `tipMtx` at `:587`.
+- **SetTip / invalidateTipCharts:** `db/cache/charts.go:908-933`.
+- **ReorgHandler (window-aware):** `db/cache/charts.go:748-783`.
+- **powDifficultyChart:** `db/cache/charts.go:1831-1899`.
+- **ticketPriceChart:** `db/cache/charts.go:1901-1976`.
+- **stakedCoinsChart:** `db/cache/charts.go:2162-2223`.
+- **skaSupplyChart:** `db/cache/charts.go:2228-` (coinType-0 short-circuit; reads `charts.mtx.RLock()` — mismatch vs `SKASupplyMtx`).
+- **Cache types:** `db/cache/charts.go:384` (`SKASupplyChartData`), `:567` (`ChartData`).
+- **DB loader:** `db/dcrpg/pgblockchain.go:1087` (`LoadSKASupplyForCoin`); `SKASupplyMtx.Lock()` write at `:1136-1142`.
 - **SQL:** `db/dcrpg/internal/vinoutstmts.go:130-138` (`SelectCoinSupply`), `:251-259` (`SelectSKACoinSupplyPerBlock`), `:261-269` (`SelectVARCoinSupplyPerBlock`).
-- **API handler & routing:** `cmd/dcrdata/internal/api/apiroutes.go:1942-1975` (`ChartTypeData`); `cmd/dcrdata/internal/api/apirouter.go:240-243`; `cmd/dcrdata/internal/middleware/apimiddleware.go:796-815`.
-- **Page handler & template:** `cmd/dcrdata/internal/explorer/explorerroutes.go:1911-1943` (`Charts`); `cmd/dcrdata/views/charts.tmpl:40-41` (dropdown).
-- **Frontend controller:** `cmd/dcrdata/public/js/controllers/charts_controller.js:58-79` (`skaCoinTypeFromChart`, `isCoinSupplyChart`, `isSKAFeeChart`, `formatSkaAtomsExact`); `:308` (`circulationFunc`); `:509-513` (`isSKA`/`coinType`/`coinLabel`/`switchKey`); `:659-693` (`plotGraph` `coin-supply` switch arm — SKA branch `:659-683`, VAR branch `:685-693`); `:853-858` (`selectChart` — `hashrate-shares` Turbolinks short-circuit); `:878-883` (`selectChart` — `chart-hashrate` CSS class toggle).
-- **Charts SCSS:** `cmd/dcrdata/public/scss/charts.scss:256-266` (`.chartview .dygraph-y2label` light/dark defaults; `.chartview.chart-hashrate .dygraph-y2label { color: #c60 }` hashrate override at `:260`).
-- **JS helpers:** `cmd/dcrdata/public/js/helpers/ska_helper.js:16` (`renderCoinType`), `:38` (`splitSkaAtoms`), `:78` (`splitSkaAtomsNoTrailing`).
-- **Spec source:** `wiki/specs/chart-ska-coin-supply/spec.md`.
-- **Key commits:** `538d5cd1` initial SKA chart support; `3e6d14cf` per-SKA endpoints; `19a114c1` cumulative + height alignment; `a9db4b3b` `h` field on time-axis; `ddf17358` frontend integration & default-case logging; `4af1009f` test/mock additions; `9f8bad1a`/`10e47bed` hashrate-shares cross-page navigation + Turbolinks; `8e9449e4` `chart-hashrate` y2label color; `d5eb8cef` Month interval button.
+- **API handler:** `cmd/dcrdata/internal/api/apiroutes.go:1942-1975` (`ChartTypeData`).
+- **Explorer SetTip call:** `cmd/dcrdata/internal/explorer/explorer.go:648-665`.
+- **Page handler:** `cmd/dcrdata/internal/explorer/explorerroutes.go:1911-1943` (`Charts`).
+- **Template:** `cmd/dcrdata/views/charts.tmpl:33-41`.
+- **Registry:** `cmd/dcrdata/public/js/charts/registry.js` (`register`, `registerCoinFactories`, `getDefinition`, `coinTypeFromName`).
+- **Format helpers:** `cmd/dcrdata/public/js/charts/format.js` (`xColumn`, `formatSkaAtomsExact`, `ATOMS_TO_VAR`, `intComma`).
+- **Coin supply definition:** `cmd/dcrdata/public/js/charts/definitions/coin_supply.js` (`coinSupplyDef`; `logFloor: 1`; `formatValue` using `datum.payload.supply[datum.idx]`).
+- **Ticket price definition:** `cmd/dcrdata/public/js/charts/definitions/ticket_price.js` (`toColumns` with `raw.h` priority over index-derived xs).
+- **PoW difficulty definition:** `cmd/dcrdata/public/js/charts/definitions/pow_difficulty.js` (`toColumns` with `raw.h` priority).
+- **Theme:** `cmd/dcrdata/public/js/helpers/chart_theme.js` (`PALETTE`, `SERIES_COLORS`, `colorForIndex`, `seriesColorByKey`; secondary dark `#4dabf7`).
+- **uPlot adapter:** `cmd/dcrdata/public/js/helpers/uplot_adapter.js` (`createChart`, `buildOpts`, `resolveSeriesColor`).
+- **Ranger:** `cmd/dcrdata/public/js/helpers/uplot_ranger.js` (`createRanger`).
+- **Controller:** `cmd/dcrdata/public/js/controllers/charts_controller.js` (`fetchGeneration`, `selectChart`, `renderChart`, `renderLegend`, `recreateRanger`, `applyControlVisibility`, `onChartRangeChange`, `onRangerSelect`, `applyZoom`).
+- **SKA helpers:** `cmd/dcrdata/public/js/helpers/ska_helper.js:78` (`splitSkaAtomsNoTrailing`), `:16` (`renderCoinType`).
+- **Charts SCSS:** `cmd/dcrdata/public/scss/charts.scss:260` (`.chartview.chart-hashrate .dygraph-y2label`), `:450-479` (visibility `.checkmark` colors).
+- **Key commits:** `538d5cd1` initial SKA chart support; `19a114c1` cumulative + height alignment; `a9db4b3b` `h` field on time-axis; `b448cb64` ChartTip + PartialWindow (live tip override); `053c51ae` ReorgHandler window-aware snipping; `c513c564` fetchGeneration race guard; `567780a3` log-floor clamp; `b2a86725` uPlot rewrite merge base; dark secondary `#4dabf7` (chart.scss + chart_theme.js).
 
 See also:
 
-- /wiki/code-analysis/page-rendering/patterns.md (shares-pattern-with: out-of-band shared page state — handler reads `pageData.HomeInfo.SKACoinSupply`; `*CommonPageData` embedding)
+- /wiki/code-analysis/page-rendering/patterns.md (shares-pattern-with: out-of-band shared page state)
 - /wiki/code-analysis/page-rendering/impact.md (depends-on: `commonData` nil render crash)
-- /wiki/core/constraints.md (depends-on: C1 numeric precision & bifurcation — applies to the SKA pipeline `string`-end-to-end rule; C2 dual pipeline — VAR delta+`accumulate` vs SKA `*big.Int` cumulation; C7 centralized coin-type label rendering — `renderCoinType` / `coinSymbol`)
-- /wiki/code-analysis/address/flow.full.md (shares-pattern-with: TurboQuery URL state, `Zoom` validation; the address chart endpoint reuses the same controller patterns. Note: charts controller calls `Zoom.project` across data-range changes (line 901); the address controller does not — see address/flow.full.md §5.)
+- /wiki/core/constraints.md (depends-on: C1 numeric precision & bifurcation; C2 dual pipeline; C7 centralized coin-type label rendering)
+- /wiki/code-analysis/address/flow.full.md (shares-pattern-with: TurboQuery URL state, `Zoom` validation; charts controller additionally calls `handle.setXRange`/`ranger.setSelection` for zoom persistence)

@@ -22,6 +22,15 @@ When a transaction data structure or multi-coin mechanism is modified, the chang
   - **Risk:** Modifying struct signature. If the type signature of `SKATotals` changed from `map[uint8]string`, the Go compiler will instantly fail any memory aggregation assignments in `mempool/collector.go`.
 
 ### 🔕 Silent Failures (Data Loss or UX Breaks)
+- **`MempoolTx.Hash` removal (HEAD=1bc57372):**
+  - **Trigger:** Any JS, Go, or JSON consumer that reads the `"hash"` key on a `MempoolTx` object (WS message, JSON marshal).
+  - **Risk:** The `Hash string json:"hash"` field was removed — it was a duplicate of `TxID`. The JSON wire format no longer includes `"hash"`. Consumers receive `undefined`/empty string silently. `homepage_controller.js` and `home_mempool.tmpl` were updated in the same commit, but any third-party or test code reading `"hash"` breaks silently.
+- **`FeeReward()` silent-zero for SKA:**
+  - **Trigger:** Calling `TxInfo.FeeReward()` on a SKA tx (CoinType != 0) and displaying the result.
+  - **Risk:** Returns `0` without error or log. A template or caller that uses `FeeReward()` for SKA will display "0.00" as the fee, with no indication of the error. Must use `skaDecimalParts .FeeRaw` or `coinDecimalParts .FeeRaw .CoinType` instead.
+- **`MempoolInfo.DeepCopy()` missing fields:**
+  - **Trigger:** Adding a new field to `MempoolInfo` without adding it to `DeepCopy()`.
+  - **Risk:** WS broadcasts copy the `MempoolInfo` via `DeepCopy()` before sending. Missing fields are silently dropped from the broadcast — the live page shows stale or zero values. Always add new `MempoolInfo` fields to `DeepCopy()`.
 - **File:** `db/dcrpg/pgblockchain.go` (interacting with `txhelpers`)
   - **Risk:** The Mempool vs. Block Divergence. Implementing a new transaction classification rule via `txhelpers` without updating the JSON node parser mapping in `pgblockchain.go` causes transactions to appear correct in mempool but silently discard their custom data when persisted to a block.
 - **File:** `cmd/dcrdata/views/tx.tmpl` (interacting with `homepage_controller.js`)
@@ -57,6 +66,9 @@ Before concluding any structural mutation involving transactions, coins, or supp
 - [ ] **Persistent String Safety:** Numeric coin data traverses the API, Database, and Websockets exclusively as `string` or `*big.Int`, never encountering float-based arithmetic.
 - [ ] **Vout Array Parity:** My feature correctly addresses output logic when heavily nested inside `TxShort.Vout[]` elements (API response) AND when summed into `MempoolTx.SKATotals` (Pub/Sub response).
 - [ ] **`MiningFee` SQL parity:** If I changed which tx types contribute to the block `MiningFee` total, I updated `internal.SelectFeesPerBlockAboveHeight` to match.
+- [ ] **MempoolTx identity:** Reading or emitting a mempool tx uses `TxID` (Go) / `"txid"` (JSON). `Hash` field is gone.
+- [ ] **New `MempoolInfo` field:** Added to `DeepCopy()` in `explorertypes.go`.
+- [ ] **New tx-type string:** Defined in `txhelpers/txhelpers.go`, not `explorertypes.go`.
 
 ---
 

@@ -12,7 +12,7 @@ export const BOUNDARY_LEFT = 0
 export const BOUNDARY_RIGHT = 1
 export const BOUNDARY_BOTH = 2
 
-const RANGER_HEIGHT = 80
+const RANGER_HEIGHT = 44 // overview strip height (px), uniform across all chart routes
 const RANGER_VPAD = 6 // top/bottom plot padding (px); left/right mirror the main chart's gutters
 
 /**
@@ -260,10 +260,19 @@ export async function createRanger(el, def, opts = {}) {
     setSelection(min, max) {
       if (destroyed) return
       if (min == null || max == null || !isFinite(min) || !isFinite(max)) return
+      const xs = uplot.data[0]
+      if (xs?.length) {
+        min = Math.max(min, xs[0])
+        max = Math.min(max, xs[xs.length - 1])
+        if (min >= max) return
+      }
       const left = Math.round(uplot.valToPos(min, 'x'))
       const right = Math.round(uplot.valToPos(max, 'x'))
-      const height = uplot.bbox.height / (UPlot.pxRatio || 1)
-      uplot.setSelect({ left: left, top: 0, width: right - left, height: height }, false)
+      const pxRatio = UPlot.pxRatio || 1
+      const minW = Math.max(1, pxRatio)
+      const width = Math.max(right - left, minW)
+      const height = uplot.bbox.height / pxRatio
+      uplot.setSelect({ left: left, top: 0, width: width, height: height }, false)
     },
     // Re-pixel the strip to a new container width (window resize). A pure width change does not
     // trip setGutters' epsilon guard, so the controller drives this explicitly; the caller

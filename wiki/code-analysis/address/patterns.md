@@ -97,7 +97,7 @@ Any SQL that aggregates address-level monetary values must emit **both** a VAR `
 
 - `SelectAddressSpentUnspentCountAndValue` ([addrstmts.go:234-261](db/dcrpg/internal/addrstmts.go#L234-L261)) — established the pattern.
 - `selectAddressAmountFlowByAddress` ([addrstmts.go:365-373](db/dcrpg/internal/addrstmts.go#L365-L373)) — adopted it in PR #263, with `CASE WHEN coin_type = 0 / > 0` guards as belt-and-braces.
-- `parseRowsSentReceived` ([db/dcrpg/queries.go:4285-4327](db/dcrpg/queries.go#L4285-L4327)) — canonical four-column scanner: `receivedVAR,sentVAR uint64` + `receivedSKAStr,sentSKAStr string`; `coinType == 0` uses the VAR pair, `coinType > 0` builds `*big.Int` via `SetString` on the SKA strings.
+- `parseRowsSentReceived` ([db/dcrpg/queries.go:4404-4446](db/dcrpg/queries.go#L4404-L4446)) — canonical four-column scanner: `receivedVAR,sentVAR uint64` + `receivedSKAStr,sentSKAStr string`; `coinType == 0` uses the VAR pair, `coinType > 0` builds `*big.Int` via `SetString` on the SKA strings.
 
 **Historical anti-pattern (do not replicate):** pre-PR-#263, `selectAddressAmountFlowByAddress` summed a single `value INT8` for both coin families; for SKA rows that column holds the truncated INT8 representation (commonly `0`), so the `*big.Int` accumulator faithfully accumulated zeros. The bug was invisible because no frontend exercised the SKA path. Full trace in [impact.md](impact.md).
 

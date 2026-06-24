@@ -112,7 +112,7 @@ func normalizeExplorerRows[T int64 | uint64](rows T) T {
 Generic to avoid `uint64` overflow that a naive `int64` cast of a URL-supplied value would
 introduce. Also called by `StakeDiffWindows` (line 451) and `Blocks` (line 692).
 
-**Constants (`cmd/dcrdata/internal/explorer/explorer.go:50–51`):**
+**Constants (`cmd/dcrdata/internal/explorer/explorer.go:51–52`):**
 ```go
 maxExplorerRows     = 400
 defaultExplorerRows = 100
@@ -204,7 +204,7 @@ swap, missing `defaultExplorerRows` dropdown option.
 - ChainDB wrappers: `db/dcrpg/pgblockchain.go:1857–1880`
 - Handler function: `cmd/dcrdata/internal/explorer/explorerroutes.go:520–638`
 - `normalizeExplorerRows` + constants: `cmd/dcrdata/internal/explorer/explorerroutes.go:645–653`
-  + `cmd/dcrdata/internal/explorer/explorer.go:50–51`
+  + `cmd/dcrdata/internal/explorer/explorer.go:51–52`
 - Shared entry points: `explorerroutes.go:500–515`
 - Template: `cmd/dcrdata/views/timelisting.tmpl`
 - Shared struct: `db/dbtypes/types.go:816–835`

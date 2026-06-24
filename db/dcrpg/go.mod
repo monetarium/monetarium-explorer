@@ -5,6 +5,7 @@ go 1.23
 replace github.com/monetarium/monetarium-explorer => ../../
 
 require (
+	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/davecgh/go-spew v1.1.1
 	github.com/decred/slog v1.2.0
 	github.com/dustin/go-humanize v1.0.1

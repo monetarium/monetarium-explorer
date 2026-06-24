@@ -1,107 +1,53 @@
 import { Controller } from '@hotwired/stimulus'
-import { barChartPlotter } from '../helpers/chart_helper'
 import { requestJSON } from '../helpers/http'
 import humanize from '../helpers/humanize_helper'
-import { getDefault } from '../helpers/module_helper'
+import { intComma } from '../charts/format'
+import { createChartPanel } from '../helpers/chart_panel'
+import { cumulativeVoteChoicesDef, voteChoicesByBlockDef } from '../charts/definitions/agenda'
 
-const chartLayout = {
-  showRangeSelector: true,
-  legend: 'follow',
-  fillGraph: true,
-  colors: ['rgb(0,153,0)', 'orange', 'red'],
-  stackedGraph: true,
-  legendFormatter: agendasLegendFormatter,
-  labelsSeparateLines: true,
-  labelsKMB: true,
-  labelsUTC: true
-}
-
-function agendasLegendFormatter(data) {
-  if (data.x == null) return ''
-  let html
-  if (this.getLabels()[0] === 'Date') {
-    html = `${this.getLabels()[0]}: ${humanize.date(data.x)}`
-  } else {
-    html = `${this.getLabels()[0]}: ${data.xHTML}`
-  }
-  const total = data.series.reduce((total, n) => {
-    return total + n.y
-  }, 0)
-  data.series.forEach((series) => {
-    const percentage = total !== 0 ? ((series.y * 100) / total).toFixed(2) : 0
-    html = `<span style="color:#2d2d2d;">${html}</span>`
-    html += `<br>${series.dashHTML}<span style="color: ${series.color};">${series.labelHTML}: ${series.yHTML} (${percentage}%)</span>`
-  })
-  return html
-}
-
-function cumulativeVoteChoicesData(d) {
-  if (d == null || !(d.yes instanceof Array)) return [[0, 0, 0, 0]]
-  return d.yes.map((n, i) => {
-    return [new Date(d.time[i]), n, d.abstain[i], d.no[i]]
-  })
-}
-
-function voteChoicesByBlockData(d) {
-  if (d == null || !(d.yes instanceof Array)) return [[0, 0, 0, 0]]
-  return d.yes.map((n, i) => {
-    return [d.height[i], n, d.abstain[i], d.no[i]]
-  })
-}
+// The agenda page shows two charts at once: cumulative vote choices (stacked area, time axis)
+// and vote choices by block (stacked bars, block-height axis). Each is a self-contained
+// ChartPanel (chart + mouse/touch tooltip + ranger + theme + resize); this controller only
+// fetches the data and hands each panel its definition. Zoom is ephemeral (no URL state).
 
 export default class extends Controller {
   static get targets() {
-    return ['cumulativeVoteChoices', 'voteChoicesByBlock']
-  }
-
-  initialize() {
-    this.emptydata = [[0, 0, 0, 0]]
-    this.cumulativeVoteChoicesChart = false
-    this.voteChoicesByBlockChart = false
+    return ['cumulativeVoteChoices', 'voteChoicesByBlock', 'cumulativeRanger', 'blockRanger']
   }
 
   async connect() {
     this.agendaId = this.data.get('id')
     this.element.classList.add('loading')
-    this.Dygraph = await getDefault(
-      import(/* webpackChunkName: "dygraphs" */ '../vendor/dygraphs.min.js')
+    this.panels = [
+      {
+        panel: createChartPanel(this.cumulativeVoteChoicesTarget, {
+          xTime: true,
+          rangerEl: this.hasCumulativeRangerTarget ? this.cumulativeRangerTarget : null,
+          formatX: (x) => `Date: ${humanize.date(x * 1000)}`
+        }),
+        def: cumulativeVoteChoicesDef(),
+        field: 'by_time'
+      },
+      {
+        panel: createChartPanel(this.voteChoicesByBlockTarget, {
+          xTime: false,
+          rangerEl: this.hasBlockRangerTarget ? this.blockRangerTarget : null,
+          formatX: (x) => `Block Height: ${intComma(x)}`
+        }),
+        def: voteChoicesByBlockDef(),
+        field: 'by_height'
+      }
+    ]
+    const res = await requestJSON(`/api/agenda/${this.agendaId}`)
+    // Render both panels in parallel — they are independent, so serializing their
+    // createChart/loadUPlot calls would just double the wall-clock time.
+    await Promise.all(
+      this.panels.map((p) => p.panel.render(p.def, (res && res[p.field]) || {}, {}))
     )
-    this.drawCharts()
-    const agendaResponse = await requestJSON(`/api/agenda/${this.agendaId}`)
-    this.cumulativeVoteChoicesChart.updateOptions({
-      file: cumulativeVoteChoicesData(agendaResponse.by_time)
-    })
-    this.voteChoicesByBlockChart.updateOptions({
-      file: voteChoicesByBlockData(agendaResponse.by_height)
-    })
-
     this.element.classList.remove('loading')
   }
 
   disconnect() {
-    this.cumulativeVoteChoicesChart.destroy()
-    this.voteChoicesByBlockChart.destroy()
-  }
-
-  drawCharts() {
-    this.cumulativeVoteChoicesChart = this.drawChart(this.cumulativeVoteChoicesTarget, {
-      labels: ['Date', 'Yes', 'Abstain', 'No'],
-      ylabel: 'Cumulative Vote Choices Cast',
-      title: 'Cumulative Vote Choices',
-      labelsKMB: true
-    })
-    this.voteChoicesByBlockChart = this.drawChart(this.voteChoicesByBlockTarget, {
-      labels: ['Block Height', 'Yes', 'Abstain', 'No'],
-      ylabel: 'Vote Choices Cast',
-      title: 'Vote Choices By Block',
-      plotter: barChartPlotter
-    })
-  }
-
-  drawChart(el, options, _Dygraph) {
-    return new this.Dygraph(el, this.emptydata, {
-      ...chartLayout,
-      ...options
-    })
+    if (this.panels) this.panels.forEach((p) => p.panel.destroy())
   }
 }

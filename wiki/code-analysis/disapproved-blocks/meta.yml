@@ -1,5 +1,5 @@
 domain: disapproved-blocks
-anchor: 883c700f
+anchor: 159bedf5
 files:
   - cmd/dcrdata/internal/explorer/explorer.go
   - cmd/dcrdata/internal/explorer/explorermiddleware.go
