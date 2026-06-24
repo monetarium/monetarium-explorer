@@ -6,7 +6,7 @@
 import { debounce } from 'lodash-es'
 import globalEventBus from '../services/event_bus_service'
 import { darkEnabled } from '../services/theme_service'
-import { classifyGesture } from './touch_gesture'
+import { classifyGesture, isDoubleTap } from './touch_gesture'
 import { createChart, resolveSeriesColor } from './uplot_adapter'
 import { createRanger } from './uplot_ranger'
 
@@ -190,6 +190,7 @@ class ChartPanel {
     let startX = 0
     let startY = 0
     let state = 'pending'
+    let lastTap = null
     this.touchActive = false
     u.over.style.touchAction = 'pan-y' // self-contained: no per-page CSS
     u.over.addEventListener(
@@ -225,6 +226,17 @@ class ChartPanel {
       if (state === 'scrub') {
         tt.classList.add('d-hide')
         u.setCursor({ left: -10, top: -10 })
+        lastTap = null // a scrub is not a tap; never pair it with a later tap
+      } else if (state === 'pending') {
+        // A still finger (never locked to scrub/scroll) is a tap. A second tap close in time
+        // and space re-synthesizes the dblclick iOS Safari omits, so uPlot's own reset runs.
+        const tap = { t: performance.now(), x: startX, y: startY }
+        if (isDoubleTap(lastTap, tap)) {
+          u.over.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true }))
+          lastTap = null
+        } else {
+          lastTap = tap
+        }
       }
       state = 'pending'
       this.touchActive = false

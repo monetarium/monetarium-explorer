@@ -1,4 +1,3 @@
-/* global MouseEvent */
 import { describe, it, expect, vi } from 'vitest'
 import {
   buildRangerOpts,
