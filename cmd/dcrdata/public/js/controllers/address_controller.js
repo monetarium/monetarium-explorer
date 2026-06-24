@@ -99,7 +99,6 @@ export default class extends Controller {
       'coinFilter',
       'coin',
       'rangerView',
-      'labels',
       'legendEntry',
       'legendMarker'
     ]
@@ -113,6 +112,7 @@ export default class extends Controller {
     ctrl.requestedChart = false
     ctrl.handle = null
     ctrl.ranger = null
+    ctrl.legendElement = null
     ctrl.payload = null
     ctrl.currentDef = null
     ctrl.xExtent = [0, 0]
@@ -171,11 +171,6 @@ export default class extends Controller {
     }
 
     // Legend element generators (cloned from the template seed nodes in the markup).
-    if (ctrl.hasLabelsTarget) {
-      ctrl.legendElement = ctrl.labelsTarget
-    } else {
-      ctrl.legendElement = null
-    }
     if (ctrl.hasLegendMarkerTarget) {
       const lm = ctrl.legendMarkerTarget
       lm.remove()
