@@ -1,0 +1,272 @@
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import globalEventBus from '../services/event_bus_service'
+
+// Mock the adapter + ranger so no real uPlot is needed. Factories push each fake onto a
+// list so tests can inspect per-render instances. References are lazy (inside the vi.fn
+// body), so vitest's hoisting of vi.mock above these declarations is fine.
+const makeFakeHandle = () => ({
+  uplot: { data: [[]], scales: { x: {} }, over: null, root: null, setCursor: vi.fn() },
+  setData: vi.fn(),
+  setXRange: vi.fn(),
+  setDark: vi.fn(),
+  resize: vi.fn(),
+  destroy: vi.fn()
+})
+const makeFakeRanger = () => ({
+  uplot: { data: [[]] },
+  setData: vi.fn(),
+  setSelection: vi.fn(),
+  setWidth: vi.fn(),
+  setGutters: vi.fn(),
+  setDark: vi.fn(),
+  destroy: vi.fn()
+})
+let fakeHandles = []
+let fakeRangers = []
+vi.mock('./uplot_adapter', () => ({
+  createChart: vi.fn(() => {
+    const h = makeFakeHandle()
+    fakeHandles.push(h)
+    return Promise.resolve(h)
+  }),
+  resolveSeriesColor: vi.fn(() => 'rgb(1,2,3)')
+}))
+vi.mock('./uplot_ranger', () => ({
+  createRanger: vi.fn(() => {
+    const r = makeFakeRanger()
+    fakeRangers.push(r)
+    return Promise.resolve(r)
+  })
+}))
+vi.mock('../services/theme_service', () => ({ darkEnabled: vi.fn(() => false) }))
+vi.mock('../services/event_bus_service', () => ({ default: { on: vi.fn(), off: vi.fn() } }))
+
+const { createChartPanel } = await import('./chart_panel.js')
+
+afterEach(() => {
+  fakeHandles = []
+  fakeRangers = []
+  vi.clearAllMocks()
+})
+
+const defA = {
+  name: 'a',
+  series: [{ label: 'Yes', color: '#009900', kind: 'area' }],
+  stacked: true,
+  toColumns: (p) => [p.x, p.yes],
+  formatValue: (i, d) => String(d.payload.yes[d.idx])
+}
+const payload1 = { x: [1, 2], yes: [10, 30] }
+
+describe('ChartPanel core lifecycle', () => {
+  it('render creates a handle and feeds the def columns', async () => {
+    const p = createChartPanel(document.createElement('div'), {})
+    await p.render(defA, payload1, {})
+    expect(p.handle).toBeTruthy()
+    expect(p.handle.setData).toHaveBeenCalledWith([
+      [1, 2],
+      [10, 30]
+    ])
+  })
+  it('render reuses the handle when the same def object is passed again (setData, no recreate)', async () => {
+    const p = createChartPanel(document.createElement('div'), {})
+    await p.render(defA, payload1, {})
+    const first = p.handle
+    await p.render(defA, { x: [1, 2], yes: [11, 31] }, {})
+    expect(p.handle).toBe(first)
+    expect(first.destroy).not.toHaveBeenCalled()
+    expect(first.setData).toHaveBeenCalledTimes(2)
+  })
+  it('render recreates the handle when a DIFFERENT def object is passed (reference identity)', async () => {
+    const p = createChartPanel(document.createElement('div'), {})
+    await p.render(defA, payload1, {})
+    const first = p.handle
+    const defB = { ...defA, name: 'a' } // same name, different object
+    await p.render(defB, payload1, {})
+    expect(first.destroy).toHaveBeenCalledTimes(1)
+    expect(p.handle).not.toBe(first)
+  })
+  it('render retains the raw payload (firewall)', async () => {
+    const p = createChartPanel(document.createElement('div'), {})
+    await p.render(defA, payload1, {})
+    expect(p.payload).toBe(payload1)
+  })
+  it('destroy tears down the handle', async () => {
+    const p = createChartPanel(document.createElement('div'), {})
+    await p.render(defA, payload1, {})
+    const h = p.handle
+    p.destroy()
+    expect(h.destroy).toHaveBeenCalledTimes(1)
+    expect(p.handle).toBeNull()
+  })
+})
+
+describe('ChartPanel tooltip', () => {
+  function uStub(idx) {
+    return {
+      cursor: { idx: idx, left: 50, top: 20 },
+      data: [
+        [1, 2],
+        [10, 30]
+      ],
+      series: [{}, { show: true }],
+      over: { clientWidth: 800, clientHeight: 300, appendChild: vi.fn(), addEventListener: vi.fn() }
+    }
+  }
+  it('renderLegend emits an x-label row and per-series formatValue rows', async () => {
+    const p = createChartPanel(document.createElement('div'), { formatX: (x) => `X: ${x}` })
+    await p.render(defA, payload1, {})
+    p.legendElement = document.createElement('div')
+    p.renderLegend(uStub(1))
+    const txt = p.legendElement.textContent
+    expect(txt).toContain('X: 2')
+    expect(txt).toContain('Yes: 30')
+  })
+  it('renderLegend no-ops before the def is set (currentDef-null gap)', () => {
+    const p = createChartPanel(document.createElement('div'), {})
+    p.legendElement = document.createElement('div')
+    // currentDef is still null (a setCursor hook can fire before createChart resolves)
+    expect(() => p.renderLegend({ cursor: { idx: 0 }, data: [[1], [2]] })).not.toThrow()
+  })
+  it('renderLegend hides the tooltip when idx is null', async () => {
+    const p = createChartPanel(document.createElement('div'), {})
+    await p.render(defA, payload1, {})
+    p.legendElement = document.createElement('div')
+    p.renderLegend({ cursor: { idx: null }, data: [[]] })
+    expect(p.legendElement.classList.contains('d-hide')).toBe(true)
+  })
+  it('renderLegend skips a hidden series', async () => {
+    const p = createChartPanel(document.createElement('div'), { formatX: (x) => `X: ${x}` })
+    await p.render(defA, payload1, {})
+    p.legendElement = document.createElement('div')
+    const u = uStub(1)
+    u.series[1].show = false
+    p.renderLegend(u)
+    expect(p.legendElement.textContent).not.toContain('Yes:')
+  })
+})
+
+describe('ChartPanel touch-scrub', () => {
+  function overStub() {
+    const listeners = {}
+    return {
+      style: {},
+      clientWidth: 800,
+      clientHeight: 300,
+      getBoundingClientRect: () => ({ left: 0, top: 0, width: 800, height: 300 }),
+      appendChild: vi.fn(),
+      addEventListener: (type, fn) => {
+        ;(listeners[type] ||= []).push(fn)
+      },
+      _fire: (type, ev) => (listeners[type] || []).forEach((fn) => fn(ev)),
+      _listeners: listeners
+    }
+  }
+  it('a horizontal touch drag scrubs the cursor; a vertical one does not', async () => {
+    const p = createChartPanel(document.createElement('div'), {})
+    await p.render(defA, payload1, {})
+    const over = overStub()
+    const u = { over: over, cursor: {}, setCursor: vi.fn() }
+    p.installTooltip(u) // installs touch listeners on over
+    over._fire('touchstart', { touches: [{ clientX: 100, clientY: 100 }] })
+    over._fire('touchmove', { touches: [{ clientX: 140, clientY: 102 }], preventDefault: () => {} }) // dx=40 horizontal
+    expect(u.setCursor).toHaveBeenCalledTimes(1)
+    expect(over.style.touchAction).toBe('pan-y')
+    // vertical drag from a fresh gesture
+    u.setCursor.mockClear()
+    over._fire('touchstart', { touches: [{ clientX: 100, clientY: 100 }] })
+    over._fire('touchmove', { touches: [{ clientX: 102, clientY: 140 }], preventDefault: () => {} }) // dy dominant
+    expect(u.setCursor).not.toHaveBeenCalled()
+  })
+})
+
+const defWithRanger = { ...defA }
+
+describe('ChartPanel ranger', () => {
+  it('render creates a ranger and seeds the full-extent selection (epoch-guarded, deferred)', async () => {
+    const p = createChartPanel(document.createElement('div'), {
+      rangerEl: document.createElement('div')
+    })
+    await p.render(defWithRanger, payload1, {})
+    expect(p.ranger).toBeTruthy()
+    expect(p.ranger.setData).toHaveBeenCalledWith([
+      [1, 2],
+      [10, 30]
+    ])
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(p.ranger.setSelection).toHaveBeenCalledWith(1, 2)
+  })
+  it('no ranger when rangerEl is omitted', async () => {
+    const p = createChartPanel(document.createElement('div'), {})
+    await p.render(defWithRanger, payload1, {})
+    expect(p.ranger).toBeNull()
+  })
+  it('a superseded render leaves only the latest ranger seeded (epoch guard)', async () => {
+    const p = createChartPanel(document.createElement('div'), {
+      rangerEl: document.createElement('div')
+    })
+    const r1 = p.render(defWithRanger, payload1, {})
+    const r2 = p.render({ ...defWithRanger }, { x: [5, 6], yes: [1, 2] }, {})
+    await Promise.all([r1, r2])
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    const latest = fakeRangers[fakeRangers.length - 1]
+    expect(latest.setSelection).toHaveBeenCalledWith(5, 6)
+    fakeRangers.slice(0, -1).forEach((r) => expect(r.setSelection).not.toHaveBeenCalledWith(1, 2))
+  })
+  it('setXRange drives both handle and ranger', async () => {
+    const p = createChartPanel(document.createElement('div'), {
+      rangerEl: document.createElement('div')
+    })
+    await p.render(defWithRanger, payload1, {})
+    p.setXRange(100, 200)
+    expect(p.handle.setXRange).toHaveBeenCalledWith(100, 200)
+    expect(p.ranger.setSelection).toHaveBeenCalledWith(100, 200)
+  })
+})
+
+describe('ChartPanel theme + resize + destroy cleanup', () => {
+  it('registers and removes NIGHT_MODE + resize listeners across its lifecycle', async () => {
+    const addSpy = vi.spyOn(window, 'addEventListener')
+    const removeSpy = vi.spyOn(window, 'removeEventListener')
+    const p = createChartPanel(document.createElement('div'), {})
+    expect(globalEventBus.on).toHaveBeenCalledWith('NIGHT_MODE', expect.any(Function))
+    expect(addSpy).toHaveBeenCalledWith('resize', expect.any(Function))
+    await p.render(defA, payload1, {})
+    p.destroy()
+    expect(globalEventBus.off).toHaveBeenCalledWith('NIGHT_MODE', expect.any(Function))
+    expect(removeSpy).toHaveBeenCalledWith('resize', expect.any(Function))
+    addSpy.mockRestore()
+    removeSpy.mockRestore()
+  })
+  it('_setDark recolors the handle and re-applies the ranger selection', async () => {
+    const p = createChartPanel(document.createElement('div'), {
+      rangerEl: document.createElement('div')
+    })
+    await p.render(defWithRanger, payload1, {}) // panel starts light (darkEnabled mock -> false)
+    p.handle.uplot.scales.x = { min: 1, max: 2 }
+    p.ranger.setSelection.mockClear()
+    p._setDark(true)
+    expect(p.handle.setDark).toHaveBeenCalledWith(true)
+    expect(p.ranger.setDark).toHaveBeenCalledWith(true)
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(p.ranger.setSelection).toHaveBeenCalledWith(1, 2)
+  })
+  it('a theme toggle during an in-flight render does not blank the panel and reconciles the theme', async () => {
+    const { createChart } = await import('./uplot_adapter.js')
+    const handle = makeFakeHandle()
+    let resolveCreate
+    createChart.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveCreate = () => resolve(handle)
+        })
+    )
+    const p = createChartPanel(document.createElement('div'), {}) // starts light
+    const pending = p.render(defA, payload1, {}) // createChart is in flight (awaiting loadUPlot)
+    p._setDark(true) // theme toggle lands mid-render
+    resolveCreate()
+    await pending
+    expect(p.handle).toBe(handle) // NOT blanked — the theme epoch must not abort the render
+    expect(handle.setDark).toHaveBeenCalledWith(true) // chart reconciled to the new theme
+  })
+})
