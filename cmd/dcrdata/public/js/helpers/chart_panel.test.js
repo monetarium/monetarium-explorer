@@ -99,3 +99,42 @@ describe('ChartPanel core lifecycle', () => {
     expect(p.handle).toBeNull()
   })
 })
+
+describe('ChartPanel tooltip', () => {
+  function uStub(idx) {
+    return {
+      cursor: { idx: idx, left: 50, top: 20 },
+      data: [
+        [1, 2],
+        [10, 30]
+      ],
+      series: [{}, { show: true }],
+      over: { clientWidth: 800, clientHeight: 300, appendChild: vi.fn(), addEventListener: vi.fn() }
+    }
+  }
+  it('renderLegend emits an x-label row and per-series formatValue rows', async () => {
+    const p = createChartPanel(document.createElement('div'), { formatX: (x) => `X: ${x}` })
+    await p.render(defA, payload1, {})
+    p.legendElement = document.createElement('div')
+    p.renderLegend(uStub(1))
+    const txt = p.legendElement.textContent
+    expect(txt).toContain('X: 2')
+    expect(txt).toContain('Yes: 30')
+  })
+  it('renderLegend hides the tooltip when idx is null', async () => {
+    const p = createChartPanel(document.createElement('div'), {})
+    await p.render(defA, payload1, {})
+    p.legendElement = document.createElement('div')
+    p.renderLegend({ cursor: { idx: null }, data: [[]] })
+    expect(p.legendElement.classList.contains('d-hide')).toBe(true)
+  })
+  it('renderLegend skips a hidden series', async () => {
+    const p = createChartPanel(document.createElement('div'), { formatX: (x) => `X: ${x}` })
+    await p.render(defA, payload1, {})
+    p.legendElement = document.createElement('div')
+    const u = uStub(1)
+    u.series[1].show = false
+    p.renderLegend(u)
+    expect(p.legendElement.textContent).not.toContain('Yes:')
+  })
+})
