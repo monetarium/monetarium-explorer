@@ -652,6 +652,9 @@ export default class extends Controller {
     )
 
     const def = this.currentDef
+    // darkEnabled() scans document.cookie; hoist it out of the per-series loop so a hover over a
+    // multi-series stacked chart doesn't re-read the cookie once per visible series, per frame.
+    const dark = darkEnabled()
     def.series.forEach((s, i) => {
       if (u.series && u.series[i + 1] && u.series[i + 1].show === false) return
       const value = u.data[i + 1][idx]
@@ -662,7 +665,7 @@ export default class extends Controller {
       // legendFormatter's `if (series.y === 0) return`). The single-series Balance chart is NOT
       // stacked: a 0 balance is meaningful, so always show it.
       if (def.stacked && /^0(\s|$)/.test(text)) return
-      const color = resolveSeriesColor(s, i, darkEnabled())
+      const color = resolveSeriesColor(s, i, dark)
       this.legendElement.appendChild(
         this.legendEntry(`${this.legendMarker(color)} ${s.label}: ${text}`)
       )
