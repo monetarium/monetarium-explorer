@@ -226,7 +226,7 @@ class ChartPanel {
       if (state === 'scrub') {
         tt.classList.add('d-hide')
         u.setCursor({ left: -10, top: -10 })
-        lastTap = null // a scrub is not a tap; never pair it with a later tap
+        lastTap = null // an intervening gesture breaks the double-tap sequence
       } else if (state === 'pending') {
         // A still finger (never locked to scrub/scroll) is a tap. A second tap close in time
         // and space re-synthesizes the dblclick iOS Safari omits, so uPlot's own reset runs.
@@ -237,6 +237,8 @@ class ChartPanel {
         } else {
           lastTap = tap
         }
+      } else {
+        lastTap = null // a scroll between taps also breaks the double-tap sequence
       }
       state = 'pending'
       this.touchActive = false

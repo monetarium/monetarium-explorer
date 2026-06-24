@@ -204,6 +204,24 @@ describe('ChartPanel touch-scrub', () => {
     over._fire('touchend', {})
     expect(over.dispatchEvent).not.toHaveBeenCalled()
   })
+  it('a scroll between two taps breaks the double-tap sequence (no false reset)', async () => {
+    const p = createChartPanel(document.createElement('div'), {})
+    await p.render(defA, payload1, {})
+    const over = overStub()
+    const u = { over: over, cursor: {}, setCursor: vi.fn() }
+    p.installTooltip(u)
+    // tap 1
+    over._fire('touchstart', { touches: [{ clientX: 100, clientY: 100 }] })
+    over._fire('touchend', {})
+    // a vertical scroll gesture (locks to 'scroll') then lifts
+    over._fire('touchstart', { touches: [{ clientX: 100, clientY: 100 }] })
+    over._fire('touchmove', { touches: [{ clientX: 102, clientY: 160 }], preventDefault: () => {} })
+    over._fire('touchend', {})
+    // tap 2 in the same spot — must NOT pair with tap 1 across the scroll
+    over._fire('touchstart', { touches: [{ clientX: 100, clientY: 100 }] })
+    over._fire('touchend', {})
+    expect(over.dispatchEvent).not.toHaveBeenCalled()
+  })
 })
 
 const defWithRanger = { ...defA }
