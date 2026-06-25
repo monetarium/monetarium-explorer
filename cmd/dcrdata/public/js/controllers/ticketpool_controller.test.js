@@ -207,7 +207,7 @@ describe('ticketpool data rendering', () => {
       expect.objectContaining({ name: 'ticketpool-price' }),
       { price: [150, 250] },
       { mempool: false },
-      { range: { min: 150, max: 300 } }
+      { range: { min: 150, max: 301.5 } }
     )
   })
 
@@ -225,7 +225,7 @@ describe('ticketpool data rendering', () => {
       expect.objectContaining({ name: 'ticketpool-price' }),
       data,
       { mempool },
-      { range: { min: 150, max: 500 } }
+      { range: { min: 150, max: 503.5 } }
     )
   })
 

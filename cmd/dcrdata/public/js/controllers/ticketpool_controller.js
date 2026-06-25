@@ -154,7 +154,8 @@ export default class extends Controller {
         if (mempool.price > dataMax) dataMax = mempool.price
       }
       const [restoreMin, restoreMax] = alignViewportToData(prevMin, prevMax, dataMin, dataMax)
-      opts = { range: { min: restoreMin, max: restoreMax } }
+      const pad = Math.max((restoreMax - restoreMin) * 0.01, 0.001)
+      opts = { range: { min: restoreMin, max: restoreMax + pad } }
     }
     return this.pricePanel.render(ticketpoolPrice, priceData, { mempool }, opts)
   }
