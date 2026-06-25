@@ -343,6 +343,48 @@ describe('ChartPanel target range on render', () => {
   })
 })
 
+describe('ChartPanel rangerSeedOnce (fixed overview)', () => {
+  it('persists the ranger across a def-change rebuild and seeds its data only once', async () => {
+    const p = createChartPanel(document.createElement('div'), {
+      rangerEl: document.createElement('div'),
+      rangerSeedOnce: true
+    })
+    await p.render(defWithRanger, payload1, {})
+    const ranger = p.ranger
+    expect(ranger).toBeTruthy()
+    expect(ranger.setData).toHaveBeenCalledTimes(1) // seeded once on creation
+    ranger.setData.mockClear()
+    ranger.setSelection.mockClear()
+    // bars change: a DIFFERENT def reference forces a chart rebuild
+    await p.render(
+      { ...defWithRanger },
+      { x: [10, 20, 30], yes: [1, 2, 3] },
+      {},
+      { range: { min: 12, max: 28 } }
+    )
+    expect(p.handle).not.toBe(undefined)
+    expect(fakeRangers.length).toBe(1) // no second ranger created
+    expect(p.ranger).toBe(ranger) // same ranger instance survives the rebuild
+    expect(ranger.destroy).not.toHaveBeenCalled()
+    expect(ranger.setData).not.toHaveBeenCalled() // NOT re-seeded from the (coarse) cols
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(ranger.setSelection).toHaveBeenCalledWith(12, 28) // only the selection moves
+  })
+
+  it('does not re-seed ranger data on a same-def update either (frozen overview)', async () => {
+    const p = createChartPanel(document.createElement('div'), {
+      rangerEl: document.createElement('div'),
+      rangerSeedOnce: true
+    })
+    await p.render(defWithRanger, payload1, {})
+    const ranger = p.ranger
+    ranger.setData.mockClear()
+    p.handle.uplot.scales.x = { min: 1, max: 2 }
+    await p.render(defWithRanger, { x: [1, 2, 3], yes: [4, 5, 6] }, {}, { preserveRange: true })
+    expect(ranger.setData).not.toHaveBeenCalled()
+  })
+})
+
 describe('ChartPanel theme + resize + destroy cleanup', () => {
   it('registers and removes NIGHT_MODE + resize listeners across its lifecycle', async () => {
     const addSpy = vi.spyOn(window, 'addEventListener')

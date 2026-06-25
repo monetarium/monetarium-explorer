@@ -55,7 +55,12 @@ export default class extends Controller {
       rangerEl: this.purchasesRangerTarget,
       formatX: (x) => `Date: ${humanize.date(x * 1000, false, false)}`,
       rangerData: (cols) => [cols[0], cols[3]],
-      rangerDef: { ...purchasesBase, series: [{ ...purchasesBase.series[2], colorIndex: 0 }] }
+      rangerDef: { ...purchasesBase, series: [{ ...purchasesBase.series[2], colorIndex: 0 }] },
+      // The purchases ranger is a fixed blocks-level overview. A bars change rebuilds the main
+      // chart from a new (aggregated) def; without this the strip would be re-seeded with the
+      // coarse columns and collapse. Seed once from the initial blocks data; only its selection
+      // tracks the chart thereafter.
+      rangerSeedOnce: true
     })
     this.pricePanel = createChartPanel(document.getElementById('tickets-by-purchase-price'), {
       xTime: false,

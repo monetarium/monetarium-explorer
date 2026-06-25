@@ -20,7 +20,7 @@ export function createChartPanel(chartEl, opts = {}) {
 class ChartPanel {
   constructor(
     chartEl,
-    { dark, xTime, rangerEl, formatX, onRangeChange, rangerData, rangerDef } = {}
+    { dark, xTime, rangerEl, formatX, onRangeChange, rangerData, rangerDef, rangerSeedOnce } = {}
   ) {
     this.chartEl = chartEl
     this.rangerEl = rangerEl || null
@@ -29,6 +29,12 @@ class ChartPanel {
     this.onRangeChange = typeof onRangeChange === 'function' ? onRangeChange : null
     this.rangerData = typeof rangerData === 'function' ? rangerData : (cols) => [cols[0], cols[1]]
     this.rangerDef = rangerDef || null
+    // Fixed-overview ranger: seed its data once (first render) and keep that instance + data
+    // across chart rebuilds; only its selection tracks the chart afterward. Use this when the
+    // chart def changes (e.g. bar-aggregation factory) but the ranger must stay a stable,
+    // fine-grained overview — re-seeding it with the chart's re-aggregated columns would
+    // collapse the strip. Default false: the ranger rebuilds + re-seeds with the chart.
+    this.rangerSeedOnce = !!rangerSeedOnce
     this._handle = null
     this._ranger = null
     this.currentDef = null
@@ -81,7 +87,10 @@ class ChartPanel {
 
   async _ensureChart(def, epoch) {
     if (this._handle && def === this.currentDef) return // reuse
-    if (this._ranger) {
+    // A fixed-overview ranger (rangerSeedOnce) survives a chart rebuild; only the handle below
+    // is recreated. Its callbacks read this._handle/this._ranger live, so they re-wire to the
+    // fresh handle without rebuilding the strip.
+    if (this._ranger && !this.rangerSeedOnce) {
       this._ranger.destroy()
       this._ranger = null
     }
@@ -135,9 +144,11 @@ class ChartPanel {
       }
       this._ranger = ranger
       this._ranger.setData(this.rangerData(cols))
-    } else {
+    } else if (!this.rangerSeedOnce) {
       this._ranger.setData(this.rangerData(cols))
     }
+    // rangerSeedOnce: data was seeded on creation and must not be overwritten by the chart's
+    // (possibly re-aggregated) cols — only the selection below tracks the chart.
     this._seedRangerSelection(cols, epoch, target)
   }
 
