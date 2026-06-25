@@ -421,7 +421,20 @@ describe('ChartPanel ranger', () => {
     const onSelect = createRanger.mock.calls.at(-1)[2].onSelect
     onSelect(100, 200) // simulate a ranger grip drag
     expect(p.handle.setXRange).toHaveBeenCalledWith(100, 200)
-    expect(onRangeChange).toHaveBeenCalledWith(100, 200)
+    expect(onRangeChange).toHaveBeenCalledWith(100, 200, 'ranger')
+  })
+  it('passes the drag source to onRangeChange (chart vs ranger)', async () => {
+    const onRangeChange = vi.fn()
+    const p = createChartPanel(document.createElement('div'), {
+      rangerEl: document.createElement('div'),
+      onRangeChange: onRangeChange
+    })
+    await p.render(defWithRanger, payload1, {})
+    p._onChartRangeChange(10, 20)
+    expect(onRangeChange).toHaveBeenLastCalledWith(10, 20, 'chart')
+    const { createRanger } = await import('./uplot_ranger.js')
+    createRanger.mock.calls.at(-1)[2].onSelect(30, 40)
+    expect(onRangeChange).toHaveBeenLastCalledWith(30, 40, 'ranger')
   })
   it('a ranger drag is a no-op for onRangeChange when none is provided (agenda/ticketpool)', async () => {
     const p = createChartPanel(document.createElement('div'), {

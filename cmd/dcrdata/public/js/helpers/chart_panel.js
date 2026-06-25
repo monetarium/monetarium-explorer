@@ -240,10 +240,12 @@ class ChartPanel {
     if (this._ranger) this._ranger.setSelection(min, max)
   }
 
-  // Main-chart drag-zoom: mirror to the strip + notify the controller (URL persistence).
+  // Main-chart drag-zoom: mirror to the strip + notify the controller (URL persistence). The
+  // 'chart' source lets a consumer treat a chart drag differently from a ranger drag (e.g.
+  // /charts snaps a chart drag to a preset but keeps a ranger drag a custom range).
   _onChartRangeChange(min, max) {
     if (this._ranger) this._ranger.setSelection(min, max)
-    if (this.onRangeChange) this.onRangeChange(min, max)
+    if (this.onRangeChange) this.onRangeChange(min, max, 'chart')
   }
 
   // Ranger grip/body drag: drive the main chart (which mirrors back via _onChartRangeChange),
@@ -251,7 +253,7 @@ class ChartPanel {
   // (it does not fire the chart's onRangeChange), so this is the only notify on a ranger drag.
   _onRangerSelect(min, max) {
     if (this._handle) this._handle.setXRange(min, max)
-    if (this.onRangeChange) this.onRangeChange(min, max)
+    if (this.onRangeChange) this.onRangeChange(min, max, 'ranger')
   }
 
   // Self-contained on-plot tooltip: a div appended to u.over, shown on cursor-enter,
