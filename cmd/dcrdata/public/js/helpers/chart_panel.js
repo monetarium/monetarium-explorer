@@ -311,6 +311,7 @@ class ChartPanel {
       const value = u.data[i + 1][idx]
       if (value == null) return
       const text = this.currentDef.formatValue(i, { idx, payload, value }, {})
+      if (text === '') return
       const color = resolveSeriesColor(s, i, dark)
       tt.appendChild(this._legendRow(`${this._marker(color)} ${s.label}: ${text}`))
     })

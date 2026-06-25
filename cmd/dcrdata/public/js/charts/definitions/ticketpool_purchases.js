@@ -97,6 +97,7 @@ export function ticketpoolPurchases(barMode) {
     formatValue: (seriesIdx, datum) => {
       if (!Number.isFinite(datum.value)) return 'n/a'
       if (seriesIdx === 4) return ''
+      if (seriesIdx === 5) return ''
       if (seriesIdx === 3) {
         return `${datum.value.toLocaleString('en-US', { maximumFractionDigits: 8 })} VAR`
       }
