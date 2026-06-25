@@ -95,7 +95,7 @@ export function ticketpoolPurchases(barMode) {
       if (mempool) {
         const lastTs = xs.length ? xs[xs.length - 1] : 0
         let memTs = new Date(mempool.time).getTime() / 1000
-        if (memTs <= lastTs + 60) memTs = lastTs + 60
+        if (memTs <= lastTs + 1) memTs = lastTs + 1
         xs.push(memTs)
         mem.push(mempool.count)
         imm.push(0)

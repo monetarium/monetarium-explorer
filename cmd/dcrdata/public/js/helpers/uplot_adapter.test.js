@@ -878,9 +878,7 @@ describe('buildOpts — points config from definition', () => {
     name: 'ref',
     label: 'Ref',
     axes: [{ label: 'Count', scale: 'y' }],
-    series: [
-      { label: 'Data', scale: 'y', kind: 'line', points: { show: true, size: 7 } }
-    ]
+    series: [{ label: 'Data', scale: 'y', kind: 'line', points: { show: true, size: 7 } }]
   }
   it('passes points.show true through', () => {
     const opts = buildOpts(fakeUPlot, pointsDef, {})

@@ -64,8 +64,8 @@ describe('ticketpoolPurchases factory', () => {
     expect(cols[0]).toContain(JUN1 + 86400)
     // ...NOT the mempool time + 1 day (the wrong, order-dependent boundary).
     expect(cols[0]).not.toContain(mempoolTs + 86400)
-    // MemTx pushed to lastTs+60 for visual spacing
-    const adjusted = JUN1 + 86400 + 60
+    // MemTx pushed to lastTs+1 for visual spacing
+    const adjusted = JUN1 + 86400 + 1
     expect(cols[0]).toContain(adjusted)
     expect(cols[1][2]).toBe(5) // mempool count at index 2 (after extend + mempool)
   })
