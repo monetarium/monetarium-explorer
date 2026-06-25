@@ -226,8 +226,8 @@ export default class extends Controller {
     const response = await requestJSON(`/api/ticketpool/bydate/${this.bars}`)
     const def = this.purchasesDefFor(this.bars) // new bars -> new def -> rebuild
 
-    if (response.mempool) {
-      this.mempool = response.mempool
+    if ('mempool' in response) {
+      this.mempool = response.mempool ?? null
       this.tipHeight = response.height
     }
     const mempoolSettings = this.bars === 'all' && this.mempool ? { mempool: this.mempool } : {}
