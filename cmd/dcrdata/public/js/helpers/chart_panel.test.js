@@ -9,6 +9,7 @@ const makeFakeHandle = () => ({
   setData: vi.fn(),
   setXRange: vi.fn(),
   setDark: vi.fn(),
+  setMode: vi.fn(),
   resize: vi.fn(),
   destroy: vi.fn()
 })
@@ -449,6 +450,34 @@ describe('ChartPanel dynamic build options', () => {
     axisTime = true
     await p.render({ ...defA }, payload1, {}) // new def ref -> rebuild -> re-resolves xTime
     expect(createChart.mock.calls.at(-1)[2].xTime).toBe(true)
+  })
+  it('forwards scaleType (value or function) into createChart', async () => {
+    const { createChart } = await import('./uplot_adapter.js')
+    const p1 = createChartPanel(document.createElement('div'), { scaleType: 'log' })
+    await p1.render(defA, payload1, {})
+    expect(createChart.mock.calls.at(-1)[2].scaleType).toBe('log')
+    const p2 = createChartPanel(document.createElement('div'), { scaleType: () => 'log' })
+    await p2.render(defA, payload1, {})
+    expect(createChart.mock.calls.at(-1)[2].scaleType).toBe('log')
+  })
+  it('defaults scaleType to linear when unset', async () => {
+    const { createChart } = await import('./uplot_adapter.js')
+    const p = createChartPanel(document.createElement('div'), {})
+    await p.render(defA, payload1, {})
+    expect(createChart.mock.calls.at(-1)[2].scaleType).toBe('linear')
+  })
+  it('applies the initial mode via setMode on a fresh build, not on a reuse setData', async () => {
+    const p = createChartPanel(document.createElement('div'), { mode: 'stepped' })
+    await p.render(defA, payload1, {})
+    expect(p.handle.setMode).toHaveBeenCalledWith('stepped')
+    p.handle.setMode.mockClear()
+    await p.render(defA, payload1, {}) // same def -> reuse -> must NOT re-assert mode
+    expect(p.handle.setMode).not.toHaveBeenCalled()
+  })
+  it('does not call setMode when mode is unset', async () => {
+    const p = createChartPanel(document.createElement('div'), {})
+    await p.render(defA, payload1, {})
+    expect(p.handle.setMode).not.toHaveBeenCalled()
   })
 })
 

@@ -20,11 +20,24 @@ export function createChartPanel(chartEl, opts = {}) {
 class ChartPanel {
   constructor(
     chartEl,
-    { dark, xTime, rangerEl, formatX, onRangeChange, rangerData, rangerDef, rangerSeedOnce } = {}
+    {
+      dark,
+      xTime,
+      scaleType,
+      mode,
+      rangerEl,
+      formatX,
+      onRangeChange,
+      rangerData,
+      rangerDef,
+      rangerSeedOnce
+    } = {}
   ) {
     this.chartEl = chartEl
     this.rangerEl = rangerEl || null
     this.xTime = xTime // boolean | (() => boolean); resolved at build via _xTime()
+    this.scaleType = scaleType // 'linear'|'log' | (()=>...); resolved at build, default linear
+    this.mode = mode // 'line'|'stepped' | (()=>...); applied via setMode on a fresh build only
     this.formatX = typeof formatX === 'function' ? formatX : (x) => String(x)
     this.onRangeChange = typeof onRangeChange === 'function' ? onRangeChange : null
     this.rangerData = typeof rangerData === 'function' ? rangerData : (cols) => [cols[0], cols[1]]
@@ -68,6 +81,19 @@ class ChartPanel {
     return v !== false
   }
 
+  // Read live at build so a rebuild after a scale/mode toggle paints the CURRENT state (a frozen
+  // initial value would revert a user's live log/stepped choice). Live toggles still go through
+  // the handle.setScaleType / setMode escape hatch.
+  _scaleType() {
+    const v = typeof this.scaleType === 'function' ? this.scaleType() : this.scaleType
+    return v === 'log' ? 'log' : 'linear'
+  }
+
+  _mode() {
+    const v = typeof this.mode === 'function' ? this.mode() : this.mode
+    return v === 'stepped' || v === 'line' ? v : null
+  }
+
   // (Re)build for `def`, feed `payload`, retain it for the tooltip. Recreates the handle on a
   // def REFERENCE change (not def.name), else setData. Async: createChart is async, so the
   // epoch guard also serializes overlapping renders.
@@ -90,6 +116,12 @@ class ChartPanel {
     if (epoch !== this.epoch || this._destroyed) return
     this.payload = payload
     this._handle.setData(cols)
+    // Initial mode on a FRESH build only (createChart has no mode option). A reuse render must
+    // not re-assert it — that would revert a user's live setMode toggle on the next setData.
+    if (!reuse) {
+      const m = this._mode()
+      if (m) this._handle.setMode(m)
+    }
     if (target) this._handle.setXRange(target.min, target.max)
     await this._ensureRanger(def, cols, epoch, target)
   }
@@ -112,6 +144,7 @@ class ChartPanel {
       dark: darkAtBuild,
       width: this.chartEl.clientWidth || 800,
       height: this.chartEl.clientHeight || 300,
+      scaleType: this._scaleType(),
       xTime: this._xTime(),
       hooks: this._buildHooks(),
       onRangeChange: (min, max) => this._onChartRangeChange(min, max)
