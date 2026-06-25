@@ -298,6 +298,51 @@ describe('ChartPanel ranger', () => {
   })
 })
 
+describe('ChartPanel target range on render', () => {
+  it('preserveRange keeps the current x-range across a same-def update (chart + ranger)', async () => {
+    const p = createChartPanel(document.createElement('div'), {
+      rangerEl: document.createElement('div')
+    })
+    await p.render(defWithRanger, payload1, {})
+    p.handle.uplot.scales.x = { min: 5, max: 9 } // user zoomed
+    p.handle.setXRange.mockClear()
+    p.ranger.setSelection.mockClear()
+    await p.render(defWithRanger, { x: [1, 2, 3], yes: [4, 5, 6] }, {}, { preserveRange: true })
+    expect(p.handle.setXRange).toHaveBeenCalledWith(5, 9)
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(p.ranger.setSelection).toHaveBeenCalledWith(5, 9)
+  })
+
+  it('preserveRange is a no-op on a fresh build (no prior finite range) -> full extent', async () => {
+    const p = createChartPanel(document.createElement('div'), {
+      rangerEl: document.createElement('div')
+    })
+    await p.render(defWithRanger, payload1, {}, { preserveRange: true })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(p.ranger.setSelection).toHaveBeenCalledWith(1, 2) // full extent of payload1
+  })
+
+  it('explicit range seeds the chart + ranger even across a rebuild (different def)', async () => {
+    const p = createChartPanel(document.createElement('div'), {
+      rangerEl: document.createElement('div')
+    })
+    await p.render(defWithRanger, payload1, {})
+    const firstHandle = p.handle
+    await p.render(
+      { ...defWithRanger },
+      { x: [10, 20, 30], yes: [1, 2, 3] },
+      {},
+      {
+        range: { min: 12, max: 28 }
+      }
+    )
+    expect(firstHandle.destroy).toHaveBeenCalledTimes(1) // rebuilt
+    expect(p.handle.setXRange).toHaveBeenCalledWith(12, 28)
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(p.ranger.setSelection).toHaveBeenCalledWith(12, 28)
+  })
+})
+
 describe('ChartPanel theme + resize + destroy cleanup', () => {
   it('registers and removes NIGHT_MODE + resize listeners across its lifecycle', async () => {
     const addSpy = vi.spyOn(window, 'addEventListener')
