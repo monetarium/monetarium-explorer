@@ -238,9 +238,13 @@ export default class extends Controller {
     const prevMax = sx?.max
     let opts = {}
     if (prevMin != null && prevMax != null && isFinite(prevMin) && isFinite(prevMax)) {
-      const epochs = timesToEpoch(response.time_chart && response.time_chart.time)
-      const dataMin = epochs.length ? epochs[0] : prevMin
-      const dataMax = epochs.length ? epochs[epochs.length - 1] : prevMax
+      const eps = timesToEpoch(response.time_chart && response.time_chart.time)
+      const dataMin = eps.length ? eps[0] : prevMin
+      let dataMax = eps.length ? eps[eps.length - 1] : prevMax
+      if (this.bars === 'all' && this.mempool && this.mempool.time) {
+        const memTs = new Date(this.mempool.time).getTime() / 1000 + 1
+        if (memTs > dataMax) dataMax = memTs
+      }
       const [restoreMin, restoreMax] = alignViewportToData(prevMin, prevMax, dataMin, dataMax)
       opts = { range: { min: restoreMin, max: restoreMax } }
     }
