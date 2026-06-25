@@ -18,12 +18,17 @@ export function createChartPanel(chartEl, opts = {}) {
 }
 
 class ChartPanel {
-  constructor(chartEl, { dark, xTime, rangerEl, formatX, onRangeChange } = {}) {
+  constructor(
+    chartEl,
+    { dark, xTime, rangerEl, formatX, onRangeChange, rangerData, rangerDef } = {}
+  ) {
     this.chartEl = chartEl
     this.rangerEl = rangerEl || null
     this.xTime = xTime !== false
     this.formatX = typeof formatX === 'function' ? formatX : (x) => String(x)
     this.onRangeChange = typeof onRangeChange === 'function' ? onRangeChange : null
+    this.rangerData = typeof rangerData === 'function' ? rangerData : (cols) => [cols[0], cols[1]]
+    this.rangerDef = rangerDef || null
     this._handle = null
     this._ranger = null
     this.currentDef = null
@@ -105,7 +110,7 @@ class ChartPanel {
     if (!this.rangerEl) return
     if (!this._ranger) {
       const g = (this._handle && this.measureGutters(this._handle.uplot)) || { left: 0, right: 0 }
-      const ranger = await createRanger(this.rangerEl, def, {
+      const ranger = await createRanger(this.rangerEl, this.rangerDef || def, {
         dark: this._dark,
         width: this.rangerEl.clientWidth || 800,
         xTime: this.xTime,
@@ -118,9 +123,9 @@ class ChartPanel {
         return
       }
       this._ranger = ranger
-      this._ranger.setData([cols[0], cols[1]])
+      this._ranger.setData(this.rangerData(cols))
     } else {
-      this._ranger.setData([cols[0], cols[1]])
+      this._ranger.setData(this.rangerData(cols))
     }
     this._seedRangerSelection(cols, epoch)
   }

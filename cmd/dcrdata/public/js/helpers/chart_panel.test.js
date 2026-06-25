@@ -266,6 +266,36 @@ describe('ChartPanel ranger', () => {
     expect(p.handle.setXRange).toHaveBeenCalledWith(100, 200)
     expect(p.ranger.setSelection).toHaveBeenCalledWith(100, 200)
   })
+
+  it('seeds the ranger via a custom rangerData selector', async () => {
+    const p = createChartPanel(document.createElement('div'), {
+      rangerEl: document.createElement('div'),
+      rangerData: (cols) => [cols[0], cols[1].map((v) => v * 2)]
+    })
+    const def = {
+      ...defA,
+      toColumns: () => [
+        [1, 2],
+        [10, 30]
+      ]
+    }
+    await p.render(def, payload1, {})
+    expect(p.ranger.setData).toHaveBeenCalledWith([
+      [1, 2],
+      [20, 60]
+    ])
+  })
+
+  it('builds the ranger from rangerDef when provided (not the chart def)', async () => {
+    const { createRanger } = await import('./uplot_ranger.js')
+    const rangerDef = { ...defA, name: 'strip-only' }
+    const p = createChartPanel(document.createElement('div'), {
+      rangerEl: document.createElement('div'),
+      rangerDef: rangerDef
+    })
+    await p.render(defA, payload1, {})
+    expect(createRanger).toHaveBeenCalledWith(expect.anything(), rangerDef, expect.anything())
+  })
 })
 
 describe('ChartPanel theme + resize + destroy cleanup', () => {
