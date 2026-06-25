@@ -125,16 +125,21 @@ describe('ticketpool connect/disconnect wiring', () => {
 })
 
 describe('ticketpool data rendering', () => {
-  it('renders purchases with preserveRange and the memoized def for the active bars', async () => {
+  it('renders purchases with the memoized def and full-extent viewport on fresh build', async () => {
     const c = makeController()
     c.bars = 'wk'
+    const before = Date.now() / 1000 - 86400 * 7
     await c.renderOrUpdatePurchases({ time: [] }, false)
-    expect(c.purchasesPanel.render).toHaveBeenCalledWith(
-      c.purchasesDefFor('wk'),
-      { time: [] },
-      { mempool: false },
-      { preserveRange: true }
-    )
+    const after = Date.now() / 1000
+    const args = c.purchasesPanel.render.mock.calls[0]
+    expect(args[0]).toEqual(c.purchasesDefFor('wk'))
+    expect(args[1]).toEqual({ time: [] })
+    expect(args[2]).toEqual({ mempool: false })
+    const range = args[3].range
+    expect(range.min).toBeGreaterThanOrEqual(before)
+    expect(range.min).toBeLessThanOrEqual(after)
+    expect(range.max).toBeGreaterThan(after) // padded past now
+    expect(range.max).toBeLessThanOrEqual(after + 86400 * 7 * 0.01 + 3600 + 2) // pad + slop
   })
 
   it('reuses the same purchases def object for the same bars (stable identity -> setData)', () => {
@@ -143,14 +148,84 @@ describe('ticketpool data rendering', () => {
     expect(c.purchasesDefFor('day')).not.toBe(c.purchasesDefFor('wk'))
   })
 
-  it('renders price with preserveRange', async () => {
+  it('renders price with full-extent viewport on fresh build', async () => {
     const c = makeController()
     await c.renderOrUpdatePrice({ price: [] }, false)
     expect(c.pricePanel.render).toHaveBeenCalledWith(
       expect.objectContaining({ name: 'ticketpool-price' }),
       { price: [] },
       { mempool: false },
-      { preserveRange: true }
+      {}
+    )
+  })
+
+  it('renders purchases with expand-only range when data extent matches viewport', async () => {
+    const c = makeController()
+    c.bars = 'all'
+    const prevMin = 1700000000
+    const prevMax = 1700086400
+    c.purchasesPanel.handle = {
+      uplot: { scales: { x: { min: prevMin, max: prevMax } } }
+    }
+    await c.renderOrUpdatePurchases({ time: [] }, false)
+    expect(c.purchasesPanel.render).toHaveBeenCalledWith(
+      c.purchasesDefFor('all'),
+      { time: [] },
+      { mempool: false },
+      { range: { min: prevMin, max: prevMax + 3600 } }
+    )
+  })
+
+  it('renders purchases with expand-only range including mempool timestamp', async () => {
+    const c = makeController()
+    c.bars = 'all'
+    const prevMin = 1700000000
+    const prevMax = 1700086400
+    c.purchasesPanel.handle = {
+      uplot: { scales: { x: { min: prevMin, max: prevMax } } }
+    }
+    const data = { time: ['2026-06-08T00:00:00Z'] } // timesToEpoch -> 1780876800
+    const mempool = { time: '2026-06-09T00:00:00Z', count: 5, price: 280 }
+    await c.renderOrUpdatePurchases(data, mempool)
+    expect(c.purchasesPanel.render).toHaveBeenCalledWith(
+      c.purchasesDefFor('all'),
+      data,
+      { mempool },
+      { range: { min: 1780876800, max: 1780966800 } }
+    )
+  })
+
+  it('renders price with expand-only range when data extent matches viewport', async () => {
+    const c = makeController()
+    const prevMin = 100
+    const prevMax = 300
+    c.pricePanel.handle = {
+      uplot: { scales: { x: { min: prevMin, max: prevMax } } }
+    }
+    await c.renderOrUpdatePrice({ price: [150, 250] }, false)
+    expect(c.pricePanel.render).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'ticketpool-price' }),
+      { price: [150, 250] },
+      { mempool: false },
+      { range: { min: 150, max: 301.5 } }
+    )
+  })
+
+  it('renders price with expand-only range including mempool price', async () => {
+    const c = makeController()
+    const prevMin = 100
+    const prevMax = 300
+    c.pricePanel.handle = {
+      uplot: { scales: { x: { min: prevMin, max: prevMax } } }
+    }
+    const data = { price: [150, 250] }
+    const mempool = { price: 500, count: 7 }
+    await c.renderOrUpdatePrice(data, mempool)
+    expect(c.pricePanel.render).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'ticketpool-price' }),
+      data,
+      { mempool },
+      { range: { min: 150, max: 503.5 } }
     )
   })
 
@@ -199,7 +274,7 @@ describe('ticketpool onBarsChange', () => {
       currentTarget: { dataset: { option: 'all' }, classList: { add: vi.fn(), remove: vi.fn() } }
     })
     const lastRender = c.purchasesPanel.render.mock.calls.at(-1)
-    expect(lastRender[3]).toEqual({ range: { min: 1780963200, max: 1782259200 } })
+    expect(lastRender[3]).toEqual({ range: { min: 1780963200, max: 1782273024 } })
   })
 })
 

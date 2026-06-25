@@ -873,6 +873,27 @@ describe('buildOpts — explicit color, dash, spanGaps', () => {
   })
 })
 
+describe('buildOpts — points config from definition', () => {
+  const pointsDef = {
+    name: 'ref',
+    label: 'Ref',
+    axes: [{ label: 'Count', scale: 'y' }],
+    series: [{ label: 'Data', scale: 'y', kind: 'line', points: { show: true, size: 7 } }]
+  }
+  it('passes points.show true through', () => {
+    const opts = buildOpts(fakeUPlot, pointsDef, {})
+    expect(opts.series[1].points.show).toBe(true)
+  })
+  it('passes points.size through', () => {
+    const opts = buildOpts(fakeUPlot, pointsDef, {})
+    expect(opts.series[1].points.size).toBe(7)
+  })
+  it('defaults to show: false when definition omits points', () => {
+    const opts = buildOpts(fakeUPlot, lineDef, {})
+    expect(opts.series[1].points.show).toBe(false)
+  })
+})
+
 describe('buildOpts — colorIndex 0 is theme-aware (primary series)', () => {
   it('keeps the index-0 line blue in light mode', () => {
     const opts = buildOpts(fakeUPlot, lineDef, { dark: false })

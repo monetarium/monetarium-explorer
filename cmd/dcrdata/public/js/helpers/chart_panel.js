@@ -307,10 +307,12 @@ class ChartPanel {
     const dark = this._dark
     const payload = this.payload
     this.currentDef.series.forEach((s, i) => {
+      if (s.show === false) return
       if (u.series && u.series[i + 1] && u.series[i + 1].show === false) return
       const value = u.data[i + 1][idx]
       if (value == null) return
       const text = this.currentDef.formatValue(i, { idx, payload, value }, {})
+      if (text === '') return
       const color = resolveSeriesColor(s, i, dark)
       tt.appendChild(this._legendRow(`${this._marker(color)} ${s.label}: ${text}`))
     })

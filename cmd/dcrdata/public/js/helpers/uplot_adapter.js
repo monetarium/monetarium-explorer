@@ -330,6 +330,7 @@ export function buildOpts(UPlot, def, opts = {}) {
       }
       if (s.dash) entry.dash = s.dash
       if (s.width != null) entry.width = s.width
+      if (s.points) entry.points = { ...entry.points, ...s.points }
       return entry
     })
   ]
