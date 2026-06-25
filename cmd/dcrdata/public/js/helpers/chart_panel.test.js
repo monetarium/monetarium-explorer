@@ -499,4 +499,14 @@ describe('ChartPanel theme + resize + destroy cleanup', () => {
     expect(p.handle).toBe(handle) // NOT blanked — the theme epoch must not abort the render
     expect(handle.setDark).toHaveBeenCalledWith(true) // chart reconciled to the new theme
   })
+  it('public resize() re-measures the chart from the element dimensions', async () => {
+    const el = document.createElement('div')
+    Object.defineProperty(el, 'clientWidth', { value: 640, configurable: true })
+    Object.defineProperty(el, 'clientHeight', { value: 480, configurable: true })
+    const p = createChartPanel(el, {})
+    await p.render(defA, payload1, {})
+    p.handle.resize.mockClear()
+    p.resize()
+    expect(p.handle.resize).toHaveBeenCalledWith(640, 480)
+  })
 })

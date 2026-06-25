@@ -373,6 +373,12 @@ class ChartPanel {
     }
   }
 
+  // Re-measure now (no debounce) — for layout changes that fire no window 'resize' event,
+  // e.g. a fullscreen-expand DOM move or a show/hide that changes the container size.
+  resize() {
+    this._resize()
+  }
+
   // Resize does not rebuild, so it does NOT bump the epoch, but it captures+checks it so a
   // later render invalidates this pending re-apply.
   _resize() {
