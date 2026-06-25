@@ -144,6 +144,34 @@ describe('ChartPanel tooltip', () => {
     p.renderLegend(u)
     expect(p.legendElement.textContent).not.toContain('Yes:')
   })
+  it('reads the raw payload value, not the cumulative plotted value, for a stacked def (firewall)', async () => {
+    // The amountflow regression guard, ported to the panel where the firewall now lives: uPlot
+    // stacks the plotted columns, so u.data carries the CUMULATIVE value (Net Received plots at
+    // 20 = received10 + net10), but formatValue reads the RAW payload (net10) — the tooltip must
+    // show 10, never the cumulative 20.
+    const stackedDef = {
+      name: 'flow',
+      series: [
+        { label: 'Received', color: '#0a0', kind: 'bars' },
+        { label: 'Net Received', color: '#00a', kind: 'bars' }
+      ],
+      stacked: true,
+      toColumns: (p) => [p.x, p.received, p.net],
+      formatValue: (i, d) => `${[d.payload.received, d.payload.net][i][d.idx]} VAR`
+    }
+    const p = createChartPanel(document.createElement('div'), { formatX: (x) => `X: ${x}` })
+    await p.render(stackedDef, { x: [1], received: [10], net: [10] }, {})
+    p.legendElement = document.createElement('div')
+    p.renderLegend({
+      cursor: { idx: 0, left: 10, top: 10 },
+      data: [[1], [10], [20]], // plotted: Received=10, Net Received cumulative=20
+      series: [{}, { show: true }, { show: true }],
+      over: { clientWidth: 800, clientHeight: 300 }
+    })
+    const txt = p.legendElement.textContent
+    expect(txt).toContain('Net Received: 10 VAR') // raw payload value
+    expect(txt).not.toContain('Net Received: 20 VAR') // NOT the cumulative plotted value
+  })
   it('skips a zero-formatted series row only when the def opts in via skipZeroRows', async () => {
     const zeroDef = {
       name: 'z',
