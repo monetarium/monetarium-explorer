@@ -74,6 +74,13 @@ export function ticketpoolPurchases(barMode) {
       const imm = data.immature ? data.immature.slice() : new Array(n).fill(0)
       const live = data.live ? data.live.slice() : new Array(n).fill(0)
       const price = data.price ? data.price.slice() : new Array(n).fill(0)
+      const cols = [xs, mem, imm, live, price]
+      // Anchor the bucketed period-end boundary to the last HISTORICAL point, BEFORE appending
+      // any live mempool point — otherwise extendToPeriodEnd would read the mempool timestamp as
+      // its anchor and compute the wrong boundary. Today the two never co-occur (mempool is only
+      // passed in 'all' mode, which is not a bucketed barMode, so extend is a no-op there), but
+      // ordering it this way keeps the boundary correct independent of that controller invariant.
+      extendToPeriodEnd(cols, barMode)
       if (mempool) {
         xs.push(new Date(mempool.time).getTime() / 1000)
         mem.push(mempool.count)
@@ -81,8 +88,6 @@ export function ticketpoolPurchases(barMode) {
         live.push(0)
         price.push(mempool.price)
       }
-      const cols = [xs, mem, imm, live, price]
-      extendToPeriodEnd(cols, barMode)
       return cols
     },
     formatValue: (seriesIdx, datum) => {

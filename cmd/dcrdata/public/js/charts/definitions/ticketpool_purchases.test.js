@@ -51,6 +51,24 @@ describe('ticketpoolPurchases factory', () => {
     expect(cols[1][1]).toBe(5) // mempool count in the Mempool Tickets series
   })
 
+  it('anchors the bucketed period-end to the last historical point, not an appended mempool point', () => {
+    // Regression: extendToPeriodEnd reads the last x as its anchor, so it must run BEFORE the
+    // live mempool point is appended — otherwise the boundary would be computed from the mempool
+    // timestamp. The two modes never co-occur today (mempool only in 'all', not a bucketed mode),
+    // but the ordering must not silently break if that ever changes.
+    const mempoolTs = Date.UTC(2026, 5, 1, 18) / 1000 // same day, 18:00
+    const cols = ticketpoolPurchases('day').toColumns(data, {
+      mempool: { time: '2026-06-01T18:00:00Z', count: 5, price: 281 }
+    })
+    // Period-end is JUN1 + 1 day (anchored to the historical bucket)...
+    expect(cols[0]).toContain(JUN1 + 86400)
+    // ...NOT the mempool time + 1 day (the wrong, order-dependent boundary).
+    expect(cols[0]).not.toContain(mempoolTs + 86400)
+    // The live mempool point is still appended (after the boundary).
+    expect(cols[0]).toContain(mempoolTs)
+    expect(cols[1]).toContain(5)
+  })
+
   it('selects bucketed bar geometry for bar modes and capped geometry for blocks', () => {
     const calls = []
     const UPlot = {
