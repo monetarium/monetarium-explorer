@@ -307,6 +307,7 @@ class ChartPanel {
     const dark = this._dark
     const payload = this.payload
     this.currentDef.series.forEach((s, i) => {
+      if (s.show === false) return
       if (u.series && u.series[i + 1] && u.series[i + 1].show === false) return
       const value = u.data[i + 1][idx]
       if (value == null) return

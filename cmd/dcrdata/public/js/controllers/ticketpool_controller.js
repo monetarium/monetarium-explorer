@@ -112,25 +112,32 @@ export default class extends Controller {
     }
   }
 
-  // preserveRange is a no-op on the first render (no prior range) and preserves the zoom
-  // across every later same-bars update (the live websocket refresh path).  Expands the
-  // viewport to include a new mempool point when one arrives (the def appends it in toColumns).
+  // Computes an expand-only range that includes the data (with mempool) plus 1% right
+  // padding, so the last mempool point isn't clipped at the chart's right edge (uPlot
+  // doesn't auto-pad x).  On every call (fresh build or update) the range is passed to
+  // render(), which applies it via setXRange after create/update.
   renderOrUpdatePurchases(timeData, mempool) {
+    const epochs = timesToEpoch(timeData.time)
+    let dataMin = epochs.length ? epochs[0] : null
+    let dataMax = epochs.length ? epochs[epochs.length - 1] : null
+    if (mempool && mempool.time) {
+      const memTs = new Date(mempool.time).getTime() / 1000
+      if (dataMin == null || memTs < dataMin) dataMin = memTs
+      if (dataMax == null || memTs > dataMax) dataMax = memTs
+    }
     const sx = this.purchasesPanel.handle?.uplot.scales.x
     const prevMin = sx?.min
     const prevMax = sx?.max
-    let opts = {}
-    if (prevMin != null && prevMax != null && isFinite(prevMin) && isFinite(prevMax)) {
-      const epochs = timesToEpoch(timeData.time)
-      let dataMax = epochs.length ? epochs[epochs.length - 1] : prevMax
-      if (mempool && mempool.time) {
-        const memTs = new Date(mempool.time).getTime() / 1000
-        if (memTs > dataMax) dataMax = memTs
-      }
-      const dataMin = epochs.length ? epochs[0] : prevMin
-      const [restoreMin, restoreMax] = alignViewportToData(prevMin, prevMax, dataMin, dataMax)
-      opts = { range: { min: restoreMin, max: restoreMax } }
+    if (dataMin == null) {
+      dataMin = prevMin != null && isFinite(prevMin) ? prevMin : Date.now() / 1000 - 86400 * 7
     }
+    if (dataMax == null) {
+      dataMax = prevMax != null && isFinite(prevMax) ? prevMax : Date.now() / 1000
+    }
+    const restoreMin = prevMin != null && isFinite(prevMin) ? Math.max(prevMin, dataMin) : dataMin
+    const restoreMax = prevMax != null && isFinite(prevMax) ? Math.max(prevMax, dataMax) : dataMax
+    const pad = Math.max((restoreMax - restoreMin) * 0.01, 3600)
+    const opts = { range: { min: restoreMin, max: restoreMax + pad } }
     return this.purchasesPanel.render(this.purchasesDefFor(this.bars), timeData, { mempool }, opts)
   }
 

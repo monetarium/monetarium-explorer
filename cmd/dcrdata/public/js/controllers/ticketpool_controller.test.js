@@ -129,11 +129,14 @@ describe('ticketpool data rendering', () => {
     const c = makeController()
     c.bars = 'wk'
     await c.renderOrUpdatePurchases({ time: [] }, false)
+    const now = Date.now() / 1000
+    const fallbackMin = now - 86400 * 7
+    const fallbackPad = Math.max((now - fallbackMin) * 0.01, 3600)
     expect(c.purchasesPanel.render).toHaveBeenCalledWith(
       c.purchasesDefFor('wk'),
       { time: [] },
       { mempool: false },
-      {}
+      { range: { min: fallbackMin, max: now + fallbackPad } }
     )
   })
 
@@ -167,7 +170,7 @@ describe('ticketpool data rendering', () => {
       c.purchasesDefFor('all'),
       { time: [] },
       { mempool: false },
-      { range: { min: prevMin, max: prevMax } }
+      { range: { min: prevMin, max: prevMax + 3600 } }
     )
   })
 
@@ -186,7 +189,7 @@ describe('ticketpool data rendering', () => {
       c.purchasesDefFor('all'),
       data,
       { mempool },
-      { range: { min: 1780876800, max: 1780963200 } }
+      { range: { min: 1780876800, max: 1780966800 } }
     )
   })
 
