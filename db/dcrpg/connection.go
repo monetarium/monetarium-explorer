@@ -32,6 +32,8 @@ func Connect(host, port, user, pass, dbname string) (*sql.DB, error) {
 		psqlInfo += fmt.Sprintf(" port=%s", port)
 	}
 
+	psqlInfo += " options='-c timezone=UTC'"
+
 	db, err := sql.Open("postgres", psqlInfo)
 	if err != nil {
 		return nil, err
