@@ -29,7 +29,10 @@ export function clampWindow(lo, hi, dataMin) {
   return [lo, hi]
 }
 
-// Expand-only union: never clip the saved viewport, only grow it to include new data.
-export function expandOnlyUnion(prevMin, prevMax, dataMin, dataMax) {
+// Reconcile the saved viewport with the new data's extent: snap the left edge up to where
+// data begins, grow the right edge out to where data ends. Preserves the saved window
+// otherwise. (Not a pure expand — the left edge contracts toward dataMin when the data starts
+// later than the saved viewport, e.g. a coarse day-boundary view snapping to the first block.)
+export function alignViewportToData(prevMin, prevMax, dataMin, dataMax) {
   return [Math.max(prevMin, dataMin), Math.max(prevMax, dataMax)]
 }

@@ -5,7 +5,7 @@ import humanize from '../helpers/humanize_helper'
 import ws from '../services/messagesocket_service'
 import { ticketpoolPurchases } from '../charts/definitions/ticketpool_purchases'
 import { ticketpoolPrice } from '../charts/definitions/ticketpool_price'
-import { timesToEpoch, computeZoomWindow, expandOnlyUnion } from '../helpers/ticketpool_zoom'
+import { timesToEpoch, computeZoomWindow, alignViewportToData } from '../helpers/ticketpool_zoom'
 
 function populateOutputs(data) {
   const totalCount = parseInt(
@@ -205,7 +205,7 @@ export default class extends Controller {
       const epochs = timesToEpoch(response.time_chart && response.time_chart.time)
       const dataMin = epochs.length ? epochs[0] : prevMin
       const dataMax = epochs.length ? epochs[epochs.length - 1] : prevMax
-      const [restoreMin, restoreMax] = expandOnlyUnion(prevMin, prevMax, dataMin, dataMax)
+      const [restoreMin, restoreMax] = alignViewportToData(prevMin, prevMax, dataMin, dataMax)
       opts = { range: { min: restoreMin, max: restoreMax } }
     }
     await this.purchasesPanel.render(def, response.time_chart, {}, opts)
