@@ -234,4 +234,19 @@ describe('ticketpool onZoom', () => {
     expect(lastRender[3].range.max - lastRender[3].range.min).toBe(604800)
     expect(c.purchasesPanel.setXRange).not.toHaveBeenCalled()
   })
+
+  it('zoom=all uses the active chart extent, not the wider ranger extent', async () => {
+    const c = makeController()
+    c.bars = 'all' // barsOrder.all(0) < zoomOrder.all(4) => no auto-coarsen, non-refetch path
+    // chart data is narrower than the ranger (blocks) data
+    c.purchasesPanel.handle = { uplot: { data: [[1781568000, 1782086400]], scales: { x: {} } } }
+    c.purchasesPanel.ranger = { uplot: { data: [[1780963200, 1782172800]] } }
+    await c.onZoom({
+      currentTarget: { dataset: { option: 'all' }, classList: { add: vi.fn(), remove: vi.fn() } }
+    })
+    // computeZoomWindow('all', chartXs) returns the chart extent verbatim
+    expect(c.purchasesPanel.setXRange).toHaveBeenCalledWith(1781568000, 1782086400)
+    // and NOT the wider ranger extent
+    expect(c.purchasesPanel.setXRange).not.toHaveBeenCalledWith(1780963200, 1782172800)
+  })
 })
