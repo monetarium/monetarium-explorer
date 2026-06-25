@@ -66,6 +66,7 @@ class ChartPanel {
   async render(def, payload, settings, opts = {}) {
     if (this._destroyed) return
     const epoch = ++this.epoch
+    this._settings = settings || {} // retained for renderLegend's formatValue/legendExtra
     const cols = def.toColumns(payload || {}, settings || {})
     const reuse = !!this._handle && def === this.currentDef
     let target = null
@@ -313,7 +314,7 @@ class ChartPanel {
       if (u.series && u.series[i + 1] && u.series[i + 1].show === false) return
       const value = u.data[i + 1][idx]
       if (value == null) return
-      const text = this.currentDef.formatValue(i, { idx, payload, value }, {})
+      const text = this.currentDef.formatValue(i, { idx, payload, value }, this._settings || {})
       // Opt-in (def.skipZeroRows): a stacked chart's many 0-valued series clutter the tooltip.
       // Defaulted off so agenda/ticketpool/charts defs are unaffected; only stacked address
       // defs set the flag. Matches the legacy address `if (def.stacked && /^0/.test(text))`.

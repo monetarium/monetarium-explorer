@@ -217,6 +217,24 @@ describe('ChartPanel tooltip', () => {
     })
     expect(p.legendElement.textContent).toContain('A: 0 VAR')
   })
+  it('passes the retained render settings to formatValue (e.g. ticket-pool network target)', async () => {
+    const settingsDef = {
+      name: 's',
+      series: [{ label: 'Tickets', color: '#0a0', kind: 'line' }],
+      toColumns: (p) => [p.x, p.v],
+      formatValue: (i, d, settings) => `${d.payload.v[d.idx]} (target ${settings.tps})`
+    }
+    const p = createChartPanel(document.createElement('div'), { formatX: (x) => `X: ${x}` })
+    await p.render(settingsDef, { x: [1], v: [42] }, { tps: 999 })
+    p.legendElement = document.createElement('div')
+    p.renderLegend({
+      cursor: { idx: 0, left: 10, top: 10 },
+      data: [[1], [42]],
+      series: [{}, { show: true }],
+      over: { clientWidth: 800, clientHeight: 300 }
+    })
+    expect(p.legendElement.textContent).toContain('Tickets: 42 (target 999)')
+  })
 })
 
 describe('ChartPanel touch-scrub', () => {
