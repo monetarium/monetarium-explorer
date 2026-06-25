@@ -113,20 +113,42 @@ export default class extends Controller {
   }
 
   // preserveRange is a no-op on the first render (no prior range) and preserves the zoom
-  // across every later same-bars update (the live websocket refresh path).
+  // across every later same-bars update (the live websocket refresh path).  Expands the
+  // viewport to include a new mempool point when one arrives (the def appends it in toColumns).
   renderOrUpdatePurchases(timeData, mempool) {
-    return this.purchasesPanel.render(
-      this.purchasesDefFor(this.bars),
-      timeData,
-      { mempool },
-      {
-        preserveRange: true
+    const sx = this.purchasesPanel.handle?.uplot.scales.x
+    const prevMin = sx?.min
+    const prevMax = sx?.max
+    let opts = {}
+    if (prevMin != null && prevMax != null && isFinite(prevMin) && isFinite(prevMax)) {
+      const epochs = timesToEpoch(timeData.time)
+      let dataMax = epochs.length ? epochs[epochs.length - 1] : prevMax
+      if (mempool && mempool.time) {
+        const memTs = new Date(mempool.time).getTime() / 1000
+        if (memTs > dataMax) dataMax = memTs
       }
-    )
+      const dataMin = epochs.length ? epochs[0] : prevMin
+      const [restoreMin, restoreMax] = alignViewportToData(prevMin, prevMax, dataMin, dataMax)
+      opts = { range: { min: restoreMin, max: restoreMax } }
+    }
+    return this.purchasesPanel.render(this.purchasesDefFor(this.bars), timeData, { mempool }, opts)
   }
 
   renderOrUpdatePrice(priceData, mempool) {
-    return this.pricePanel.render(ticketpoolPrice, priceData, { mempool }, { preserveRange: true })
+    const sx = this.pricePanel.handle?.uplot.scales.x
+    const prevMin = sx?.min
+    const prevMax = sx?.max
+    let opts = {}
+    if (prevMin != null && prevMax != null && isFinite(prevMin) && isFinite(prevMax)) {
+      const dataMin = priceData?.price?.length ? priceData.price[0] : prevMin
+      let dataMax = priceData?.price?.length ? priceData.price[priceData.price.length - 1] : prevMax
+      if (mempool && mempool.price) {
+        if (mempool.price > dataMax) dataMax = mempool.price
+      }
+      const [restoreMin, restoreMax] = alignViewportToData(prevMin, prevMax, dataMin, dataMax)
+      opts = { range: { min: restoreMin, max: restoreMax } }
+    }
+    return this.pricePanel.render(ticketpoolPrice, priceData, { mempool }, opts)
   }
 
   disconnect() {
