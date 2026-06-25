@@ -144,6 +144,51 @@ describe('ChartPanel tooltip', () => {
     p.renderLegend(u)
     expect(p.legendElement.textContent).not.toContain('Yes:')
   })
+  it('skips a zero-formatted series row only when the def opts in via skipZeroRows', async () => {
+    const zeroDef = {
+      name: 'z',
+      series: [
+        { label: 'A', color: '#0a0', kind: 'bars' },
+        { label: 'B', color: '#00a', kind: 'bars' }
+      ],
+      stacked: true,
+      skipZeroRows: true,
+      toColumns: (p) => [p.x, p.a, p.b],
+      // A -> "0 VAR" (skipped), B -> "5 VAR" (kept)
+      formatValue: (i, d) => `${[d.payload.a, d.payload.b][i][d.idx]} VAR`
+    }
+    const p = createChartPanel(document.createElement('div'), { formatX: (x) => `X: ${x}` })
+    await p.render(zeroDef, { x: [1], a: [0], b: [5] }, {})
+    p.legendElement = document.createElement('div')
+    p.renderLegend({
+      cursor: { idx: 0, left: 10, top: 10 },
+      data: [[1], [0], [5]],
+      series: [{}, { show: true }, { show: true }],
+      over: { clientWidth: 800, clientHeight: 300 }
+    })
+    const txt = p.legendElement.textContent
+    expect(txt).not.toContain('A: 0 VAR') // zero row skipped (skipZeroRows)
+    expect(txt).toContain('B: 5 VAR') // non-zero row kept
+  })
+  it('keeps a zero-formatted row when the def does NOT set skipZeroRows (default)', async () => {
+    const keepDef = {
+      name: 'k',
+      series: [{ label: 'A', color: '#0a0', kind: 'bars' }],
+      stacked: true,
+      toColumns: (p) => [p.x, p.a],
+      formatValue: (i, d) => `${d.payload.a[d.idx]} VAR`
+    }
+    const p = createChartPanel(document.createElement('div'), { formatX: (x) => `X: ${x}` })
+    await p.render(keepDef, { x: [1], a: [0] }, {})
+    p.legendElement = document.createElement('div')
+    p.renderLegend({
+      cursor: { idx: 0, left: 10, top: 10 },
+      data: [[1], [0]],
+      series: [{}, { show: true }],
+      over: { clientWidth: 800, clientHeight: 300 }
+    })
+    expect(p.legendElement.textContent).toContain('A: 0 VAR')
+  })
 })
 
 describe('ChartPanel touch-scrub', () => {

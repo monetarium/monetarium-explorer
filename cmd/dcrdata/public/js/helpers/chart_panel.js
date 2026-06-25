@@ -311,6 +311,10 @@ class ChartPanel {
       const value = u.data[i + 1][idx]
       if (value == null) return
       const text = this.currentDef.formatValue(i, { idx, payload, value }, {})
+      // Opt-in (def.skipZeroRows): a stacked chart's many 0-valued series clutter the tooltip.
+      // Defaulted off so agenda/ticketpool/charts defs are unaffected; only stacked address
+      // defs set the flag. Matches the legacy address `if (def.stacked && /^0/.test(text))`.
+      if (this.currentDef.skipZeroRows && /^0(\s|$)/.test(text)) return
       const color = resolveSeriesColor(s, i, dark)
       tt.appendChild(this._legendRow(`${this._marker(color)} ${s.label}: ${text}`))
     })
