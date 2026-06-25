@@ -322,6 +322,13 @@ class ChartPanel {
       const color = resolveSeriesColor(s, i, dark)
       tt.appendChild(this._legendRow(`${this._marker(color)} ${s.label}: ${text}`))
     })
+    // Optional extra non-series lines (e.g. stake-participation's pool/supply). Opt-in: only
+    // fires when the def defines legendExtra; agenda/address/ticketpool defs don't, so no-op.
+    if (typeof this.currentDef.legendExtra === 'function') {
+      this.currentDef
+        .legendExtra({ idx, payload }, this._settings || {})
+        .forEach((line) => tt.appendChild(this._legendRow(`${this._marker()} ${line}`)))
+    }
     this.positionTooltip(u)
   }
 

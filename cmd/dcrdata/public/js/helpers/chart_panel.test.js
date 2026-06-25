@@ -235,6 +235,27 @@ describe('ChartPanel tooltip', () => {
     })
     expect(p.legendElement.textContent).toContain('Tickets: 42 (target 999)')
   })
+  it('appends def.legendExtra lines after the series rows (stake-participation extras)', async () => {
+    const extraDef = {
+      name: 'e',
+      series: [{ label: 'Participation', color: '#0a0', kind: 'line' }],
+      toColumns: (p) => [p.x, p.v],
+      formatValue: (i, d) => `${d.payload.v[d.idx]}%`,
+      legendExtra: (d, settings) => [`Pool: ${d.payload.pool[d.idx]} (tps ${settings.tps})`]
+    }
+    const p = createChartPanel(document.createElement('div'), { formatX: (x) => `X: ${x}` })
+    await p.render(extraDef, { x: [1], v: [50], pool: [123] }, { tps: 7 })
+    p.legendElement = document.createElement('div')
+    p.renderLegend({
+      cursor: { idx: 0, left: 10, top: 10 },
+      data: [[1], [50]],
+      series: [{}, { show: true }],
+      over: { clientWidth: 800, clientHeight: 300 }
+    })
+    const txt = p.legendElement.textContent
+    expect(txt).toContain('Participation: 50%')
+    expect(txt).toContain('Pool: 123 (tps 7)')
+  })
 })
 
 describe('ChartPanel touch-scrub', () => {
