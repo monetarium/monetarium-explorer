@@ -568,6 +568,37 @@ describe('ChartPanel rangerSeedOnce (fixed overview)', () => {
   })
 })
 
+describe('ChartPanel measureSize + width-gate', () => {
+  it('uses measureSize for the initial build dims', async () => {
+    const { createChart } = await import('./uplot_adapter.js')
+    const p = createChartPanel(document.createElement('div'), {
+      measureSize: () => ({ width: 640, height: 480 })
+    })
+    await p.render(defA, payload1, {})
+    expect(createChart.mock.calls.at(-1)[2].width).toBe(640)
+    expect(createChart.mock.calls.at(-1)[2].height).toBe(480)
+  })
+  it('window-path resize skips a height-only change and runs on a width change', async () => {
+    const measure = vi.fn(() => ({ width: 800, height: 300 }))
+    const p = createChartPanel(document.createElement('div'), { measureSize: measure })
+    await p.render(defA, payload1, {}) // seeds _lastWidth = 800
+    p.handle.resize.mockClear()
+    p._resize(false) // window path, width unchanged -> gated
+    expect(p.handle.resize).not.toHaveBeenCalled()
+    measure.mockReturnValue({ width: 900, height: 300 }) // width changed
+    p._resize(false)
+    expect(p.handle.resize).toHaveBeenCalledWith(900, 300)
+  })
+  it('public resize() forces a re-measure even when width is unchanged', async () => {
+    const measure = vi.fn(() => ({ width: 800, height: 300 }))
+    const p = createChartPanel(document.createElement('div'), { measureSize: measure })
+    await p.render(defA, payload1, {}) // _lastWidth = 800
+    p.handle.resize.mockClear()
+    p.resize() // forced, same width
+    expect(p.handle.resize).toHaveBeenCalledWith(800, 300)
+  })
+})
+
 describe('ChartPanel theme + resize + destroy cleanup', () => {
   it('registers and removes NIGHT_MODE + resize listeners across its lifecycle', async () => {
     const addSpy = vi.spyOn(window, 'addEventListener')

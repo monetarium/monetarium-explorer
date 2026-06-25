@@ -25,6 +25,7 @@ class ChartPanel {
       xTime,
       scaleType,
       mode,
+      measureSize,
       rangerEl,
       formatX,
       onRangeChange,
@@ -35,6 +36,16 @@ class ChartPanel {
   ) {
     this.chartEl = chartEl
     this.rangerEl = rangerEl || null
+    // Chart dimensions at build + resize. Default = the element's CSS box; /charts overrides it
+    // to size to the viewport (documentElement-based) via computeChartHeight.
+    this.measureSize =
+      typeof measureSize === 'function'
+        ? measureSize
+        : () => ({
+            width: this.chartEl.clientWidth || 800,
+            height: this.chartEl.clientHeight || 300
+          })
+    this._lastWidth = null // last width applied (window-resize width-gate baseline)
     this.xTime = xTime // boolean | (() => boolean); resolved at build via _xTime()
     this.scaleType = scaleType // 'linear'|'log' | (()=>...); resolved at build, default linear
     this.mode = mode // 'line'|'stepped' | (()=>...); applied via setMode on a fresh build only
@@ -61,7 +72,7 @@ class ChartPanel {
     // Page-level listeners (removed in destroy() — the mandatory-destroy invariant).
     this._onNightMode = () => this._setDark(darkEnabled())
     globalEventBus.on('NIGHT_MODE', this._onNightMode)
-    this._onWindowResize = debounce(() => this._resize(), RESIZE_DEBOUNCE_MS)
+    this._onWindowResize = debounce(() => this._resize(false), RESIZE_DEBOUNCE_MS)
     window.addEventListener('resize', this._onWindowResize)
   }
 
@@ -140,10 +151,11 @@ class ChartPanel {
       this._handle = null
     }
     const darkAtBuild = this._dark
+    const { width, height } = this.measureSize()
     const handle = await createChart(this.chartEl, def, {
       dark: darkAtBuild,
-      width: this.chartEl.clientWidth || 800,
-      height: this.chartEl.clientHeight || 300,
+      width: width,
+      height: height,
       scaleType: this._scaleType(),
       xTime: this._xTime(),
       hooks: this._buildHooks(),
@@ -154,6 +166,7 @@ class ChartPanel {
       return
     }
     this._handle = handle
+    this._lastWidth = width // seed the gate so the first height-only window resize is a no-op
     this.currentDef = def
     // A theme toggle that landed while createChart was awaiting loadUPlot() couldn't reach the
     // not-yet-assigned handle; reconcile so the chart matches the current theme.
@@ -423,17 +436,27 @@ class ChartPanel {
   }
 
   // Re-measure now (no debounce) — for layout changes that fire no window 'resize' event,
-  // e.g. a fullscreen-expand DOM move or a show/hide that changes the container size.
+  // e.g. a fullscreen-expand DOM move or a show/hide that changes the container size. Forces
+  // past the width-gate: an explicit layout change wants a re-measure even at the same width.
   resize() {
-    this._resize()
+    this._resize(true)
   }
 
   // Resize does not rebuild, so it does NOT bump the epoch, but it captures+checks it so a
-  // later render invalidates this pending re-apply.
-  _resize() {
+  // later render invalidates this pending re-apply. The debounced window path passes force=false
+  // and gates on width; the public resize() passes force=true.
+  _resize(force) {
     if (this._destroyed || !this._handle) return
     const epoch = this.epoch
-    this._handle.resize(this.chartEl.clientWidth || 800, this.chartEl.clientHeight || 300)
+    const { width, height } = this.measureSize()
+    // Mobile browsers fire `resize` on URL-bar collapse/expand during scroll — a HEIGHT-only
+    // change. Re-fitting then makes a viewport-fit chart (e.g. /charts) jump on every scroll;
+    // desktop drag and orientation flips both move the WIDTH. So the window path gates on width
+    // (harmless for CSS-stable-height pages: same height -> no visual change). An explicit
+    // resize() forces past the gate.
+    if (!force && this._lastWidth != null && width === this._lastWidth) return
+    this._lastWidth = width
+    this._handle.resize(width, height)
     if (!this._ranger || !this.rangerEl) return
     this._ranger.setWidth(this.rangerEl.clientWidth || 800)
     const sx = this._handle.uplot.scales.x
