@@ -341,6 +341,30 @@ describe('ChartPanel ranger', () => {
     await p.render(defA, payload1, {})
     expect(createRanger).toHaveBeenCalledWith(expect.anything(), rangerDef, expect.anything())
   })
+
+  it('a ranger drag drives the chart AND notifies onRangeChange', async () => {
+    const onRangeChange = vi.fn()
+    const p = createChartPanel(document.createElement('div'), {
+      rangerEl: document.createElement('div'),
+      onRangeChange: onRangeChange
+    })
+    await p.render(defWithRanger, payload1, {})
+    const { createRanger } = await import('./uplot_ranger.js')
+    const onSelect = createRanger.mock.calls.at(-1)[2].onSelect
+    onSelect(100, 200) // simulate a ranger grip drag
+    expect(p.handle.setXRange).toHaveBeenCalledWith(100, 200)
+    expect(onRangeChange).toHaveBeenCalledWith(100, 200)
+  })
+  it('a ranger drag is a no-op for onRangeChange when none is provided (agenda/ticketpool)', async () => {
+    const p = createChartPanel(document.createElement('div'), {
+      rangerEl: document.createElement('div')
+    })
+    await p.render(defWithRanger, payload1, {})
+    const { createRanger } = await import('./uplot_ranger.js')
+    const onSelect = createRanger.mock.calls.at(-1)[2].onSelect
+    expect(() => onSelect(100, 200)).not.toThrow()
+    expect(p.handle.setXRange).toHaveBeenCalledWith(100, 200)
+  })
 })
 
 describe('ChartPanel target range on render', () => {

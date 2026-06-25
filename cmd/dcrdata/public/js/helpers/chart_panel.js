@@ -191,9 +191,12 @@ class ChartPanel {
     if (this.onRangeChange) this.onRangeChange(min, max)
   }
 
-  // Ranger grip/body drag: drive the main chart (which mirrors back via _onChartRangeChange).
+  // Ranger grip/body drag: drive the main chart (which mirrors back via _onChartRangeChange),
+  // and notify the controller so it can persist (e.g. address URL zoom). setXRange is silent
+  // (it does not fire the chart's onRangeChange), so this is the only notify on a ranger drag.
   _onRangerSelect(min, max) {
     if (this._handle) this._handle.setXRange(min, max)
+    if (this.onRangeChange) this.onRangeChange(min, max)
   }
 
   // Self-contained on-plot tooltip: a div appended to u.over, shown on cursor-enter,
