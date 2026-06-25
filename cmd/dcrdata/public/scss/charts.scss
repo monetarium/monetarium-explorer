@@ -755,3 +755,9 @@ body.darkBG .chart-tooltip {
 [data-controller="charts"] .container.main {
   padding-bottom: 8px;
 }
+
+// Ticketpool's on-plot tooltip likewise frees the legend gap; reclaim the bottom
+// padding the same way (scoped, so the shared layout.scss rule is untouched).
+[data-controller="ticketpool"] .container.main {
+  padding-bottom: 8px;
+}
