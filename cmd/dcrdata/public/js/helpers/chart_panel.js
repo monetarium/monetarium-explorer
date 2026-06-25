@@ -18,12 +18,23 @@ export function createChartPanel(chartEl, opts = {}) {
 }
 
 class ChartPanel {
-  constructor(chartEl, { dark, xTime, rangerEl, formatX, onRangeChange } = {}) {
+  constructor(
+    chartEl,
+    { dark, xTime, rangerEl, formatX, onRangeChange, rangerData, rangerDef, rangerSeedOnce } = {}
+  ) {
     this.chartEl = chartEl
     this.rangerEl = rangerEl || null
     this.xTime = xTime !== false
     this.formatX = typeof formatX === 'function' ? formatX : (x) => String(x)
     this.onRangeChange = typeof onRangeChange === 'function' ? onRangeChange : null
+    this.rangerData = typeof rangerData === 'function' ? rangerData : (cols) => [cols[0], cols[1]]
+    this.rangerDef = rangerDef || null
+    // Fixed-overview ranger: seed its data once (first render) and keep that instance + data
+    // across chart rebuilds; only its selection tracks the chart afterward. Use this when the
+    // chart def changes (e.g. bar-aggregation factory) but the ranger must stay a stable,
+    // fine-grained overview — re-seeding it with the chart's re-aggregated columns would
+    // collapse the strip. Default false: the ranger rebuilds + re-seeds with the chart.
+    this.rangerSeedOnce = !!rangerSeedOnce
     this._handle = null
     this._ranger = null
     this.currentDef = null
@@ -52,20 +63,34 @@ class ChartPanel {
   // (Re)build for `def`, feed `payload`, retain it for the tooltip. Recreates the handle on a
   // def REFERENCE change (not def.name), else setData. Async: createChart is async, so the
   // epoch guard also serializes overlapping renders.
-  async render(def, payload, settings) {
+  async render(def, payload, settings, opts = {}) {
     if (this._destroyed) return
     const epoch = ++this.epoch
     const cols = def.toColumns(payload || {}, settings || {})
+    const reuse = !!this._handle && def === this.currentDef
+    let target = null
+    if (opts.range && opts.range.min != null && opts.range.max != null) {
+      target = { min: opts.range.min, max: opts.range.max }
+    } else if (opts.preserveRange && reuse) {
+      const sx = this._handle.uplot.scales.x
+      if (sx && sx.min != null && sx.max != null && isFinite(sx.min) && isFinite(sx.max)) {
+        target = { min: sx.min, max: sx.max }
+      }
+    }
     await this._ensureChart(def, epoch)
     if (epoch !== this.epoch || this._destroyed) return
     this.payload = payload
     this._handle.setData(cols)
-    await this._ensureRanger(def, cols, epoch)
+    if (target) this._handle.setXRange(target.min, target.max)
+    await this._ensureRanger(def, cols, epoch, target)
   }
 
   async _ensureChart(def, epoch) {
     if (this._handle && def === this.currentDef) return // reuse
-    if (this._ranger) {
+    // A fixed-overview ranger (rangerSeedOnce) survives a chart rebuild; only the handle below
+    // is recreated. Its callbacks read this._handle/this._ranger live, so they re-wire to the
+    // fresh handle without rebuilding the strip.
+    if (this._ranger && !this.rangerSeedOnce) {
       this._ranger.destroy()
       this._ranger = null
     }
@@ -101,11 +126,11 @@ class ChartPanel {
     }
   }
 
-  async _ensureRanger(def, cols, epoch) {
+  async _ensureRanger(def, cols, epoch, target) {
     if (!this.rangerEl) return
     if (!this._ranger) {
       const g = (this._handle && this.measureGutters(this._handle.uplot)) || { left: 0, right: 0 }
-      const ranger = await createRanger(this.rangerEl, def, {
+      const ranger = await createRanger(this.rangerEl, this.rangerDef || def, {
         dark: this._dark,
         width: this.rangerEl.clientWidth || 800,
         xTime: this.xTime,
@@ -118,23 +143,26 @@ class ChartPanel {
         return
       }
       this._ranger = ranger
-      this._ranger.setData([cols[0], cols[1]])
-    } else {
-      this._ranger.setData([cols[0], cols[1]])
+      this._ranger.setData(this.rangerData(cols))
+    } else if (!this.rangerSeedOnce) {
+      this._ranger.setData(this.rangerData(cols))
     }
-    this._seedRangerSelection(cols, epoch)
+    // rangerSeedOnce: data was seeded on creation and must not be overwritten by the chart's
+    // (possibly re-aggregated) cols — only the selection below tracks the chart.
+    this._seedRangerSelection(cols, epoch, target)
   }
 
   // Deferred (uPlot commits layout async) + epoch-guarded: align the strip's plot insets to
   // the main chart, then seed the full-extent selection one microtask later.
-  _seedRangerSelection(cols, epoch) {
+  _seedRangerSelection(cols, epoch, target) {
     const xs = cols[0]
     queueMicrotask(() => {
       if (epoch !== this.epoch || this._destroyed || !this._ranger) return
       this.syncRangerGutters(this._handle && this._handle.uplot)
       queueMicrotask(() => {
         if (epoch !== this.epoch || this._destroyed || !this._ranger) return
-        if (xs && xs.length) this._ranger.setSelection(xs[0], xs[xs.length - 1])
+        if (target) this._ranger.setSelection(target.min, target.max)
+        else if (xs && xs.length) this._ranger.setSelection(xs[0], xs[xs.length - 1])
       })
     })
   }

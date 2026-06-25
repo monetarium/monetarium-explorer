@@ -11,7 +11,8 @@ export const ticketpoolPrice = {
     { label: 'Live Tickets', scale: 'y', kind: 'bars', colorIndex: 2 },
     { label: '', scale: 'y2', kind: 'line', colorIndex: 2, width: 0, show: false }
   ],
-  toColumns: (data, mempool) => {
+  toColumns: (data, settings = {}) => {
+    const mempool = settings.mempool
     const prices = data.price ? data.price.slice() : []
     const n = prices.length
     const mem = new Array(n).fill(0)

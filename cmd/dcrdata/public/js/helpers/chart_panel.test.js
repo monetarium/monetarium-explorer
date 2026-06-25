@@ -266,6 +266,123 @@ describe('ChartPanel ranger', () => {
     expect(p.handle.setXRange).toHaveBeenCalledWith(100, 200)
     expect(p.ranger.setSelection).toHaveBeenCalledWith(100, 200)
   })
+
+  it('seeds the ranger via a custom rangerData selector', async () => {
+    const p = createChartPanel(document.createElement('div'), {
+      rangerEl: document.createElement('div'),
+      rangerData: (cols) => [cols[0], cols[1].map((v) => v * 2)]
+    })
+    const def = {
+      ...defA,
+      toColumns: () => [
+        [1, 2],
+        [10, 30]
+      ]
+    }
+    await p.render(def, payload1, {})
+    expect(p.ranger.setData).toHaveBeenCalledWith([
+      [1, 2],
+      [20, 60]
+    ])
+  })
+
+  it('builds the ranger from rangerDef when provided (not the chart def)', async () => {
+    const { createRanger } = await import('./uplot_ranger.js')
+    const rangerDef = { ...defA, name: 'strip-only' }
+    const p = createChartPanel(document.createElement('div'), {
+      rangerEl: document.createElement('div'),
+      rangerDef: rangerDef
+    })
+    await p.render(defA, payload1, {})
+    expect(createRanger).toHaveBeenCalledWith(expect.anything(), rangerDef, expect.anything())
+  })
+})
+
+describe('ChartPanel target range on render', () => {
+  it('preserveRange keeps the current x-range across a same-def update (chart + ranger)', async () => {
+    const p = createChartPanel(document.createElement('div'), {
+      rangerEl: document.createElement('div')
+    })
+    await p.render(defWithRanger, payload1, {})
+    p.handle.uplot.scales.x = { min: 5, max: 9 } // user zoomed
+    p.handle.setXRange.mockClear()
+    p.ranger.setSelection.mockClear()
+    await p.render(defWithRanger, { x: [1, 2, 3], yes: [4, 5, 6] }, {}, { preserveRange: true })
+    expect(p.handle.setXRange).toHaveBeenCalledWith(5, 9)
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(p.ranger.setSelection).toHaveBeenCalledWith(5, 9)
+  })
+
+  it('preserveRange is a no-op on a fresh build (no prior finite range) -> full extent', async () => {
+    const p = createChartPanel(document.createElement('div'), {
+      rangerEl: document.createElement('div')
+    })
+    await p.render(defWithRanger, payload1, {}, { preserveRange: true })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(p.ranger.setSelection).toHaveBeenCalledWith(1, 2) // full extent of payload1
+  })
+
+  it('explicit range seeds the chart + ranger even across a rebuild (different def)', async () => {
+    const p = createChartPanel(document.createElement('div'), {
+      rangerEl: document.createElement('div')
+    })
+    await p.render(defWithRanger, payload1, {})
+    const firstHandle = p.handle
+    await p.render(
+      { ...defWithRanger },
+      { x: [10, 20, 30], yes: [1, 2, 3] },
+      {},
+      {
+        range: { min: 12, max: 28 }
+      }
+    )
+    expect(firstHandle.destroy).toHaveBeenCalledTimes(1) // rebuilt
+    expect(p.handle.setXRange).toHaveBeenCalledWith(12, 28)
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(p.ranger.setSelection).toHaveBeenCalledWith(12, 28)
+  })
+})
+
+describe('ChartPanel rangerSeedOnce (fixed overview)', () => {
+  it('persists the ranger across a def-change rebuild and seeds its data only once', async () => {
+    const p = createChartPanel(document.createElement('div'), {
+      rangerEl: document.createElement('div'),
+      rangerSeedOnce: true
+    })
+    await p.render(defWithRanger, payload1, {})
+    const ranger = p.ranger
+    expect(ranger).toBeTruthy()
+    expect(ranger.setData).toHaveBeenCalledTimes(1) // seeded once on creation
+    ranger.setData.mockClear()
+    ranger.setSelection.mockClear()
+    // bars change: a DIFFERENT def reference forces a chart rebuild
+    await p.render(
+      { ...defWithRanger },
+      { x: [10, 20, 30], yes: [1, 2, 3] },
+      {},
+      { range: { min: 12, max: 28 } }
+    )
+    expect(p.handle).not.toBe(undefined)
+    expect(fakeRangers.length).toBe(1) // no second ranger created
+    expect(p.ranger).toBe(ranger) // same ranger instance survives the rebuild
+    expect(ranger.destroy).not.toHaveBeenCalled()
+    expect(ranger.setData).not.toHaveBeenCalled() // NOT re-seeded from the (coarse) cols
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(ranger.setSelection).toHaveBeenCalledWith(12, 28) // only the selection moves
+  })
+
+  it('does not re-seed ranger data on a same-def update either (frozen overview)', async () => {
+    const p = createChartPanel(document.createElement('div'), {
+      rangerEl: document.createElement('div'),
+      rangerSeedOnce: true
+    })
+    await p.render(defWithRanger, payload1, {})
+    const ranger = p.ranger
+    ranger.setData.mockClear()
+    p.handle.uplot.scales.x = { min: 1, max: 2 }
+    await p.render(defWithRanger, { x: [1, 2, 3], yes: [4, 5, 6] }, {}, { preserveRange: true })
+    expect(ranger.setData).not.toHaveBeenCalled()
+  })
 })
 
 describe('ChartPanel theme + resize + destroy cleanup', () => {
