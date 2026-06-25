@@ -224,6 +224,12 @@ export default class extends Controller {
     const response = await requestJSON(`/api/ticketpool/bydate/${this.bars}`)
     const def = this.purchasesDefFor(this.bars) // new bars -> new def -> rebuild
 
+    if (response.mempool) {
+      this.mempool = response.mempool
+      this.tipHeight = response.height
+    }
+    const mempoolSettings = this.bars === 'all' && this.mempool ? { mempool: this.mempool } : {}
+
     // Expand-only union: keep the visible viewport, only grow it to include new data.
     // The data extent comes from the RAW response (before the def's period-end point).
     const sx = this.purchasesPanel.handle?.uplot.scales.x
@@ -237,7 +243,7 @@ export default class extends Controller {
       const [restoreMin, restoreMax] = alignViewportToData(prevMin, prevMax, dataMin, dataMax)
       opts = { range: { min: restoreMin, max: restoreMax } }
     }
-    await this.purchasesPanel.render(def, response.time_chart, {}, opts)
+    await this.purchasesPanel.render(def, response.time_chart, mempoolSettings, opts)
     this.wrapperTarget.classList.remove('loading')
   }
 }
