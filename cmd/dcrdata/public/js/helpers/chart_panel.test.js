@@ -434,6 +434,24 @@ describe('ChartPanel ranger', () => {
   })
 })
 
+describe('ChartPanel dynamic build options', () => {
+  it('resolves a function xTime at build (chart + ranger get the current value)', async () => {
+    const { createChart } = await import('./uplot_adapter.js')
+    const { createRanger } = await import('./uplot_ranger.js')
+    let axisTime = false
+    const p = createChartPanel(document.createElement('div'), {
+      rangerEl: document.createElement('div'),
+      xTime: () => axisTime
+    })
+    await p.render(defA, payload1, {})
+    expect(createChart.mock.calls.at(-1)[2].xTime).toBe(false)
+    expect(createRanger.mock.calls.at(-1)[2].xTime).toBe(false)
+    axisTime = true
+    await p.render({ ...defA }, payload1, {}) // new def ref -> rebuild -> re-resolves xTime
+    expect(createChart.mock.calls.at(-1)[2].xTime).toBe(true)
+  })
+})
+
 describe('ChartPanel target range on render', () => {
   it('preserveRange keeps the current x-range across a same-def update (chart + ranger)', async () => {
     const p = createChartPanel(document.createElement('div'), {

@@ -24,7 +24,7 @@ class ChartPanel {
   ) {
     this.chartEl = chartEl
     this.rangerEl = rangerEl || null
-    this.xTime = xTime !== false
+    this.xTime = xTime // boolean | (() => boolean); resolved at build via _xTime()
     this.formatX = typeof formatX === 'function' ? formatX : (x) => String(x)
     this.onRangeChange = typeof onRangeChange === 'function' ? onRangeChange : null
     this.rangerData = typeof rangerData === 'function' ? rangerData : (cols) => [cols[0], cols[1]]
@@ -58,6 +58,14 @@ class ChartPanel {
 
   get ranger() {
     return this._ranger
+  }
+
+  // xTime may be a value or a zero-arg function read live at build time, so a rebuild after an
+  // axis toggle paints the CURRENT axis type. A build only happens on a def-reference change,
+  // which the consuming controller keys to the axis via def memoization.
+  _xTime() {
+    const v = typeof this.xTime === 'function' ? this.xTime() : this.xTime
+    return v !== false
   }
 
   // (Re)build for `def`, feed `payload`, retain it for the tooltip. Recreates the handle on a
@@ -104,7 +112,7 @@ class ChartPanel {
       dark: darkAtBuild,
       width: this.chartEl.clientWidth || 800,
       height: this.chartEl.clientHeight || 300,
-      xTime: this.xTime,
+      xTime: this._xTime(),
       hooks: this._buildHooks(),
       onRangeChange: (min, max) => this._onChartRangeChange(min, max)
     })
@@ -134,7 +142,7 @@ class ChartPanel {
       const ranger = await createRanger(this.rangerEl, this.rangerDef || def, {
         dark: this._dark,
         width: this.rangerEl.clientWidth || 800,
-        xTime: this.xTime,
+        xTime: this._xTime(),
         leftGutter: g.left,
         rightGutter: g.right,
         onSelect: (min, max) => this._onRangerSelect(min, max)
