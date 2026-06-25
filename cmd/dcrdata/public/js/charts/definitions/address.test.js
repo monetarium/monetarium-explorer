@@ -194,3 +194,15 @@ describe('amountflowDef SKA (coin 1) — precision firewall', () => {
     expect(def.formatValue(3, { idx: 0, payload: negRaw, value: 5 }, {})).toBe('5 SKA1')
   })
 })
+
+describe('address def skipZeroRows (stacked tooltip zero-skip parity)', () => {
+  it('typesDef opts into skipZeroRows', () => {
+    expect(typesDef().skipZeroRows).toBe(true)
+  })
+  it('amountflowDef opts into skipZeroRows', () => {
+    expect(amountflowDef(0).skipZeroRows).toBe(true)
+  })
+  it('balanceDef does NOT skip zeros (a 0 balance is meaningful)', () => {
+    expect(balanceDef(0).skipZeroRows).toBeFalsy()
+  })
+})
