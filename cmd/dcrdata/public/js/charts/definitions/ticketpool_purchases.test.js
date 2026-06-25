@@ -6,16 +6,16 @@ const JUN1 = Date.UTC(2026, 5, 1) / 1000
 const data = { time: ['2026-06-01T00:00:00Z'], price: [282.1], immature: [79], live: [5162] }
 
 describe('ticketpoolPurchases factory', () => {
-  it('returns a def named ticketpool-purchases with 4 series', () => {
+  it('returns a def named ticketpool-purchases with 5 series (4 visible + overlay)', () => {
     const def = ticketpoolPurchases('all')
     expect(def.name).toBe('ticketpool-purchases')
-    expect(def.series).toHaveLength(4)
+    expect(def.series).toHaveLength(5)
   })
 
   it("blocks mode ('all') does not append a period-end point", () => {
     const cols = ticketpoolPurchases('all').toColumns(data, {})
     expect(cols[0]).toEqual([JUN1])
-    expect(cols).toHaveLength(5)
+    expect(cols).toHaveLength(6)
   })
 
   it.each([
@@ -85,5 +85,38 @@ describe('ticketpoolPurchases factory', () => {
     const all = ticketpoolPurchases('all')
     all.series[0].paths(UPlot, all.series[0])({}, 1, 0, 1)
     expect(calls[calls.length - 1]).toEqual({ size: [0.6, 100], align: 0 })
+  })
+})
+
+describe('ticketpoolPurchases overlay points series', () => {
+  const def = ticketpoolPurchases('all')
+  const overlay = def.series[4]
+
+  it('is a line with visible points and zero-width stroke', () => {
+    expect(overlay.kind).toBe('line')
+    expect(overlay.points.show).toBe(true)
+    expect(overlay.points.size).toBe(7)
+    expect(overlay.spanGaps).toBe(true)
+  })
+})
+
+describe('ticketpoolPurchases.columns', () => {
+  const def = ticketpoolPurchases('all')
+
+  it('returns 6 columns (xs, mem, imm, live, price, overlay)', () => {
+    const cols = def.toColumns(data, {})
+    expect(cols).toHaveLength(6)
+  })
+
+  it('overlay column is null everywhere when no mempool', () => {
+    const cols = def.toColumns(data, {})
+    expect(cols[5]).toEqual([null])
+  })
+
+  it('overlay column has mempool count at appended point', () => {
+    const cols = def.toColumns(data, {
+      mempool: { time: '2026-06-02T00:00:00Z', count: 5, price: 281 }
+    })
+    expect(cols[5]).toEqual([null, 5])
   })
 })
