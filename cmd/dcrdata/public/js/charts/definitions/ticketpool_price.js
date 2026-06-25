@@ -1,11 +1,15 @@
 export const ticketpoolPrice = {
   name: 'ticketpool-price',
   label: 'Ticket Price Distribution',
-  axes: [{ label: 'Number of Tickets', scale: 'y' }],
+  axes: [
+    { label: 'Number of Tickets', scale: 'y' },
+    { label: '\u00A0', scale: 'y2' }
+  ],
   series: [
     { label: 'Mempool Tickets', scale: 'y', kind: 'bars', colorIndex: 0 },
     { label: 'Immature Tickets', scale: 'y', kind: 'bars', colorIndex: 1 },
     { label: 'Live Tickets', scale: 'y', kind: 'bars', colorIndex: 2 },
+    { label: '', scale: 'y2', kind: 'line', colorIndex: 2, width: 0, show: false },
     {
       label: '',
       scale: 'y',
@@ -46,11 +50,12 @@ export const ticketpoolPrice = {
         }
       }
     }
-    return [prices, mem, imm, live, pts]
+    return [prices, mem, imm, live, live, pts]
   },
   formatValue: (seriesIdx, datum) => {
     if (!Number.isFinite(datum.value)) return 'n/a'
-    if (seriesIdx === 3) return ''
+    if (seriesIdx === 4) return ''
+    if (seriesIdx === 5) return ''
     return datum.value.toLocaleString('en-US', { maximumFractionDigits: 0 })
   }
 }

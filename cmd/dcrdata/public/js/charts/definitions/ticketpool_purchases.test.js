@@ -64,9 +64,10 @@ describe('ticketpoolPurchases factory', () => {
     expect(cols[0]).toContain(JUN1 + 86400)
     // ...NOT the mempool time + 1 day (the wrong, order-dependent boundary).
     expect(cols[0]).not.toContain(mempoolTs + 86400)
-    // The live mempool point is still appended (after the boundary).
-    expect(cols[0]).toContain(mempoolTs)
-    expect(cols[1]).toContain(5)
+    // MemTx pushed to lastTs+60 for visual spacing
+    const adjusted = JUN1 + 86400 + 60
+    expect(cols[0]).toContain(adjusted)
+    expect(cols[1][2]).toBe(5) // mempool count at index 2 (after extend + mempool)
   })
 
   it('selects bucketed bar geometry for bar modes and capped geometry for blocks', () => {
@@ -84,7 +85,7 @@ describe('ticketpoolPurchases factory', () => {
     expect(calls[calls.length - 1]).toEqual({ size: [1], align: 1 })
     const all = ticketpoolPurchases('all')
     all.series[0].paths(UPlot, all.series[0])({}, 1, 0, 1)
-    expect(calls[calls.length - 1]).toEqual({ size: [0.6, 100], align: 0 })
+    expect(calls[calls.length - 1]).toEqual({ size: [0.6, 100, 4], align: 0 })
   })
 })
 

@@ -6,7 +6,7 @@
 // Granularity-aware bar paths: bucketed modes draw full-width left-aligned bars at the
 // bucket start (date_trunc boundary); blocks/fallback draws centered capped bars.
 function granularBarPaths(UPlot, s, barMode) {
-  const defaultSize = s.barSize || [0.6, 100]
+  const defaultSize = s.barSize || [0.6, 100, 4]
   const defaultAlign = s.barAlign ?? 0
   return (u, seriesIdx, idx0, idx1) => {
     switch (barMode) {
@@ -66,7 +66,15 @@ export function ticketpoolPurchases(barMode) {
       { label: 'Immature Tickets', scale: 'y', kind: 'bars', colorIndex: 1, paths: barPaths },
       { label: 'Live Tickets', scale: 'y', kind: 'bars', colorIndex: 2, paths: barPaths },
       { label: 'Ticket Value', scale: 'y2', kind: 'line', colorIndex: 3, width: 2 },
-      { label: '', scale: 'y', kind: 'line', colorIndex: 0, width: 0, points: { show: true, size: 7 }, spanGaps: true }
+      {
+        label: '',
+        scale: 'y',
+        kind: 'line',
+        colorIndex: 0,
+        width: 0,
+        points: { show: true, size: 7 },
+        spanGaps: true
+      }
     ],
     toColumns: (data, settings = {}) => {
       const mempool = settings.mempool
@@ -85,7 +93,10 @@ export function ticketpoolPurchases(barMode) {
       // ordering it this way keeps the boundary correct independent of that controller invariant.
       extendToPeriodEnd(cols, barMode)
       if (mempool) {
-        xs.push(new Date(mempool.time).getTime() / 1000)
+        const lastTs = xs.length ? xs[xs.length - 1] : 0
+        let memTs = new Date(mempool.time).getTime() / 1000
+        if (memTs <= lastTs + 60) memTs = lastTs + 60
+        xs.push(memTs)
         mem.push(mempool.count)
         imm.push(0)
         live.push(0)

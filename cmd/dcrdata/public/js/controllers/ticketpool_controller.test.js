@@ -128,16 +128,18 @@ describe('ticketpool data rendering', () => {
   it('renders purchases with the memoized def and full-extent viewport on fresh build', async () => {
     const c = makeController()
     c.bars = 'wk'
+    const before = Date.now() / 1000 - 86400 * 7
     await c.renderOrUpdatePurchases({ time: [] }, false)
-    const now = Date.now() / 1000
-    const fallbackMin = now - 86400 * 7
-    const fallbackPad = Math.max((now - fallbackMin) * 0.01, 3600)
-    expect(c.purchasesPanel.render).toHaveBeenCalledWith(
-      c.purchasesDefFor('wk'),
-      { time: [] },
-      { mempool: false },
-      { range: { min: fallbackMin, max: now + fallbackPad } }
-    )
+    const after = Date.now() / 1000
+    const args = c.purchasesPanel.render.mock.calls[0]
+    expect(args[0]).toEqual(c.purchasesDefFor('wk'))
+    expect(args[1]).toEqual({ time: [] })
+    expect(args[2]).toEqual({ mempool: false })
+    const range = args[3].range
+    expect(range.min).toBeGreaterThanOrEqual(before)
+    expect(range.min).toBeLessThanOrEqual(after)
+    expect(range.max).toBeGreaterThan(after) // padded past now
+    expect(range.max).toBeLessThanOrEqual(after + 86400 * 7 * 0.01 + 3600 + 2) // pad + slop
   })
 
   it('reuses the same purchases def object for the same bars (stable identity -> setData)', () => {
