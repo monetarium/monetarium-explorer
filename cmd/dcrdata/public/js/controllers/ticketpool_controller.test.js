@@ -274,7 +274,7 @@ describe('ticketpool onBarsChange', () => {
       currentTarget: { dataset: { option: 'all' }, classList: { add: vi.fn(), remove: vi.fn() } }
     })
     const lastRender = c.purchasesPanel.render.mock.calls.at(-1)
-    expect(lastRender[3]).toEqual({ range: { min: 1780963200, max: 1782259200 } })
+    expect(lastRender[3]).toEqual({ range: { min: 1780963200, max: 1782273024 } })
   })
 })
 

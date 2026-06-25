@@ -245,6 +245,7 @@ export default class extends Controller {
         const memTs = new Date(this.mempool.time).getTime() / 1000 + 1
         if (memTs > dataMax) dataMax = memTs
       }
+      dataMax += Math.max((dataMax - dataMin) * 0.01, 3600)
       const [restoreMin, restoreMax] = alignViewportToData(prevMin, prevMax, dataMin, dataMax)
       opts = { range: { min: restoreMin, max: restoreMax } }
     }
