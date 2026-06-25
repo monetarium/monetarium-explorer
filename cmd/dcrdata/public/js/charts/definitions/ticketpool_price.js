@@ -55,7 +55,6 @@ export const ticketpoolPrice = {
   formatValue: (seriesIdx, datum) => {
     if (!Number.isFinite(datum.value)) return 'n/a'
     if (seriesIdx === 4) return ''
-    if (seriesIdx === 5) return ''
     return datum.value.toLocaleString('en-US', { maximumFractionDigits: 0 })
   }
 }

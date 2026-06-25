@@ -147,9 +147,10 @@ export default class extends Controller {
     const prevMax = sx?.max
     let opts = {}
     if (prevMin != null && prevMax != null && isFinite(prevMin) && isFinite(prevMax)) {
-      const dataMin = priceData?.price?.length ? priceData.price[0] : prevMin
+      let dataMin = priceData?.price?.length ? priceData.price[0] : prevMin
       let dataMax = priceData?.price?.length ? priceData.price[priceData.price.length - 1] : prevMax
       if (mempool && mempool.price) {
+        if (mempool.price < dataMin) dataMin = mempool.price
         if (mempool.price > dataMax) dataMax = mempool.price
       }
       const [restoreMin, restoreMax] = alignViewportToData(prevMin, prevMax, dataMin, dataMax)
