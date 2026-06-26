@@ -397,7 +397,7 @@ body.darkBG {
   }
 }
 
-@media (max-height: 540px) {
+@media (height <= 540px) {
   #menu {
     max-height: calc(100vh - 60px);
     overflow-y: auto;
