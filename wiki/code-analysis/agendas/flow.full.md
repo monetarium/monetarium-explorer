@@ -14,8 +14,8 @@ Two pages exist:
 
 - `/agendas` — list of all agendas + live Rule-Change-Interval (RCI) / Stake-Version-Interval
   (SVI) / miner / voter / quorum / approval progress.
-- `/agenda/{id}` — one agenda's metadata, choice tally table, and two Dygraphs charts
-  (cumulative vote choices over time, vote choices by block).
+- `/agenda/{id}` — one agenda's metadata, choice tally table, and two uPlot charts via
+  ChartPanel (cumulative vote choices over time, vote choices by block).
 
 **The whole feature carries no monetary amounts.** Every displayed value is a vote *count*
 (`uint32`), a *percentage* (`float32`), a block *height*, a *status* string, or a *timestamp*.
@@ -61,7 +61,7 @@ Two complementary data origins feed the pages (a **dual-source** design):
   views/agendas.tmpl, agenda.tmpl     /api/agendas (JSON), /api/agenda/{id} (JSON charts)
         │                                   │
         ▼                                   ▼
-  agendas_controller.js (meters)      agenda_controller.js (Dygraphs ← /api/agenda/{id})
+  agendas_controller.js (meters)      agenda_controller.js (ChartPanel/uPlot ← /api/agenda/{id})
 ```
 
 HTML pages are **request-scoped HTTP only** — there is no WebSocket push path for agendas, so
@@ -182,12 +182,27 @@ the Template+WebSocket parity concern (C3) does not arise here.
   ([templates.go:754](../../../cmd/dcrdata/internal/explorer/templates.go#L754)),
   `secondsToShortDurationString`, `dateTimeWithoutTimeZone`. No coin amounts.
 - **`views/agenda.tmpl`** — choice table (`ID/Description/Bits/Count/Progress`) +
-  `data-controller="agenda" data-agenda-id="{{.ID}}"` with two chart target `<div>`s.
+  `data-controller="agenda" data-agenda-id="{{.ID}}"` with two CSS-classed chart `<div>`s
+  (`agenda-chart--cumulative`, `agenda-chart--block`) and two ranger strip `<div>`s
+  (`data-agenda-target="cumulativeRanger"` / `"blockRanger"`). Chart titles are plain HTML
+  above each pair (not template-rendered text). Previous inline `style="width:100%; height:Npx"`
+  attributes are replaced by CSS classes.
 - **`agendas_controller.js`** — builds `ProgressMeter`/`VoteMeter` from the meter `data-*`
   attrs; re-themes on `NIGHT_MODE`.
-- **`agenda_controller.js`** — on connect, `requestJSON('/api/agenda/${id}')`, maps
-  `by_time → [Date, yes, abstain, no]` and `by_height → [height, yes, abstain, no]` into two
-  Dygraphs. Empty/missing arrays fall back to `[[0,0,0,0]]`.
+- **`agenda_controller.js`** — on connect, `requestJSON('/api/agenda/${id}')`, creates two
+  `ChartPanel` instances (one per chart target `<div>`), each with a ranger element wired from
+  the template's `cumulativeRanger`/`blockRanger` targets. Calls `panel.render(def, data)` in
+  `Promise.all` for parallel init. Chart definitions are imported from
+  `charts/definitions/agenda.js`. Disconnect: `panel.destroy()` on each instance.
+- **`charts/definitions/agenda.js`** *(widened; new file)* — defines
+  `cumulativeVoteChoicesDef()` (stacked area, time axis) and `voteChoicesByBlockDef()` (stacked
+  bars, block-height axis). The `voteColumns(raw, xs)` helper reshapes the API payload
+  (`by_time` → `[xs, yes[], abstain[], no[]]`; `by_height` → `[height[], yes[], abstain[], no[]]`)
+  — this is the new home of the data transformation that was previously inline in
+  `agenda_controller.js`. `formatVote(seriesIdx, datum)` reads raw per-series count from
+  `datum.payload[field][i]` and computes share-of-total percentage (parity with the legacy
+  Dygraphs `agendasLegendFormatter`). Imports `secondsFromTimes` from `definitions/address.js`
+  for time-axis conversion (seconds epoch from ISO-like time strings).
 
 ## Section 4 — Cross-Layer Dependencies
 
@@ -200,9 +215,17 @@ the Template+WebSocket parity concern (C3) does not arise here.
   `data-approval` (raw `float32` 0–1); `agendas_controller.js` reads them positionally. No
   compile-time check.
 - **Go→JS chart contract (untyped JSON).** `dbtypes.AgendaVoteChoices` field tags
-  (`yes/no/abstain/height/time`) must match the keys read in `agenda_controller.js`
-  (`d.yes/d.abstain/d.no/d.time/d.height`). Adding/renaming a field changes the wire shape
-  silently.
+  (`yes/no/abstain/height/time`) must match the keys consumed in
+  `charts/definitions/agenda.js:voteColumns()` (`r.yes`, `r.abstain`, `r.no`, `raw.time`,
+  `raw.height`) and `formatVote()` (`p[VOTE_SERIES[seriesIdx].field]`). The controller now
+  merely passes `res.by_time`/`res.by_height` to each panel; the actual key access lives in
+  the definitions file. Adding/renaming a field changes the wire shape silently.
+- **New tmpl→JS ranger contract.** `agenda.tmpl` emits
+  `data-agenda-target="cumulativeRanger"` and `data-agenda-target="blockRanger"` elements;
+  `agenda_controller.js` reads them via `this.hasCumulativeRangerTarget` /
+  `this.hasBlockRangerTarget` (Stimulus target checks, guarded). Renaming these targets in the
+  template without updating the controller silently disables the ranger strip (chart still works,
+  no overview strip).
 - **Milestone dependency.** Every Postgres read keys `ChainInfo().AgendaMileStones[agendaID]`;
   if `GetBlockChainInfo` stops returning a deployment, that agenda's tallies become unreachable
   even though `agenda_votes` rows still exist.
@@ -433,7 +456,9 @@ the Template+WebSocket parity concern (C3) does not arise here.
 - Templates: [agendas.tmpl](../../../cmd/dcrdata/views/agendas.tmpl),
   [agenda.tmpl](../../../cmd/dcrdata/views/agenda.tmpl); JS
   [agendas_controller.js](../../../cmd/dcrdata/public/js/controllers/agendas_controller.js),
-  [agenda_controller.js](../../../cmd/dcrdata/public/js/controllers/agenda_controller.js).
+  [agenda_controller.js](../../../cmd/dcrdata/public/js/controllers/agenda_controller.js),
+  [charts/definitions/agenda.js](../../../cmd/dcrdata/public/js/charts/definitions/agenda.js)
+  (`cumulativeVoteChoicesDef`, `voteChoicesByBlockDef`, `voteColumns`, `formatVote`).
 - Node support: `monetarium-node/chaincfg@v1.3.10` `mainnetparams.go:148`/`testnetparams.go:147`
   `Deployments` maps; vote IDs at `mainnetparams.go:405-461`; RPC types
   `rpc/jsonrpc/types@v1.3.10/chainsvrresults.go:497-527` (`Choice`, `Agenda`,

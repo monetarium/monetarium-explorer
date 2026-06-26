@@ -1,8 +1,9 @@
 domain: agendas
-anchor: 4c359752
+anchor: 2938f9af
 files:
   - cmd/dcrdata/internal/api/apiroutes.go
   - cmd/dcrdata/internal/explorer/explorerroutes.go
+  - cmd/dcrdata/public/js/charts/definitions/agenda.js
   - cmd/dcrdata/public/js/controllers/agenda_controller.js
   - cmd/dcrdata/public/js/controllers/agendas_controller.js
   - cmd/dcrdata/views/agenda.tmpl
