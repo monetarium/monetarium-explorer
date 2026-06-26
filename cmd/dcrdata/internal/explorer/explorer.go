@@ -395,7 +395,7 @@ func New(cfg *ExplorerConfig) *explorerUI {
 	tmpls := []string{"home", "blocks", "mempool", "block", "tx", "address",
 		"rawtx", "status", "parameters", "agenda", "agendas", "charts", "hashrate_shares",
 		"sidechains", "disapproved", "ticketpool", "visualblocks",
-		"windows", "timelisting", "addresstable", "proposals", "proposal",
+		"windows", "timelisting", "addresstable", "proposals",
 		"insight_root", "attackcost", "verify_message"}
 
 	// Debug-only: load the dev_indicators template alongside the rest only when
