@@ -5,7 +5,7 @@ import humanize from '../helpers/humanize_helper'
 import ws from '../services/messagesocket_service'
 import { ticketpoolPurchases } from '../charts/definitions/ticketpool_purchases'
 import { ticketpoolPrice } from '../charts/definitions/ticketpool_price'
-import { timesToEpoch, computeZoomWindow, alignViewportToData } from '../helpers/ticketpool_zoom'
+import { timesToEpoch, computeZoomWindow } from '../helpers/ticketpool_zoom'
 
 function populateOutputs(data) {
   const totalCount = parseInt(
@@ -135,9 +135,11 @@ export default class extends Controller {
       dataMax = prevMax != null && isFinite(prevMax) ? prevMax : Date.now() / 1000
     }
     const restoreMin = prevMin != null && isFinite(prevMin) ? Math.max(prevMin, dataMin) : dataMin
-    const restoreMax = prevMax != null && isFinite(prevMax) ? Math.max(prevMax, dataMax) : dataMax
-    const pad = Math.max((restoreMax - restoreMin) * 0.01, 3600)
-    const opts = { range: { min: restoreMin, max: restoreMax + pad } }
+    const dataSpan = dataMax - dataMin
+    const pad = Math.max(dataSpan * 0.01, 3600)
+    const restoreMax =
+      prevMax != null && isFinite(prevMax) ? Math.max(prevMax, dataMax + pad) : dataMax + pad
+    const opts = { range: { min: restoreMin, max: restoreMax } }
     return this.purchasesPanel.render(this.purchasesDefFor(this.bars), timeData, { mempool }, opts)
   }
 
@@ -153,9 +155,14 @@ export default class extends Controller {
         if (mempool.price < dataMin) dataMin = mempool.price
         if (mempool.price > dataMax) dataMax = mempool.price
       }
-      const [restoreMin, restoreMax] = alignViewportToData(prevMin, prevMax, dataMin, dataMax)
-      const pad = Math.max((restoreMax - restoreMin) * 0.01, 0.001)
-      opts = { range: { min: restoreMin, max: restoreMax + pad } }
+      const restoreMin = prevMin != null && isFinite(prevMin) ? Math.max(prevMin, dataMin) : dataMin
+      const dataSpan = dataMax - dataMin
+      const pad = Math.max(dataSpan * 0.01, 0.001)
+      const restoreMax = Math.max(
+        prevMax != null && isFinite(prevMax) ? prevMax : dataMax + pad,
+        dataMax + pad
+      )
+      opts = { range: { min: restoreMin, max: restoreMax } }
     }
     return this.pricePanel.render(ticketpoolPrice, priceData, { mempool }, opts)
   }
@@ -246,8 +253,12 @@ export default class extends Controller {
         const memTs = new Date(this.mempool.time).getTime() / 1000 + 1
         if (memTs > dataMax) dataMax = memTs
       }
-      dataMax += Math.max((dataMax - dataMin) * 0.01, 3600)
-      const [restoreMin, restoreMax] = alignViewportToData(prevMin, prevMax, dataMin, dataMax)
+      const pad = Math.max((dataMax - dataMin) * 0.01, 3600)
+      const restoreMin = prevMin != null && isFinite(prevMin) ? Math.max(prevMin, dataMin) : dataMin
+      const restoreMax = Math.max(
+        prevMax != null && isFinite(prevMax) ? prevMax : dataMax + pad,
+        dataMax + pad
+      )
       opts = { range: { min: restoreMin, max: restoreMax } }
     }
     await this.purchasesPanel.render(def, response.time_chart, mempoolSettings, opts)
