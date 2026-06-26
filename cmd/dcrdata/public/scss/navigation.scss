@@ -397,6 +397,14 @@ body.darkBG {
   }
 }
 
+@media (height <= 540px) {
+  #menu {
+    max-height: calc(100vh - 60px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+}
+
 @keyframes autofill-dark {
   to {
     color: #7fbdff;
