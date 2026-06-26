@@ -1,11 +1,14 @@
 domain: ticketpool
-anchor: f78c0a4e
+anchor: b8ce73e6
 files:
   - api/types/apitypes.go
   - cmd/dcrdata/internal/api/apiroutes.go
   - cmd/dcrdata/internal/explorer/explorerroutes.go
   - cmd/dcrdata/internal/explorer/websockethandlers.go
+  - cmd/dcrdata/public/js/charts/definitions/ticketpool_price.js
+  - cmd/dcrdata/public/js/charts/definitions/ticketpool_purchases.js
   - cmd/dcrdata/public/js/controllers/ticketpool_controller.js
+  - cmd/dcrdata/public/js/helpers/ticketpool_zoom.js
   - cmd/dcrdata/views/ticketpool.tmpl
   - db/dbtypes/types.go
   - db/dcrpg/internal/stakestmts.go
