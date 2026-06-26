@@ -1,15 +1,14 @@
 # Address Page — Full Flow
 
-> **Code-grounded as of `HEAD` = `bba67634`** (re-verified 2026-06-22). The address
-> flow is **functionally unchanged since `a48ea0e1`** (PR #265/#266 multi-coin
-> frontend + post-launch fixes). The `a48ea0e1→bba67634` interval (229 commits)
-> touched only window/charts/live-tip code — `db/dcrpg/queries.go` window-stats
-> functions, `explorer.go` #502 live-tip estimate, `extras.tmpl` bundle-chunk
-> number — **no address code**. This Refresh pass re-verified every `file:line`
-> reference and corrected two that had drifted: `explorer.go:78→80` (a #502 import
-> line shifted the interface method) and `queries.go:4285-4327→4404-4446`
-> (`parseRowsSentReceived`). Prior anchor `1b670255`; see §9 (`flow.compact.md`)
-> for the stale-claim delta tables.
+> **Code-grounded as of `HEAD` = `fcad89dd`** (re-verified 2026-06-25). This Refresh
+> pass (Tier 1, anchor `bba67634→fcad89dd`) re-traced the three changed covered files:
+> `address_controller.js` (Dygraphs→ChartPanel retrofit), `address.tmpl` (Sent checkbox
+> default + `rangerView` target), and `db/dcrpg/queries.go` (missed-votes reorg-recovery
+> rewrite — **not address-related**; address-relevant functions in `queries.go` unchanged).
+> Two widen targets added to coverage: `cmd/dcrdata/public/js/helpers/chart_panel.js` and
+> `cmd/dcrdata/public/js/charts/definitions/address.js`. The DB/API/template layers and
+> all constraints from the prior trace remain accurate. Prior anchor `bba67634`; see §9
+> (`flow.compact.md`) for the full stale-claim delta.
 
 ---
 
@@ -62,7 +61,9 @@ and the transaction table; charts are per-coin. Mempool/unconfirmed activity is
           → MakeSelectAddressAmountFlowByAddress  (dual VAR INT8 / SKA numeric::text columns)
           → parseRowsSentReceived(rows, coinType) with big.Int cumulative balance accumulator
         → ChartsData{ Received,Sent,Net,Balance (VAR) | ReceivedAtoms,SentAtoms,NetAtoms,BalanceAtoms (SKA) }
-        → address_controller.js: amountFlowProcessor(data, effectiveCoin(), skaAtomsByTime)
+        → address_controller.js: defFor(chart, coin) → def; panel.render(def, payload, settings, opts)
+          → charts/definitions/address.js: def.toColumns(raw, settings) → columns
+            def.formatValue(seriesIdx, datum) → display string (SKA precision firewall here)
 ```
 
 ---
@@ -200,46 +201,77 @@ serializes as a JSON array for `data-active-coins`.
 `&coin=%d` appended when `GetCoinCtx(r) != CoinTypeAll`, so pagination links
 preserve the filter.
 
-### 3.6 Transformation 2 — controller (`address_controller.js`)
+### 3.6 Transformation 2 — controller (`address_controller.js`) and chart definitions (`charts/definitions/address.js`)
 
-- `coin` **added to the TurboQuery null-template** (`:282-291`) and to targets
-  (`coinFilter`, `coin`).
-- New `coinUrlSegment()` (`:400-403`, `&coin=` or empty), `normalizeCoinSetting()`
-  (validates against `activeCoins`, syncs both selectors, canonicalizes string
-  form), `effectiveCoin()` (`:~436`; returns the integer coin used for chart fetches —
-  **mirrors backend `CoinTypeAll→0` collapse**: explicit coin, else first
-  `activeCoins`, else 0), `changeCoin(e)` (`:456`; sets `settings.coin`, resets
-  pagination, forces chart refetch via `state.coin='__force_refetch__'`).
-- `activeCoins` parsed from `data-active-coins` (try/catch → `[]` on bad JSON).
-- Chart cache keys now `${chart}-${bin}-${coin}` (`fetchGraphData :623`,
-  `processData`, `popChartCache :674`); `drawGraph` short-circuit also compares
-  `settings.coin === state.coin`. Chart URL: `?coin=${coin}` appended.
-- `amountFlowProcessor(d, binSize, coinType, atomsByTime)`: VAR reads the
-  **server-precomputed `d.balance[i]`** (old JS `balance += v` accumulator
-  removed); SKA reads `d.received_atoms / sent_atoms / net_atoms / balance_atoms`
-  strings, sign-splits on the string, stores originals in `skaAtomsByTime` Map
-  keyed by `time.getTime()`, uses `Number()` only for pixel positioning.
-- `makeAmountFormatter(coinType, atomsByTime)` builds the legend per-fetch;
-  SKA values rendered via `formatSkaAtoms` → `splitSkaAtomsNoTrailing`; label via
-  `renderCoinType`. `legendFormatter` is per-fetch in `popChartCache`, not static.
-- **Chart title is a DOM element, not a Dygraph `ylabel`** (commit `ae0812a8`):
-  Dygraph's rotated `ylabel` option was removed. The title string is written to
-  `ctrl.chartTitleTarget.textContent` (`:713`), where `data-address-target="chartTitle"`
-  points to `address.tmpl:271`: `<div class="text-start fs14 fw-bold text-secondary
-  mt-n1 mb-1" data-address-target="chartTitle"></div>`. This avoids the overlap
-  between the rotated label and large SKA atom tick values.
-- **`flowVisibility(bitmap)` export** (`:209-224`): replaces per-index
-  `setVisibility` loops in `updateFlow`. Dygraph triggers `predraw_` on each
-  `setVisibility` call; toggling per-index could leave a transient all-invisible
-  state where `computeCombinedSeriesAndLimits_` dereferences `d[0].length` on
-  an empty array and throws. The export takes a bitmap, returns the full
-  `{0: bool, 1: bool, 2: bool}` map, and `updateFlow` applies it in a single
-  call (`:795`). Unit-tested in `address_controller.test.js`.
-- **`maxAddrRows` and `pageSizeOptions` removed** (commit `4d5f63ee`): the
-  disabled-after-AJAX logic and per-option disable were deleted. The template
-  now carries a stable always-enabled 20/40/80/160 `<select>` (`address.tmpl:418-421`).
-- Confirmed-tx handler decrements **only the `numUnconfirmed` target whose
-  `data-coin-type` matches** the row's `data-coin-type`.
+The controller was retrofitted from a Dygraph-per-chart model (Dygraphs library,
+inline processors, `skaAtomsByTime` Map) to a single `ChartPanel` instance. The
+three chart definitions were extracted to
+`cmd/dcrdata/public/js/charts/definitions/address.js`; the SKA precision firewall
+moved into each definition's `formatValue` hook, eliminating the `skaAtomsByTime` Map.
+
+**Stable coin-selector mechanics (unchanged):**
+`coin` in `TurboQuery.nullTemplate` (`:120`); `coinUrlSegment()`, `normalizeCoinSetting()`,
+`effectiveCoin()`, `changeCoin()` — unchanged. `activeCoins` from `data-active-coins`.
+Chart cache keys `${chart}-${bin}-${coin}` — unchanged. `drawGraph` short-circuit also
+compares `settings.coin`.
+
+**ChartPanel construction** (`connect()`, lines `:171–179`):
+
+```js
+ctrl.panel = createChartPanel(ctrl.chartTarget, {
+  xTime: true,
+  rangerEl: ctrl.hasRangerViewTarget ? ctrl.rangerViewTarget : null,
+  formatX: (x) => `Date: ${humanize.date(x * 1000, false, true)}`,
+  rangerData: (cols) => [cols[0], rangerColumn(cols[1])],
+  onRangeChange: (min, max) => {
+    ctrl.settings.zoom = Zoom.encode(min * 1000, max * 1000)
+    ctrl.query.replace(ctrl.settings)
+    ctrl.setSelectedZoom(Zoom.mapKey(ctrl.settings.zoom, ctrl.xExtent))
+  }
+})
+```
+
+`rangerView` target (`address.tmpl:271`): `<div data-address-target="rangerView" class="chart-ranger">` immediately below the chart div. `rangerData` extracts the primary series via `rangerColumn(cols[1])`, which sustains the last real value into the trailing null bucket appended by `padTrailingBin` (histogram bars are left-aligned and padded with a trailing null so the domain reaches the current period's end; without sustain the ranger's overview LINE stops at the last real point, leaving the newest bar uncovered). The main chart must keep the null (no phantom bar); sustain is ranger-only.
+
+**Chart definitions** (`charts/definitions/address.js`):
+
+Each factory returns `{name, label, stacked, series[], axes[], toColumns(raw, settings), formatValue(seriesIdx, datum)}`.
+
+- **`typesDef()`** — stacked bars. `toColumns` maps `raw.time → UNIX seconds` via `secondsFromTimes`, reads `{sentRtx, receivedRtx, tickets, votes, revokeTx}`, appends a trailing null via `padTrailingBin`. `formatValue` reads `datum.payload[TYPE_SERIES[seriesIdx].field][datum.idx]` directly (raw integer counts; coin-independent).
+- **`balanceDef(coinType)`** — stepped area (single series). `toColumns`: VAR reads `raw.balance[]` (float64 array); SKA reads `raw.balance_atoms[]` and converts `Number(s) * 1e-18` for pixel geometry only. A leading 0-balance sentinel and trailing sustain point are inserted (matching Dygraphs `padPoints(sustain=true)`). `formatValue`: VAR emits `${datum.value}`; **SKA reads `raw.balance_atoms[datum.idx - 1]`** (adjusted for the leading 0-pad) and formats via `formatSkaAtomsExact` — never uses `datum.value`, which is lossy. **SKA precision firewall lives here.**
+- **`amountflowDef(coinType)`** — stacked bars (4 series: `Received`, `Spent`, `Net Received`, `Net Spent`). `toColumns`: VAR maps `raw.received`/`raw.sent`/`raw.net` directly, sign-splits `net` into two non-negative columns; SKA converts `Number(s) * 1e-18` for geometry. `padTrailingBin` appended. `formatValue`: VAR reads **`datum.payload.received[i]`/`sent[i]`/`net[i]`** (NOT `datum.value` — stacking makes that the cumulative total, not the raw series value); SKA reads `raw.received_atoms[i]`, `raw.sent_atoms[i]`, `raw.net_atoms[i]`, sign-splits via `absAtom()`, formats via `formatSkaAtomsExact`. **SKA precision firewall lives here.**
+
+Both float-lossy definitions (`balanceDef`, `amountflowDef` for SKA) use `Number(atom) * 1e-18` only for pixel positioning — the displayed value is always read from the raw payload strings.
+
+**processData → popChartCache → renderChart**:
+
+- `processData()` (`:501`) stores **raw API payload** directly: `ctrl.retrievedData[`${key}-${bin}-${coin}`] = data` where `key = chart === 'balance' ? 'amountflow' : chart` (balance and amountflow share one endpoint and one cache slot).
+- `defFor(chart, coin)` (`:513`) returns `typesDef()`, `balanceDef(coin)`, or `amountflowDef(coin)`.
+- `popChartCache(chart, bin)` (async, `:519`): sets `ctrl.payload` and `ctrl.currentDef = ctrl.defFor(chart, coin)`, calls `await ctrl.renderChart()`, then `validateZoom`.
+- `renderChart()` (async, `:544`):
+  - `settings = { binSize: binSizeMs / 1000 }` (seconds).
+  - Decodes `this.settings.zoom` → `opts.range = { min, max }` (seconds) when present and valid; the panel seeds both chart and ranger to that range before the first `setData`.
+  - Calls `await this.panel.render(def, this.payload, settings, opts)`.
+  - After render: if `def.name === 'amountflow'` and flow boxes exist, applies `this.panel.handle.setVisibility(flowVisibility(this.flow))`.
+  - Reads `xExtent` (ms) back from `this.panel.handle.uplot.data[0]` for zoom-preset math.
+
+**`flowVisibility(bitmap)` export** (`:30`):
+Changed from index-keyed (`{0: bool, 1: bool, 2: bool, 3: bool}`) to **label-keyed** (`{Received: bool, Spent: bool, 'Net Received': bool, 'Net Spent': bool}`) for the uPlot adapter's `setVisibility` API. The 3-bit bitmap semantics are unchanged (bit 0 = Received, bit 1 = Sent, bit 2 = Net; Net still drives both net series). Unit-tested in `address_controller.test.js`.
+
+**`rangerColumn(col)` export** (`:47`): sustains the trailing null in a histogram column for the ranger overview. No-op when the column has no trailing null (e.g., the balance chart already sustains its last value).
+
+**Flow mutual exclusivity** (new): Net (Received − Sent) must not be stacked on Received/Spent (double-counting). `enforceFlowExclusivity(changed)` (`:642`) resolves on user toggle; `clampFlowExclusivity()` (`:659`) resolves programmatically (saved/crafted `?flow=`). Both are called from `updateFlow()` (`:619`) and `setFlowChecks()`; neither fires `change` events, so no re-entry. Resolves in Net's favour.
+
+**Zoom handling** (revised):
+- `_drawCallback`/`_zoomCallback` removed; the panel's `onRangeChange` callback (ms) fires for both chart drag and ranger drag.
+- `setZoom(start, end)` (ms) (`:698`) calls `this.panel.setXRange(start / 1000, end / 1000)` (converts to seconds at the uPlot boundary); keeps `Zoom.encode` in ms.
+- `validateZoom()` (`:579`) guards against a malformed `?zoom=` (undefined `.start`/`.end`); falls back to `setZoom(xExtent[0], xExtent[1])` + `setSelectedZoom('all')`.
+- `setButtonVisibility()` never hides the currently-selected button (fix for a young SKA coin dropping the Month button while still grouped by month).
+
+**Chart title**: still written to `ctrl.chartTitleTarget.textContent` (`address.tmpl:271`); not a uPlot/Dygraph axis label.
+
+**`maxAddrRows`/`pageSizeOptions` removed**, always-enabled 20/40/80/160 dropdown (unchanged since `4d5f63ee`).
+Confirmed-tx handler still decrements **only the `numUnconfirmed` target** matching `data-coin-type` (unchanged).
 
 ### 3.7 Chart serialization (`db/dbtypes/types.go:2079-2095`,
 `db/dcrpg/internal/addrstmts.go:365-373`, `db/dcrpg/queries.go:4404-4446`)
@@ -264,10 +296,17 @@ balanceSKA` → `items.BalanceAtoms`.
 
 - **`AddressHistory` signature** — DB ↔ two Go interfaces ↔ four test mocks
   (6 sites). Any further param change re-touches all six across modules.
-- **`ChartsData` JSON tags ↔ `amountFlowProcessor` string keys** — `omitempty`
-  means a renamed tag silently disappears; SKA chart goes blank, no error.
-- **`effectiveCoin()` (JS) ↔ backend `CoinTypeAll→0` collapse** (`:3316-3317`) — the
+- **`ChartsData` JSON tags ↔ `charts/definitions/address.js` payload field names** — `omitempty`
+  means a renamed tag silently disappears (`undefined` in `toColumns`/`formatValue`); chart goes
+  blank or shows NaN with no error. The fields read by the definitions: `time`, `received`,
+  `sent`, `net`, `balance`, `received_atoms`, `sent_atoms`, `net_atoms`, `balance_atoms`,
+  `sentRtx`, `receivedRtx`, `tickets`, `votes`, `revokeTx`.
+- **`effectiveCoin()` (JS) ↔ backend `CoinTypeAll→0` collapse** (`:3285-3287`) — the
   same rule implemented twice; divergence shows the wrong coin's chart silently.
+- **`def === ctrl.currentDef` (identity check in `panel.render`)** — ChartPanel reuses
+  the existing uPlot handle when `def` is the same object reference; a new factory call
+  each render triggers a full chart rebuild (DOM teardown + `createChart`). `defFor()`
+  must return a stable reference from `ctrl.currentDef`, not be called again in `renderChart`.
 - **`data-coin-type` SSR attr (`extras.tmpl`) ↔ unconfirmed-decrement compare**
   — string equality; format/type drift silently stops decrementing.
 - **`jsonMarshal` ↔ `data-active-coins` ↔ controller `activeCoins`** — if the
@@ -289,8 +328,10 @@ balanceSKA` → `items.BalanceAtoms`.
    only by design; mempool surfaces via `NumUnconfirmedByCoin`. Do not
    reintroduce the deleted accumulator block.
 4. **SKA precision (core constraint C1).** SKA atoms stay strings end-to-end;
-   `Number()` permitted only for chart pixel positioning, never for displayed
-   values — the legend reads the original strings from `skaAtomsByTime`.
+   `Number()` permitted only for chart pixel positioning (`toColumns` geometry), never
+   for displayed values — `formatValue` in each definition reads the original atom strings
+   from `datum.payload` directly (e.g., `raw.balance_atoms[datum.idx - 1]`). The `skaAtomsByTime`
+   Map that bridged this boundary in the Dygraphs controller is gone.
 5. **Merged view has no `coin_type` predicate.** It aggregates all coins; query
    directly with `(address, N, offset)`, never via the coin-injecting stmt
    helper (LIMIT-0 trap).
@@ -342,10 +383,11 @@ When modifying *the address coin-filter / multi-coin path*, check:
 
 **Silent failures**
 - `effectiveCoin()` vs. backend collapse divergence (wrong coin chart).
-- `ChartsData` tag rename (omitempty hides absence) → blank SKA chart.
+- `ChartsData` tag rename (omitempty hides absence) → `undefined` in `toColumns`/`formatValue` → blank or NaN chart.
+- `formatValue` reading `datum.value` instead of raw payload field on a stacked chart → cumulative stacked total shown as per-series value; for SKA this also bypasses the precision firewall.
 - `data-coin-type` string-compare drift → unconfirmed count never decrements.
-- Stale `?zoom=` carried across coin/chart-type change → `validateZoom`
-  silently clamps (pre-existing latent issue, unchanged).
+- A new `defFor()` call inside `renderChart()` (not stored in `ctrl.currentDef`) breaks the identity check → chart rebuilds every render (no silent data error, but repeated DOM teardown).
+- Malformed `?zoom=` from a crafted URL → `validateZoom` falls back to full extent (guarded since this pass; would have blanked the chart before).
 
 **Hard failures**
 - `AddressHistory` signature mismatch → compile error (multi-module).
@@ -359,23 +401,29 @@ When modifying *the address coin-filter / multi-coin path*, check:
 - Editing `AddressHistory` without the 4 mocks → multi-module build break.
 - "Fixing" unconfirmed display by re-adding mempool amounts to balance — that
   removal was deliberate (confirmed-only).
-- Renaming a `ChartsData` field and missing the JS string key — SKA chart
-  silently blank (`omitempty`).
-- Routing the merged query through the coin-injecting helper — LIMIT-0,
-  zero rows, no error.
-- Trusting the prior wiki's "frontend VAR-only / `coin` not in null-template"
-  — both now false.
+- Renaming a `ChartsData` field and missing the payload field name in the definition's
+  `toColumns`/`formatValue` — blank or NaN chart, no error (`omitempty` hides absence).
+- Using `datum.value` in a stacked chart's `formatValue` — that's the cumulative stacked
+  total; read the raw payload field directly (`datum.payload.received[datum.idx]` etc.).
+- Routing the merged query through the coin-injecting helper — LIMIT-0, zero rows, no error.
+- Calling `defFor()` inside `renderChart()` instead of reading `ctrl.currentDef` — breaks
+  ChartPanel's identity check, triggering a full chart rebuild every render.
+- Trusting the prior wiki's "frontend VAR-only / `coin` not in null-template" — both now false.
 - Populating only one of the two `ActiveCoins` assignment branches.
 - "Fixing" the CSV download so it respects the page Type/Coin filters — the
   unfiltered full export is intentional (Constraint 7), not an oversight.
+- Letting Net be stacked on Received/Sent in the amount-flow chart — double-counting;
+  `enforceFlowExclusivity`/`clampFlowExclusivity` enforce mutual exclusivity, don't bypass them.
 
 ---
 
 ## Section 8 — Evidence
 
-All file:line references verified against working tree at `HEAD`
-(`bba67634`; address code unchanged since `a48ea0e1`). Original anchor
-`1b670255` (PR #265/#266 multi-coin frontend).
+Tier 1 Refresh at `HEAD = fcad89dd` (anchor `bba67634→fcad89dd`). Re-traced:
+`address_controller.js` (ChartPanel retrofit), `address.tmpl` (Sent default + rangerView),
+`db/dcrpg/queries.go` (missed-votes functions — not address-relevant; address functions unchanged).
+Widened into: `cmd/dcrdata/public/js/helpers/chart_panel.js` and
+`cmd/dcrdata/public/js/charts/definitions/address.js`. Original anchor `1b670255` (PR #265/#266).
 
 **Original evidence (PR #265/#266):**
 - PR #265: `8cf06854`, `8b5c3a1b`, `9f5d5a7e`, `f3e2d687`, `a4457a7a`,
@@ -384,22 +432,31 @@ All file:line references verified against working tree at `HEAD`
   `61661722`, `be28442e`, `1b670255`.
 - Charts SKA SQL precision (`#263`, still valid): `49953185`, `6837673f`.
 
-**Refresh delta (`1b670255→a48ea0e1`) — address-domain commits:**
+**Refresh delta (`1b670255→a48ea0e1`) — address-domain commits (prior pass):**
 - `b13091c8` — `utxoStore.set()` stores `SKAValue` (fixes SKA amount-flow sent=0).
 - `e15efe10` — fix SKA spent regression from empty `ska_value`.
-- `031c9bc4`, `72a2645a`, `a61fe0f6`, `1367121b` — multi-coin stake metrics
-  in `retrieveAddressBalance`; burned-coin exclusion; `valid_mainchain` on
-  `SelectAddressCoinTypes`.
+- `031c9bc4`, `72a2645a`, `a61fe0f6`, `1367121b` — multi-coin stake metrics.
 - `151a272c` — `AddressRowMerged` carries `CoinType` + `SKAAtomsCredit/Debit`.
-- `9a8361e0` — `CoinTypeAll` short-circuit in `AddressCache.Rows`/`AddressRowsCompact`;
-  `FormatSKACoins` bare-decimal CSV format; empty-CSV bug fix.
-- `738735c9` — `flowVisibility(bitmap)` export; atomic `setVisibility`.
-- `4d5f63ee` — paginator cleanup (`maxAddrRows`/`pageSizeOptions` removed;
-  always-enabled 20/40/80/160 dropdown).
-- `ae0812a8`, `b67b3068`, `89f89186`, `92a4bebc` — template/CSS: `chartTitle`
-  DOM target replaces Dygraph `ylabel`; header card alignment; `.btn-set-label`;
-  `boldNumPlaces=2` for balance stats.
-- `460f5ecd` — release cleanup: `ConvertedBalance`/fiat cells deleted; market removed.
+- `9a8361e0` — `CoinTypeAll` short-circuit + CSV fix.
+- `738735c9` — `flowVisibility(bitmap)` export (Dygraph, now superseded).
+- `4d5f63ee` — paginator cleanup.
+- `ae0812a8`, `b67b3068`, `89f89186`, `92a4bebc` — template/CSS.
+- `460f5ecd` — release cleanup.
+
+**Refresh delta (`bba67634→fcad89dd`) — this pass (Tier 1):**
+- `address_controller.js` — full ChartPanel retrofit: Dygraphs removed; `createChartPanel`
+  introduced; `amountFlowProcessor`/`makeAmountFormatter`/`txTypesFunc`/`skaAtomsByTime`
+  deleted; `defFor`/`renderChart`/`enforceFlowExclusivity`/`clampFlowExclusivity` added;
+  `flowVisibility` changed to label-keyed; `rangerColumn` export added; `setZoom` now calls
+  `panel.setXRange(ms/1000)`; `validateZoom` malformed-URL guard added; `setButtonVisibility`
+  never hides selected button; `rangerView` target added.
+- `address.tmpl` — "Sent" checkbox defaults to `checked`; `rangerView` target div added.
+- `db/dcrpg/queries.go` — `retrieveMissedVotes`/`appendMissedVotesPerWindow` reorg recovery
+  (missed-votes chart domain; **not address-relevant**).
+
+**Widen targets added this pass:**
+- `cmd/dcrdata/public/js/helpers/chart_panel.js` — `ChartPanel` class; `createChartPanel`.
+- `cmd/dcrdata/public/js/charts/definitions/address.js` — `typesDef`, `balanceDef`, `amountflowDef`, `secondsFromTimes`, `rangerColumn` (re-exported in controller), `padTrailingBin`.
 
 Primary files: `db/dcrpg/pgblockchain.go`, `db/dcrpg/queries.go`,
 `db/dcrpg/internal/addrstmts.go`, `db/dbtypes/types.go`,
@@ -409,7 +466,9 @@ Primary files: `db/dcrpg/pgblockchain.go`, `db/dcrpg/queries.go`,
 `…/explorer/templates.go`, `cmd/dcrdata/views/address.tmpl`,
 `cmd/dcrdata/views/extras.tmpl`,
 `cmd/dcrdata/public/js/controllers/address_controller.js`,
-`cmd/dcrdata/public/js/helpers/ska_helper.js`.
+`cmd/dcrdata/public/js/helpers/ska_helper.js`,
+`cmd/dcrdata/public/js/helpers/chart_panel.js`,
+`cmd/dcrdata/public/js/charts/definitions/address.js`.
 
 ---
 
