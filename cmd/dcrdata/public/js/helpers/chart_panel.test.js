@@ -144,6 +144,79 @@ describe('ChartPanel tooltip', () => {
     p.renderLegend(u)
     expect(p.legendElement.textContent).not.toContain('Yes:')
   })
+  it('reads the raw payload value, not the cumulative plotted value, for a stacked def (firewall)', async () => {
+    // The amountflow regression guard, ported to the panel where the firewall now lives: uPlot
+    // stacks the plotted columns, so u.data carries the CUMULATIVE value (Net Received plots at
+    // 20 = received10 + net10), but formatValue reads the RAW payload (net10) — the tooltip must
+    // show 10, never the cumulative 20.
+    const stackedDef = {
+      name: 'flow',
+      series: [
+        { label: 'Received', color: '#0a0', kind: 'bars' },
+        { label: 'Net Received', color: '#00a', kind: 'bars' }
+      ],
+      stacked: true,
+      toColumns: (p) => [p.x, p.received, p.net],
+      formatValue: (i, d) => `${[d.payload.received, d.payload.net][i][d.idx]} VAR`
+    }
+    const p = createChartPanel(document.createElement('div'), { formatX: (x) => `X: ${x}` })
+    await p.render(stackedDef, { x: [1], received: [10], net: [10] }, {})
+    p.legendElement = document.createElement('div')
+    p.renderLegend({
+      cursor: { idx: 0, left: 10, top: 10 },
+      data: [[1], [10], [20]], // plotted: Received=10, Net Received cumulative=20
+      series: [{}, { show: true }, { show: true }],
+      over: { clientWidth: 800, clientHeight: 300 }
+    })
+    const txt = p.legendElement.textContent
+    expect(txt).toContain('Net Received: 10 VAR') // raw payload value
+    expect(txt).not.toContain('Net Received: 20 VAR') // NOT the cumulative plotted value
+  })
+  it('skips a zero-formatted series row only when the def opts in via skipZeroRows', async () => {
+    const zeroDef = {
+      name: 'z',
+      series: [
+        { label: 'A', color: '#0a0', kind: 'bars' },
+        { label: 'B', color: '#00a', kind: 'bars' }
+      ],
+      stacked: true,
+      skipZeroRows: true,
+      toColumns: (p) => [p.x, p.a, p.b],
+      // A -> "0 VAR" (skipped), B -> "5 VAR" (kept)
+      formatValue: (i, d) => `${[d.payload.a, d.payload.b][i][d.idx]} VAR`
+    }
+    const p = createChartPanel(document.createElement('div'), { formatX: (x) => `X: ${x}` })
+    await p.render(zeroDef, { x: [1], a: [0], b: [5] }, {})
+    p.legendElement = document.createElement('div')
+    p.renderLegend({
+      cursor: { idx: 0, left: 10, top: 10 },
+      data: [[1], [0], [5]],
+      series: [{}, { show: true }, { show: true }],
+      over: { clientWidth: 800, clientHeight: 300 }
+    })
+    const txt = p.legendElement.textContent
+    expect(txt).not.toContain('A: 0 VAR') // zero row skipped (skipZeroRows)
+    expect(txt).toContain('B: 5 VAR') // non-zero row kept
+  })
+  it('keeps a zero-formatted row when the def does NOT set skipZeroRows (default)', async () => {
+    const keepDef = {
+      name: 'k',
+      series: [{ label: 'A', color: '#0a0', kind: 'bars' }],
+      stacked: true,
+      toColumns: (p) => [p.x, p.a],
+      formatValue: (i, d) => `${d.payload.a[d.idx]} VAR`
+    }
+    const p = createChartPanel(document.createElement('div'), { formatX: (x) => `X: ${x}` })
+    await p.render(keepDef, { x: [1], a: [0] }, {})
+    p.legendElement = document.createElement('div')
+    p.renderLegend({
+      cursor: { idx: 0, left: 10, top: 10 },
+      data: [[1], [0]],
+      series: [{}, { show: true }],
+      over: { clientWidth: 800, clientHeight: 300 }
+    })
+    expect(p.legendElement.textContent).toContain('A: 0 VAR')
+  })
 })
 
 describe('ChartPanel touch-scrub', () => {
@@ -296,6 +369,30 @@ describe('ChartPanel ranger', () => {
     await p.render(defA, payload1, {})
     expect(createRanger).toHaveBeenCalledWith(expect.anything(), rangerDef, expect.anything())
   })
+
+  it('a ranger drag drives the chart AND notifies onRangeChange', async () => {
+    const onRangeChange = vi.fn()
+    const p = createChartPanel(document.createElement('div'), {
+      rangerEl: document.createElement('div'),
+      onRangeChange: onRangeChange
+    })
+    await p.render(defWithRanger, payload1, {})
+    const { createRanger } = await import('./uplot_ranger.js')
+    const onSelect = createRanger.mock.calls.at(-1)[2].onSelect
+    onSelect(100, 200) // simulate a ranger grip drag
+    expect(p.handle.setXRange).toHaveBeenCalledWith(100, 200)
+    expect(onRangeChange).toHaveBeenCalledWith(100, 200)
+  })
+  it('a ranger drag is a no-op for onRangeChange when none is provided (agenda/ticketpool)', async () => {
+    const p = createChartPanel(document.createElement('div'), {
+      rangerEl: document.createElement('div')
+    })
+    await p.render(defWithRanger, payload1, {})
+    const { createRanger } = await import('./uplot_ranger.js')
+    const onSelect = createRanger.mock.calls.at(-1)[2].onSelect
+    expect(() => onSelect(100, 200)).not.toThrow()
+    expect(p.handle.setXRange).toHaveBeenCalledWith(100, 200)
+  })
 })
 
 describe('ChartPanel target range on render', () => {
@@ -429,5 +526,15 @@ describe('ChartPanel theme + resize + destroy cleanup', () => {
     await pending
     expect(p.handle).toBe(handle) // NOT blanked — the theme epoch must not abort the render
     expect(handle.setDark).toHaveBeenCalledWith(true) // chart reconciled to the new theme
+  })
+  it('public resize() re-measures the chart from the element dimensions', async () => {
+    const el = document.createElement('div')
+    Object.defineProperty(el, 'clientWidth', { value: 640, configurable: true })
+    Object.defineProperty(el, 'clientHeight', { value: 480, configurable: true })
+    const p = createChartPanel(el, {})
+    await p.render(defA, payload1, {})
+    p.handle.resize.mockClear()
+    p.resize()
+    expect(p.handle.resize).toHaveBeenCalledWith(640, 480)
   })
 })

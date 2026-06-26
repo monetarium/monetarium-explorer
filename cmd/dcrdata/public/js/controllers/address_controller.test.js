@@ -11,41 +11,41 @@ vi.mock('@hotwired/stimulus', () => ({
 }))
 
 // ---------------------------------------------------------------------------
-// Mocks for uPlot adapter + ranger (Task 9).
-// Must be declared before the dynamic import so vi.mock hoisting picks them up.
+// Fake ChartPanel: the controller now owns one panel instead of a raw handle + ranger.
+// The chart/tooltip/ranger/theme/resize behavior is tested in chart_panel.test.js; here we
+// only assert the controller drives the panel correctly. Declared before the dynamic import
+// so vi.mock hoisting picks it up.
 // ---------------------------------------------------------------------------
-const fakeHandle = {
-  uplot: { data: [[]], scales: { x: {} }, setSeries: vi.fn(), setSelect: vi.fn(), over: null },
-  setData: vi.fn(),
-  setVisibility: vi.fn(),
+const fakePanelHandle = {
+  uplot: {
+    data: [
+      [1, 2],
+      [10, 20]
+    ],
+    scales: { x: {} }
+  },
+  setVisibility: vi.fn()
+}
+const fakePanel = {
+  handle: fakePanelHandle,
+  ranger: {},
+  render: vi.fn().mockResolvedValue(undefined),
   setXRange: vi.fn(),
-  setDark: vi.fn(),
   resize: vi.fn(),
   destroy: vi.fn()
 }
-const fakeRanger = {
-  uplot: { data: [[]] },
-  setData: vi.fn(),
-  setSelection: vi.fn(),
-  setWidth: vi.fn(),
-  setGutters: vi.fn(),
-  setDark: vi.fn(),
-  destroy: vi.fn()
-}
-vi.mock('../helpers/uplot_adapter', () => ({
-  createChart: vi.fn().mockResolvedValue(fakeHandle),
-  resolveSeriesColor: vi.fn(() => 'rgb(1,2,3)')
-}))
-vi.mock('../helpers/uplot_ranger', () => ({
-  createRanger: vi.fn().mockResolvedValue(fakeRanger)
+vi.mock('../helpers/chart_panel', () => ({
+  createChartPanel: vi.fn(() => fakePanel)
 }))
 
 // Reset shared singleton mock state that individual tests mutate, so a thrown assertion
-// mid-test can't leak it into later tests (order-dependent failures). makeRenderController
-// clears the per-call mocks; this restores the shared uplot scale object the theme/resize
-// tests poke at, regardless of whether their test body reached its trailing restore.
+// mid-test can't leak it into later tests (order-dependent failures).
 afterEach(() => {
-  fakeHandle.uplot.scales.x = {}
+  fakePanelHandle.uplot.scales.x = {}
+  fakePanelHandle.uplot.data = [
+    [1, 2],
+    [10, 20]
+  ]
 })
 
 const {
@@ -53,7 +53,6 @@ const {
   flowVisibility,
   rangerColumn
 } = await import('./address_controller.js')
-const { amountflowDef, balanceDef } = await import('../charts/definitions/address.js')
 
 function makeBoxes(state) {
   // state: { received, sent, net } booleans
@@ -90,26 +89,14 @@ function makeRenderController(chart, coin, payload) {
   ctrl.chartLoaderTarget = { classList: { add() {}, remove() {} } }
   ctrl.rangerViewTarget = { clientWidth: 800 }
   ctrl.hasRangerViewTarget = false
-  ctrl.labelsTarget = document.createElement('div')
   ctrl.flowTarget = { classList: { add() {}, remove() {} } }
-  // Stub legend helpers (filled in 9-b but needed for rendering path)
-  ctrl.legendElement = null
-  ctrl.legendEntry = (s) => {
-    const n = document.createElement('div')
-    n.textContent = s
-    return n
-  }
-  ctrl.legendMarker = () => ''
-  // Reset mocks on each controller creation
-  fakeHandle.setData.mockClear()
-  fakeHandle.setVisibility.mockClear()
-  fakeHandle.setXRange.mockClear()
-  fakeHandle.setDark.mockClear()
-  fakeHandle.resize.mockClear()
-  fakeHandle.destroy.mockClear()
-  fakeRanger.setData.mockClear()
-  fakeRanger.setSelection.mockClear()
-  fakeRanger.setDark.mockClear()
+  // The controller drives a single ChartPanel.
+  ctrl.panel = fakePanel
+  fakePanel.render.mockClear()
+  fakePanel.setXRange.mockClear()
+  fakePanel.resize.mockClear()
+  fakePanel.destroy.mockClear()
+  fakePanelHandle.setVisibility.mockClear()
   return ctrl
 }
 
@@ -221,28 +208,20 @@ describe('flowVisibility', () => {
 })
 
 describe('address renderChart', () => {
-  it('calls handle.setData with the definition columns for the current payload (with front+back pad)', async () => {
-    // settings.bin = 'day' (set by makeRenderController) → Zoom.mapValue('day') = 86400000 ms
-    // → binSize = 86400 s. Single point: duration=0 < binSize → pad = 43200 s.
-    // Leading 0-balance point at 1717279200 - 43200 = 1717236000;
-    // trailing sustain at 1717279200 + 43200 = 1717322400.
+  it('renders via the panel with the definition for the current payload and settings', async () => {
     const ctrl = makeRenderController('balance', 0, {
       time: ['2024-06-01T22:00:00Z'],
       balance: [12.5]
     })
     await ctrl.renderChart()
-    expect(fakeHandle.setData).toHaveBeenCalledWith([
-      [1717236000, 1717279200, 1717322400],
-      [0, 12.5, 12.5]
-    ])
+    expect(fakePanel.render).toHaveBeenCalledTimes(1)
+    const [def, payload, settings] = fakePanel.render.mock.calls[0]
+    expect(def.name).toBe('balance')
+    expect(payload).toBe(ctrl.payload)
+    expect(settings.binSize).toBe(86400) // Zoom.mapValue('day')=86400000 ms / 1000
   })
 
-  it('seeds amountflow visibility from the flow bitmap so the first build is not double-stacked', async () => {
-    // Without the seed the chart is built with all four flow series visible (a double-counted
-    // stacked total), then updateFlow() forces a throwaway restack rebuild. The seed makes the
-    // first build already correct.
-    const { createChart } = await import('../helpers/uplot_adapter')
-    createChart.mockClear()
+  it('applies amountflow visibility via the escape hatch after render (no build-time double-stack)', async () => {
     const ctrl = makeRenderController('amountflow', 0, {
       time: ['2024-06-01T22:00:00Z'],
       received: [10],
@@ -251,92 +230,36 @@ describe('address renderChart', () => {
     })
     ctrl.flowBoxes = makeBoxes({ received: true, sent: true, net: false }) // bitmap 3
     await ctrl.renderChart()
-    const opts = createChart.mock.calls.at(-1)[2]
-    expect(opts.visibility).toEqual({
+    expect(fakePanelHandle.setVisibility).toHaveBeenCalledWith({
       Received: true,
       Spent: true,
       'Net Received': false,
       'Net Spent': false
     })
   })
-})
 
-describe('address renderLegend', () => {
-  it('reads raw payload values (not cumulative u.data) for stacked amountflow VAR', () => {
-    // payload: received=10, sent=0, net=10
-    // u.data reflects cumulative stacking: received=10, +sent0=10, +netReceived10=20, +netSpent0=20
-    // The key assertion: Net Received must show 10 (raw payload), NOT 20 (cumulative u.data[3][0]).
-    const ctrl = makeRenderController('amountflow', 0, {
-      time: ['2024-06-01T22:00:00Z'],
-      received: [10],
-      sent: [0],
-      net: [10]
-    })
-    ctrl.currentDef = amountflowDef(0)
-    const entries = []
-    ctrl.legendElement = {
-      classList: { add() {}, remove() {} },
-      replaceChildren: () => {},
-      appendChild: (n) => entries.push(n.textContent)
-    }
-    ctrl.legendEntry = (txt) => ({ textContent: txt })
-    ctrl.legendMarker = () => ''
-    // Cumulative u.data as the adapter would produce after stacking all visible series:
-    // [time, Received=10, Received+Spent=10, Received+Spent+NetReceived=20, ...+NetSpent=20]
-    const u = {
-      cursor: { idx: 0 },
-      data: [[1717279200], [10], [10], [20], [20]],
-      series: [{}, { show: true }, { show: true }, { show: true }, { show: true }]
-    }
-    ctrl.positionTooltip = () => {}
-    ctrl.renderLegend(u)
-    // Received: raw payload value 10 must be shown
-    expect(entries.some((e) => e.includes('Received: 10 VAR'))).toBe(true)
-    // Net Received: raw payload net[0]=10, NOT cumulative u.data[3][0]=20
-    expect(entries.some((e) => e.includes('Net Received: 10 VAR'))).toBe(true)
-    expect(entries.some((e) => e.includes('Net Received: 20 VAR'))).toBe(false)
-    // Spent=0 is zero-skipped
-    expect(entries.some((e) => e.includes('Spent: 0 VAR'))).toBe(false)
-    // Net Spent=0 is zero-skipped
-    expect(entries.some((e) => e.includes('Net Spent'))).toBe(false)
-  })
-
-  it('shows a 0 value on the non-stacked balance chart (zero-skip is stacked-only)', () => {
-    // The leading 0-baseline point (balance was 0 before the first tx) must be visible in the
-    // tooltip — unlike the stacked amount charts, a 0 balance is meaningful.
+  it('passes a saved zoom to the panel as an explicit target range (seconds)', async () => {
     const ctrl = makeRenderController('balance', 0, {
       time: ['2024-06-01T22:00:00Z'],
-      balance: [0]
+      balance: [12.5]
     })
-    ctrl.currentDef = balanceDef(0)
-    const entries = []
-    ctrl.legendElement = {
-      classList: { add() {}, remove() {} },
-      replaceChildren: () => {},
-      appendChild: (n) => entries.push(n.textContent)
-    }
-    ctrl.legendEntry = (txt) => ({ textContent: txt })
-    ctrl.legendMarker = () => ''
-    const u = {
-      cursor: { idx: 0 },
-      data: [[1717236000], [0]],
-      series: [{}, { show: true }]
-    }
-    ctrl.positionTooltip = () => {}
-    ctrl.renderLegend(u)
-    expect(entries.some((e) => e.includes('Balance: 0 VAR'))).toBe(true)
+    // Zoom.encode takes ms; renderChart converts to seconds for the panel target.
+    ctrl.settings.zoom = Zoom.encode(1717236000000, 1717322400000)
+    await ctrl.renderChart()
+    const opts = fakePanel.render.mock.calls[0][3]
+    expect(opts.range.min).toBeCloseTo(1717236000, 0)
+    expect(opts.range.max).toBeCloseTo(1717322400, 0)
   })
 })
 
 describe('address updateFlow', () => {
-  it('applies the label-keyed visibility map to the handle', () => {
+  it('applies the label-keyed visibility map to the panel handle', () => {
     const ctrl = makeRenderController('amountflow', 0, {})
     ctrl.flowBoxes = makeBoxes({ received: true, sent: true, net: false })
-    ctrl.handle = fakeHandle
     ctrl.settings = {}
     ctrl.query = { replace: vi.fn() }
     ctrl.updateFlow()
-    expect(fakeHandle.setVisibility).toHaveBeenCalledWith({
+    expect(fakePanelHandle.setVisibility).toHaveBeenCalledWith({
       Received: true,
       Spent: true,
       'Net Received': false,
@@ -350,12 +273,11 @@ describe('address updateFlow', () => {
     // event must not stack Net on top of them (double-count). Net wins.
     const ctrl = makeRenderController('amountflow', 0, {})
     ctrl.flowBoxes = makeBoxes({ received: true, sent: true, net: true })
-    ctrl.handle = fakeHandle
     ctrl.settings = {}
     ctrl.query = { replace: vi.fn() }
     ctrl.updateFlow() // programmatic — no event
     expect(ctrl.settings.flow).toBe(4)
-    expect(fakeHandle.setVisibility).toHaveBeenCalledWith({
+    expect(fakePanelHandle.setVisibility).toHaveBeenCalledWith({
       Received: false,
       Spent: false,
       'Net Received': true,
@@ -405,13 +327,12 @@ describe('address flow Net exclusivity (finding #2)', () => {
   it('updateFlow enforces exclusivity on a Net toggle and shows only Net', () => {
     const ctrl = makeRenderController('amountflow', 0, {})
     ctrl.flowBoxes = makeBoxes({ sent: true, received: true, net: true })
-    ctrl.handle = fakeHandle
     ctrl.settings = {}
     ctrl.query = { replace: vi.fn() }
     const net = ctrl.flowBoxes.find((b) => b.value === '4')
     ctrl.updateFlow({ target: net })
     expect(ctrl.settings.flow).toBe(4)
-    expect(fakeHandle.setVisibility).toHaveBeenCalledWith({
+    expect(fakePanelHandle.setVisibility).toHaveBeenCalledWith({
       Received: false,
       Spent: false,
       'Net Received': true,
@@ -421,15 +342,14 @@ describe('address flow Net exclusivity (finding #2)', () => {
 })
 
 describe('address setZoom', () => {
-  it('drives the handle x-range and persists zoom', () => {
-    // setZoom args are ms; handle.setXRange receives seconds (÷1000).
+  it('drives the panel x-range (seconds) and persists zoom', () => {
+    // setZoom args are ms; panel.setXRange receives seconds (÷1000).
     const ctrl = makeRenderController('balance', 0, {})
-    ctrl.handle = fakeHandle
     ctrl.settings = {}
     ctrl.query = { replace: vi.fn() }
     ctrl.chartLoaderTarget = { classList: { add() {}, remove() {} } }
     ctrl.setZoom(100, 200)
-    expect(fakeHandle.setXRange).toHaveBeenCalledWith(0.1, 0.2)
+    expect(fakePanel.setXRange).toHaveBeenCalledWith(0.1, 0.2)
   })
 })
 
@@ -442,24 +362,6 @@ describe('rangerColumn (ranger line covers the latest histogram bar)', () => {
   })
   it('skips an interior null to find the value to sustain', () => {
     expect(rangerColumn([10, null, null])).toEqual([10, null, 10])
-  })
-})
-
-describe('address recreateRanger (latest-bar coverage)', () => {
-  it('sustains the trailing-null primary value so the ranger line spans the full domain', async () => {
-    const c = makeRenderController('types', 0, {})
-    c.hasRangerViewTarget = true
-    c.rangerViewTarget = { clientWidth: 800 }
-    fakeRanger.setData.mockClear()
-    // cols as the histogram toColumns produces: trailing x + trailing null y.
-    await c.recreateRanger(balanceDef(0), [
-      [1, 2, 3],
-      [10, 20, null]
-    ])
-    expect(fakeRanger.setData).toHaveBeenCalledWith([
-      [1, 2, 3],
-      [10, 20, 20]
-    ])
   })
 })
 
@@ -504,165 +406,32 @@ describe('address validateZoom (load-time preset restore)', () => {
   })
 })
 
-describe('address ranger gutter alignment (issue 4)', () => {
-  it('syncRangerGutters mirrors the main chart plot-box insets onto the strip', () => {
-    const c = makeRenderController('types', 0, {})
-    c.ranger = fakeRanger
-    fakeRanger.setGutters.mockClear()
-    const u = {
-      root: { getBoundingClientRect: () => ({ left: 0, right: 800 }) },
-      over: { getBoundingClientRect: () => ({ left: 50, right: 780 }) }
-    }
-    c.syncRangerGutters(u)
-    // left = over.left - root.left = 50; right = root.right - over.right = 20
-    expect(fakeRanger.setGutters).toHaveBeenCalledWith(50, 20)
-  })
-  it('syncRangerGutters is a no-op when there is no ranger', () => {
-    const c = makeRenderController('types', 0, {})
-    c.ranger = null
-    expect(() => c.syncRangerGutters({})).not.toThrow()
-  })
-  it('recreateRanger seeds the strip with the main chart gutters', async () => {
-    const { createRanger } = await import('../helpers/uplot_ranger')
-    createRanger.mockClear()
-    const c = makeRenderController('balance', 0, {})
-    c.hasRangerViewTarget = true
-    c.rangerViewTarget = { clientWidth: 800 }
-    c.handle = {
-      uplot: {
-        root: { getBoundingClientRect: () => ({ left: 0, right: 800 }) },
-        over: { getBoundingClientRect: () => ({ left: 40, right: 790 }) }
-      }
-    }
-    await c.recreateRanger(balanceDef(0), [
-      [1, 2],
-      [10, 20]
-    ])
-    const opts = createRanger.mock.calls.at(-1)[2]
-    expect(opts.leftGutter).toBe(40) // over.left - root.left
-    expect(opts.rightGutter).toBe(10) // root.right - over.right
-  })
-})
-
-describe('address ranger + theme', () => {
-  it('creates a ranger seeded with the x + primary series columns', async () => {
-    const { createRanger } = await import('../helpers/uplot_ranger')
-    const ctrl = makeRenderController('balance', 0, {})
-    ctrl.currentDef = balanceDef(0)
-    ctrl.hasRangerViewTarget = true
-    ctrl.rangerViewTarget = { clientWidth: 800 }
-    await ctrl.recreateRanger(balanceDef(0), [
-      [1, 2],
-      [10, 20]
-    ])
-    expect(createRanger).toHaveBeenCalled()
-    expect(fakeRanger.setData).toHaveBeenCalledWith([
-      [1, 2],
-      [10, 20]
-    ])
-  })
-  it('redrawTheme pushes dark state to handle and ranger', () => {
-    const ctrl = makeRenderController('balance', 0, {})
-    ctrl.handle = fakeHandle
-    ctrl.ranger = fakeRanger
-    ctrl.redrawTheme()
-    expect(fakeHandle.setDark).toHaveBeenCalled()
-    expect(fakeRanger.setDark).toHaveBeenCalled()
-  })
-  it('onRangerSelect clears stale zoom-preset button via setSelectedZoom', () => {
-    // onRangerSelect now uses `this` so it can be exercised directly on the instance.
-    // Verifies that after a ranger drag, setSelectedZoom is called to reconcile the
-    // preset-button highlight — the fix for the stale-preset bug.
-    // Note: min/max args are seconds (ranger posToVal); xExtent is ms (post-units-fix).
-    const c = makeRenderController('balance', 0, {})
-    c.handle = fakeHandle
-    // xExtent in ms (post-fix convention): 0 to 1 000 000 ms (≈16 min span).
-    c.xExtent = [0, 1000000]
-    c.settings = { zoom: null }
-    c.query = { replace: vi.fn() }
-    // Stub zoomButtons so setSelectedZoom can iterate without DOM.
-    const btn = { name: 'all', classList: { add: vi.fn(), remove: vi.fn() } }
-    c.zoomButtons = [btn]
-    const spy = vi.spyOn(c, 'setSelectedZoom')
-    // Ranger delivers seconds; handle.setXRange stays seconds; Zoom.encode gets ms.
-    c.onRangerSelect(100, 500)
-    expect(fakeHandle.setXRange).toHaveBeenCalledWith(100, 500)
-    // setSelectedZoom must be called with the mapped zoom key — this is the fix.
-    // Zoom.encode(100000, 500000) does not match any named preset against xExtent
-    // [0, 1000000], so mapKey returns null; setSelectedZoom(null) clears btn-selected.
-    const encodedZoom = Zoom.encode(100 * 1000, 500 * 1000)
-    expect(spy).toHaveBeenCalledWith(Zoom.mapKey(encodedZoom, [0, 1000000]))
-  })
-  it('redrawTheme re-applies the ranger selection after theme toggle', async () => {
-    // Regression: before the fix, setDark rebuilt the ranger strip without restoring the
-    // selection rectangle — the rectangle collapsed to zero width on theme toggle.
-    const ctrl = makeRenderController('balance', 0, {})
-    // Set a known x-range on the main chart so redrawTheme can capture it.
-    fakeHandle.uplot.scales.x = { min: 100, max: 200 }
-    ctrl.handle = fakeHandle
-    ctrl.ranger = fakeRanger
-    fakeRanger.setDark.mockClear()
-    fakeRanger.setSelection.mockClear()
-    ctrl.redrawTheme()
-    // setDark must fire synchronously.
-    expect(fakeRanger.setDark).toHaveBeenCalled()
-    // setSelection is deferred to a microtask — flush it.
-    await Promise.resolve()
-    expect(fakeRanger.setSelection).toHaveBeenCalledWith(100, 200)
-  })
-  it('resizeChart re-applies the ranger selection after width change', async () => {
-    // Regression: before the fix, setWidth invalidated the pixel-based selection rectangle
-    // and it was never restored — the rectangle vanished on every window resize.
-    const ctrl = makeRenderController('balance', 0, {})
-    fakeHandle.uplot.scales.x = { min: 100, max: 200 }
-    ctrl.handle = fakeHandle
-    ctrl.ranger = fakeRanger
-    ctrl.chartTarget = { clientWidth: 900, clientHeight: 320 }
-    ctrl.rangerViewTarget = { clientWidth: 900 }
-    ctrl.hasRangerViewTarget = true
-    fakeRanger.setWidth.mockClear()
-    fakeRanger.setSelection.mockClear()
-    ctrl.resizeChart()
-    // setWidth must fire synchronously.
-    expect(fakeRanger.setWidth).toHaveBeenCalled()
-    // setSelection is deferred to a microtask — flush it.
-    await Promise.resolve()
-    expect(fakeRanger.setSelection).toHaveBeenCalledWith(100, 200)
-  })
-})
-
 // Regression test: bug 3 (unit mismatch) — xExtent must be in ms so that chartDuration
 // (xExtent[1]-xExtent[0]) is comparable to Zoom.mapValue keys (also ms). Before the fix,
 // xExtent stored raw seconds from cols[0], so chartDuration was ~2592 for a 30-day chart
 // while Zoom.mapValue('week')=6.048e8 ms — week/day buttons were wrongly hidden.
 // After the fix, xExtent is ms, chartDuration ≈ 2.592e9 > 6.048e8 → buttons stay visible.
 describe('address xExtent ms units (bug 3 regression)', () => {
-  it('renderChart stores xExtent in ms so chartDuration exceeds zoomMap week value', async () => {
-    // Build a 30-day payload spanning seconds timestamps (as the API returns).
+  it('renderChart stores xExtent in ms from the plotted x column', async () => {
     const startSec = 1700000000
     const endSec = startSec + 30 * 86400
     const ctrl = makeRenderController('balance', 0, {
       time: [new Date(startSec * 1000).toISOString(), new Date(endSec * 1000).toISOString()],
       balance: [1.0, 2.0]
     })
-    ctrl.currentDef = balanceDef(0)
-    ctrl.hasRangerViewTarget = false
-
+    // The panel plots these seconds; the controller derives xExtent (ms) from the handle's
+    // x column. Set the handle's plotted x to the panel's seconds output.
+    fakePanelHandle.uplot.data = [
+      [startSec, endSec],
+      [1.0, 2.0]
+    ]
     await ctrl.renderChart()
-
-    // toColumns now brackets data with a leading 0-balance point and a trailing sustain.
-    // binSize=86400 s, duration=30*86400 > binSize → pad=43200 s.
-    // xExtent[0] is from the leading pad point: (startSec - 43200) * 1000.
-    // xExtent[1] is from the trailing sustain point: (endSec + 43200) * 1000.
-    expect(ctrl.xExtent[0]).toBeCloseTo((startSec - 43200) * 1000, -3)
-    expect(ctrl.xExtent[1]).toBeCloseTo((endSec + 43200) * 1000, -3)
-
-    // chartDuration (ms) ≈ (30*86400 + 2*43200)*1000 ≈ 2.679e9 > Zoom.mapValue('week')=6.048e8.
-    // Before the fix: chartDuration ≈ 30*86400 ≈ 2.592e6 — less than 6.048e8 → bug.
+    expect(ctrl.xExtent[0]).toBe(startSec * 1000)
+    expect(ctrl.xExtent[1]).toBe(endSec * 1000)
+    // chartDuration must be in ms so it's comparable to Zoom.mapValue keys (also ms).
     const chartDuration = ctrl.xExtent[1] - ctrl.xExtent[0]
     expect(chartDuration).toBeGreaterThan(Zoom.mapValue('week')) // 6.048e8 ms
     expect(chartDuration).toBeGreaterThan(Zoom.mapValue('day')) // 8.64e7 ms
-    // Sanity: must not exceed 'year' (3.154e10 ms) for a 30-day span.
     expect(chartDuration).toBeLessThan(Zoom.mapValue('year'))
   })
 })

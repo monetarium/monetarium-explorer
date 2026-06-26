@@ -191,9 +191,12 @@ class ChartPanel {
     if (this.onRangeChange) this.onRangeChange(min, max)
   }
 
-  // Ranger grip/body drag: drive the main chart (which mirrors back via _onChartRangeChange).
+  // Ranger grip/body drag: drive the main chart (which mirrors back via _onChartRangeChange),
+  // and notify the controller so it can persist (e.g. address URL zoom). setXRange is silent
+  // (it does not fire the chart's onRangeChange), so this is the only notify on a ranger drag.
   _onRangerSelect(min, max) {
     if (this._handle) this._handle.setXRange(min, max)
+    if (this.onRangeChange) this.onRangeChange(min, max)
   }
 
   // Self-contained on-plot tooltip: a div appended to u.over, shown on cursor-enter,
@@ -313,6 +316,10 @@ class ChartPanel {
       if (value == null) return
       const text = this.currentDef.formatValue(i, { idx, payload, value }, {})
       if (text === '') return
+      // Opt-in (def.skipZeroRows): a stacked chart's many 0-valued series clutter the tooltip.
+      // Defaulted off so agenda/ticketpool/charts defs are unaffected; only stacked address
+      // defs set the flag. Matches the legacy address `if (def.stacked && /^0/.test(text))`.
+      if (this.currentDef.skipZeroRows && /^0(\s|$)/.test(text)) return
       const color = resolveSeriesColor(s, i, dark)
       tt.appendChild(this._legendRow(`${this._marker(color)} ${s.label}: ${text}`))
     })
@@ -366,6 +373,12 @@ class ChartPanel {
         }
       })
     }
+  }
+
+  // Re-measure now (no debounce) — for layout changes that fire no window 'resize' event,
+  // e.g. a fullscreen-expand DOM move or a show/hide that changes the container size.
+  resize() {
+    this._resize()
   }
 
   // Resize does not rebuild, so it does NOT bump the epoch, but it captures+checks it so a
