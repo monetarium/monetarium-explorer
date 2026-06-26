@@ -155,13 +155,10 @@ export default class extends Controller {
         if (mempool.price < dataMin) dataMin = mempool.price
         if (mempool.price > dataMax) dataMax = mempool.price
       }
-      const restoreMin = prevMin != null && isFinite(prevMin) ? Math.max(prevMin, dataMin) : dataMin
+      const restoreMin = Math.max(prevMin, dataMin)
       const dataSpan = dataMax - dataMin
       const pad = Math.max(dataSpan * 0.01, 0.001)
-      const restoreMax = Math.max(
-        prevMax != null && isFinite(prevMax) ? prevMax : dataMax + pad,
-        dataMax + pad
-      )
+      const restoreMax = Math.max(prevMax, dataMax + pad)
       opts = { range: { min: restoreMin, max: restoreMax } }
     }
     return this.pricePanel.render(ticketpoolPrice, priceData, { mempool }, opts)
@@ -254,11 +251,8 @@ export default class extends Controller {
         if (memTs > dataMax) dataMax = memTs
       }
       const pad = Math.max((dataMax - dataMin) * 0.01, 3600)
-      const restoreMin = prevMin != null && isFinite(prevMin) ? Math.max(prevMin, dataMin) : dataMin
-      const restoreMax = Math.max(
-        prevMax != null && isFinite(prevMax) ? prevMax : dataMax + pad,
-        dataMax + pad
-      )
+      const restoreMin = Math.max(prevMin, dataMin)
+      const restoreMax = Math.max(prevMax, dataMax + pad)
       opts = { range: { min: restoreMin, max: restoreMax } }
     }
     await this.purchasesPanel.render(def, response.time_chart, mempoolSettings, opts)
