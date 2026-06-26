@@ -53,8 +53,34 @@ Chart makers read `charts.Tip` under `tipMtx.RLock()` at chart-build time:
 Without this guard, rapidly switching the chart `<select>` could: (a) have a slow fetch resolving after a faster one, overwriting `this.payload` with data for the wrong chart, or (b) have two concurrent `createChart()` calls both resolve, orphaning the first uPlot root (canvas + event listeners left in the DOM with `destroy()` never called).
 
 **Constraints:**
-- Any new `await` point inside `selectChart()` or `renderChart()` (or any async path launched from them) must check `gen !== this.fetchGeneration` before applying its result.
-- `pendingCreate` holds the in-flight `createChart()` promise; code paths that depend on the chart being ready must await it or guard on `this.handle`.
+- Any new `await` point inside `selectChart()` or the fetch path must check `gen !== this.fetchGeneration` before applying its result.
+- Chart-creation overlap is now guarded by `panel.epoch` in `chart_panel.js`; `pendingCreate` is removed. Code that needs the chart ready should await `panel.render(...)` and then access `panel.handle`.
+
+---
+
+## ChartPanel reusable lifecycle owner
+
+**Appears in:**
+- [/wiki/code-analysis/charts/flow.full.md](flow.full.md)
+
+**Description:**
+`cmd/dcrdata/public/js/helpers/chart_panel.js` provides `ChartPanel`, a class that encapsulates one uPlot chart's full lifecycle: handle + optional ranger strip + on-plot tooltip + theme recoloring + debounced resize. Page controllers (Stimulus) create one panel per chart via `createChartPanel(chartEl, opts)` and call `panel.render(def, payload, settings, opts)` to update it.
+
+Key behavioral invariants:
+- **Render serialization.** Every `render()` call increments `panel.epoch`. `_ensureChart` and `_ensureRanger` check the epoch after each `await` and abort if a newer render superseded them, preventing an orphaned uPlot instance from a slower competing render.
+- **Theme epoch.** Theme changes use a separate `_themeEpoch` so a dark/light toggle cannot abort an in-flight `render()`.
+- **def-reference identity.** `render()` reuses the live uPlot instance when `def === this.currentDef` (same object reference); a different reference triggers a fresh `createChart`. Controllers memoize the def by structural signature (`name|xTime|seriesCount|axisLabel`) to avoid spurious rebuilds.
+- **Zoom seed race-free.** Pass `opts.range = {min, max}` to `render()` to seed both chart and ranger in the same call, sidestepping the race between a post-render programmatic `setXRange` and the ranger's async microtask layout settle.
+- **`rangerSeedOnce`.** When `true`, the strip data is seeded on first build and kept frozen across subsequent `render()` calls; only the selection rectangle tracks the chart. Use when the chart shows re-bucketed/aggregated data but the ranger must show the full fine-grained history.
+- **Mandatory `destroy()`.** Removes the `NIGHT_MODE` globalEventBus listener and the debounced `window.resize` listener. Must be called in Stimulus `disconnect()`.
+
+Page-level concerns moved from controller to panel (charts, ticketpool, address all share this): `installTooltip`, `renderLegend`, `positionTooltip`, `installTouchScrub` (three-state pending/scrub/scroll + double-tap iOS dblclick synthesis), `_setDark` (captures live x-range before rebuild, deferred ranger re-select via themeEpoch-guarded microtask), `_resize` (width-gated, mobile URL-bar-collapse safe).
+
+**Constraints:**
+- A controller must not hold a separate `this.handle` reference — use `panel.handle`; it is null between `_handle.destroy()` and the `await createChart()` resolving (a chart rebuild gap).
+- Never bump `panel.epoch` from outside the panel — it is the sole authority on render generation.
+- Do not call `panel.setXRange()` immediately after `panel.render()` while the ranger is still awaiting its async microtask; pass `opts.range` to `render()` instead.
+- If the controller's `onRangeChange` callback reads `panel.handle.uplot.data[0]` (e.g. for `persistRange`), guard it with `panel.handle &&` since the handle is null during a rebuild gap.
 
 ---
 
@@ -132,7 +158,7 @@ The coin type is encoded in the chart ID string and parsed by two independent im
 **Description:**
 Every SKA supply response that carries timestamps also carries a parallel `h` (block height) array. `skaSupplyChart` emits `h` on the block-bin path verbatim; for day-bin it calls `aggregateSKASupply` which buckets by `t / 86400`, keeps the **last** sample per day, and re-emits `(timestamp, height, value)` triples — heights are carried through aggregation, not dropped.
 
-Frontend: `xColumn(raw, n)` in `format.js` handles the height-bin → `offset + raw.h[i]` path. For block-bin it uses a 1-based index (no `raw.h` needed). For time axis it uses `raw.t`. Definition `toColumns` calls `xColumn(raw, ys.length)`.
+Frontend: `xColumn(raw, n)` in `format.js` handles the height-bin → `offset + raw.h[i]` path. For block-bin it uses a 0-based index (no `raw.h` needed; genesis = height 0). For time axis it uses `raw.t`. Definition `toColumns` calls `xColumn(raw, ys.length)`.
 
 Similarly, the live-tip window-append in `powDifficultyChart` / `ticketPriceChart` now emits an explicit `h` array containing both the historical heights and the appended `windowStartHeight`. Frontend `toColumns` for these definitions checks `raw.h` before falling back to index-derived xs.
 
@@ -197,6 +223,7 @@ The `.vSelector .checkmark` background-color values in `charts.scss` MUST stay i
 **Constraints:**
 - Adding a new named series color: update `SERIES_COLORS` in `chart_theme.js` AND the matching `.checkmark` rule in `charts.scss`.
 - Renaming a `colorKey` in a series spec: update both the spec and the `SERIES_COLORS` key — there is no runtime error for a missing key (falls back to palette index).
+- The address page uses a parallel `.customcheck` swatch set (`received`/`sent`/`net`) that tracks **PALETTE indices**, not `SERIES_COLORS` named entries. Current values (as of `7a2e5da9`): `.received` dark-mode = `#2dd8a3` (PRIMARY mint); `.sent` = `#e03131` (PALETTE[1]); `.net` = `#f08c00` (PALETTE[3], representing Net Spent). A PALETTE color change must also update the matching `.customcheck` swatch in `charts.scss`.
 
 ---
 
@@ -209,7 +236,7 @@ The `.vSelector .checkmark` background-color values in `charts.scss` MUST stay i
 **Description:**
 The charts controller drives all URL state through TurboQuery + `Zoom.encode/decode`. The uPlot chart reports x-range changes via `onRangeChange` (hook in `createChart`); the controller calls `persistRange(min, max, snap)` which maps the range back to a zoom preset key or encodes a custom base-36 range.
 
-The ranger strip (overview navigator, `uplot_ranger.js`) drives the main chart via `onRangerSelect(min, max)` → `handle.setXRange(min, max)` (silent — does not re-fire `onRangeChange`). Zooms applied programmatically (`applyZoom`, presets, defaults) use `setMainXRange(min, max)` which updates both the main chart and the strip in lockstep.
+The ranger strip drives the main chart via `panel._onRangerSelect(min, max)` → `panel.handle.setXRange(min, max)` (silent — does not re-fire `onRangeChange`). The panel calls `onRangeChange(min, max, 'ranger')` to notify the controller, which calls `persistRange(min, max, false)`. Zoom seed on initial render is passed as `opts.range` in `panel.render()` (race-free; avoids a programmatic `setXRange` racing the ranger's async microtask setup). Live preset clicks call `panel.setXRange(min, max)` directly.
 
 The charts controller no longer uses `Zoom.project(...)` (which was a Dygraphs-era range projection across data-range changes). The uPlot path encodes and decodes absolute x-values in plot units directly.
 

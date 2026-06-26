@@ -71,7 +71,7 @@ PostgreSQL `vins.value_in` deltas → `pgb.coinSupply` fetcher populates `ChartD
   - `coinTypeFromName(name)` parses `coin-supply/{N}` or `fees/{N}` → integer 1–255, else 0.
 
 - **Location:** `cmd/dcrdata/public/js/charts/format.js`
-  - `xColumn(raw, n, offset=1)` — canonical x-column builder: block-bin height → 1-based index (`Array.from({length:n}, (_,i) => i+1)`); other height-bin → `offset + raw.h[i]`; time → `raw.t.slice(0, n)`.
+  - `xColumn(raw, n, offset=1)` — canonical x-column builder: block-bin height → 0-based index (`Array.from({length:n}, (_,i) => i)`; genesis = height 0); other height-bin → `offset + raw.h[i]`; time → `raw.t.slice(0, n)`.
   - `formatSkaAtomsExact(atomStr)` → `splitSkaAtomsNoTrailing` for exact 18-decimal display.
   - `ATOMS_TO_VAR = 1e-8`, `intComma`, `withBigUnits`, `unitPrefix`.
 
@@ -85,24 +85,41 @@ PostgreSQL `vins.value_in` deltas → `pgb.coinSupply` fetcher populates `ChartD
   - `colorForIndex(i, dark)`, `seriesColorByKey(key, dark)` — resolution functions used by `uplot_adapter.js`.
 
 - **Location:** `cmd/dcrdata/public/js/helpers/uplot_adapter.js`
-  - `createChart(el, def, opts)` — builds a uPlot opts object from a `ChartDefinition` + config and attaches a live instance to the DOM element. Returns a handle with `setData()`, `setXRange()`, `setMode()`, `destroy()`, `.uplot` direct access.
-  - `buildOpts(def, opts)` — pure (no DOM), the unit under test. Translates `def.series[i].kind` (`line`, `area`, `bars`, `stepped`) and color resolution into uPlot series descriptors. Respects `logFloor` on individual series.
+  - `createChart(el, def, opts)` — builds a uPlot opts object from a `ChartDefinition` + config and attaches a live instance to the DOM element. Returns a handle with `setData()`, `setXRange()`, `setMode()`, `setVisibility()`, `setDark()`, `destroy()`, `.uplot` direct access.
+  - `buildOpts(def, opts)` — pure (no DOM), the unit under test. Translates `def.series[i].kind` (`line`, `area`, `bars`, `stepped`) and color resolution into uPlot series descriptors. Respects `logFloor` on individual series. When `def.stacked` is true, computes uPlot `bands` via `stack()` using `opts.visibility` for the initial hidden-series set.
+  - `stack(columns, omit)` — exported pure function; accumulates each non-omitted series into a running per-row total, emits re-stacked `data` + uPlot `bands`. A visibility toggle on a stacked chart calls `rebuild()` (bands and accumulation must be recomputed at opts level; `setSeries` alone is insufficient).
+  - `pathsFor(UPlot, s)` — now accepts the full series object `s`, not just `s.kind`. `s.paths` factory override lets per-series custom renderers bypass the `kind` switch. `s.barAlign` (0/1/-1) and `s.barSize` ([widthFactor, maxPx?]) configure per-series bar geometry.
+  - Seeded visibility: `opts.visibility` is consumed by `buildOpts` for bands AND by `applyVisibility()` called immediately after the uPlot constructor, so a seeded-hidden series is hidden from the first paint. `setVisibility()` short-circuits when the map is unchanged (early-return) to avoid spurious rebuilds on stacked charts.
   - `resolveSeriesColor(s, i, dark)` — resolves in order: `s.color` (explicit), `seriesColorByKey(s.colorKey)` (named), `colorForIndex(s.colorIndex ?? i)` (palette).
 
 - **Location:** `cmd/dcrdata/public/js/helpers/uplot_ranger.js`
-  - `createRanger(el, def, opts)` — creates the overview/zoom-navigator strip below the main chart. Shows the full primary series; grip-drag and body-drag drive `opts.onSelect(min, max)` on the controller.
+  - `createRanger(el, def, opts)` — creates the overview/zoom-navigator strip below the main chart. Shows the full primary series; grip-drag and body-drag drive `opts.onSelect(min, max)` on the panel.
+  - `RANGER_HEIGHT = 44` — strip height in CSS px, uniform across all chart routes (reduced from 80; value is embedded in the module so SCSS and the ranger stay aligned without a shared constant).
+  - `setSelection(min, max)` — now clamps `min`/`max` to the data extent before pixel-converting, and enforces a minimum pixel width of `max(1, pxRatio)` so the handle is never invisible at range boundaries.
 
 - **Location:** `cmd/dcrdata/public/js/controllers/charts_controller.js`
-  - `this.fetchGeneration` — monotonic counter bumped by `selectChart()` on every chart selection. After each `await` (fetch, `createChart`), if the counter has advanced, the stale result is discarded. Prevents stale-fetch clobbering `this.payload` and orphaned uPlot instances.
-  - `selectChart()` (line 236) — `hashrate-shares` early-return via `Turbolinks.visit`; all others: `getDefinition(name)` → fetch (if needed) → `renderChart(def)`.
-  - `renderChart(def)` (line 292) — calls `def.toColumns(this.payload, this.settingsForDef())` → `createChart()` (if chart type/axis/series count changed, else `handle.setData(cols)`) → `recreateRanger()` → `applyZoom()`.
-  - `renderLegend(u)` (line 591) — builds hover tooltip from `def.series` + `def.formatValue(i, {idx, payload, value}, settings)`. Passes `payload: this.payload` in the datum so `formatValue` can reach exact atom strings.
-  - `applyControlVisibility(def)` (line 635) — reads `def.controls.{bin, scale, mode, zoom, interval, windowUnits, visibility}` to show/hide UI controls; also toggles `chart-hashrate` CSS class on `chartsViewTarget` for hashrate selection (gates `.chartview.chart-hashrate .dygraph-y2label { color: #c60 }` in charts.scss).
-  - `onChartRangeChange(min, max)` / `onRangerSelect(min, max)` / `setMainXRange(min, max)` — range persistence and strip sync. Zoom presets snap to trailing windows; custom ranges encode as base-36 via `Zoom.encode/decode`.
+  - `this.fetchGeneration` — monotonic counter bumped by `selectChart()` on every chart selection. After each fetch `await`, if the counter has advanced, the stale result is discarded. Prevents a slow fetch from clobbering `this.payload`. (Chart-creation overlap guard is now owned by `panel.epoch` in `chart_panel.js`.)
+  - `this.panel` — a `ChartPanel` instance created in `connect()`. Owns the handle + ranger + tooltip + resize + theme. `panel.handle` exposes the underlying `ChartHandle`; `panel.setXRange(min, max)` drives both chart and ranger in lockstep.
+  - `selectChart()` — `hashrate-shares` early-return via `Turbolinks.visit`; all others: `getDefinition(name)` → fetch (if needed) → `renderChart(def)`.
+  - `memoizedDef(def)` — returns the same object reference when the structural signature `name|xTime|seriesCount|axisLabel` is unchanged; a new reference forces `panel._ensureChart` to rebuild the uPlot instance. Axis type is included in the signature so an axis toggle triggers a rebuild.
+  - `renderChart(def)` — calls `memoizedDef(def)` → `settingsForDef()` → `toColumns(payload, settings)` → `computeZoomTarget(cols[0])` → `panel.render(renderDef, payload, settings, {range})`.
+  - `computeZoomTarget(xs)` — pure; returns `{min, max}` or `null`. Replaces `applyZoom()` which imperatively called `setMainXRange`; the target is now passed to `panel.render()` as `opts.range` so the initial zoom is seeded atomically, avoiding the deferred-ranger-seed race (spec A1).
+  - `persistRange(min, max, snap)` — persists visible x-range to URL + ZOOM control; called from the `onRangeChange` panel callback. `snap=true` (source='chart') → preset snapping; `snap=false` (source='ranger') → custom base-36 range. Reads `panel.handle.uplot.data[0]` for xs.
+  - `applyControlVisibility(def)` — reads `def.controls.{bin, scale, mode, zoom, interval, windowUnits, visibility}` to show/hide UI controls; also toggles `chart-hashrate` CSS class on `chartsViewTarget` for hashrate selection.
+
+- **Location:** `cmd/dcrdata/public/js/helpers/chart_panel.js` (added; widened into this refresh)
+  - `createChartPanel(chartEl, opts)` — factory; `opts` includes `{rangerEl, xTime, scaleType, mode, measureSize, formatX, onRangeChange, rangerData, rangerDef, rangerSeedOnce}`. Callable values are resolved live at build time.
+  - `panel.render(def, payload, settings, opts)` — async main entry point. `_ensureChart(def, epoch)` rebuilds on a def-reference change; same reference → `setData` only. `opts.range` seeds the zoom; `opts.preserveRange` restores the existing window for same-def in-place updates. After the chart, `_ensureRanger(def, cols, epoch, target)` builds or updates the strip and defers the selection seed two microtasks (waiting for uPlot's async commit to settle before calling `valToPos`).
+  - `panel.epoch` — monotonic counter bumped by every `render()` call; checked after each `await` in `_ensureChart` and `_ensureRanger` to abort work from a superseded render.
+  - `panel._themeEpoch` — separate counter for theme changes; a dark/light toggle bumps this without bumping `epoch`, so it cannot abort an in-flight render.
+  - `rangerSeedOnce` — when `true`, the strip data is seeded once on first build and never overwritten by subsequent `render()` calls (only the selection tracks the chart). Use when the chart shows aggregated/re-bucketed data but the ranger must show the full fine-grained history.
+  - Owns: `NIGHT_MODE` globalEventBus listener, debounced `window.resize` listener, `installTooltip`, `renderLegend`, `positionTooltip`, `installTouchScrub` (three-state gesture + double-tap dblclick synthesis for iOS), `_setDark` (captures live x-range before rebuild, deferred ranger re-select via themeEpoch-guarded microtask). All moved verbatim from the charts controller.
+  - `destroy()` — removes globalEventBus listener and window.resize listener; destroys handle and ranger. Must be called in Stimulus `disconnect()`.
 
 ### 4. Cross-Layer Dependencies
 
 - **Definition registry is the new untyped boundary.** `getDefinition(name)` returns a plain object; the controller treats every definition identically. Mismatch between `def.series.length` and `toColumns(...)` column count silently renders the wrong series against wrong data (no error at runtime).
+- **`chart_panel.js` is the new controller-to-renderer intermediary.** All `createChart`, `createRanger`, resize, theme, tooltip, and range callbacks are owned by `ChartPanel`. A controller that bypasses the panel and calls `createChart` / `createRanger` directly will silently diverge in resize guard, theme handling, and epoch-based overlap protection.
 - **Two truth sources for "coin supply"**: `Blocks.NewAtoms`/`Days.NewAtoms` (VAR deltas) versus per-coin-type `SKASupply` (SKA cumulative). They share only the chart-ID namespace and the `coinSupplyDef` factory.
 - **Cache symmetry break**: `chartMakers` hits → `cacheChart`; `skaSupplyChart` → no cache. SKA responses are recomputed (and re-marshaled) on every request. `invalidateTipCharts` only flushes `chartMakers`-cached charts (TicketPrice, POWDifficulty, PercentStaked).
 - **`uint8` ↔ string coupling**: Go `IsSKASupplyChart`/`SkaCoinType` and JS `coinTypeFromName`/`isCoinSupplyName` in `registry.js` must agree on `coin-supply/` prefix and `1..255` range — no shared parser.
@@ -130,7 +147,7 @@ When modifying chart data structures or pipelines, check ALL of:
   - SKA: `db/cache/charts.go:SKASupplyChartData`, `SKASupplyData`, `skaSupplyChart`, `aggregateSKASupply`; `db/dcrpg/pgblockchain.go:LoadSKASupplyForCoin`; SQL `SelectSKACoinSupplyPerBlock`.
   - Live tip: `ChartTip`, `SetTip`, `invalidateTipCharts`, `tipMtx`. All three tip-reading chart makers: `powDifficultyChart`, `ticketPriceChart`, `stakedCoinsChart`.
   - API: `cmd/dcrdata/internal/api/apiroutes.go:ChartTypeData`, `appContext.charts`, `DataSource.LoadSKASupplyForCoin`.
-  - Frontend: `public/js/charts/registry.js` (`getDefinition`, `registerCoinFactories`), `public/js/charts/format.js` (`xColumn`, `formatSkaAtomsExact`), `public/js/charts/definitions/coin_supply.js` (`coinSupplyDef`), per-chart definition modules, `public/js/helpers/uplot_adapter.js`, `public/js/helpers/uplot_ranger.js`, `public/js/helpers/chart_theme.js`.
+  - Frontend: `public/js/charts/registry.js` (`getDefinition`, `registerCoinFactories`), `public/js/charts/format.js` (`xColumn`, `formatSkaAtomsExact`), `public/js/charts/definitions/coin_supply.js` (`coinSupplyDef`), per-chart definition modules, `public/js/helpers/chart_panel.js`, `public/js/helpers/uplot_adapter.js`, `public/js/helpers/uplot_ranger.js`, `public/js/helpers/chart_theme.js`.
 - **Indirect dependencies:**
   - `cmd/dcrdata/internal/explorer/explorerroutes.go:Charts` builds `ActiveSKATypes`.
   - `cmd/dcrdata/views/charts.tmpl:33-41` consumes `ActiveSKATypes`.
@@ -191,12 +208,13 @@ When modifying chart data structures or pipelines, check ALL of:
 - **Ticket price definition:** `cmd/dcrdata/public/js/charts/definitions/ticket_price.js` (`toColumns` with `raw.h` priority over index-derived xs).
 - **PoW difficulty definition:** `cmd/dcrdata/public/js/charts/definitions/pow_difficulty.js` (`toColumns` with `raw.h` priority).
 - **Theme:** `cmd/dcrdata/public/js/helpers/chart_theme.js` (`PALETTE`, `SERIES_COLORS`, `colorForIndex`, `seriesColorByKey`; secondary dark `#4dabf7`).
-- **uPlot adapter:** `cmd/dcrdata/public/js/helpers/uplot_adapter.js` (`createChart`, `buildOpts`, `resolveSeriesColor`).
-- **Ranger:** `cmd/dcrdata/public/js/helpers/uplot_ranger.js` (`createRanger`).
-- **Controller:** `cmd/dcrdata/public/js/controllers/charts_controller.js` (`fetchGeneration`, `selectChart`, `renderChart`, `renderLegend`, `recreateRanger`, `applyControlVisibility`, `onChartRangeChange`, `onRangerSelect`, `applyZoom`).
+- **uPlot adapter:** `cmd/dcrdata/public/js/helpers/uplot_adapter.js` (`createChart`, `buildOpts`, `stack`, `resolveSeriesColor`; `stack()` added; `def.stacked`/`bands` support; `s.paths`/`s.barAlign`/`s.barSize` per-series overrides; seeded visibility; `setVisibility` early-return + stacked-rebuild).
+- **Ranger:** `cmd/dcrdata/public/js/helpers/uplot_ranger.js` (`createRanger`; `RANGER_HEIGHT = 44`; `setSelection` clamps to data extent + min-width 1 device pixel).
+- **Chart panel:** `cmd/dcrdata/public/js/helpers/chart_panel.js` (`createChartPanel`, `ChartPanel.render`, `_ensureChart`, `_ensureRanger`, `setXRange`, `installTooltip`, `renderLegend`, `installTouchScrub`, `_setDark`, `destroy`).
+- **Controller:** `cmd/dcrdata/public/js/controllers/charts_controller.js` (`fetchGeneration`, `this.panel`, `selectChart`, `memoizedDef`, `renderChart`, `computeZoomTarget`, `persistRange`, `applyControlVisibility`).
 - **SKA helpers:** `cmd/dcrdata/public/js/helpers/ska_helper.js:78` (`splitSkaAtomsNoTrailing`), `:16` (`renderCoinType`).
-- **Charts SCSS:** `cmd/dcrdata/public/scss/charts.scss:260` (`.chartview.chart-hashrate .dygraph-y2label`), `:450-479` (visibility `.checkmark` colors).
-- **Key commits:** `538d5cd1` initial SKA chart support; `19a114c1` cumulative + height alignment; `a9db4b3b` `h` field on time-axis; `b448cb64` ChartTip + PartialWindow (live tip override); `053c51ae` ReorgHandler window-aware snipping; `c513c564` fetchGeneration race guard; `567780a3` log-floor clamp; `b2a86725` uPlot rewrite merge base; dark secondary `#4dabf7` (chart.scss + chart_theme.js).
+- **Charts SCSS:** `cmd/dcrdata/public/scss/charts.scss` — `.chartview.chart-hashrate .dygraph-y2label` (y2 axis label color gate); `.customcheck .checkmark` colors (`.received` dark-mode mint `#2dd8a3` added; `.sent` corrected to `#e03131` PALETTE[1]; `.net` corrected to `#f08c00` PALETTE[3]); `.tp-chart-ranger` (full-width ranger variant for ticketpool, sharing `@mixin ranger-select-styles` with `.chart-ranger`); `body.darkBG .btn_sm` color overrides.
+- **Key commits:** `538d5cd1` initial SKA chart support; `19a114c1` cumulative + height alignment; `a9db4b3b` `h` field on time-axis; `b448cb64` ChartTip + PartialWindow (live tip override); `053c51ae` ReorgHandler window-aware snipping; `c513c564` fetchGeneration race guard; `567780a3` log-floor clamp; `b2a86725` uPlot rewrite merge base; dark secondary `#4dabf7` (chart.scss + chart_theme.js); `7a2e5da9` ChartPanel retrofit + block-bin 0-based + stack() + RANGER_HEIGHT 44.
 
 See also:
 

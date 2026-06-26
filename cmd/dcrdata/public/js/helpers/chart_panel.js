@@ -20,11 +20,35 @@ export function createChartPanel(chartEl, opts = {}) {
 class ChartPanel {
   constructor(
     chartEl,
-    { dark, xTime, rangerEl, formatX, onRangeChange, rangerData, rangerDef, rangerSeedOnce } = {}
+    {
+      dark,
+      xTime,
+      scaleType,
+      mode,
+      measureSize,
+      rangerEl,
+      formatX,
+      onRangeChange,
+      rangerData,
+      rangerDef,
+      rangerSeedOnce
+    } = {}
   ) {
     this.chartEl = chartEl
     this.rangerEl = rangerEl || null
-    this.xTime = xTime !== false
+    // Chart dimensions at build + resize. Default = the element's CSS box; /charts overrides it
+    // to size to the viewport (documentElement-based) via computeChartHeight.
+    this.measureSize =
+      typeof measureSize === 'function'
+        ? measureSize
+        : () => ({
+            width: this.chartEl.clientWidth || 800,
+            height: this.chartEl.clientHeight || 300
+          })
+    this._lastWidth = null // last width applied (window-resize width-gate baseline)
+    this.xTime = xTime // boolean | (() => boolean); resolved at build via _xTime()
+    this.scaleType = scaleType // 'linear'|'log' | (()=>...); resolved at build, default linear
+    this.mode = mode // 'line'|'stepped' | (()=>...); applied via setMode on a fresh build only
     this.formatX = typeof formatX === 'function' ? formatX : (x) => String(x)
     this.onRangeChange = typeof onRangeChange === 'function' ? onRangeChange : null
     this.rangerData = typeof rangerData === 'function' ? rangerData : (cols) => [cols[0], cols[1]]
@@ -48,7 +72,7 @@ class ChartPanel {
     // Page-level listeners (removed in destroy() — the mandatory-destroy invariant).
     this._onNightMode = () => this._setDark(darkEnabled())
     globalEventBus.on('NIGHT_MODE', this._onNightMode)
-    this._onWindowResize = debounce(() => this._resize(), RESIZE_DEBOUNCE_MS)
+    this._onWindowResize = debounce(() => this._resize(false), RESIZE_DEBOUNCE_MS)
     window.addEventListener('resize', this._onWindowResize)
   }
 
@@ -60,12 +84,34 @@ class ChartPanel {
     return this._ranger
   }
 
+  // xTime may be a value or a zero-arg function read live at build time, so a rebuild after an
+  // axis toggle paints the CURRENT axis type. A build only happens on a def-reference change,
+  // which the consuming controller keys to the axis via def memoization.
+  _xTime() {
+    const v = typeof this.xTime === 'function' ? this.xTime() : this.xTime
+    return v !== false
+  }
+
+  // Read live at build so a rebuild after a scale/mode toggle paints the CURRENT state (a frozen
+  // initial value would revert a user's live log/stepped choice). Live toggles still go through
+  // the handle.setScaleType / setMode escape hatch.
+  _scaleType() {
+    const v = typeof this.scaleType === 'function' ? this.scaleType() : this.scaleType
+    return v === 'log' ? 'log' : 'linear'
+  }
+
+  _mode() {
+    const v = typeof this.mode === 'function' ? this.mode() : this.mode
+    return v === 'stepped' || v === 'line' ? v : null
+  }
+
   // (Re)build for `def`, feed `payload`, retain it for the tooltip. Recreates the handle on a
   // def REFERENCE change (not def.name), else setData. Async: createChart is async, so the
   // epoch guard also serializes overlapping renders.
   async render(def, payload, settings, opts = {}) {
     if (this._destroyed) return
     const epoch = ++this.epoch
+    this._settings = settings || {} // retained for renderLegend's formatValue/legendExtra
     const cols = def.toColumns(payload || {}, settings || {})
     const reuse = !!this._handle && def === this.currentDef
     let target = null
@@ -81,6 +127,12 @@ class ChartPanel {
     if (epoch !== this.epoch || this._destroyed) return
     this.payload = payload
     this._handle.setData(cols)
+    // Initial mode on a FRESH build only (createChart has no mode option). A reuse render must
+    // not re-assert it — that would revert a user's live setMode toggle on the next setData.
+    if (!reuse) {
+      const m = this._mode()
+      if (m) this._handle.setMode(m)
+    }
     if (target) this._handle.setXRange(target.min, target.max)
     await this._ensureRanger(def, cols, epoch, target)
   }
@@ -99,11 +151,13 @@ class ChartPanel {
       this._handle = null
     }
     const darkAtBuild = this._dark
+    const { width, height } = this.measureSize()
     const handle = await createChart(this.chartEl, def, {
       dark: darkAtBuild,
-      width: this.chartEl.clientWidth || 800,
-      height: this.chartEl.clientHeight || 300,
-      xTime: this.xTime,
+      width: width,
+      height: height,
+      scaleType: this._scaleType(),
+      xTime: this._xTime(),
       hooks: this._buildHooks(),
       onRangeChange: (min, max) => this._onChartRangeChange(min, max)
     })
@@ -112,6 +166,7 @@ class ChartPanel {
       return
     }
     this._handle = handle
+    this._lastWidth = width // seed the gate so the first height-only window resize is a no-op
     this.currentDef = def
     // A theme toggle that landed while createChart was awaiting loadUPlot() couldn't reach the
     // not-yet-assigned handle; reconcile so the chart matches the current theme.
@@ -133,7 +188,7 @@ class ChartPanel {
       const ranger = await createRanger(this.rangerEl, this.rangerDef || def, {
         dark: this._dark,
         width: this.rangerEl.clientWidth || 800,
-        xTime: this.xTime,
+        xTime: this._xTime(),
         leftGutter: g.left,
         rightGutter: g.right,
         onSelect: (min, max) => this._onRangerSelect(min, max)
@@ -185,10 +240,12 @@ class ChartPanel {
     if (this._ranger) this._ranger.setSelection(min, max)
   }
 
-  // Main-chart drag-zoom: mirror to the strip + notify the controller (URL persistence).
+  // Main-chart drag-zoom: mirror to the strip + notify the controller (URL persistence). The
+  // 'chart' source lets a consumer treat a chart drag differently from a ranger drag (e.g.
+  // /charts snaps a chart drag to a preset but keeps a ranger drag a custom range).
   _onChartRangeChange(min, max) {
     if (this._ranger) this._ranger.setSelection(min, max)
-    if (this.onRangeChange) this.onRangeChange(min, max)
+    if (this.onRangeChange) this.onRangeChange(min, max, 'chart')
   }
 
   // Ranger grip/body drag: drive the main chart (which mirrors back via _onChartRangeChange),
@@ -196,7 +253,7 @@ class ChartPanel {
   // (it does not fire the chart's onRangeChange), so this is the only notify on a ranger drag.
   _onRangerSelect(min, max) {
     if (this._handle) this._handle.setXRange(min, max)
-    if (this.onRangeChange) this.onRangeChange(min, max)
+    if (this.onRangeChange) this.onRangeChange(min, max, 'ranger')
   }
 
   // Self-contained on-plot tooltip: a div appended to u.over, shown on cursor-enter,
@@ -314,7 +371,7 @@ class ChartPanel {
       if (u.series && u.series[i + 1] && u.series[i + 1].show === false) return
       const value = u.data[i + 1][idx]
       if (value == null) return
-      const text = this.currentDef.formatValue(i, { idx, payload, value }, {})
+      const text = this.currentDef.formatValue(i, { idx, payload, value }, this._settings || {})
       if (text === '') return
       // Opt-in (def.skipZeroRows): a stacked chart's many 0-valued series clutter the tooltip.
       // Defaulted off so agenda/ticketpool/charts defs are unaffected; only stacked address
@@ -323,6 +380,13 @@ class ChartPanel {
       const color = resolveSeriesColor(s, i, dark)
       tt.appendChild(this._legendRow(`${this._marker(color)} ${s.label}: ${text}`))
     })
+    // Optional extra non-series lines (e.g. stake-participation's pool/supply). Opt-in: only
+    // fires when the def defines legendExtra; agenda/address/ticketpool defs don't, so no-op.
+    if (typeof this.currentDef.legendExtra === 'function') {
+      this.currentDef
+        .legendExtra({ idx, payload }, this._settings || {})
+        .forEach((line) => tt.appendChild(this._legendRow(`${this._marker()} ${line}`)))
+    }
     this.positionTooltip(u)
   }
 
@@ -376,17 +440,27 @@ class ChartPanel {
   }
 
   // Re-measure now (no debounce) — for layout changes that fire no window 'resize' event,
-  // e.g. a fullscreen-expand DOM move or a show/hide that changes the container size.
+  // e.g. a fullscreen-expand DOM move or a show/hide that changes the container size. Forces
+  // past the width-gate: an explicit layout change wants a re-measure even at the same width.
   resize() {
-    this._resize()
+    this._resize(true)
   }
 
   // Resize does not rebuild, so it does NOT bump the epoch, but it captures+checks it so a
-  // later render invalidates this pending re-apply.
-  _resize() {
+  // later render invalidates this pending re-apply. The debounced window path passes force=false
+  // and gates on width; the public resize() passes force=true.
+  _resize(force) {
     if (this._destroyed || !this._handle) return
     const epoch = this.epoch
-    this._handle.resize(this.chartEl.clientWidth || 800, this.chartEl.clientHeight || 300)
+    const { width, height } = this.measureSize()
+    // Mobile browsers fire `resize` on URL-bar collapse/expand during scroll — a HEIGHT-only
+    // change. Re-fitting then makes a viewport-fit chart (e.g. /charts) jump on every scroll;
+    // desktop drag and orientation flips both move the WIDTH. So the window path gates on width
+    // (harmless for CSS-stable-height pages: same height -> no visual change). An explicit
+    // resize() forces past the gate.
+    if (!force && this._lastWidth != null && width === this._lastWidth) return
+    this._lastWidth = width
+    this._handle.resize(width, height)
     if (!this._ranger || !this.rangerEl) return
     this._ranger.setWidth(this.rangerEl.clientWidth || 800)
     const sx = this._handle.uplot.scales.x

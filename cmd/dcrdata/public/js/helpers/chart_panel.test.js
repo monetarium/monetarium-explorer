@@ -9,6 +9,7 @@ const makeFakeHandle = () => ({
   setData: vi.fn(),
   setXRange: vi.fn(),
   setDark: vi.fn(),
+  setMode: vi.fn(),
   resize: vi.fn(),
   destroy: vi.fn()
 })
@@ -217,6 +218,45 @@ describe('ChartPanel tooltip', () => {
     })
     expect(p.legendElement.textContent).toContain('A: 0 VAR')
   })
+  it('passes the retained render settings to formatValue (e.g. ticket-pool network target)', async () => {
+    const settingsDef = {
+      name: 's',
+      series: [{ label: 'Tickets', color: '#0a0', kind: 'line' }],
+      toColumns: (p) => [p.x, p.v],
+      formatValue: (i, d, settings) => `${d.payload.v[d.idx]} (target ${settings.tps})`
+    }
+    const p = createChartPanel(document.createElement('div'), { formatX: (x) => `X: ${x}` })
+    await p.render(settingsDef, { x: [1], v: [42] }, { tps: 999 })
+    p.legendElement = document.createElement('div')
+    p.renderLegend({
+      cursor: { idx: 0, left: 10, top: 10 },
+      data: [[1], [42]],
+      series: [{}, { show: true }],
+      over: { clientWidth: 800, clientHeight: 300 }
+    })
+    expect(p.legendElement.textContent).toContain('Tickets: 42 (target 999)')
+  })
+  it('appends def.legendExtra lines after the series rows (stake-participation extras)', async () => {
+    const extraDef = {
+      name: 'e',
+      series: [{ label: 'Participation', color: '#0a0', kind: 'line' }],
+      toColumns: (p) => [p.x, p.v],
+      formatValue: (i, d) => `${d.payload.v[d.idx]}%`,
+      legendExtra: (d, settings) => [`Pool: ${d.payload.pool[d.idx]} (tps ${settings.tps})`]
+    }
+    const p = createChartPanel(document.createElement('div'), { formatX: (x) => `X: ${x}` })
+    await p.render(extraDef, { x: [1], v: [50], pool: [123] }, { tps: 7 })
+    p.legendElement = document.createElement('div')
+    p.renderLegend({
+      cursor: { idx: 0, left: 10, top: 10 },
+      data: [[1], [50]],
+      series: [{}, { show: true }],
+      over: { clientWidth: 800, clientHeight: 300 }
+    })
+    const txt = p.legendElement.textContent
+    expect(txt).toContain('Participation: 50%')
+    expect(txt).toContain('Pool: 123 (tps 7)')
+  })
 })
 
 describe('ChartPanel touch-scrub', () => {
@@ -381,7 +421,20 @@ describe('ChartPanel ranger', () => {
     const onSelect = createRanger.mock.calls.at(-1)[2].onSelect
     onSelect(100, 200) // simulate a ranger grip drag
     expect(p.handle.setXRange).toHaveBeenCalledWith(100, 200)
-    expect(onRangeChange).toHaveBeenCalledWith(100, 200)
+    expect(onRangeChange).toHaveBeenCalledWith(100, 200, 'ranger')
+  })
+  it('passes the drag source to onRangeChange (chart vs ranger)', async () => {
+    const onRangeChange = vi.fn()
+    const p = createChartPanel(document.createElement('div'), {
+      rangerEl: document.createElement('div'),
+      onRangeChange: onRangeChange
+    })
+    await p.render(defWithRanger, payload1, {})
+    p._onChartRangeChange(10, 20)
+    expect(onRangeChange).toHaveBeenLastCalledWith(10, 20, 'chart')
+    const { createRanger } = await import('./uplot_ranger.js')
+    createRanger.mock.calls.at(-1)[2].onSelect(30, 40)
+    expect(onRangeChange).toHaveBeenLastCalledWith(30, 40, 'ranger')
   })
   it('a ranger drag is a no-op for onRangeChange when none is provided (agenda/ticketpool)', async () => {
     const p = createChartPanel(document.createElement('div'), {
@@ -392,6 +445,52 @@ describe('ChartPanel ranger', () => {
     const onSelect = createRanger.mock.calls.at(-1)[2].onSelect
     expect(() => onSelect(100, 200)).not.toThrow()
     expect(p.handle.setXRange).toHaveBeenCalledWith(100, 200)
+  })
+})
+
+describe('ChartPanel dynamic build options', () => {
+  it('resolves a function xTime at build (chart + ranger get the current value)', async () => {
+    const { createChart } = await import('./uplot_adapter.js')
+    const { createRanger } = await import('./uplot_ranger.js')
+    let axisTime = false
+    const p = createChartPanel(document.createElement('div'), {
+      rangerEl: document.createElement('div'),
+      xTime: () => axisTime
+    })
+    await p.render(defA, payload1, {})
+    expect(createChart.mock.calls.at(-1)[2].xTime).toBe(false)
+    expect(createRanger.mock.calls.at(-1)[2].xTime).toBe(false)
+    axisTime = true
+    await p.render({ ...defA }, payload1, {}) // new def ref -> rebuild -> re-resolves xTime
+    expect(createChart.mock.calls.at(-1)[2].xTime).toBe(true)
+  })
+  it('forwards scaleType (value or function) into createChart', async () => {
+    const { createChart } = await import('./uplot_adapter.js')
+    const p1 = createChartPanel(document.createElement('div'), { scaleType: 'log' })
+    await p1.render(defA, payload1, {})
+    expect(createChart.mock.calls.at(-1)[2].scaleType).toBe('log')
+    const p2 = createChartPanel(document.createElement('div'), { scaleType: () => 'log' })
+    await p2.render(defA, payload1, {})
+    expect(createChart.mock.calls.at(-1)[2].scaleType).toBe('log')
+  })
+  it('defaults scaleType to linear when unset', async () => {
+    const { createChart } = await import('./uplot_adapter.js')
+    const p = createChartPanel(document.createElement('div'), {})
+    await p.render(defA, payload1, {})
+    expect(createChart.mock.calls.at(-1)[2].scaleType).toBe('linear')
+  })
+  it('applies the initial mode via setMode on a fresh build, not on a reuse setData', async () => {
+    const p = createChartPanel(document.createElement('div'), { mode: 'stepped' })
+    await p.render(defA, payload1, {})
+    expect(p.handle.setMode).toHaveBeenCalledWith('stepped')
+    p.handle.setMode.mockClear()
+    await p.render(defA, payload1, {}) // same def -> reuse -> must NOT re-assert mode
+    expect(p.handle.setMode).not.toHaveBeenCalled()
+  })
+  it('does not call setMode when mode is unset', async () => {
+    const p = createChartPanel(document.createElement('div'), {})
+    await p.render(defA, payload1, {})
+    expect(p.handle.setMode).not.toHaveBeenCalled()
   })
 })
 
@@ -479,6 +578,37 @@ describe('ChartPanel rangerSeedOnce (fixed overview)', () => {
     p.handle.uplot.scales.x = { min: 1, max: 2 }
     await p.render(defWithRanger, { x: [1, 2, 3], yes: [4, 5, 6] }, {}, { preserveRange: true })
     expect(ranger.setData).not.toHaveBeenCalled()
+  })
+})
+
+describe('ChartPanel measureSize + width-gate', () => {
+  it('uses measureSize for the initial build dims', async () => {
+    const { createChart } = await import('./uplot_adapter.js')
+    const p = createChartPanel(document.createElement('div'), {
+      measureSize: () => ({ width: 640, height: 480 })
+    })
+    await p.render(defA, payload1, {})
+    expect(createChart.mock.calls.at(-1)[2].width).toBe(640)
+    expect(createChart.mock.calls.at(-1)[2].height).toBe(480)
+  })
+  it('window-path resize skips a height-only change and runs on a width change', async () => {
+    const measure = vi.fn(() => ({ width: 800, height: 300 }))
+    const p = createChartPanel(document.createElement('div'), { measureSize: measure })
+    await p.render(defA, payload1, {}) // seeds _lastWidth = 800
+    p.handle.resize.mockClear()
+    p._resize(false) // window path, width unchanged -> gated
+    expect(p.handle.resize).not.toHaveBeenCalled()
+    measure.mockReturnValue({ width: 900, height: 300 }) // width changed
+    p._resize(false)
+    expect(p.handle.resize).toHaveBeenCalledWith(900, 300)
+  })
+  it('public resize() forces a re-measure even when width is unchanged', async () => {
+    const measure = vi.fn(() => ({ width: 800, height: 300 }))
+    const p = createChartPanel(document.createElement('div'), { measureSize: measure })
+    await p.render(defA, payload1, {}) // _lastWidth = 800
+    p.handle.resize.mockClear()
+    p.resize() // forced, same width
+    expect(p.handle.resize).toHaveBeenCalledWith(800, 300)
   })
 })
 

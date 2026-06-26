@@ -4,12 +4,7 @@ import { requestJSON } from '../helpers/http'
 import humanize from '../helpers/humanize_helper'
 import TurboQuery from '../helpers/turbolinks_helper'
 import Zoom from '../helpers/zoom_helper'
-import { animationFrame } from '../helpers/animation_helper' // eslint-disable-line no-unused-vars
-import globalEventBus from '../services/event_bus_service'
-import { darkEnabled } from '../services/theme_service'
-import { createChart, resolveSeriesColor } from '../helpers/uplot_adapter'
-import { createRanger } from '../helpers/uplot_ranger'
-import { classifyGesture, isDoubleTap } from '../helpers/touch_gesture'
+import { createChartPanel } from '../helpers/chart_panel'
 import { getDefinition } from '../charts/registry'
 import '../charts/definitions/index' // side-effect: register all definitions
 
@@ -23,19 +18,6 @@ const BELOW_CHART_RESERVE = 104
 const BELOW_CHART_GAP = 32
 // Readability floor — below this the chart stops shrinking and the page scrolls instead.
 const CHART_MIN_HEIGHT = 320
-
-// Horizontal travel (CSS px) a touch must exceed before it locks into a scrub rather than a
-// vertical page scroll. Mirrors the touch-action: pan-y split with a JS fallback.
-const SCRUB_THRESHOLD = 8
-
-// Trailing debounce so a window drag-resize coalesces into one setSize.
-function debounce(fn, ms) {
-  let t = null
-  return (...args) => {
-    if (t) clearTimeout(t)
-    t = setTimeout(() => fn(...args), ms)
-  }
-}
 
 export default class extends Controller {
   static get targets() {
@@ -57,8 +39,6 @@ export default class extends Controller {
       'vSelectorItem',
       'vSelector',
       'binSize',
-      'legendEntry',
-      'legendMarker',
       'modeSelector',
       'modeOption',
       'intervalSelector',
@@ -87,45 +67,35 @@ export default class extends Controller {
     this.query.update(this.settings)
     this.settings.chart = this.settings.chart || 'ticket-price'
 
-    this.handle = null
     this.currentDef = null
     this.payload = null
     this.selectedChartName = null
-    this.zoomGuard = false
-    this.ranger = null
-    this.lastWidth = null // viewport width the chart was last sized to (resize guard)
     // Monotonic selection counter. selectChart() bumps it on entry and captures the
     // value; after each await it bails if a newer selection has superseded it. Prevents
-    // a stale fetch from clobbering this.payload and stops two overlapping createChart
-    // calls from orphaning a uPlot instance in the shared chart element.
+    // a stale fetch from clobbering this.payload.
     this.fetchGeneration = 0
 
-    // Legend element generators (cloned from the template nodes).
-    this.legendElement = this.labelsTarget
-    const lm = this.legendMarkerTarget
-    lm.remove()
-    lm.removeAttribute('data-charts-target')
-    this.legendMarker = (color) => {
-      const node = document.createElement('div')
-      const marker = lm.cloneNode()
-      if (color) marker.style.borderBottomColor = color
-      node.appendChild(marker)
-      return node.innerHTML
-    }
-    const le = this.legendEntryTarget
-    le.remove()
-    le.removeAttribute('data-charts-target')
-    this.legendEntry = (s) => {
-      const node = le.cloneNode()
-      node.innerHTML = s
-      return node
-    }
-
-    this.processNightMode = () => this.redrawTheme()
-    globalEventBus.on('NIGHT_MODE', this.processNightMode)
-
-    this.onWindowResize = debounce(() => this.resizeChartToViewport(), 150)
-    window.addEventListener('resize', this.onWindowResize)
+    // One ChartPanel owns the chart + tooltip + touch-scrub + ranger + theme + resize.
+    // xTime/scaleType/mode and the x-label are read LIVE because the Time/Blocks axis, the
+    // log/stepped controls, and the ticket-price date format all change at runtime; a rebuild
+    // (def-reference change, keyed by memoizedDef) then repaints the current state with no flash.
+    // measureSize sizes the chart to the viewport. A main-chart drag snaps to a preset; a
+    // ranger-strip drag persists a custom range (source distinguishes them in persistRange).
+    this.panel = createChartPanel(this.chartsViewTarget, {
+      rangerEl: this.hasRangerViewTarget ? this.rangerViewTarget : null,
+      xTime: () => this.settings.axis === 'time',
+      scaleType: () => (this.settings.scale === 'log' ? 'log' : 'linear'),
+      mode: () => (this.settings.mode === 'stepped' ? 'stepped' : 'line'),
+      measureSize: () => ({
+        width: this.chartsViewTarget.clientWidth || 800,
+        height: this.computeChartHeight()
+      }),
+      formatX: (x) =>
+        this.settings.axis === 'time'
+          ? `Date: ${humanize.date(x * 1000, false, this.settings.chart !== 'ticket-price')}`
+          : `Block Height: ${x}`,
+      onRangeChange: (min, max, source) => this.persistRange(min, max, source === 'chart')
+    })
 
     this.chartSelectTarget.value = this.settings.chart
 
@@ -144,49 +114,18 @@ export default class extends Controller {
   }
 
   disconnect() {
-    window.removeEventListener('resize', this.onWindowResize)
-    globalEventBus.off('NIGHT_MODE', this.processNightMode)
-    if (this.handle) {
-      this.handle.destroy()
-      this.handle = null
-    }
-    if (this.ranger) {
-      this.ranger.destroy()
-      this.ranger = null
+    if (this.panel) {
+      this.panel.destroy()
+      this.panel = null
     }
   }
 
-  // Called by the adapter on a user-driven main-chart x-range change (drag-zoom or
-  // double-click reset). Persist with preset-snapping (existing behavior) and reflect the
-  // new window in the overview strip.
-  onChartRangeChange(min, max) {
-    this.persistRange(min, max, true)
-    if (this.ranger) this.ranger.setSelection(min, max)
-  }
-
-  // Called by the overview strip on a grip/body/native-paint drag. Drive the main chart
-  // (silent — setXRange does not re-fire onChartRangeChange) and persist as a CUSTOM range
-  // that clears every preset (snap=false). The strip already shows the new selection.
-  onRangerSelect(min, max) {
-    if (!this.handle) return
-    this.handle.setXRange(min, max)
-    this.persistRange(min, max, false)
-  }
-
-  // Push an x-range to the main chart and mirror it onto the strip. Used by the
-  // programmatic zoom paths (applyZoom / presets / privacy default).
-  setMainXRange(min, max) {
-    if (!this.handle) return
-    this.handle.setXRange(min, max)
-    if (this.ranger) this.ranger.setSelection(min, max)
-  }
-
-  // Persist a visible [min,max] window to the URL + ZOOM control. When snap is true, a
-  // window that lines up with a preset re-highlights it; when false (strip drags), always
-  // store an encoded custom range and clear every preset.
+  // Persist a visible [min,max] window to the URL + ZOOM control. When snap is true (a
+  // main-chart drag), a window that lines up with a preset re-highlights it; when false (a
+  // ranger-strip drag), always store an encoded custom range and clear every preset.
   persistRange(min, max, snap) {
-    if (!this.handle || !this.payload) return
-    const xs = this.handle.uplot.data[0]
+    if (!this.panel.handle || !this.payload) return
+    const xs = this.panel.handle.uplot.data[0]
     if (!xs || !xs.length) return
     const preset = snap ? this.presetForRange(min, max, xs[0], xs[xs.length - 1]) : null
     if (preset) {
@@ -290,86 +229,32 @@ export default class extends Controller {
   }
 
   async renderChart(def) {
-    // Captured here (not as a param) so the createChart().then below can tell whether a
-    // newer selectChart() landed while it was in flight. Without this, two overlapping
-    // creations both resolve and assign this.handle; the first-resolved uPlot root is then
-    // orphaned in the shared element (its canvas + listeners stay, destroy() never runs).
-    const gen = this.fetchGeneration
-    // hashrate w/o active_miners → drop the y2 miners series/axis.
-    const renderDef = this.resolveRenderDef(def)
+    const renderDef = this.memoizedDef(def)
     this.currentDef = renderDef
-
-    const cols = renderDef.toColumns(this.payload, this.settingsForDef())
-    const xTime = this.settings.axis === 'time'
-
-    if (
-      !this.handle ||
-      this.renderedName !== renderDef.name ||
-      this.renderedXTime !== xTime ||
-      this.renderedSeriesCount !== renderDef.series.length
-    ) {
-      if (this.handle) this.handle.destroy()
-      // Null it during the async createChart gap: applyZoom()/resizeChartToViewport()
-      // guard on `this.handle`, so a resize landing here must see null rather than a
-      // torn-down instance whose stale data could be applied to the incoming chart.
-      this.handle = null
-      // create synchronously-awaited handle
-      const width = this.chartsViewTarget.clientWidth || 800
-      this.pendingCreate = createChart(this.chartsViewTarget, renderDef, {
-        dark: darkEnabled(),
-        width: width,
-        height: this.computeChartHeight(),
-        scaleType: this.settings.scale === 'log' ? 'log' : 'linear',
-        xTime: xTime,
-        hooks: this.buildHooks(),
-        onRangeChange: (min, max) => this.onChartRangeChange(min, max)
-      }).then(async (h) => {
-        // Superseded while createChart was awaiting: tear this instance down instead of
-        // adopting it, so it isn't left orphaned in the element under the newer chart.
-        if (gen !== this.fetchGeneration) {
-          h.destroy()
-          return null
-        }
-        this.handle = h
-        // Seed the resize-guard baseline so the first mobile scroll (height-only) is a
-        // no-op — see resizeChartToViewport.
-        this.lastWidth = width
-        this.renderedName = renderDef.name
-        this.renderedXTime = xTime
-        this.renderedSeriesCount = renderDef.series.length
-        h.setData(cols)
-        if (this.settings.mode === 'stepped') h.setMode('stepped')
-        await this.recreateRanger(renderDef, cols, xTime)
-        this.applyZoom()
-        this.setVisibilityFromSettings()
-        return h
-      })
-      return this.pendingCreate
-    }
-    this.handle.setData(cols)
-    if (this.ranger) this.ranger.setData([cols[0], cols[1]])
-    this.applyZoom()
+    const settings = this.settingsForDef()
+    const cols = renderDef.toColumns(this.payload, settings)
+    // Compute the zoom target BEFORE render and pass it as { range } so the panel seeds the chart
+    // AND the ranger to it. A post-render panel.setXRange would race render's deferred full-extent
+    // ranger seed and lose the zoom (see spec A1).
+    const target = this.computeZoomTarget(cols[0])
+    await this.panel.render(renderDef, this.payload, settings, target ? { range: target } : {})
+    this.setVisibilityFromSettings()
   }
 
-  // (Re)build the overview strip for the current chart. The strip always shows the full
-  // extent of the primary series; it is recreated whenever the main chart is, so its
-  // primary color and x-axis type stay in step.
-  async recreateRanger(renderDef, cols, xTime) {
-    if (this.ranger) {
-      this.ranger.destroy()
-      this.ranger = null
-    }
-    if (!this.hasRangerViewTarget) return
-    const g = (this.handle && this.measureGutters(this.handle.uplot)) || { left: 0, right: 0 }
-    this.ranger = await createRanger(this.rangerViewTarget, renderDef, {
-      dark: darkEnabled(),
-      width: this.rangerViewTarget.clientWidth || this.chartsViewTarget.clientWidth || 800,
-      xTime: xTime,
-      leftGutter: g.left,
-      rightGutter: g.right,
-      onSelect: (min, max) => this.onRangerSelect(min, max)
-    })
-    this.ranger.setData([cols[0], cols[1]])
+  // resolveRenderDef returns a NEW object every call; ChartPanel rebuilds on a def-REFERENCE
+  // change. Memoize by a structural signature so a stable structure returns the same reference
+  // (panel does a cheap setData) and a changed one (chart / axis / series-count / dynamic axis
+  // label) returns a new reference (rebuild). xTime is in the signature so an axis flip forces
+  // the rebuild that re-resolves the panel's xTime/scaleType/formatX.
+  memoizedDef(def) {
+    const renderDef = this.resolveRenderDef(def)
+    const xTime = this.settings.axis === 'time'
+    const axisLabel = (renderDef.axes[0] && renderDef.axes[0].label) || ''
+    const sig = `${renderDef.name}|${xTime}|${renderDef.series.length}|${axisLabel}`
+    if (this._defSig === sig && this._memoDef) return this._memoDef
+    this._defSig = sig
+    this._memoDef = renderDef
+    return renderDef
   }
 
   // chainwork/hashrate set a dynamic axis label; hashrate may drop its y2 series.
@@ -414,238 +299,6 @@ export default class extends Controller {
     return Math.max(CHART_MIN_HEIGHT, Math.round(avail))
   }
 
-  // Re-fit the chart to the viewport after a window resize. Reads the live container width
-  // and the computed available height and pushes both to uPlot via the existing resize().
-  // Also re-pixels the ranger strip (its width path is setGutters, which is epsilon-guarded
-  // and never fires on a pure-width change) and re-applies the selection (pixel-based).
-  resizeChartToViewport() {
-    if (!this.handle) return
-    const width = this.chartsViewTarget.clientWidth || 800
-    // Mobile browsers fire `resize` when the URL/toolbar collapses or re-expands during
-    // scroll — a HEIGHT-only viewport change (innerWidth is untouched). Re-fitting then
-    // would make the chart jump on every scroll. Desktop drag-resize and mobile
-    // orientation changes both move the WIDTH, so gate the re-fit on a width change and
-    // ignore height-only churn. (computeChartHeight reads documentElement.clientHeight, which
-    // can change on mobile toolbar collapse/expand.)
-    if (width === this.lastWidth) return
-    this.lastWidth = width
-    this.handle.resize(width, this.computeChartHeight())
-    if (!this.ranger) return
-    this.ranger.setWidth(this.rangerViewTarget.clientWidth || width)
-    // The strip's selection rectangle is pixel-based, so a width change invalidates it. Re-apply
-    // it at the new width from the main chart's current x-range (setSelection uses fire=false, so
-    // this cannot loop back through onRangerSelect).
-    //
-    // Defer to a microtask. uPlot batches its own resize work onto a microtask (commit ->
-    // microTask(_commit)); that commit rescales any visible selection by plotWidCss/_plotWidCss,
-    // and on a widening resize (e.g. a portrait->landscape orientation flip) the baseline is still
-    // the OLD, narrower width — so a selection written synchronously here gets multiplied a moment
-    // later and shoots past the strip's right edge. Queuing after uPlot's commit (microtasks are
-    // FIFO) lets the baseline refresh first, so our write lands last on a settled layout. Mirrors
-    // the deferral in redrawTheme.
-    const sx = this.handle.uplot.scales.x
-    if (sx && sx.min != null && sx.max != null) {
-      const min = sx.min
-      const max = sx.max
-      queueMicrotask(() => {
-        if (this.ranger) this.ranger.setSelection(min, max)
-      })
-    }
-  }
-
-  buildHooks() {
-    return {
-      // Create the on-plot hover tooltip once the chart is in the DOM.
-      ready: [(u) => this.installTooltip(u)],
-      setCursor: [(u) => this.renderLegend(u)],
-      // On every main-chart draw, mirror its plot-box insets onto the strip so the two stay
-      // aligned through zoom, scale toggle, and single↔dual-axis chart switches.
-      draw: [(u) => this.syncRangerGutters(u)]
-    }
-  }
-
-  // The main chart's plot-box insets in CSS px: the gap between the uPlot root and its
-  // over(lay) element on each side. Used to size the strip's reserve axes so its plot area
-  // lines up under the main chart's. Returns null if the geometry isn't available yet.
-  measureGutters(u) {
-    if (!u || !u.over || !u.root) return null
-    const root = u.root.getBoundingClientRect()
-    const over = u.over.getBoundingClientRect()
-    return { left: over.left - root.left, right: root.right - over.right }
-  }
-
-  syncRangerGutters(u) {
-    if (!this.ranger) return
-    const g = this.measureGutters(u)
-    if (g) this.ranger.setGutters(g.left, g.right)
-  }
-
-  // Create the hover tooltip inside the plot overlay (follows uPlot demos/tooltips.html):
-  // a div appended to u.over, shown on cursor-enter and hidden on cursor-leave (kept up
-  // during a locked drag). renderLegend fills + positions it. Reassigns this.legendElement
-  // so the existing legend content path renders into the on-plot tooltip instead of the
-  // hidden seed holder.
-  installTooltip(u) {
-    if (!u || !u.over) return
-    const tt = document.createElement('div')
-    tt.className = 'chart-tooltip d-hide'
-    u.over.appendChild(tt)
-    this.legendElement = tt
-    u.over.addEventListener('mouseenter', () => tt.classList.remove('d-hide'))
-    u.over.addEventListener('mouseleave', () => {
-      if (!u.cursor || !u.cursor._lock) tt.classList.add('d-hide')
-    })
-    this.installTouchScrub(u, tt)
-  }
-
-  // Touch parity for the desktop hover tooltip. A horizontal finger drag scrubs the cursor
-  // (driving the same setCursor -> renderLegend path as the mouse); a vertical drag yields
-  // to page scroll (touch-action: pan-y handles it, this is the JS fallback). The gesture is
-  // a three-state machine: pending -> scrub | scroll, terminal until touchend/touchcancel.
-  installTouchScrub(u, tt) {
-    let startX = 0
-    let startY = 0
-    let state = 'pending'
-    let lastTap = null
-    this.touchActive = false
-
-    u.over.addEventListener(
-      'touchstart',
-      (e) => {
-        const t = e.touches && e.touches[0]
-        if (!t) return
-        startX = t.clientX
-        startY = t.clientY
-        state = 'pending'
-      },
-      { passive: true }
-    )
-
-    u.over.addEventListener(
-      'touchmove',
-      (e) => {
-        const t = e.touches && e.touches[0]
-        if (!t) return
-        if (state === 'pending') {
-          state = classifyGesture(t.clientX - startX, t.clientY - startY, SCRUB_THRESHOLD)
-        }
-        if (state !== 'scrub') return // pending (below threshold) or scroll -> let the page scroll
-        this.touchActive = true // positionTooltip places the box up-left of the finger, not under it
-        e.preventDefault()
-        const rect = u.over.getBoundingClientRect()
-        const left = Math.max(0, Math.min(t.clientX - rect.left, rect.width))
-        const top = Math.max(0, Math.min(t.clientY - rect.top, rect.height))
-        u.setCursor({ left: left, top: top })
-      },
-      { passive: false }
-    )
-
-    const end = () => {
-      if (state === 'scrub') {
-        tt.classList.add('d-hide')
-        // Reset uPlot's cursor off-plot so the crosshair doesn't freeze at the last scrub
-        // position — touch has no uPlot mouseleave to do this, unlike desktop.
-        u.setCursor({ left: -10, top: -10 })
-        lastTap = null // an intervening gesture breaks the double-tap sequence
-      } else if (state === 'pending') {
-        // A still finger (never locked to scrub/scroll) is a tap. A second tap close in time
-        // and space re-synthesizes the dblclick iOS Safari omits, so uPlot's own reset runs.
-        const tap = { t: performance.now(), x: startX, y: startY }
-        if (isDoubleTap(lastTap, tap)) {
-          u.over.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true }))
-          lastTap = null
-        } else {
-          lastTap = tap
-        }
-      } else {
-        lastTap = null // a scroll between taps also breaks the double-tap sequence
-      }
-      state = 'pending'
-      this.touchActive = false
-    }
-    u.over.addEventListener('touchend', end)
-    u.over.addEventListener('touchcancel', end)
-  }
-
-  // Place the on-plot tooltip near the cursor, flipping the offset to keep the box inside
-  // the overlay. No-op for the hidden seed holder (no u.over) so the content-only legend
-  // tests stay valid.
-  positionTooltip(u) {
-    const tt = this.legendElement
-    if (!u.over || !tt || !tt.style) return
-    const pad = 12
-    if (this.touchActive) {
-      // On touch the cursor IS the fingertip, so the mouse's bottom-right offset would land
-      // the box under the finger/hand. Prefer the top-left quadrant (the clearest spot — the
-      // hand obscures below and to the right), flipping to the opposite side only when the
-      // preferred side has no room, then clamping inside the overlay.
-      const w = tt.offsetWidth
-      const h = tt.offsetHeight
-      // Left of the finger; flip right only at the left edge.
-      let left = u.cursor.left - w - pad
-      if (left < 0) left = u.cursor.left + pad
-      left = Math.max(0, Math.min(left, u.over.clientWidth - w))
-      // Above the finger; flip below only at the top edge.
-      let top = u.cursor.top - h - pad
-      if (top < 0) top = u.cursor.top + pad
-      top = Math.max(0, Math.min(top, u.over.clientHeight - h))
-      tt.style.left = `${left}px`
-      tt.style.top = `${top}px`
-      return
-    }
-    // Mouse: prefer bottom-right of the cursor, flip on edge overflow.
-    let left = u.cursor.left + pad
-    let top = u.cursor.top + pad
-    if (left + tt.offsetWidth > u.over.clientWidth) left = u.cursor.left - tt.offsetWidth - pad
-    if (top + tt.offsetHeight > u.over.clientHeight) top = u.cursor.top - tt.offsetHeight - pad
-    tt.style.left = `${Math.max(0, left)}px`
-    tt.style.top = `${Math.max(0, top)}px`
-  }
-
-  renderLegend(u) {
-    const idx = u.cursor.idx
-    if (idx == null) {
-      this.legendElement.classList.add('d-hide')
-      return
-    }
-    this.legendElement.classList.remove('d-hide')
-    this.legendElement.replaceChildren()
-
-    // X label.
-    const x = u.data[0][idx]
-    const xLabel = this.settings.axis === 'time' ? 'Date' : 'Block Height'
-    const xText =
-      this.settings.axis === 'time'
-        ? humanize.date(x * 1000, false, this.settings.chart !== 'ticket-price')
-        : String(x)
-    this.legendElement.appendChild(this.legendEntry(`${xLabel}: ${xText}`))
-
-    // One entry per series at the cursor index.
-    const def = this.currentDef
-    const settings = this.settingsForDef()
-    def.series.forEach((s, i) => {
-      if (u.series && u.series[i + 1] && u.series[i + 1].show === false) return
-      const value = u.data[i + 1][idx]
-      const datum = { idx: idx, payload: this.payload, value: value }
-      const text = def.formatValue(i, datum, settings)
-      // Color the marker line with the same resolver the adapter uses for the series stroke,
-      // so the tooltip swatch matches the on-chart line color.
-      const color = resolveSeriesColor(s, i, darkEnabled())
-      this.legendElement.appendChild(
-        this.legendEntry(`${this.legendMarker(color)} ${s.label}: ${text}`)
-      )
-    })
-
-    // Optional extra non-series lines (e.g. stake-participation).
-    if (typeof def.legendExtra === 'function') {
-      def.legendExtra({ idx: idx, payload: this.payload }, settings).forEach((line) => {
-        this.legendElement.appendChild(this.legendEntry(`${this.legendMarker()} ${line}`))
-      })
-    }
-
-    this.positionTooltip(u)
-  }
-
   applyControlVisibility(def, selection) {
     const c = def.controls
     this.toggle(this.scaleSelectorTarget, c.scale)
@@ -671,14 +324,16 @@ export default class extends Controller {
     else el.classList.add('d-hide')
   }
 
-  applyZoom() {
-    if (!this.handle || !this.payload) return
-    const xs = this.handle.uplot.data[0]
-    if (!xs || !xs.length) return
+  // The visible [min,max] target for the current zoom setting, or null when there is no data.
+  // The render path passes it to panel.render({ range }) (race-free vs the deferred ranger
+  // seed); the live preset click (setZoom) feeds it to panel.setXRange. `xs` is the plotted x
+  // column. Privacy-participation defaults to the start of the record; an encoded range restores
+  // clamped to the data; a preset key is a trailing window ending at dataMax; else full extent.
+  computeZoomTarget(xs) {
+    if (!xs || !xs.length) return null
     const dataMin = xs[0]
     const dataMax = xs[xs.length - 1]
 
-    // privacy-participation defaults to the start of the record.
     if (
       this.settings.chart === 'privacy-participation' &&
       this.currentDef.limits &&
@@ -686,37 +341,22 @@ export default class extends Controller {
     ) {
       const [start] = this.currentDef.limits(this.payload)
       const startX = this.settings.axis === 'time' ? start / 1000 : start
-      this.zoomGuard = true
-      this.setMainXRange(startX, dataMax)
-      this.zoomGuard = false
-      return
+      return { min: startX, max: dataMax }
     }
 
-    // Arbitrary persisted range (e.g. "mq4z4efo-mq7k6k1g") — restore it directly,
-    // clamped to the available data. Falls through to the preset logic if invalid.
     const zoom = this.settings.zoom
     if (zoom && zoom.indexOf('-') !== -1) {
       const r = this.decodeRange(zoom)
       if (r) {
         const lo = Math.max(dataMin, r.min)
         const hi = Math.min(dataMax, r.max)
-        if (hi > lo) {
-          this.zoomGuard = true
-          this.setMainXRange(lo, hi)
-          this.zoomGuard = false
-          return
-        }
+        if (hi > lo) return { min: lo, max: hi }
       }
     }
 
-    const preset = this.settings.zoom
-    let min = dataMin
-    const max = dataMax
-    const span = this.zoomSpan(preset)
-    if (span != null) min = Math.max(dataMin, dataMax - span)
-    this.zoomGuard = true
-    this.setMainXRange(min, max)
-    this.zoomGuard = false
+    const span = this.zoomSpan(zoom)
+    const min = span != null ? Math.max(dataMin, dataMax - span) : dataMin
+    return { min: min, max: dataMax }
   }
 
   // Span (in plot x-units) for a preset key, or null for 'all'/unknown.
@@ -729,35 +369,6 @@ export default class extends Controller {
     // height axis: convert seconds → blocks via the average block time.
     const blockSeconds = this.avgBlockTime / 1000
     return blockSeconds > 0 ? seconds / blockSeconds : null
-  }
-
-  redrawTheme() {
-    const dark = darkEnabled()
-    // Capture the main chart's visible x-range BEFORE rebuilding. uPlot commits scale values on
-    // a microtask, so reading scales.x synchronously right after a rebuild yields stale nulls;
-    // read it now, while the live instance's scale is still committed.
-    const sx = this.handle && this.handle.uplot.scales.x
-    const range = sx && sx.min != null && sx.max != null ? [sx.min, sx.max] : null
-    // uPlot bakes the theme colors in at construction, so each chart must rebuild to recolor.
-    // setDark preserves the main chart's current x-range (zoom), so the captured range still holds.
-    if (this.handle) this.handle.setDark(dark)
-    if (this.ranger) {
-      this.ranger.setDark(dark)
-      // setDark rebuilds the strip's uPlot fresh (no selection); re-apply it so the rectangle
-      // survives the toggle. The rebuild commits its scales/layout on a microtask, so its
-      // valToPos (used by setSelection) is not ready synchronously — defer to a later microtask
-      // (FIFO: uPlot's commit, queued during setDark, runs first) or the rectangle collapses to
-      // zero width. Prefer the captured main-chart range (keeps the two in step); fall back to
-      // the strip's own full extent so the rectangle can never vanish.
-      queueMicrotask(() => {
-        if (!this.ranger) return
-        if (range) this.ranger.setSelection(range[0], range[1])
-        else {
-          const xs = this.ranger.uplot.data[0]
-          if (xs && xs.length) this.ranger.setSelection(xs[0], xs[xs.length - 1])
-        }
-      })
-    }
   }
 
   async setBin(e) {
@@ -777,7 +388,7 @@ export default class extends Controller {
     if (!option) return
     this.setActiveOptionBtn(option, this.scaleTypeTargets)
     if (!target) return
-    if (this.handle) this.handle.setScaleType(option === 'log' ? 'log' : 'linear')
+    if (this.panel.handle) this.panel.handle.setScaleType(option === 'log' ? 'log' : 'linear')
     this.settings.scale = option
     this.query.replace(this.settings)
   }
@@ -788,7 +399,7 @@ export default class extends Controller {
     if (!option) return
     this.setActiveOptionBtn(option, this.modeOptionTargets)
     if (!target) return
-    if (this.handle) this.handle.setMode(option === 'stepped' ? 'stepped' : 'line')
+    if (this.panel.handle) this.panel.handle.setMode(option === 'stepped' ? 'stepped' : 'line')
     this.settings.mode = option
     this.query.replace(this.settings)
   }
@@ -822,7 +433,10 @@ export default class extends Controller {
     this.setActiveOptionBtn(option, this.zoomOptionTargets)
     if (!target) return
     this.settings.zoom = option
-    this.applyZoom()
+    // Live preset click: drive the panel directly (no render -> no deferred-seed race).
+    const xs = this.panel.handle && this.panel.handle.uplot.data[0]
+    const t = this.computeZoomTarget(xs)
+    if (t) this.panel.setXRange(t.min, t.max)
     this.query.replace(this.settings)
   }
 
@@ -897,10 +511,10 @@ export default class extends Controller {
   }
 
   applyVisibilityToHandle(labels, states) {
-    if (!this.handle) return
+    if (!this.panel.handle) return
     const map = {}
     labels.forEach((label, i) => (map[label] = states[i]))
-    this.handle.setVisibility(map)
+    this.panel.handle.setVisibility(map)
   }
 
   parsedVisibility() {

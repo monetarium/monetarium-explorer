@@ -5,7 +5,7 @@
 `db/dcrpg` `agendas`/`agenda_votes` tables (historical tallies, written by `insertVotes` during
 `StoreBlock` via `SSGenVoteChoices`) → `explorer.AgendasPage`/`AgendaPage` →
 `agendas.tmpl`/`agenda.tmpl` → `agendas_controller.js` (meters) + `agenda_controller.js`
-(Dygraphs ← `/api/agenda/{id}`).
+(ChartPanel/uPlot ← `/api/agenda/{id}`; chart definitions in `charts/definitions/agenda.js`).
 
 **Current status: LIVE** — enabled in **PR #395** (commit `6622b4ae`). Both HTML routes call the
 real handlers at [main.go:785-786](../../../cmd/dcrdata/main.go#L785-L786) (`explore.AgendasPage`;
@@ -20,7 +20,10 @@ by reverting those two route lines + re-adding the link.)
    tracker); historical per-block tallies from Postgres `agenda_votes`. `AgendaPage` joins them
    by string agenda ID + choice ID ("yes"/"no"/"abstain").
 2. **Untyped Go→JS contracts** — meter `data-progress/threshold/approval` floats; chart JSON
-   `by_time/by_height` with `yes/no/abstain/height/time` arrays.
+   `by_time/by_height` with `yes/no/abstain/height/time` arrays (consumed by `voteColumns()` in
+   `charts/definitions/agenda.js`, not directly in the controller); ranger targets
+   `cumulativeRanger`/`blockRanger` (template `data-agenda-target` → controller Stimulus
+   checks — missing target silently disables the overview strip).
 3. **Dormant-feature route stub** — agendas was the worked re-enable case for this pattern; the
    pattern still describes the remaining 410-stubbed pages (treasury/proposals/market).
 
@@ -67,7 +70,8 @@ by reverting those two route lines + re-adding the link.)
       navbar link ([extras.tmpl:85](../../../cmd/dcrdata/views/extras.tmpl#L85)) in sync — drop one
       and the page is orphaned / the link is dead.
 - [ ] Choice IDs ("yes"/"no"/"abstain") and `AgendaVoteChoices` JSON tags are an untyped Go↔JS
-      contract — change both ends together or counts mis-map / charts blank.
+      contract — the consuming end is now `voteColumns()` in `charts/definitions/agenda.js` and
+      `VOTE_SERIES[].field`; change Go JSON tags and JS field names together or charts blank.
 - [ ] Historical vote charts populate **forward** from sync; pre-sync completed votes need a
       genesis resync to backfill.
 - [ ] No multi-coin / precision handling — do not introduce VAR/SKA maps or float coin conversion.
