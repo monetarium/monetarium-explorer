@@ -234,6 +234,7 @@ export default class extends Controller {
   async _buildChart(dark) {
     const isDark = dark != null ? dark : darkEnabled()
     const UPlot = await loadUPlot()
+    if (this._destroyed) return
 
     this._graphData = []
     this.ratioTable = new Map()
@@ -289,6 +290,10 @@ export default class extends Controller {
 
   _destroyChart() {
     if (this._uplot) {
+      if (this._clickCb) {
+        this._uplot.over.removeEventListener('click', this._clickCb)
+        this._clickCb = null
+      }
       this._uplot.destroy()
       this._uplot = null
     }
@@ -319,7 +324,7 @@ export default class extends Controller {
   }
 
   _onChartClick(e) {
-    const rect = this.graphTarget.getBoundingClientRect()
+    const rect = this._uplot.over.getBoundingClientRect()
     const px = e.clientX - rect.left
     const py = e.clientY - rect.top
     this._uplot.setCursor({ left: px, top: py })
