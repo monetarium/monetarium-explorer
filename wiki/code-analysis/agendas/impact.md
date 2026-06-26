@@ -69,13 +69,21 @@ these pages.
 
 ## Risk: Choice-ID / JSON-tag drift
 - **Trigger:** rename a vote choice ID or a `dbtypes.AgendaVoteChoices` JSON tag.
-- **Affected:** the lower-cased switch at
+- **Affected:** (1) the lower-cased switch at
   [explorerroutes.go:2079-2087](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L2079-L2087)
-  (`"abstain"/"yes"/"no"`); `agenda_controller.js` keys (`d.yes/d.abstain/d.no/d.time/d.height`);
-  meter `data-*` attrs in `agendas.tmpl`.
+  (`"abstain"/"yes"/"no"`) — Go handler side; (2) `VOTE_SERIES[].field` and `voteColumns()`
+  in
+  [charts/definitions/agenda.js](../../../cmd/dcrdata/public/js/charts/definitions/agenda.js)
+  (`r.yes`, `r.abstain`, `r.no`, `raw.time`, `raw.height`) — JS consumer side; (3) meter
+  `data-*` attrs in `agendas.tmpl` (for the progress meters, separate path).
+  Note: the key consumption moved from inline controller code to the definitions file in the
+  Dygraphs → ChartPanel migration; `agenda_controller.js` itself no longer touches the raw
+  payload keys.
 - **Failure mode:** silent — counts mis-mapped or charts blank; no build/test error
   (Go↔JS boundary is untyped).
-- **Fix:** change both ends together; treat the JSON shape as a contract.
+- **Fix:** change both ends together — Go JSON tags in `dbtypes.AgendaVoteChoices` and
+  `VOTE_SERIES[].field` + `voteColumns()` in `charts/definitions/agenda.js`; treat the JSON
+  shape as a contract.
 
 ## Risk: Milestone unavailability
 - **Trigger:** `GetBlockChainInfo` stops returning a deployment whose `agenda_votes` rows exist.

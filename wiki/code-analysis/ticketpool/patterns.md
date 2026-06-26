@@ -4,11 +4,11 @@
 
 **What:** The server handler is a one-line `templates.exec("ticketpool", commonData(r))`; no data is injected via SSR. All chart data arrives at the client through three independent channels (HTTP `/api/ticketpool/charts`, HTTP `/api/ticketpool/bydate/{tp}`, and WS request/response `getticketpooldata`→`getticketpooldataResp`). The `newblock` WS signal carries `WebsocketBlock` (not ticketpool data); the JS controller listens for it and **re-requests** ticketpool data on every block by calling `ws.send('getticketpooldata', this.bars)`.
 
-**Where:** [cmd/dcrdata/internal/explorer/explorerroutes.go:811-824](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L811-L824) (handler), [cmd/dcrdata/views/ticketpool.tmpl](../../../cmd/dcrdata/views/ticketpool.tmpl) (template), [cmd/dcrdata/public/js/controllers/ticketpool_controller.js:149-163](../../../cmd/dcrdata/public/js/controllers/ticketpool_controller.js#L149-L163) (controller).
+**Where:** [cmd/dcrdata/internal/explorer/explorerroutes.go:811-824](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L811-L824) (handler), [cmd/dcrdata/views/ticketpool.tmpl](../../../cmd/dcrdata/views/ticketpool.tmpl) (template), [cmd/dcrdata/public/js/controllers/ticketpool_controller.js:51-85](../../../cmd/dcrdata/public/js/controllers/ticketpool_controller.js#L51-L85) (controller connect/disconnect).
 
 **Constraints:**
 - Event names (`'newblock'`, `'getticketpooldata'`, `'getticketpooldataResp'`) are duplicated across JS and the server switch + `EventId + "Resp"` suffix. Renaming any one silently breaks live refresh.
-- Initial render of the page shows two empty Dygraphs (seed rows `[[0,0,0,0,0]]` / `[[0,0,0,0]]`) until `fetchAll()` returns. Acceptable latency for this page; do not paper over with synthetic data.
+- `initialize()` is synchronous — ChartPanel instances are created in `connect()`, not `initialize()`. The chart areas are blank (no placeholder data) until `fetchAll()` returns; acceptable latency for this page.
 - This shape is shared with `/decodetx` (see [/wiki/code-analysis/decodetx/patterns.md](../decodetx/patterns.md) P1). Both pages survive without server-rendered data because the wait for the first WS/HTTP fetch is short and the empty chart is visually obvious.
 
 ## P2: Tri-modal struct with positional Scan
@@ -18,8 +18,8 @@
 **Where:** [db/dbtypes/types.go:2118-2128](../../../db/dbtypes/types.go#L2118-L2128); producers in [db/dcrpg/queries.go:1138-1236](../../../db/dcrpg/queries.go#L1138-L1236); consumer dispatch in [ticketpool_controller.js:172-199](../../../cmd/dcrdata/public/js/controllers/ticketpool_controller.js#L172-L199).
 
 **Constraints:**
-- The struct's seven slices must always be either fully populated *for the relevant chart* or all absent — partial population would render zeroes (Dygraphs treats zero as a real value).
-- Adding a column to any of the three `SELECT`s requires updating the matching `rows.Scan` call positionally **and** the consumer (`processData` branch). No name-based safety net.
+- The struct's seven slices must always be either fully populated *for the relevant chart* or all absent — partial population would render zeroes (uPlot treats zero as a real value, not a gap).
+- Adding a column to any of the three `SELECT`s requires updating the matching `rows.Scan` call positionally **and** the `toColumns` function in the relevant chart def. No name-based safety net.
 - Same positional-Scan risk as [/wiki/code-analysis/time-based-blocks/patterns.md](../time-based-blocks/patterns.md) and [/wiki/code-analysis/windows/patterns.md](../windows/patterns.md).
 
 ## P3: Process-global stale-while-revalidate cache, height-keyed, trylock-gated
@@ -47,13 +47,24 @@
 
 ## P5: VAR-only float64 staking pipeline
 
-**What:** Every monetary value in this trace is `float64` VAR — `PoolTicketsData.Price []float64`, `MempoolTx.TotalOut float64`, `toCoin(amt) float64`, Dygraphs `digitsAfterDecimal: 8`. There is no SKA branch and there cannot be one without restructuring the data shape, because **tickets are a PoS staking instrument denominated only in VAR** ([/wiki/core/staking-rewards.md](../../core/staking-rewards.md) §2).
+**What:** Every monetary value in this trace is `float64` VAR — `PoolTicketsData.Price []float64`, `MempoolTx.TotalOut float64`, `toCoin(amt) float64`, uPlot `formatValue` with `toLocaleString(maximumFractionDigits:8)`. There is no SKA branch and there cannot be one without restructuring the data shape, because **tickets are a PoS staking instrument denominated only in VAR** ([/wiki/core/staking-rewards.md](../../core/staking-rewards.md) §2).
 
-**Where:** [db/dbtypes/types.go:2118-2128](../../../db/dbtypes/types.go#L2118-L2128), [db/dcrpg/queries.go:1142-1204](../../../db/dcrpg/queries.go#L1142-L1204), [db/dcrpg/queries.go:4297-4299](../../../db/dcrpg/queries.go#L4297-L4299), [cmd/dcrdata/public/js/controllers/ticketpool_controller.js:111-122](../../../cmd/dcrdata/public/js/controllers/ticketpool_controller.js#L111-L122).
+**Where:** [db/dbtypes/types.go:2118-2128](../../../db/dbtypes/types.go#L2118-L2128), [db/dcrpg/queries.go:1142-1204](../../../db/dcrpg/queries.go#L1142-L1204), [db/dcrpg/queries.go:4297-4299](../../../db/dcrpg/queries.go#L4297-L4299), [cmd/dcrdata/public/js/charts/definitions/ticketpool_purchases.js:108-115](../../../cmd/dcrdata/public/js/charts/definitions/ticketpool_purchases.js#L108-L115) (formatValue).
 
 **Constraints:**
 - The `uint64(price*1e8)` round-trip in `retrieveTicketsByDate` is VAR-safe only. Extending this path to handle SKA atoms via `float64` would silently corrupt values >2^53 atoms.
 - "Make this multi-coin" is not a refactor — it is a redesign that requires upstream chain semantics for SKA tickets (which do not currently exist).
+
+## P6: Def-identity memoization for bar-mode-aware chart rebuild
+
+**What:** `ticketpoolPurchases(barMode)` is a factory — it returns a new def object whose bar path functions close over `barMode`. The controller memoizes defs per bar mode in `this._purchasesDefCache`. ChartPanel uses **object identity** to decide between a cheap `setData` call (same def ref) and a full rebuild with new geometry (new def ref). This means a bar mode change automatically triggers a ChartPanel rebuild without the controller needing to call a special rebuild API.
+
+**Where:** [cmd/dcrdata/public/js/controllers/ticketpool_controller.js:43-49](../../../cmd/dcrdata/public/js/controllers/ticketpool_controller.js#L43-L49) (`purchasesDefFor`), [cmd/dcrdata/public/js/charts/definitions/ticketpool_purchases.js:55-117](../../../cmd/dcrdata/public/js/charts/definitions/ticketpool_purchases.js#L55-L117) (`ticketpoolPurchases` factory).
+
+**Constraints:**
+- Always access the purchases def through `purchasesDefFor(barMode)`. Returning a new object per call (bypassing the cache) triggers ChartPanel rebuilds on every data update, discarding the zoom viewport.
+- The price chart def (`ticketpoolPrice`) is a static const — no memoization needed because bar mode does not affect the price chart's geometry.
+- This pattern is specific to bar-mode-parametrized defs. Static defs (like `ticketpoolPrice`) do not need it.
 
 See also:
 - /wiki/code-analysis/ticketpool/flow.full.md

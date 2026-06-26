@@ -37,11 +37,11 @@
 
 ## Risk: TimeGrouping enum drift
 
-**Trigger:** adding a new bars/zoom interval in the JS controller without extending `dbtypes.TimeBasedGroupings` / `TimeGroupingFromStr` / `NumIntervals`.
+**Trigger:** adding a new bars/zoom interval in the JS controller without extending `dbtypes.TimeBasedGroupings` / `TimeGroupingFromStr` / `NumIntervals` and/or the `barsOrder`/`zoomOrder` maps in `onZoom`.
 **Affected flows:**
 - /wiki/code-analysis/ticketpool/flow.full.md §3.1, §3.4
-**Failure mode:** loud (REST 422 / WS "Error: unknown interval"), but silent on the UI side: the failing tile shows the previous chart with no visible error message.
-**Description:** JS sends `bars` as `"all"/"day"/"wk"/"mo"`. `TimeGroupingFromStr` rejects anything else as `UnknownGrouping`. The map `dbtypes.TimeBasedGroupings`, the switch in `TimeGroupingFromStr`, and the JS button HTML must move together. Note `tpUpdatePermission` is built off the same `NumIntervals` constant — new enum values automatically get a lock.
+**Failure mode:** loud (REST 422 / WS "Error: unknown interval"), but silent on the UI side: the failing tile shows the previous chart with no visible error message. A missing `barsOrder`/`zoomOrder` entry evaluates as `NaN` → the auto-coarsen guard silently never fires.
+**Description:** JS sends `bars` as `"all"/"day"/"wk"/"mo"`. `TimeGroupingFromStr` rejects anything else as `UnknownGrouping`. The map `dbtypes.TimeBasedGroupings`, the switch in `TimeGroupingFromStr`, the JS button HTML, and the `barsOrder`/`zoomOrder` maps in `onZoom` must all move together. Note `tpUpdatePermission` is built off the same `NumIntervals` constant — new enum values automatically get a lock.
 
 ## Risk: SKA-through-VAR pipeline corruption
 
@@ -70,7 +70,7 @@
 
 ## Risk: C6 violation surface (populateOutputs)
 
-**Trigger:** extending [ticketpool_controller.js:79-96](../../../cmd/dcrdata/public/js/controllers/ticketpool_controller.js#L79-L96) (`populateOutputs`) to include user-derived strings or non-numeric data.
+**Trigger:** extending [ticketpool_controller.js:10-25](../../../cmd/dcrdata/public/js/controllers/ticketpool_controller.js#L10-L25) (`populateOutputs`) to include user-derived strings or non-numeric data.
 **Affected flows:**
 - /wiki/code-analysis/ticketpool/flow.full.md §3.9
 **Failure mode:** XSS if untrusted strings are interpolated; otherwise none.
@@ -78,11 +78,19 @@
 
 ## Risk: `/bydate` response asymmetry
 
-**Trigger:** unifying `getTicketPoolByDate` to return a `TicketPoolChartsData` (instead of the anonymous `{Height, TimeChart}` struct) without updating the JS to expect `mempool`/`price_chart`/`outputs_chart` keys on this branch.
+**Trigger:** unifying `getTicketPoolByDate` to return a `TicketPoolChartsData` (instead of the anonymous `{Height, TimeChart}` struct) without updating the JS to handle `mempool`/`price_chart`/`outputs_chart` keys on this branch.
 **Affected flows:**
 - /wiki/code-analysis/ticketpool/flow.full.md §3.4, §3.9
 **Failure mode:** silent
-**Description:** `onBarsChange` calls `purchasesGraphData(response.time_chart)` directly with **no mempool merge** — it does not route through `processData`. If `/bydate` were widened to a full payload, the mempool tile and the outputs donut would *not* refresh on bars change unless the controller is also updated to dispatch through `processData`.
+**Description:** `onBarsChange` renders via `purchasesPanel.render(def, response.time_chart, mempoolSettings, opts)` using the **cached** `this.mempool` (from the last full-payload response); it never reads `response.mempool`. The guard `if ('mempool' in response)` is always false for bydate. If `/bydate` were widened to a full payload, the controller would still not update the price chart or outputs donut on bars change unless also updated to dispatch through `processData`.
+
+## Risk: Def-memoization bypass
+
+**Trigger:** calling `ticketpoolPurchases(barMode)` directly (not via `purchasesDefFor`) on every render, or constructing an inline def object per render call.
+**Affected flows:**
+- /wiki/code-analysis/ticketpool/flow.full.md §3.9, §3.10
+**Failure mode:** UX regression (not a data correctness bug)
+**Description:** ChartPanel decides setData vs. full rebuild by object identity. If a new def object is returned on every call, ChartPanel rebuilds on every `processData` invocation — resetting the zoom viewport on each `newblock` update. Particularly jarring during rapid block production. The `purchasesDefFor(barMode)` memoization exists exactly to prevent this; bypassing it is safe only for a deliberate forced rebuild.
 
 See also:
 - /wiki/code-analysis/ticketpool/flow.full.md

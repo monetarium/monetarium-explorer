@@ -1,5 +1,5 @@
 domain: charts
-anchor: 4649d1bf
+anchor: 7a2e5da9
 files:
   - cmd/dcrdata/internal/api/apiroutes.go
   - cmd/dcrdata/internal/explorer/explorer.go
@@ -8,6 +8,7 @@ files:
   - cmd/dcrdata/public/js/charts/format.js
   - cmd/dcrdata/public/js/charts/registry.js
   - cmd/dcrdata/public/js/controllers/charts_controller.js
+  - cmd/dcrdata/public/js/helpers/chart_panel.js
   - cmd/dcrdata/public/js/helpers/chart_theme.js
   - cmd/dcrdata/public/js/helpers/ska_helper.js
   - cmd/dcrdata/public/js/helpers/uplot_adapter.js

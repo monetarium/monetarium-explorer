@@ -9,6 +9,7 @@ const makeFakeHandle = () => ({
   setData: vi.fn(),
   setXRange: vi.fn(),
   setDark: vi.fn(),
+  setMode: vi.fn(),
   resize: vi.fn(),
   destroy: vi.fn()
 })
@@ -144,6 +145,118 @@ describe('ChartPanel tooltip', () => {
     p.renderLegend(u)
     expect(p.legendElement.textContent).not.toContain('Yes:')
   })
+  it('reads the raw payload value, not the cumulative plotted value, for a stacked def (firewall)', async () => {
+    // The amountflow regression guard, ported to the panel where the firewall now lives: uPlot
+    // stacks the plotted columns, so u.data carries the CUMULATIVE value (Net Received plots at
+    // 20 = received10 + net10), but formatValue reads the RAW payload (net10) — the tooltip must
+    // show 10, never the cumulative 20.
+    const stackedDef = {
+      name: 'flow',
+      series: [
+        { label: 'Received', color: '#0a0', kind: 'bars' },
+        { label: 'Net Received', color: '#00a', kind: 'bars' }
+      ],
+      stacked: true,
+      toColumns: (p) => [p.x, p.received, p.net],
+      formatValue: (i, d) => `${[d.payload.received, d.payload.net][i][d.idx]} VAR`
+    }
+    const p = createChartPanel(document.createElement('div'), { formatX: (x) => `X: ${x}` })
+    await p.render(stackedDef, { x: [1], received: [10], net: [10] }, {})
+    p.legendElement = document.createElement('div')
+    p.renderLegend({
+      cursor: { idx: 0, left: 10, top: 10 },
+      data: [[1], [10], [20]], // plotted: Received=10, Net Received cumulative=20
+      series: [{}, { show: true }, { show: true }],
+      over: { clientWidth: 800, clientHeight: 300 }
+    })
+    const txt = p.legendElement.textContent
+    expect(txt).toContain('Net Received: 10 VAR') // raw payload value
+    expect(txt).not.toContain('Net Received: 20 VAR') // NOT the cumulative plotted value
+  })
+  it('skips a zero-formatted series row only when the def opts in via skipZeroRows', async () => {
+    const zeroDef = {
+      name: 'z',
+      series: [
+        { label: 'A', color: '#0a0', kind: 'bars' },
+        { label: 'B', color: '#00a', kind: 'bars' }
+      ],
+      stacked: true,
+      skipZeroRows: true,
+      toColumns: (p) => [p.x, p.a, p.b],
+      // A -> "0 VAR" (skipped), B -> "5 VAR" (kept)
+      formatValue: (i, d) => `${[d.payload.a, d.payload.b][i][d.idx]} VAR`
+    }
+    const p = createChartPanel(document.createElement('div'), { formatX: (x) => `X: ${x}` })
+    await p.render(zeroDef, { x: [1], a: [0], b: [5] }, {})
+    p.legendElement = document.createElement('div')
+    p.renderLegend({
+      cursor: { idx: 0, left: 10, top: 10 },
+      data: [[1], [0], [5]],
+      series: [{}, { show: true }, { show: true }],
+      over: { clientWidth: 800, clientHeight: 300 }
+    })
+    const txt = p.legendElement.textContent
+    expect(txt).not.toContain('A: 0 VAR') // zero row skipped (skipZeroRows)
+    expect(txt).toContain('B: 5 VAR') // non-zero row kept
+  })
+  it('keeps a zero-formatted row when the def does NOT set skipZeroRows (default)', async () => {
+    const keepDef = {
+      name: 'k',
+      series: [{ label: 'A', color: '#0a0', kind: 'bars' }],
+      stacked: true,
+      toColumns: (p) => [p.x, p.a],
+      formatValue: (i, d) => `${d.payload.a[d.idx]} VAR`
+    }
+    const p = createChartPanel(document.createElement('div'), { formatX: (x) => `X: ${x}` })
+    await p.render(keepDef, { x: [1], a: [0] }, {})
+    p.legendElement = document.createElement('div')
+    p.renderLegend({
+      cursor: { idx: 0, left: 10, top: 10 },
+      data: [[1], [0]],
+      series: [{}, { show: true }],
+      over: { clientWidth: 800, clientHeight: 300 }
+    })
+    expect(p.legendElement.textContent).toContain('A: 0 VAR')
+  })
+  it('passes the retained render settings to formatValue (e.g. ticket-pool network target)', async () => {
+    const settingsDef = {
+      name: 's',
+      series: [{ label: 'Tickets', color: '#0a0', kind: 'line' }],
+      toColumns: (p) => [p.x, p.v],
+      formatValue: (i, d, settings) => `${d.payload.v[d.idx]} (target ${settings.tps})`
+    }
+    const p = createChartPanel(document.createElement('div'), { formatX: (x) => `X: ${x}` })
+    await p.render(settingsDef, { x: [1], v: [42] }, { tps: 999 })
+    p.legendElement = document.createElement('div')
+    p.renderLegend({
+      cursor: { idx: 0, left: 10, top: 10 },
+      data: [[1], [42]],
+      series: [{}, { show: true }],
+      over: { clientWidth: 800, clientHeight: 300 }
+    })
+    expect(p.legendElement.textContent).toContain('Tickets: 42 (target 999)')
+  })
+  it('appends def.legendExtra lines after the series rows (stake-participation extras)', async () => {
+    const extraDef = {
+      name: 'e',
+      series: [{ label: 'Participation', color: '#0a0', kind: 'line' }],
+      toColumns: (p) => [p.x, p.v],
+      formatValue: (i, d) => `${d.payload.v[d.idx]}%`,
+      legendExtra: (d, settings) => [`Pool: ${d.payload.pool[d.idx]} (tps ${settings.tps})`]
+    }
+    const p = createChartPanel(document.createElement('div'), { formatX: (x) => `X: ${x}` })
+    await p.render(extraDef, { x: [1], v: [50], pool: [123] }, { tps: 7 })
+    p.legendElement = document.createElement('div')
+    p.renderLegend({
+      cursor: { idx: 0, left: 10, top: 10 },
+      data: [[1], [50]],
+      series: [{}, { show: true }],
+      over: { clientWidth: 800, clientHeight: 300 }
+    })
+    const txt = p.legendElement.textContent
+    expect(txt).toContain('Participation: 50%')
+    expect(txt).toContain('Pool: 123 (tps 7)')
+  })
 })
 
 describe('ChartPanel touch-scrub', () => {
@@ -266,6 +379,237 @@ describe('ChartPanel ranger', () => {
     expect(p.handle.setXRange).toHaveBeenCalledWith(100, 200)
     expect(p.ranger.setSelection).toHaveBeenCalledWith(100, 200)
   })
+
+  it('seeds the ranger via a custom rangerData selector', async () => {
+    const p = createChartPanel(document.createElement('div'), {
+      rangerEl: document.createElement('div'),
+      rangerData: (cols) => [cols[0], cols[1].map((v) => v * 2)]
+    })
+    const def = {
+      ...defA,
+      toColumns: () => [
+        [1, 2],
+        [10, 30]
+      ]
+    }
+    await p.render(def, payload1, {})
+    expect(p.ranger.setData).toHaveBeenCalledWith([
+      [1, 2],
+      [20, 60]
+    ])
+  })
+
+  it('builds the ranger from rangerDef when provided (not the chart def)', async () => {
+    const { createRanger } = await import('./uplot_ranger.js')
+    const rangerDef = { ...defA, name: 'strip-only' }
+    const p = createChartPanel(document.createElement('div'), {
+      rangerEl: document.createElement('div'),
+      rangerDef: rangerDef
+    })
+    await p.render(defA, payload1, {})
+    expect(createRanger).toHaveBeenCalledWith(expect.anything(), rangerDef, expect.anything())
+  })
+
+  it('a ranger drag drives the chart AND notifies onRangeChange', async () => {
+    const onRangeChange = vi.fn()
+    const p = createChartPanel(document.createElement('div'), {
+      rangerEl: document.createElement('div'),
+      onRangeChange: onRangeChange
+    })
+    await p.render(defWithRanger, payload1, {})
+    const { createRanger } = await import('./uplot_ranger.js')
+    const onSelect = createRanger.mock.calls.at(-1)[2].onSelect
+    onSelect(100, 200) // simulate a ranger grip drag
+    expect(p.handle.setXRange).toHaveBeenCalledWith(100, 200)
+    expect(onRangeChange).toHaveBeenCalledWith(100, 200, 'ranger')
+  })
+  it('passes the drag source to onRangeChange (chart vs ranger)', async () => {
+    const onRangeChange = vi.fn()
+    const p = createChartPanel(document.createElement('div'), {
+      rangerEl: document.createElement('div'),
+      onRangeChange: onRangeChange
+    })
+    await p.render(defWithRanger, payload1, {})
+    p._onChartRangeChange(10, 20)
+    expect(onRangeChange).toHaveBeenLastCalledWith(10, 20, 'chart')
+    const { createRanger } = await import('./uplot_ranger.js')
+    createRanger.mock.calls.at(-1)[2].onSelect(30, 40)
+    expect(onRangeChange).toHaveBeenLastCalledWith(30, 40, 'ranger')
+  })
+  it('a ranger drag is a no-op for onRangeChange when none is provided (agenda/ticketpool)', async () => {
+    const p = createChartPanel(document.createElement('div'), {
+      rangerEl: document.createElement('div')
+    })
+    await p.render(defWithRanger, payload1, {})
+    const { createRanger } = await import('./uplot_ranger.js')
+    const onSelect = createRanger.mock.calls.at(-1)[2].onSelect
+    expect(() => onSelect(100, 200)).not.toThrow()
+    expect(p.handle.setXRange).toHaveBeenCalledWith(100, 200)
+  })
+})
+
+describe('ChartPanel dynamic build options', () => {
+  it('resolves a function xTime at build (chart + ranger get the current value)', async () => {
+    const { createChart } = await import('./uplot_adapter.js')
+    const { createRanger } = await import('./uplot_ranger.js')
+    let axisTime = false
+    const p = createChartPanel(document.createElement('div'), {
+      rangerEl: document.createElement('div'),
+      xTime: () => axisTime
+    })
+    await p.render(defA, payload1, {})
+    expect(createChart.mock.calls.at(-1)[2].xTime).toBe(false)
+    expect(createRanger.mock.calls.at(-1)[2].xTime).toBe(false)
+    axisTime = true
+    await p.render({ ...defA }, payload1, {}) // new def ref -> rebuild -> re-resolves xTime
+    expect(createChart.mock.calls.at(-1)[2].xTime).toBe(true)
+  })
+  it('forwards scaleType (value or function) into createChart', async () => {
+    const { createChart } = await import('./uplot_adapter.js')
+    const p1 = createChartPanel(document.createElement('div'), { scaleType: 'log' })
+    await p1.render(defA, payload1, {})
+    expect(createChart.mock.calls.at(-1)[2].scaleType).toBe('log')
+    const p2 = createChartPanel(document.createElement('div'), { scaleType: () => 'log' })
+    await p2.render(defA, payload1, {})
+    expect(createChart.mock.calls.at(-1)[2].scaleType).toBe('log')
+  })
+  it('defaults scaleType to linear when unset', async () => {
+    const { createChart } = await import('./uplot_adapter.js')
+    const p = createChartPanel(document.createElement('div'), {})
+    await p.render(defA, payload1, {})
+    expect(createChart.mock.calls.at(-1)[2].scaleType).toBe('linear')
+  })
+  it('applies the initial mode via setMode on a fresh build, not on a reuse setData', async () => {
+    const p = createChartPanel(document.createElement('div'), { mode: 'stepped' })
+    await p.render(defA, payload1, {})
+    expect(p.handle.setMode).toHaveBeenCalledWith('stepped')
+    p.handle.setMode.mockClear()
+    await p.render(defA, payload1, {}) // same def -> reuse -> must NOT re-assert mode
+    expect(p.handle.setMode).not.toHaveBeenCalled()
+  })
+  it('does not call setMode when mode is unset', async () => {
+    const p = createChartPanel(document.createElement('div'), {})
+    await p.render(defA, payload1, {})
+    expect(p.handle.setMode).not.toHaveBeenCalled()
+  })
+})
+
+describe('ChartPanel target range on render', () => {
+  it('preserveRange keeps the current x-range across a same-def update (chart + ranger)', async () => {
+    const p = createChartPanel(document.createElement('div'), {
+      rangerEl: document.createElement('div')
+    })
+    await p.render(defWithRanger, payload1, {})
+    p.handle.uplot.scales.x = { min: 5, max: 9 } // user zoomed
+    p.handle.setXRange.mockClear()
+    p.ranger.setSelection.mockClear()
+    await p.render(defWithRanger, { x: [1, 2, 3], yes: [4, 5, 6] }, {}, { preserveRange: true })
+    expect(p.handle.setXRange).toHaveBeenCalledWith(5, 9)
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(p.ranger.setSelection).toHaveBeenCalledWith(5, 9)
+  })
+
+  it('preserveRange is a no-op on a fresh build (no prior finite range) -> full extent', async () => {
+    const p = createChartPanel(document.createElement('div'), {
+      rangerEl: document.createElement('div')
+    })
+    await p.render(defWithRanger, payload1, {}, { preserveRange: true })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(p.ranger.setSelection).toHaveBeenCalledWith(1, 2) // full extent of payload1
+  })
+
+  it('explicit range seeds the chart + ranger even across a rebuild (different def)', async () => {
+    const p = createChartPanel(document.createElement('div'), {
+      rangerEl: document.createElement('div')
+    })
+    await p.render(defWithRanger, payload1, {})
+    const firstHandle = p.handle
+    await p.render(
+      { ...defWithRanger },
+      { x: [10, 20, 30], yes: [1, 2, 3] },
+      {},
+      {
+        range: { min: 12, max: 28 }
+      }
+    )
+    expect(firstHandle.destroy).toHaveBeenCalledTimes(1) // rebuilt
+    expect(p.handle.setXRange).toHaveBeenCalledWith(12, 28)
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(p.ranger.setSelection).toHaveBeenCalledWith(12, 28)
+  })
+})
+
+describe('ChartPanel rangerSeedOnce (fixed overview)', () => {
+  it('persists the ranger across a def-change rebuild and seeds its data only once', async () => {
+    const p = createChartPanel(document.createElement('div'), {
+      rangerEl: document.createElement('div'),
+      rangerSeedOnce: true
+    })
+    await p.render(defWithRanger, payload1, {})
+    const ranger = p.ranger
+    expect(ranger).toBeTruthy()
+    expect(ranger.setData).toHaveBeenCalledTimes(1) // seeded once on creation
+    ranger.setData.mockClear()
+    ranger.setSelection.mockClear()
+    // bars change: a DIFFERENT def reference forces a chart rebuild
+    await p.render(
+      { ...defWithRanger },
+      { x: [10, 20, 30], yes: [1, 2, 3] },
+      {},
+      { range: { min: 12, max: 28 } }
+    )
+    expect(p.handle).not.toBe(undefined)
+    expect(fakeRangers.length).toBe(1) // no second ranger created
+    expect(p.ranger).toBe(ranger) // same ranger instance survives the rebuild
+    expect(ranger.destroy).not.toHaveBeenCalled()
+    expect(ranger.setData).not.toHaveBeenCalled() // NOT re-seeded from the (coarse) cols
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(ranger.setSelection).toHaveBeenCalledWith(12, 28) // only the selection moves
+  })
+
+  it('does not re-seed ranger data on a same-def update either (frozen overview)', async () => {
+    const p = createChartPanel(document.createElement('div'), {
+      rangerEl: document.createElement('div'),
+      rangerSeedOnce: true
+    })
+    await p.render(defWithRanger, payload1, {})
+    const ranger = p.ranger
+    ranger.setData.mockClear()
+    p.handle.uplot.scales.x = { min: 1, max: 2 }
+    await p.render(defWithRanger, { x: [1, 2, 3], yes: [4, 5, 6] }, {}, { preserveRange: true })
+    expect(ranger.setData).not.toHaveBeenCalled()
+  })
+})
+
+describe('ChartPanel measureSize + width-gate', () => {
+  it('uses measureSize for the initial build dims', async () => {
+    const { createChart } = await import('./uplot_adapter.js')
+    const p = createChartPanel(document.createElement('div'), {
+      measureSize: () => ({ width: 640, height: 480 })
+    })
+    await p.render(defA, payload1, {})
+    expect(createChart.mock.calls.at(-1)[2].width).toBe(640)
+    expect(createChart.mock.calls.at(-1)[2].height).toBe(480)
+  })
+  it('window-path resize skips a height-only change and runs on a width change', async () => {
+    const measure = vi.fn(() => ({ width: 800, height: 300 }))
+    const p = createChartPanel(document.createElement('div'), { measureSize: measure })
+    await p.render(defA, payload1, {}) // seeds _lastWidth = 800
+    p.handle.resize.mockClear()
+    p._resize(false) // window path, width unchanged -> gated
+    expect(p.handle.resize).not.toHaveBeenCalled()
+    measure.mockReturnValue({ width: 900, height: 300 }) // width changed
+    p._resize(false)
+    expect(p.handle.resize).toHaveBeenCalledWith(900, 300)
+  })
+  it('public resize() forces a re-measure even when width is unchanged', async () => {
+    const measure = vi.fn(() => ({ width: 800, height: 300 }))
+    const p = createChartPanel(document.createElement('div'), { measureSize: measure })
+    await p.render(defA, payload1, {}) // _lastWidth = 800
+    p.handle.resize.mockClear()
+    p.resize() // forced, same width
+    expect(p.handle.resize).toHaveBeenCalledWith(800, 300)
+  })
 })
 
 describe('ChartPanel theme + resize + destroy cleanup', () => {
@@ -312,5 +656,15 @@ describe('ChartPanel theme + resize + destroy cleanup', () => {
     await pending
     expect(p.handle).toBe(handle) // NOT blanked — the theme epoch must not abort the render
     expect(handle.setDark).toHaveBeenCalledWith(true) // chart reconciled to the new theme
+  })
+  it('public resize() re-measures the chart from the element dimensions', async () => {
+    const el = document.createElement('div')
+    Object.defineProperty(el, 'clientWidth', { value: 640, configurable: true })
+    Object.defineProperty(el, 'clientHeight', { value: 480, configurable: true })
+    const p = createChartPanel(el, {})
+    await p.render(defA, payload1, {})
+    p.handle.resize.mockClear()
+    p.resize()
+    expect(p.handle.resize).toHaveBeenCalledWith(640, 480)
   })
 })

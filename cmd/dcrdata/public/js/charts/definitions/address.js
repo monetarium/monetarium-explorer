@@ -52,6 +52,7 @@ export function typesDef() {
     name: 'types',
     label: 'Tx Count',
     stacked: true,
+    skipZeroRows: true, // stacked: drop the many 0-count series rows from the tooltip
     axes: [{ label: '', scale: 'y', intTicks: true }],
     series: TYPE_SERIES.map((s, i) => ({
       label: s.label,
@@ -133,6 +134,7 @@ export function amountflowDef(coinType) {
     name: 'amountflow',
     label: `Total (${coinLabel})`,
     stacked: true,
+    skipZeroRows: true, // stacked: drop 0-flow series rows from the tooltip
     axes: [{ label: '', scale: 'y' }],
     series: FLOW_SERIES.map((label, i) => ({
       label: label,

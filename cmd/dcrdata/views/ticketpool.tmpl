@@ -5,25 +5,24 @@
     {{template "navbar" . }}
 
     <div class="container main" data-controller="ticketpool">
-      <div>
-        <h2 style="text-align: center; margin-top: 0px">Ticket Pool Visualization</h2>
+      <div class="mb-4">
+        <h2 style="text-align: center; margin: 0 0 4px">Ticket Pool Visualization</h2>
         <p style="text-align: center; margin-bottom: 5px">
           These charts represent the current ticket pool. For historic views go <a href="/charts">here</a>.
         </p>
       </div>
-      <br>
 
       <div class="position-relative" data-ticketpool-target="wrapper">
         <div class="modal position-absolute"></div>
-        <div class="d-flex flex-wrap justify-content-center align-items-center chart-controls mb-1 mt-1">
+        <div class="d-flex flex-wrap justify-content-center align-items-center chart-controls mb-1">
           <div class="chart-control-wrapper me-2 mb-1">
             <div class="chart-control-label">ZOOM</div>
             <div class="chart-control">
               <ul class="nav nav-pills">
                 <li class="nav-item nav-link active" data-ticketpool-target="zoom" data-action="click->ticketpool#onZoom" data-option="all">All</li>
-                <li class="nav-item nav-link" data-ticketpool-target="zoom" data-action="click->ticketpool#onZoom" data-option="day">Day</li>
-                <li class="nav-item nav-link" data-ticketpool-target="zoom" data-action="click->ticketpool#onZoom" data-option="wk">Week</li>
                 <li class="nav-item nav-link" data-ticketpool-target="zoom" data-action="click->ticketpool#onZoom" data-option="mo">Month</li>
+                <li class="nav-item nav-link" data-ticketpool-target="zoom" data-action="click->ticketpool#onZoom" data-option="wk">Week</li>
+                <li class="nav-item nav-link" data-ticketpool-target="zoom" data-action="click->ticketpool#onZoom" data-option="day">Day</li>
               </ul>
             </div>
           </div>
@@ -32,27 +31,26 @@
             <div class="chart-control-label">BARS</div>
             <div class="chart-control">
               <ul class="nav nav-pills">
-                <li class="nav-item nav-link active" data-ticketpool-target="bars" data-action="click->ticketpool#onBarsChange" data-option="all">Blocks</li>
-                <li class="nav-item nav-link" data-ticketpool-target="bars" data-action="click->ticketpool#onBarsChange" data-option="day">Day</li>
-                <li class="nav-item nav-link" data-ticketpool-target="bars" data-action="click->ticketpool#onBarsChange" data-option="wk">Week</li>
                 <li class="nav-item nav-link" data-ticketpool-target="bars" data-action="click->ticketpool#onBarsChange" data-option="mo">Month</li>
+                <li class="nav-item nav-link" data-ticketpool-target="bars" data-action="click->ticketpool#onBarsChange" data-option="wk">Week</li>
+                <li class="nav-item nav-link" data-ticketpool-target="bars" data-action="click->ticketpool#onBarsChange" data-option="day">Day</li>
+                <li class="nav-item nav-link active" data-ticketpool-target="bars" data-action="click->ticketpool#onBarsChange" data-option="all">Blocks</li>
               </ul>
             </div>
           </div>
         </div>
 
         <div class="dygraph-label dygraph-title mb-1">Tickets Purchase Distribution</div>
-        <div class="chart-wrapper px-2 pb-5">
+        <div class="chart-wrapper px-2 pb-2">
           <div id="tickets-by-purchase-date" class="tp-charts"></div>
           <div data-ticketpool-target="purchasesRanger" class="tp-chart-ranger"></div>
         </div>
-        <div class="dygraph-label dygraph-title mb-1">Ticket Price Distribution</div>
-        <div class="chart-wrapper px-2 pb-5">
+        <div class="dygraph-label dygraph-title mb-1 mt-2">Ticket Price Distribution</div>
+        <div class="chart-wrapper px-2 pb-2">
           <div id="tickets-by-purchase-price" class="tp-charts"></div>
           <div data-ticketpool-target="priceRanger" class="tp-chart-ranger"></div>
         </div>
-        <br>
-        <div class="justify-content-between">
+        <div class="justify-content-between mt-2">
           <div class="dygraph-label dygraph-title mb-1">Distribution of Tickets by Reward Outputs</div>
           <div class="col d-flex text-center mw50 w-100 m-auto ">
             <table class="tp-outputs-align" data-ticketpool-target="outputs">

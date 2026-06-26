@@ -43,5 +43,6 @@ export default class extends Controller {
 
   onSunClick() {
     toggleSun()
+    closeMenu()
   }
 }

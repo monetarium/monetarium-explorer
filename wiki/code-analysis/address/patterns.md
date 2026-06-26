@@ -1,8 +1,8 @@
 # Address area — recurring patterns
 
-> Code-grounded as of `HEAD = a48ea0e1` (original multi-coin at `1b670255`;
-> post-launch fixes through 2026-06-18). The three former sub-area impact notes
-> were folded into a single [impact.md](impact.md) in the prior Consolidate pass.
+> Code-grounded as of `HEAD = fcad89dd` (2026-06-25); original multi-coin at `1b670255`.
+> Updated in this Refresh pass: "Atomic chart series visibility" rewritten for ChartPanel/uPlot
+> (Dygraphs removed); "Per-coin caching" updated for raw-payload cache. Prior anchor `bba67634`.
 
 Patterns extracted from [flow.full.md](flow.full.md) and grounded in current code.
 Each recurs across 2+ surfaces of the address area; cross-domain links noted.
@@ -57,7 +57,7 @@ Three Go-side functions independently aggregate per-coin balance information fro
 **Description:**
 Server: `AddressCacheItem.history` holds `TypeByInterval`/`AmtFlowByInterval` as `[dbtypes.NumIntervals]map[uint8]*dbtypes.ChartsData` ([db/cache/addresscache.go](db/cache/addresscache.go)); the inner map is keyed by coin type. Accessor `HistoryChart(addr, addrChart, grouping, coinType)` / writer `StoreHistoryChart(...)`. The `Rows` cache (table + CSV) is **not** per-coin keyed — coin filtering happens in-memory after the cache hit, and **must short-circuit on `CoinTypeAll`** (`AddressRowsCompact` returns all rows; missing this empties the no-`?coin=` CSV).
 
-Client: the chart cache `ctrl.retrievedData` **is** keyed by coin — `` `${chart}-${bin}-${coin}` `` ([address_controller.js:623](cmd/dcrdata/public/js/controllers/address_controller.js#L623)); `drawGraph`'s short-circuit also compares `settings.coin`. (This is the reversal of the pre-#265 `${chart}-${bin}` key.)
+Client: the chart cache `ctrl.retrievedData` **is** keyed by coin — `` `${chart}-${bin}-${coin}` `` ([address_controller.js](cmd/dcrdata/public/js/controllers/address_controller.js), `processData :509`); `drawGraph`'s short-circuit also compares `settings.coin`. (This is the reversal of the pre-#265 `${chart}-${bin}` key.) After the ChartPanel retrofit, `processData` stores the **raw API payload** directly — no preprocessing; `def.toColumns` transforms it at render time.
 
 **Constraints:**
 - Cache freshness invalidation (`FreshenAddressCaches`) is per-address, **not** per-(address, coin) — a reorg invalidates all coin types together.
@@ -169,30 +169,42 @@ Keys declared today: `chart`, `zoom`, `bin`, `flow`, `n`, `start`, `txntype`, **
 
 ---
 
-## Atomic chart series visibility (`flowVisibility`)
+## Atomic chart series visibility + mutual exclusivity (`flowVisibility`)
 
 **Appears in:** [flow.full.md](flow.full.md) §3.6.
 
 **Description:**
-The amount-flow chart has three toggleable series (Sent / Received / Net). Each
-checkbox maps to a Dygraph series index. The naive pattern — calling
-`graph.setVisibility(index, bool)` per index in a loop — triggers Dygraph's
-`predraw_` hook on every call. When all series are transiently invisible (e.g.,
-unchecking Received when only Received was checked), `computeCombinedSeriesAndLimits_`
-dereferences `d[0].length` on an empty combined array and throws.
+The amount-flow chart has four series (Received / Spent / Net Received / Net Spent)
+controlled by three user checkboxes (Received / Sent / Net — the Net checkbox drives
+both net series). Two constraints govern this:
 
-`flowVisibility(bitmap)` (address_controller.js:209-224) is an exported pure
-function: it takes a 3-bit integer (bit 0 = Sent, bit 1 = Received, bit 2 = Net)
-and returns `{0: bool, 1: bool, 2: bool}`. `updateFlow` calls
-`this.graph.setVisibility(flowVisibility(bitmap))` (`:795`) in a single call,
-so Dygraph sees the final visibility map atomically. The function is unit-tested
-in `address_controller.test.js` (mapping table + the regression case).
+1. **Atomic visibility update:** `flowVisibility(bitmap)` (`address_controller.js:30`)
+   is an exported pure function. It takes a 3-bit integer (bit 0 = Received, bit 1 =
+   Sent, bit 2 = Net) and returns a label-keyed map:
+   `{Received: bool, Spent: bool, 'Net Received': bool, 'Net Spent': bool}`.
+   `updateFlow` applies it in one call: `this.panel.handle.setVisibility(flowVisibility(bitmap))`
+   (`:635`). The uPlot adapter's `setVisibility` takes a label-keyed object; passing
+   series labels (not indices) decouples the function from series ordering.
+   Unit-tested in `address_controller.test.js` (mapping table + label-key assertions).
+
+2. **Net ↔ Sent/Received mutual exclusivity:** Net is Received − Sent; stacking
+   Net on top of Received/Spent double-counts. Two methods enforce exclusivity:
+   - `enforceFlowExclusivity(changed)` (`:642`) — user checkbox toggle: if `changed`
+     is Net and checked, clear Sent/Received; if Sent/Received and checked, clear Net.
+     Neither branch fires a `change` event (sets `.checked` directly), so no re-entry.
+   - `clampFlowExclusivity()` (`:659`) — programmatic (saved/crafted `?flow=` may
+     set Net + Sent/Received simultaneously). Resolves in Net's favour: if Net is
+     checked, clear Sent/Received. Called from `updateFlow()` when no event is passed,
+     and from `setFlowChecks()`.
 
 **Constraints:**
-- Always update all three series in one `setVisibility(object)` call; never loop
-  `setVisibility(index, bool)` — the transient-empty state can crash.
-- If the series count changes (e.g., a fourth flow series), update the bitmap
-  width in `flowVisibility` and the test mapping table together.
+- Always pass `flowVisibility(bitmap)` as a single label-keyed object to
+  `panel.handle.setVisibility(...)` — never loop per-label calls.
+- If flow series are added or renamed, update: bitmap width in `flowVisibility`, the
+  label keys in the returned object, `enforceFlowExclusivity` NET value (`'4'`), and
+  the `address_controller.test.js` mapping table — all must stay in sync.
+- `flowVisibility` signature changed from Dygraph index-keyed `{0,1,2,3}` to label-keyed
+  `{Received, Spent, ...}` in this Refresh. Don't revert to indices.
 
 ---
 
