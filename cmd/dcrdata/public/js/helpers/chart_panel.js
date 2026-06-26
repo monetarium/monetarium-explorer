@@ -367,10 +367,12 @@ class ChartPanel {
     const dark = this._dark
     const payload = this.payload
     this.currentDef.series.forEach((s, i) => {
+      if (s.show === false) return
       if (u.series && u.series[i + 1] && u.series[i + 1].show === false) return
       const value = u.data[i + 1][idx]
       if (value == null) return
       const text = this.currentDef.formatValue(i, { idx, payload, value }, this._settings || {})
+      if (text === '') return
       // Opt-in (def.skipZeroRows): a stacked chart's many 0-valued series clutter the tooltip.
       // Defaulted off so agenda/ticketpool/charts defs are unaffected; only stacked address
       // defs set the flag. Matches the legacy address `if (def.stacked && /^0/.test(text))`.

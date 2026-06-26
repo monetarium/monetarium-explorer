@@ -6,7 +6,7 @@
 // Granularity-aware bar paths: bucketed modes draw full-width left-aligned bars at the
 // bucket start (date_trunc boundary); blocks/fallback draws centered capped bars.
 function granularBarPaths(UPlot, s, barMode) {
-  const defaultSize = s.barSize || [0.6, 100]
+  const defaultSize = s.barSize || [0.6, 100, 4]
   const defaultAlign = s.barAlign ?? 0
   return (u, seriesIdx, idx0, idx1) => {
     switch (barMode) {
@@ -49,6 +49,7 @@ function extendToPeriodEnd(cols, barMode) {
   cols[2].push(null)
   cols[3].push(null)
   cols[4].push(cols[4][cols[4].length - 1])
+  cols[5].push(null)
 }
 
 export function ticketpoolPurchases(barMode) {
@@ -64,7 +65,16 @@ export function ticketpoolPurchases(barMode) {
       { label: 'Mempool Tickets', scale: 'y', kind: 'bars', colorIndex: 0, paths: barPaths },
       { label: 'Immature Tickets', scale: 'y', kind: 'bars', colorIndex: 1, paths: barPaths },
       { label: 'Live Tickets', scale: 'y', kind: 'bars', colorIndex: 2, paths: barPaths },
-      { label: 'Ticket Value', scale: 'y2', kind: 'line', colorIndex: 3, width: 2 }
+      { label: 'Ticket Value', scale: 'y2', kind: 'line', colorIndex: 3, width: 2 },
+      {
+        label: '',
+        scale: 'y',
+        kind: 'line',
+        colorIndex: 0,
+        width: 0,
+        points: { show: true, size: 7 },
+        spanGaps: true
+      }
     ],
     toColumns: (data, settings = {}) => {
       const mempool = settings.mempool
@@ -74,7 +84,8 @@ export function ticketpoolPurchases(barMode) {
       const imm = data.immature ? data.immature.slice() : new Array(n).fill(0)
       const live = data.live ? data.live.slice() : new Array(n).fill(0)
       const price = data.price ? data.price.slice() : new Array(n).fill(0)
-      const cols = [xs, mem, imm, live, price]
+      const pts = new Array(n).fill(null)
+      const cols = [xs, mem, imm, live, price, pts]
       // Anchor the bucketed period-end boundary to the last HISTORICAL point, BEFORE appending
       // any live mempool point — otherwise extendToPeriodEnd would read the mempool timestamp as
       // its anchor and compute the wrong boundary. Today the two never co-occur (mempool is only
@@ -82,16 +93,21 @@ export function ticketpoolPurchases(barMode) {
       // ordering it this way keeps the boundary correct independent of that controller invariant.
       extendToPeriodEnd(cols, barMode)
       if (mempool) {
-        xs.push(new Date(mempool.time).getTime() / 1000)
+        const lastTs = xs.length ? xs[xs.length - 1] : 0
+        let memTs = new Date(mempool.time).getTime() / 1000
+        if (memTs <= lastTs + 1) memTs = lastTs + 1
+        xs.push(memTs)
         mem.push(mempool.count)
         imm.push(0)
         live.push(0)
         price.push(mempool.price)
+        pts.push(mempool.count)
       }
       return cols
     },
     formatValue: (seriesIdx, datum) => {
       if (!Number.isFinite(datum.value)) return 'n/a'
+      if (seriesIdx === 4) return ''
       if (seriesIdx === 3) {
         return `${datum.value.toLocaleString('en-US', { maximumFractionDigits: 8 })} VAR`
       }

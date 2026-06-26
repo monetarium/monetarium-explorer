@@ -30,3 +30,36 @@ describe('ticketpoolPrice.toColumns', () => {
     expect(cols[1]).toEqual([0, 9, 0, 0])
   })
 })
+
+describe('ticketpoolPrice overlay points series', () => {
+  const overlay = ticketpoolPrice.series[4]
+
+  it('is a line with visible points and zero-width stroke', () => {
+    expect(overlay.kind).toBe('line')
+    expect(overlay.points.show).toBe(true)
+    expect(overlay.points.size).toBe(7)
+    expect(overlay.spanGaps).toBe(true)
+  })
+})
+
+describe('ticketpoolPrice.columns', () => {
+  it('returns 6 columns (x, mem, imm, live, y2-axis, overlay)', () => {
+    const cols = ticketpoolPrice.toColumns(base, {})
+    expect(cols).toHaveLength(6)
+  })
+
+  it('overlay column is null everywhere when no mempool', () => {
+    const cols = ticketpoolPrice.toColumns(base, {})
+    expect(cols[5]).toEqual([null, null, null])
+  })
+
+  it('overlay column has the mempool count at matching price', () => {
+    const cols = ticketpoolPrice.toColumns(base, { mempool: { price: 200, count: 7 } })
+    expect(cols[5]).toEqual([null, 7, null])
+  })
+
+  it('overlay column has the mempool count at inserted price', () => {
+    const cols = ticketpoolPrice.toColumns(base, { mempool: { price: 150, count: 9 } })
+    expect(cols[5]).toEqual([null, 9, null, null])
+  })
+})
