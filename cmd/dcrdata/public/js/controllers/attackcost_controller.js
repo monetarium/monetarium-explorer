@@ -305,7 +305,13 @@ export default class extends Controller {
     const prevMax = this._uplot && this._uplot.scales.x ? this._uplot.scales.x.max : null
     this._destroyChart()
     await this._buildChart(dark)
-    if (prevMin != null && prevMax != null && isFinite(prevMin) && isFinite(prevMax)) {
+    if (
+      this._uplot &&
+      prevMin != null &&
+      prevMax != null &&
+      isFinite(prevMin) &&
+      isFinite(prevMax)
+    ) {
       this._uplot.setScale('x', { min: prevMin, max: prevMax })
     }
   }
