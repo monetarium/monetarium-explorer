@@ -1375,7 +1375,7 @@ func (c *appContext) blockSubsidies(w http.ResponseWriter, r *http.Request) {
 	} else if c.DataSource.IsDCP0010Active(idx) {
 		ssv = standalone.SSVDCP0010
 	}
-	work, stake, tax := txhelpers.RewardsAtBlock(idx, uint16(numVotes), c.Params, ssv)
+	work, stake := txhelpers.RewardsAtBlock(idx, uint16(numVotes), c.Params, ssv)
 	rewards := apitypes.BlockSubsidies{
 		BlockNum:   idx,
 		BlockHash:  hash,
@@ -1383,8 +1383,7 @@ func (c *appContext) blockSubsidies(w http.ResponseWriter, r *http.Request) {
 		Stake:      stake,
 		NumVotes:   numVotes,
 		TotalStake: stake * int64(numVotes),
-		Tax:        tax,
-		Total:      work + stake*int64(numVotes) + tax,
+		Total:      work + stake*int64(numVotes),
 	}
 
 	writeJSON(w, rewards, m.GetIndentCtx(r))

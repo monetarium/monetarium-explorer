@@ -97,20 +97,19 @@ type ScriptSig struct {
 
 // Vin models basic data about a transaction input.
 type Vin struct {
-	Coinbase     string     `json:"coinbase,omitempty"`
-	Stakebase    string     `json:"stakebase,omitempty"`
-	Treasurybase bool       `json:"treasurybase,omitempty"`
-	Txid         string     `json:"txid,omitempty"`
-	Vout         uint32     `json:"vout,omitempty"`
-	Tree         int8       `json:"tree,omitempty"`
-	ScriptSig    *ScriptSig `json:"scriptSig,omitempty"`
-	Sequence     uint32     `json:"sequence"`
-	AmountIn     float64    `json:"amountin,omitempty"`
-	SKAAmountIn  string     `json:"ska_amountin,omitempty"`
-	BlockHeight  uint32     `json:"blockheight"`
-	BlockIndex   uint32     `json:"blockindex"`
-	CoinType     uint8      `json:"coin_type,omitempty"`
-	ValueInRaw   string     `json:"value_in_raw,omitempty"`
+	Coinbase    string     `json:"coinbase,omitempty"`
+	Stakebase   string     `json:"stakebase,omitempty"`
+	Txid        string     `json:"txid,omitempty"`
+	Vout        uint32     `json:"vout,omitempty"`
+	Tree        int8       `json:"tree,omitempty"`
+	ScriptSig   *ScriptSig `json:"scriptSig,omitempty"`
+	Sequence    uint32     `json:"sequence"`
+	AmountIn    float64    `json:"amountin,omitempty"`
+	SKAAmountIn string     `json:"ska_amountin,omitempty"`
+	BlockHeight uint32     `json:"blockheight"`
+	BlockIndex  uint32     `json:"blockindex"`
+	CoinType    uint8      `json:"coin_type,omitempty"`
+	ValueInRaw  string     `json:"value_in_raw,omitempty"`
 }
 
 // TxShort models info about transaction TxID
@@ -166,31 +165,12 @@ type Txns struct {
 	Transactions []string `json:"transactions"`
 }
 
-// TSpendVote describes how a SSGen transaction decided on a tspend.
-type TSpendVote struct {
-	TSpend string `json:"tspend"`
-	Choice uint8  `json:"choice"`
-}
-
 // VoteInfo models data about a SSGen transaction (vote)
 type VoteInfo struct {
 	Validation BlockValidation         `json:"block_validation"`
 	Version    uint32                  `json:"vote_version"`
 	Bits       uint16                  `json:"vote_bits"`
 	Choices    []*txhelpers.VoteChoice `json:"vote_choices"`
-	TSpends    []*TSpendVote           `json:"tspend_votes,omitempty"`
-}
-
-// ConvertTSpendVotes converts into the api's TSpendVote format.
-func ConvertTSpendVotes(tspendChoices []*txhelpers.TSpendVote) []*TSpendVote {
-	tspendVotes := make([]*TSpendVote, len(tspendChoices))
-	for i := range tspendChoices {
-		tspendVotes[i] = &TSpendVote{
-			TSpend: tspendChoices[i].TSpend.String(),
-			Choice: tspendChoices[i].Choice,
-		}
-	}
-	return tspendVotes
 }
 
 // BlockValidation models data about a vote's decision on a block
@@ -263,8 +243,8 @@ const (
 	ScriptClassStakeRevocation                    // Stake revocation.
 	ScriptClassStakeSubChange                     // Change for stake submission tx.
 	ScriptClassStakeSubCommit                     // Pseudo-class, actually nulldata odd outputs of stake submission (tickets)
-	ScriptClassTreasuryAdd                        // Treasury Add (e.g. treasury add tx types, or 0th output of treasury base tx)
-	ScriptClassTreasuryGen                        // Treasury Generation (e.g. >0th outputs of treasury spend)
+	ScriptClassTreasuryAdd                        // Deprecated: Monetarium has no treasury. Always 0.
+	ScriptClassTreasuryGen                        // Deprecated: Monetarium has no treasury. Always 0.
 	ScriptClassInvalid
 )
 
@@ -282,9 +262,11 @@ var scriptClassToName = map[ScriptClass]string{
 	ScriptClassStakeRevocation: "stakerevoke",
 	ScriptClassStakeSubChange:  "sstxchange",
 	ScriptClassStakeSubCommit:  "sstxcommitment",
-	ScriptClassTreasuryAdd:     "treasuryadd",
-	ScriptClassTreasuryGen:     "treasurygen",
-	ScriptClassInvalid:         "invalid",
+	// Deprecated: Monetarium has no treasury.
+	ScriptClassTreasuryAdd: "treasuryadd",
+	// Deprecated: Monetarium has no treasury.
+	ScriptClassTreasuryGen: "treasurygen",
+	ScriptClassInvalid:     "invalid",
 }
 
 var scriptNameToClass = map[string]ScriptClass{
@@ -301,8 +283,10 @@ var scriptNameToClass = map[string]ScriptClass{
 	"stakerevoke":     ScriptClassStakeRevocation,
 	"sstxchange":      ScriptClassStakeSubChange,
 	"sstxcommitment":  ScriptClassStakeSubCommit,
-	"treasuryadd":     ScriptClassTreasuryAdd,
-	"treasurygen":     ScriptClassTreasuryGen,
+	// Deprecated: Monetarium has no treasury.
+	"treasuryadd": ScriptClassTreasuryAdd,
+	// Deprecated: Monetarium has no treasury.
+	"treasurygen": ScriptClassTreasuryGen,
 
 	// No "invalid" mapping!
 }
@@ -335,8 +319,10 @@ func NewScriptClass(sc stdscript.ScriptType) ScriptClass {
 		return ScriptClassPubkeyAlt
 	case stdscript.STPubKeyHashEd25519, stdscript.STPubKeyHashSchnorrSecp256k1:
 		return ScriptClassPubkeyHashAlt
+	// Deprecated: Monetarium has no treasury.
 	case stdscript.STTreasuryGenPubKeyHash, stdscript.STTreasuryGenScriptHash:
 		return ScriptClassTreasuryGen
+	// Deprecated: Monetarium has no treasury.
 	case stdscript.STTreasuryAdd:
 		return ScriptClassTreasuryAdd
 	}
@@ -434,6 +420,8 @@ type Address struct {
 // VinShort describes a transaction input with limited detail, for the address
 // txn API endpoints. In particular, there is no ScriptSig or Sequence, and the
 // string fields for Coinbase, Stakebase, and TreasurySpend are just booleans.
+// Deprecated fields Treasurybase and TreasurySpend are kept for API compat —
+// always false on Monetarium.
 type VinShort struct {
 	Coinbase      bool    `json:"coinbase"`
 	Stakebase     bool    `json:"stakebase"`
@@ -472,6 +460,7 @@ func (v *VinShort) MarshalJSON() ([]byte, error) {
 			AmountIn:  v.AmountIn,
 		}
 		return json.Marshal(generated)
+	// Deprecated: Monetarium has no treasury. Always false.
 	case v.Treasurybase:
 		generated := struct {
 			Treasurybase bool    `json:"treasurybase"`
@@ -481,6 +470,7 @@ func (v *VinShort) MarshalJSON() ([]byte, error) {
 			AmountIn:     v.AmountIn,
 		}
 		return json.Marshal(generated)
+	// Deprecated: Monetarium has no treasury. Always false.
 	case v.TreasurySpend:
 		generated := struct {
 			TreasurySpend bool    `json:"treasuryspend"`
@@ -833,7 +823,6 @@ type BlockSubsidies struct {
 	Stake      int64  `json:"stake_reward"`
 	NumVotes   int16  `json:"num_votes,omitempty"`
 	TotalStake int64  `json:"stake_reward_total,omitempty"`
-	Tax        int64  `json:"project_subsidy"`
 	Total      int64  `json:"total,omitempty"`
 }
 

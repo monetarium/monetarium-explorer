@@ -62,9 +62,7 @@ func UltimateSubsidy(params *chaincfg.Params, dcp0010Height, dcp0012Height int64
 	subsidySum := func(height int64, ssv standalone.SubsidySplitVariant) int64 {
 		work := subsidyCache.CalcWorkSubsidyV3(height, votesPerBlock, ssv)
 		vote := subsidyCache.CalcStakeVoteSubsidyV3(height, ssv) * int64(votesPerBlock)
-		// With voters set to max (votesPerBlock), treasury bool is unimportant.
-		treasury := subsidyCache.CalcTreasurySubsidy(height, votesPerBlock, false)
-		return work + vote + treasury
+		return work + vote
 	}
 
 	// Define details to account for partial intervals where the subsidy split
@@ -172,15 +170,12 @@ func networkSubsidyCache(p *chaincfg.Params) *standalone.SubsidyCache {
 	return sc
 }
 
-// RewardsAtBlock computes the PoW, PoS (per vote), and project fund subsidies
-// at for the specified block index, assuming a certain number of votes. The
-// stake reward is for a single vote. The total reward for the block is thus
-// work + stake * votes + tax.
-func RewardsAtBlock(blockIdx int64, votes uint16, p *chaincfg.Params, ssv standalone.SubsidySplitVariant) (work, stake, tax int64) {
+// RewardsAtBlock computes the PoW and PoS (per vote) subsidies at the
+// specified block index, assuming a certain number of votes. The total reward
+// for the block is work + stake * votes.
+func RewardsAtBlock(blockIdx int64, votes uint16, p *chaincfg.Params, ssv standalone.SubsidySplitVariant) (work, stake int64) {
 	subsidyCache := networkSubsidyCache(p)
 	work = subsidyCache.CalcWorkSubsidyV3(blockIdx, votes, ssv)
 	stake = subsidyCache.CalcStakeVoteSubsidyV3(blockIdx, ssv)
-	treasuryActive := IsTreasuryActive(p.Net, blockIdx)
-	tax = subsidyCache.CalcTreasurySubsidy(blockIdx, votes, treasuryActive)
 	return
 }

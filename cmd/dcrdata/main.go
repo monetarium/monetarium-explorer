@@ -205,7 +205,6 @@ func _main(ctx context.Context) error {
 	dbCfg := dcrpg.ChainDBCfg{
 		DBi:                  &dbi,
 		Params:               activeChain,
-		DevPrefetch:          !cfg.NoDevPrefetch,
 		HidePGConfig:         cfg.HidePGConfig,
 		AddrCacheAddrCap:     cfg.AddrCacheLimit,
 		AddrCacheRowCap:      rowCap,
@@ -445,7 +444,6 @@ func _main(ctx context.Context) error {
 		ChartSource:       charts,
 		UseRealIP:         cfg.UseRealIP,
 		AppVersion:        Version(),
-		DevPrefetch:       !cfg.NoDevPrefetch,
 		Viewsfolder:       "views",
 		AssetManifestPath: "public/dist/manifest.json",
 		AgendasSource:     agendaDB,
@@ -775,12 +773,6 @@ func _main(ctx context.Context) error {
 		// fetched on demand by the controller, so it must not share the page's
 		// block-scoped ETag/Last-Modified caching.
 		r.Get("/hashrate-shares/data", explore.HashrateSharesData)
-		withCache.Get("/treasury", func(w http.ResponseWriter, r *http.Request) {
-			http.Error(w, "treasury not available", http.StatusGone)
-		})
-		withCache.Get("/treasurytable", func(w http.ResponseWriter, r *http.Request) {
-			http.Error(w, "treasury not available", http.StatusGone)
-		})
 		withCache.Get("/parameters", explore.ParametersPage)
 		withCache.Get("/agendas", explore.AgendasPage)
 		withCache.With(explorer.AgendaPathCtx).Get("/agenda/{agendaid}", explore.AgendaPage)
@@ -1066,10 +1058,6 @@ func _main(ctx context.Context) error {
 	if cerr != nil {
 		return fmt.Errorf("RPC client error: %v (%v)", cerr.Error(), cerr.Cause())
 	}
-
-	// Clear any cached address data in case the sync status page is not
-	// intercepting requests (see SyncStatusLimit).
-	_ = chainDB.FreshenAddressCaches(true, nil)
 
 	log.Infof("All ready, at height %d.", chainDBHeight)
 	explore.SetDBsSyncing(false) // let explorer.Store do final updates

@@ -60,8 +60,8 @@ func (iapi *InsightApi) DcrToInsightTxns(ctx context.Context, txs []*chainjson.T
 			// dumb because only the 0th input will be generated.
 			coinbase, treasurybase := vin.IsCoinBase(), vin.Treasurybase
 			vinGenerated := coinbase || vin.IsStakeBase() || treasurybase
-			txNew.IsTreasurybase = vin.Treasurybase || treasurybase
-			txNew.IsCoinBase = txNew.IsCoinBase || coinbase // exclude stakebase
+			txNew.IsTreasurybase = vin.Treasurybase || treasurybase // Deprecated: Always false on Monetarium.
+			txNew.IsCoinBase = txNew.IsCoinBase || coinbase         // exclude stakebase
 			// NOTE: coinbase transactions should only have one input, so the
 			// above is a bit weird.
 
@@ -171,8 +171,8 @@ func (iapi *InsightApi) DcrToInsightBlock(inBlocks []*chainjson.GetBlockVerboseR
 		} else if blocknum >= dcp0010Height {
 			ssv = standalone.SSVDCP0010
 		}
-		work, stake, tax := txhelpers.RewardsAtBlock(blocknum, voters, iapi.params, ssv)
-		return dcrutil.Amount(work + stake*int64(voters) + tax).ToCoin()
+		work, stake := txhelpers.RewardsAtBlock(blocknum, voters, iapi.params, ssv)
+		return dcrutil.Amount(work + stake*int64(voters)).ToCoin()
 	}
 
 	outBlocks := make([]*apitypes.InsightBlockResult, 0, len(inBlocks))

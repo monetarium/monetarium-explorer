@@ -85,8 +85,6 @@ const (
 	SCStakeSubCommit                     // Pseudo-class for stake submission commitments, odd outputs
 	SCPubkeyAlt                          // Alternative signature pubkey.
 	SCPubkeyHashAlt                      // Alternative signature pubkey hash.
-	SCTreasuryAdd                        // Add value to treasury
-	SCTreasuryGen                        // Generate utxos from treasury account
 	scLen
 
 	SCInvalid ScriptClass = 0xff
@@ -106,8 +104,6 @@ var scriptClassToName = [...]string{
 	SCStakeRevocation: "stakerevoke",
 	SCStakeSubChange:  "sstxchange",
 	SCStakeSubCommit:  "sstxcommitment",
-	SCTreasuryAdd:     "treasuryadd",
-	SCTreasuryGen:     "treasurygen",
 }
 
 // NewScriptClass converts a stdscript.ScriptType to the DB's ScriptClass type,
@@ -138,10 +134,6 @@ func NewScriptClass(sc stdscript.ScriptType) ScriptClass {
 		return SCPubkeyAlt
 	case stdscript.STPubKeyHashEd25519, stdscript.STPubKeyHashSchnorrSecp256k1:
 		return SCPubkeyHashAlt
-	case stdscript.STTreasuryGenPubKeyHash, stdscript.STTreasuryGenScriptHash:
-		return SCTreasuryGen
-	case stdscript.STTreasuryAdd:
-		return SCTreasuryAdd
 	}
 	return SCInvalid
 }
@@ -989,36 +981,6 @@ type AgendaSummary struct {
 	Abstain       uint32
 	VotingStarted int64
 	LockedIn      int64
-}
-
-// TreasurySpendVotes summarizes the vote tally for a tspend.
-type TreasurySpendVotes struct {
-	Hash      ChainHash `json:"hash"`
-	Expiry    int64     `json:"expiry"`
-	VoteStart int64     `json:"votestart"`
-	VoteEnd   int64     `json:"voteend"`
-	YesVotes  int64     `json:"yesvotes"`
-	NoVotes   int64     `json:"novotes"`
-}
-
-// TreasurySpendMetaData extends TreasurySpendVotes and contains some
-// status-dependent data representations for display purposes.
-type TreasurySpendMetaData struct {
-	*TreasurySpendVotes
-	PoliteiaKey      string
-	VoteEndDate      time.Time
-	VoteStartDate    time.Time
-	NextTVI          int64
-	NextTVITime      time.Time
-	Approved         bool
-	QuorumAchieved   bool
-	QuorumCount      int64
-	MaxVotes         int64
-	EligibleVotes    int64
-	RequiredYesVotes int64
-	TotalVotes       int64
-	PassPercent      float32
-	Approval         float32
 }
 
 // BlockChainData defines data holding the latest block chain state from the

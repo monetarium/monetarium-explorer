@@ -127,7 +127,6 @@ func mainCore(ctx context.Context) error {
 	dbCfg := dcrpg.ChainDBCfg{
 		DBi:                  &dbi,
 		Params:               activeChain,
-		DevPrefetch:          false,
 		HidePGConfig:         cfg.HidePGConfig,
 		AddrCacheAddrCap:     1 << 10,
 		AddrCacheRowCap:      1 << 8,
