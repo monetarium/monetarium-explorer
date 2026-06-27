@@ -860,8 +860,7 @@ func _main(ctx context.Context) error {
 		// Collect and store data for each side chain.
 		log.Infof("Importing %d new block(s) from %d known side chains...",
 			nSideChainBlocks, nSideChains)
-		// Disable recomputing project fund balance, and clearing address
-		// balance and counts cache.
+		// Disable clearing address balance and counts cache during batch sync.
 		chainDB.InBatchSync = true
 		var sideChainsStored, sideChainBlocksStored int
 		for _, sideChain := range sideChainBlocksToStore {
