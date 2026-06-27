@@ -1059,6 +1059,10 @@ func _main(ctx context.Context) error {
 	}
 
 	log.Infof("All ready, at height %d.", chainDBHeight)
+
+	// Clear stale address cache entries accumulated during bulk sync.
+	_ = chainDB.FreshenAddressCaches(nil)
+
 	explore.SetDBsSyncing(false) // let explorer.Store do final updates
 	psHub.SetReady(true)         // make the psHub's WebsocketHub ready to send
 
