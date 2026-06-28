@@ -44,25 +44,6 @@
           {{- $varCB := index $balance.Coins 0 -}}
           <div class="position-relative d-flex justify-content-between align-items-start flex-wrap">
             <div class="d-inline-block text-start pe-2 pb-3">
-              <span class="text-secondary fs13">Balance</span>
-              <br>
-              {{- range $ct := $active}}
-                {{- $cb := index $balance.Coins $ct}}
-                {{- if $cb}}
-                  <span class="lh1rem d-block pt-1 fs18 fs14-decimal fw-bold">
-                    {{- if eq $ct 0 -}}
-                      {{template "decimalParts" (float64AsDecimalParts (toFloat64Amount $cb.TotalUnspent) 8 true 2)}}
-                    {{- else -}}
-                      {{template "decimalParts" (skaDecimalParts $cb.TotalUnspentSKA true 2)}}
-                    {{- end -}}
-                    <span class="text-secondary fs14 ms-1">{{coinSymbol $ct}}</span>
-                  </span>
-                {{- end}}
-              {{- else}}
-                <span class="lh1rem d-inline-block pt-1 fs18 fs14-decimal fw-bold">&mdash;</span>
-              {{- end}}
-            </div>
-            <div class="d-inline-block text-start pe-2 pb-3">
               <span class="text-secondary fs13">Received</span>
               <br>
               {{- range $ct := $active}}
@@ -106,6 +87,25 @@
               {{- if gt (len $active) 0}}
                 <br>
                 <span class="text-secondary fs16 lh1rem">{{intComma $balance.TotalInputs}} inputs</span>
+              {{- end}}
+            </div>
+            <div class="d-inline-block text-start pe-2 pb-3">
+              <span class="text-secondary fs13">Balance</span>
+              <br>
+              {{- range $ct := $active}}
+                {{- $cb := index $balance.Coins $ct}}
+                {{- if $cb}}
+                  <span class="lh1rem d-block pt-1 fs18 fs14-decimal fw-bold">
+                    {{- if eq $ct 0 -}}
+                      {{template "decimalParts" (float64AsDecimalParts (toFloat64Amount $cb.TotalUnspent) 8 true 2)}}
+                    {{- else -}}
+                      {{template "decimalParts" (skaDecimalParts $cb.TotalUnspentSKA true 2)}}
+                    {{- end -}}
+                    <span class="text-secondary fs14 ms-1">{{coinSymbol $ct}}</span>
+                  </span>
+                {{- end}}
+              {{- else}}
+                <span class="lh1rem d-inline-block pt-1 fs18 fs14-decimal fw-bold">&mdash;</span>
               {{- end}}
             </div>
             <span></span>
