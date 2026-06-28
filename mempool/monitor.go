@@ -231,7 +231,7 @@ func (p *MempoolMonitor) TxHandler(rawTx *chainjson.TxRawResult) error {
 	// If this is a vote, decode vote bits.
 	var voteInfo *exptypes.VoteInfo
 	if txType == stake.TxTypeSSGen {
-		validation, version, bits, choices, tspendVotes, err := txhelpers.SSGenVoteChoices(msgTx, p.params)
+		validation, version, bits, choices, _, err := txhelpers.SSGenVoteChoices(msgTx, p.params)
 		if err != nil {
 			log.Debugf("Cannot get vote choices for %s", hash)
 		} else {
@@ -245,7 +245,6 @@ func (p *MempoolMonitor) TxHandler(rawTx *chainjson.TxRawResult) error {
 				Bits:        bits,
 				Choices:     choices,
 				TicketSpent: msgTx.TxIn[1].PreviousOutPoint.Hash.String(),
-				TSpends:     exptypes.ConvertTSpendVotes(tspendVotes),
 			}
 			voteInfo.ForLastBlock = voteInfo.VotesOnBlock(p.lastBlock.Hash.String())
 		}
@@ -334,19 +333,21 @@ func (p *MempoolMonitor) TxHandler(rawTx *chainjson.TxRawResult) error {
 		p.inventory.NumRevokes++
 		p.inventory.LikelyMineable.RevokeTotal += tx.TotalOut
 
+	// Deprecated: Monetarium has no treasury. TSpend tx never appears in mempool.
 	case stake.TxTypeTSpend:
 		p.inventory.InvStake[tx.TxID] = struct{}{}
 		p.inventory.TSpends = append([]exptypes.MempoolTx{tx}, p.inventory.TSpends...)
-		likelyMineable = false // really depends on vote choices and TreasuryVoteInterval
+		likelyMineable = false
 		// p.inventory.LikelyMineable.TSpendTotal += tx.TotalOut
 
+	// Deprecated: Monetarium has no treasury. TAdd tx never appears in mempool.
 	case stake.TxTypeTAdd:
 		p.inventory.InvStake[tx.TxID] = struct{}{}
 		p.inventory.TAdds = append([]exptypes.MempoolTx{tx}, p.inventory.TAdds...)
 		p.inventory.LikelyMineable.TAddTotal += tx.TotalOut
 
+	// Deprecated: Monetarium has no treasury. TreasuryBase tx never appears in mempool.
 	case stake.TxTypeTreasuryBase:
-		// treasurybase should never be in mempool so let's warn
 		log.Warnf("Treasury base in mempool! %v", tx.TxID)
 	}
 

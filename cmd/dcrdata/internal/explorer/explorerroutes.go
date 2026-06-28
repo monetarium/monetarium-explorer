@@ -946,7 +946,6 @@ func (exp *explorerUI) TxPage(w http.ResponseWriter, r *http.Request) {
 				FeeRate:       dcrutil.Amount((1000 * int64(fees)) / int64(dbTx0.Size)),
 				// VoteInfo TODO - check votes table
 				Coinbase:     dbTx0.BlockIndex == 0 && dbTx0.Tree == wire.TxTreeRegular,
-				Treasurybase: stake.TxType(txType) == stake.TxTypeTreasuryBase,
 				SKASent:      dbTx0.SentByCoin,
 			},
 			SpendingTxns: make([]types.TxInID, len(dbTx0.VoutDbIds)), // SpendingTxns filled below
@@ -1055,25 +1054,26 @@ func (exp *explorerUI) TxPage(w http.ResponseWriter, r *http.Request) {
 			} else {
 				formattedAmt = types.FormatSKAAmount(vins[iv].SKAValue, vins[iv].CoinType, true)
 			}
-			var coinbase, stakebase, tspend string
-			var treasuryBase bool
+			var coinbase, stakebase, tspend string // Deprecated: tspend always "" on Monetarium.
+			var treasuryBase bool                   // Deprecated: Always false on Monetarium.
 			if txIndex == 0 {
 				if tx.Coinbase {
 					coinbase = hex.EncodeToString(txhelpers.CoinbaseScript)
 				} else if tx.IsVote() {
 					stakebase = hex.EncodeToString(txhelpers.CoinbaseScript)
+				// Deprecated: Monetarium has no treasury. Dead branches.
 				} else if stake.TxType(dbTx0.TxType) == stake.TxTypeTreasuryBase {
 					treasuryBase = true
 				} else if stake.TxType(dbTx0.TxType) == stake.TxTypeTSpend {
-					tspend = "<unknown>" // todo: maybe store the tspend sigscript in db so we can retrieve it without dcrd, maybe not
+					tspend = "<unknown>"
 				}
 			}
 			tx.Vin = append(tx.Vin, types.Vin{
 				Vin: &chainjson.Vin{
 					Coinbase:      coinbase,
 					Stakebase:     stakebase,
-					Treasurybase:  treasuryBase,
-					TreasurySpend: tspend,
+					Treasurybase:  treasuryBase,  // Deprecated: Always false on Monetarium.
+					TreasurySpend: tspend,         // Deprecated: Always "" on Monetarium.
 					Txid:          hash,
 					Vout:          vins[iv].PrevTxIndex,
 					Tree:          dbTx0.Tree,
@@ -1095,8 +1095,7 @@ func (exp *explorerUI) TxPage(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// For coinbase, stakebase, and treasury txns, get maturity status.
-		if tx.Coinbase || tx.IsVote() || tx.IsRevocation() || tx.IsTreasuryAdd() ||
-			tx.IsTreasurySpend() || tx.IsTreasurybase() {
+		if tx.Coinbase || tx.IsVote() || tx.IsRevocation() {
 			tx.Maturity = int64(exp.ChainParams.CoinbaseMaturity)
 			if tx.IsVote() {
 				tx.Maturity++ // TODO why as elsewhere for votes?
@@ -1370,8 +1369,10 @@ func (exp *explorerUI) TxPage(w http.ResponseWriter, r *http.Request) {
 			vin.DisplayText = types.CoinbaseTypeStr
 		} else if vin.Stakebase != "" {
 			vin.DisplayText = "Stakebase"
+			// Deprecated: Monetarium has no treasury. Dead branch.
 		} else if vin.Treasurybase {
 			vin.DisplayText = "TreasuryBase"
+			// Deprecated: Monetarium has no treasury. Dead branch.
 		} else if vin.TreasurySpend != "" {
 			vin.DisplayText = "TreasurySpend"
 		} else {

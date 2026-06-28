@@ -16,9 +16,7 @@ import (
 	"time"
 
 	"github.com/dustin/go-humanize"
-	"github.com/monetarium/monetarium-explorer/db/dbtypes"
 	"github.com/monetarium/monetarium-explorer/txhelpers"
-	"github.com/monetarium/monetarium-node/blockchain/stake"
 	"github.com/monetarium/monetarium-node/chaincfg"
 	"github.com/monetarium/monetarium-node/dcrutil"
 	chainjson "github.com/monetarium/monetarium-node/rpc/jsonrpc/types"
@@ -361,12 +359,11 @@ type TxBasic struct {
 	FeeRateRaw    string
 	Size          int32
 	*VoteInfo
-	Coinbase     bool
-	Treasurybase bool
-	MixCount     uint32
-	MixDenom     int64
-	CoinType     uint8
-	SKASent      map[uint8]string
+	Coinbase bool
+	MixCount uint32
+	MixDenom int64
+	CoinType uint8
+	SKASent  map[uint8]string
 }
 
 // TrimmedTxInfo for use with /visualblocks
@@ -398,7 +395,6 @@ type TxInfo struct {
 	VoteFundsLocked  string
 	Maturity         int64   // Total number of blocks before mature
 	MaturityTimeTill float64 // Time in hours until mature
-	TSpendMeta       *dbtypes.TreasurySpendMetaData
 	TicketInfo
 }
 
@@ -415,21 +411,6 @@ func (t *TxInfo) IsTicket() bool {
 // IsVote checks whether this transaction is a vote.
 func (t *TxInfo) IsVote() bool {
 	return t.Type == txhelpers.TxTypeVote
-}
-
-// IsTreasurySpend checks whether this transaction is a tspend.
-func (t *TxInfo) IsTreasurySpend() bool {
-	return t.Type == txhelpers.TxTypeTreasurySpend
-}
-
-// IsTreasurybase checks whether this transaction is a treasurybase.
-func (t *TxInfo) IsTreasurybase() bool {
-	return t.Type == txhelpers.TxTypeTreasurybase
-}
-
-// IsTreasuryAdd checks whether this transaction is a tadd.
-func (t *TxInfo) IsTreasuryAdd() bool {
-	return t.Type == txhelpers.TxTypeTreasuryAdd
 }
 
 // IsSSFee checks whether this transaction is an SSFee (Stake Fee) tx.
@@ -551,12 +532,6 @@ type TxInID struct {
 	Index uint32
 }
 
-// TSpendVote describes how a SSGen transaction decided on a tspend.
-type TSpendVote struct {
-	TSpend string `json:"tspend"`
-	Choice string `json:"choice"`
-}
-
 // VoteInfo models data about a SSGen transaction (vote)
 type VoteInfo struct {
 	Validation         BlockValidation         `json:"block_validation"`
@@ -566,7 +541,6 @@ type VoteInfo struct {
 	TicketSpent        string                  `json:"ticket_spent"`
 	MempoolTicketIndex int                     `json:"mempool_ticket_index"`
 	ForLastBlock       bool                    `json:"last_block"`
-	TSpends            []*TSpendVote           `json:"tspend_votes,omitempty"`
 }
 
 func (vi *VoteInfo) DeepCopy() *VoteInfo {
@@ -577,28 +551,6 @@ func (vi *VoteInfo) DeepCopy() *VoteInfo {
 	out.Choices = make([]*txhelpers.VoteChoice, len(vi.Choices))
 	copy(out.Choices, vi.Choices)
 	return &out
-}
-
-// ConvertTSpendVotes converts into the api's TSpendVote format.
-func ConvertTSpendVotes(tspendChoices []*txhelpers.TSpendVote) []*TSpendVote {
-	choiceStr := func(choice uint8) string {
-		switch stake.TreasuryVoteT(choice) {
-		case stake.TreasuryVoteYes:
-			return "yes"
-		case stake.TreasuryVoteNo:
-			return "no"
-		default:
-			return "invalid"
-		}
-	}
-	tspendVotes := make([]*TSpendVote, len(tspendChoices))
-	for i := range tspendChoices {
-		tspendVotes[i] = &TSpendVote{
-			TSpend: tspendChoices[i].TSpend.String(),
-			Choice: choiceStr(tspendChoices[i].Choice),
-		}
-	}
-	return tspendVotes
 }
 
 // BlockValidation models data about a vote's decision on a block
@@ -812,7 +764,6 @@ type BlockInfo struct {
 	MerkleRoot            string
 	TxAvailable           bool
 	Tx                    []*TrimmedTxInfo
-	Treasury              []*TrimmedTxInfo
 	Tickets               []*TrimmedTxInfo
 	Revs                  []*TrimmedTxInfo
 	Votes                 []*TrimmedTxInfo
@@ -947,8 +898,8 @@ type TrimmedMempoolInfo struct {
 	Tickets        []*TrimmedTxInfo
 	Votes          []*TrimmedTxInfo
 	Revocations    []*TrimmedTxInfo
-	TSpends        []*TrimmedTxInfo
-	TAdds          []*TrimmedTxInfo
+	TSpends        []*TrimmedTxInfo // Deprecated: Monetarium has no treasury. Always nil.
+	TAdds          []*TrimmedTxInfo // Deprecated: Monetarium has no treasury. Always nil.
 	Subsidy        BlockSubsidy
 	Total          float64
 	Time           int64
@@ -969,8 +920,8 @@ type MempoolInfo struct {
 	Tickets      []MempoolTx `json:"tickets"`
 	Votes        []MempoolTx `json:"votes"`
 	Revocations  []MempoolTx `json:"revs"`
-	TSpends      []MempoolTx `json:"tspends"`
-	TAdds        []MempoolTx `json:"tadds"`
+	TSpends      []MempoolTx `json:"tspends"` // Deprecated: Monetarium has no treasury. Always nil.
+	TAdds        []MempoolTx `json:"tadds"`   // Deprecated: Monetarium has no treasury. Always nil.
 	Ident        uint64      `json:"id"`
 	// CoinFills holds per-coin mempool fill bar data for the homepage.
 	CoinFills []CoinFillData `json:"coin_fills,omitempty"`
@@ -1224,8 +1175,8 @@ type MempoolShort struct {
 	NumVotes           int                 `json:"num_votes"`
 	NumRegular         int                 `json:"num_regular"`
 	NumRevokes         int                 `json:"num_revokes"`
-	NumTSpends         int                 `json:"num_tspends"`
-	NumTAdds           int                 `json:"num_tadds"`
+	NumTSpends         int                 `json:"num_tspends"` // Deprecated: Monetarium has no treasury. Always 0.
+	NumTAdds           int                 `json:"num_tadds"`   // Deprecated: Monetarium has no treasury. Always 0.
 	NumAll             int                 `json:"num_all"`
 	LikelyMineable     LikelyMineable      `json:"likely_mineable"`
 	LatestTransactions []MempoolTx         `json:"latest"`
@@ -1254,8 +1205,8 @@ type LikelyMineable struct {
 	TicketTotal   float64 `json:"ticket_total"`
 	VoteTotal     float64 `json:"vote_total"`
 	RevokeTotal   float64 `json:"revoke_total"`
-	TSpendTotal   float64 `json:"tspend_total"`
-	TAddTotal     float64 `json:"tadd_total"`
+	TSpendTotal   float64 `json:"tspend_total"` // Deprecated: Monetarium has no treasury. Always 0.
+	TAddTotal     float64 `json:"tadd_total"`   // Deprecated: Monetarium has no treasury. Always 0.
 	Count         int     `json:"count"`
 }
 
@@ -1718,15 +1669,12 @@ type StatsInfo struct {
 	UltimateSupply             int64
 	TotalSupply                int64
 	TotalSupplyPercentage      float64
-	ProjectFunds               int64
-	ProjectAddress             string
 	PoWDiff                    float64
 	HashRate                   float64
 	BlockReward                int64
 	NextBlockReward            int64
 	PoWReward                  int64
 	PoSReward                  int64
-	ProjectFundReward          int64
 	VotesInMempool             int
 	TicketsInMempool           int
 	TicketPrice                float64

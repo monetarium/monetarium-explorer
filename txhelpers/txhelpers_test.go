@@ -192,9 +192,6 @@ func TestTxTypeToString(t *testing.T) {
 		{1, TxTypeTicket},
 		{2, TxTypeVote},
 		{3, TxTypeRevocation},
-		{4, TxTypeTreasuryAdd},
-		{5, TxTypeTreasurySpend},
-		{6, TxTypeTreasurybase},
 		{7, TxTypeSSFee},
 		// DB extension subtypes (mirrors db/dbtypes/types.go)
 		{txTypeBlockRewardPoS, TxTypeStakeReward},

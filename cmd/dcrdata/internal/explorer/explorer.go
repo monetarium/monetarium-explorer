@@ -79,7 +79,6 @@ type explorerDataSource interface {
 	PoolStatusForTicket(ctx context.Context, txid string) (dbtypes.TicketSpendType, dbtypes.TicketPoolStatus, error)
 	AddressHistory(ctx context.Context, address string, N, offset int64, txnType dbtypes.AddrTxnViewType, coinType uint8) ([]*dbtypes.AddressRow, *dbtypes.AddressBalance, error)
 	AddressData(ctx context.Context, address string, N, offset int64, txnType dbtypes.AddrTxnViewType, coinType uint8) (*dbtypes.AddressInfo, error)
-	DevBalance(ctx context.Context) (*dbtypes.AddressBalance, error)
 	FillAddressTransactions(ctx context.Context, addrInfo *dbtypes.AddressInfo) error
 	BlockMissedVotes(ctx context.Context, blockHash string) ([]string, error)
 	TicketMiss(ctx context.Context, ticketHash string) (string, int64, error)
@@ -225,7 +224,6 @@ type explorerUI struct {
 	voteTracker      *agendas.VoteTracker
 	proposals        PoliteiaBackend
 	dbsSyncing       atomic.Value
-	devPrefetch      bool
 	templates        templates
 	wsHub            *WebsocketHub
 	pageData         *pageData
@@ -295,7 +293,6 @@ type ExplorerConfig struct {
 	ChartSource       ChartDataSource
 	UseRealIP         bool
 	AppVersion        string
-	DevPrefetch       bool
 	Viewsfolder       string
 	AgendasSource     agendaBackend
 	Tracker           *agendas.VoteTracker
@@ -317,7 +314,6 @@ func New(cfg *ExplorerConfig) *explorerUI {
 	// Allocate Mempool fields.
 	exp.invs = new(types.MempoolInfo)
 	exp.Version = cfg.AppVersion
-	exp.devPrefetch = cfg.DevPrefetch
 	exp.agendasSource = cfg.AgendasSource
 	exp.voteTracker = cfg.Tracker
 	exp.proposals = cfg.Proposals
@@ -346,13 +342,6 @@ func New(cfg *ExplorerConfig) *explorerUI {
 	exp.NetName = netName(exp.ChainParams)
 	exp.MeanVotingBlocks = txhelpers.CalcMeanVotingBlocks(params)
 	exp.premine = params.BlockOneSubsidy()
-
-	// Development subsidy address of the current network
-	devSubsidyAddress, err := dbtypes.DevSubsidyAddress(params)
-	if err != nil {
-		log.Warnf("explorer.New: %v", err)
-	}
-	log.Debugf("Organization address: %s", devSubsidyAddress)
 
 	exp.pageData = &pageData{
 		BlockInfo: new(types.BlockInfo),

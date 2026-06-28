@@ -24,7 +24,6 @@ import (
 	"github.com/monetarium/monetarium-node/chaincfg"
 	"github.com/monetarium/monetarium-node/dcrutil"
 
-	"github.com/monetarium/monetarium-explorer/db/dbtypes"
 	"github.com/monetarium/monetarium-explorer/netparams"
 )
 
@@ -131,7 +130,6 @@ type config struct {
 	AddrCacheCap     int    `long:"addr-cache-cap" description:"Address cache capacity in bytes." env:"DCRDATA_ADDR_CACHE_CAP"`
 	AddrCacheLimit   int    `long:"addr-cache-address-limit" description:"Maximum number of addresses allowed in the address cache." env:"DCRDATA_ADDR_CACHE_LIMIT"`
 	AddrCacheUXTOCap int    `long:"addr-cache-utxo-cap" description:"UTXO cache capacity in bytes." env:"DCRDATA_ADDR_CASH_UTXO_CAP"`
-	NoDevPrefetch    bool   `long:"no-dev-prefetch" description:"Disable automatic dev fund balance query on new blocks. When true, the query will still be run on demand, but not automatically after new blocks are connected." env:"DCRDATA_DISABLE_DEV_PREFETCH"`
 	ChartsCacheDump  string `long:"chartscache" description:"Defines the file name that holds the charts cache data on system exit." env:"DCRDATA_CHARTS_CACHE"`
 
 	// DB backend
@@ -554,13 +552,6 @@ func loadConfig() (*config, error) {
 
 	log.Infof("Log folder:  %s", cfg.LogDir)
 	log.Infof("Config file: %s", configFile)
-
-	// Disable dev balance prefetch if network has invalid script.
-	_, err = dbtypes.DevSubsidyAddress(activeChain)
-	if !cfg.NoDevPrefetch && err != nil {
-		cfg.NoDevPrefetch = true
-		log.Warnf("%v. Disabling balance prefetch (--no-dev-prefetch).", err)
-	}
 
 	// Validate SyncStatusLimit has been set. Zero means always show sync status
 	// page instead of full block explorer pages.

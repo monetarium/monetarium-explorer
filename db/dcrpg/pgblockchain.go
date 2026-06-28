@@ -25,7 +25,6 @@ import (
 	"github.com/monetarium/monetarium-node/blockchain/standalone"
 	"github.com/monetarium/monetarium-node/chaincfg"
 	"github.com/monetarium/monetarium-node/chaincfg/chainhash"
-	"github.com/monetarium/monetarium-node/dcrec/secp256k1"
 	"github.com/monetarium/monetarium-node/dcrutil"
 	chainjson "github.com/monetarium/monetarium-node/rpc/jsonrpc/types"
 	"github.com/monetarium/monetarium-node/rpcclient"
@@ -259,7 +258,6 @@ type ChainDB struct {
 	db                 *sql.DB
 	mp                 rpcutils.MempoolAddressChecker
 	chainParams        *chaincfg.Params
-	devAddress         string
 	dupChecks          bool
 	bestBlock          *BestBlock
 	lastBlock          map[chainhash.Hash]uint64
@@ -267,9 +265,7 @@ type ChainDB struct {
 	unspentTicketCache *TicketTxnIDGetter
 	AddressCache       *cache.AddressCache
 	CacheLocks         cacheLocks
-	devPrefetch        bool
 	InBatchSync        bool
-	InReorg            bool
 	tpUpdatePermission map[dbtypes.TimeBasedGrouping]*trylock.Mutex
 	utxoCache          utxoStore
 	mixSetDiffsMtx     sync.Mutex
@@ -470,7 +466,7 @@ type DBInfo struct {
 type ChainDBCfg struct {
 	DBi                               *DBInfo
 	Params                            *chaincfg.Params
-	DevPrefetch, HidePGConfig         bool
+	HidePGConfig                      bool
 	AddrCacheRowCap, AddrCacheAddrCap int
 	AddrCacheUTXOByteCap              int
 }
@@ -675,12 +671,6 @@ func NewChainDB(ctx context.Context, cfg *ChainDBCfg, stakeDB *stakedb.StakeData
 		}
 	}
 
-	// Project fund address of the current network
-	projectFundAddress, err := dbtypes.DevSubsidyAddress(params)
-	if err != nil {
-		log.Warnf("ChainDB.NewChainDB: %v", err)
-	}
-
 	log.Infof("Pre-loading unspent ticket info for InsertVote optimization.")
 	unspentTicketCache := NewTicketTxnIDGetter(db)
 	unspentTicketDbIDs, unspentTicketHashes, err := retrieveUnspentTickets(ctx, db)
@@ -712,11 +702,8 @@ func NewChainDB(ctx context.Context, cfg *ChainDBCfg, stakeDB *stakedb.StakeData
 		hash:   bestHash,
 	}
 
-	// Create the address cache with the given capacity. The project fund
-	// address is set to prevent purging its data when cache reaches capacity.
 	addrCache := cache.NewAddressCache(cfg.AddrCacheRowCap, cfg.AddrCacheAddrCap,
 		cfg.AddrCacheUTXOByteCap)
-	addrCache.ProjectAddress = projectFundAddress
 
 	chainDB := &ChainDB{
 		ctx:                ctx,
@@ -724,7 +711,6 @@ func NewChainDB(ctx context.Context, cfg *ChainDBCfg, stakeDB *stakedb.StakeData
 		db:                 db,
 		mp:                 mp,
 		chainParams:        params,
-		devAddress:         projectFundAddress,
 		dupChecks:          true,
 		bestBlock:          bestBlock,
 		lastBlock:          make(map[chainhash.Hash]uint64),
@@ -732,7 +718,6 @@ func NewChainDB(ctx context.Context, cfg *ChainDBCfg, stakeDB *stakedb.StakeData
 		unspentTicketCache: unspentTicketCache,
 		AddressCache:       addrCache,
 		CacheLocks:         cacheLocks{cache.NewCacheLock(), cache.NewCacheLock(), cache.NewCacheLock(), cache.NewCacheLock()},
-		devPrefetch:        cfg.DevPrefetch,
 		tpUpdatePermission: tpUpdatePermissions,
 		utxoCache:          newUtxoStore(5e4),
 		mixSetDiffs:        make(map[uint32]int64),
@@ -2046,103 +2031,16 @@ func (pgb *ChainDB) GetTicketInfo(ctx context.Context, txid string) (*apitypes.T
 	}, nil
 }
 
-func (pgb *ChainDB) TSpendVotes(ctx context.Context, tspendID *chainhash.Hash) (*dbtypes.TreasurySpendVotes, error) {
-	tspendVotesResult, err := pgb.Client.GetTreasurySpendVotes(ctx, nil, []*chainhash.Hash{tspendID})
-	if err != nil {
-		return nil, err
-	}
-	if len(tspendVotesResult.Votes) != 1 {
-		return nil, fmt.Errorf("expected 1 tally, got %d", len(tspendVotesResult.Votes))
-	}
-
-	v0 := tspendVotesResult.Votes[0]
-
-	hash, err := chainHashFromStr(v0.Hash)
-	if err != nil {
-		return nil, err
-	}
-
-	tsv := dbtypes.TreasurySpendVotes{
-		Hash:      hash,
-		Expiry:    v0.Expiry,
-		VoteStart: v0.VoteStart,
-		VoteEnd:   v0.VoteEnd,
-		YesVotes:  v0.YesVotes,
-		NoVotes:   v0.NoVotes,
-	}
-
-	return &tsv, nil
-}
-
-func (pgb *ChainDB) updateProjectFundCache(ctx context.Context) error {
-	_, _, err := pgb.AddressHistoryAll(ctx, pgb.devAddress, 1, 0)
-	if err != nil && !IsRetryError(err) {
-		err = pgb.replaceCancelError(err)
-		return fmt.Errorf("failed to update project fund data: %w", err)
-	}
-	log.Infof("Project fund data is up-to-date.")
-	return nil
-	// Similar to individually updating balance and rows, but more efficient:
-	// pgb.AddressBalance(pgb.devAddress)
-	// pgb.AddressRowsCompact(pgb.devAddress)
-}
-
 // FreshenAddressCaches resets the address balance cache by purging data for the
-// addresses listed in expireAddresses, and prefetches the project fund balance
-// if devPrefetch is enabled and not mid-reorg. The project fund update is run
-// asynchronously if lazyProjectFund is true.
-func (pgb *ChainDB) FreshenAddressCaches(lazyProjectFund bool, expireAddresses []string) error {
-	// Clear existing cache entries.
+// addresses listed in expireAddresses.
+func (pgb *ChainDB) FreshenAddressCaches(expireAddresses []string) error {
 	numCleared := pgb.AddressCache.Clear(expireAddresses)
 	if expireAddresses == nil {
 		log.Debugf("Cleared cache of all %d cached addresses.", numCleared)
 	} else if len(expireAddresses) > 0 {
 		log.Debugf("Cleared cache of %d of %d addresses with activity.", numCleared, len(expireAddresses))
 	}
-
-	// Do not initiate project fund queries if a reorg is in progress, or
-	// pre-fetch is disabled.
-	if !pgb.devPrefetch || pgb.InReorg {
-		return nil
-	}
-
-	// Update project fund data.
-	log.Infof("Pre-fetching project fund data at height %d...", pgb.Height())
-	if lazyProjectFund {
-		go func() {
-			if err := pgb.updateProjectFundCache(pgb.ctx); err != nil {
-				log.Error(err)
-			}
-		}()
-		return nil
-	}
-	return pgb.updateProjectFundCache(pgb.ctx)
-}
-
-// DevBalance returns the current development/project fund balance, updating the
-// cached balance if it is stale. DevBalance differs slightly from
-// addressBalance(devAddress) in that it will not initiate a DB query if a chain
-// reorganization is in progress.
-func (pgb *ChainDB) DevBalance(ctx context.Context) (*dbtypes.AddressBalance, error) {
-	// Check cache first.
-	cachedBalance, validBlock := pgb.AddressCache.Balance(pgb.devAddress) // bestBlockHash := pgb.BestBlockHash()
-	if cachedBalance != nil && validBlock != nil /*  && validBlock.Hash == *bestBlockHash */ {
-		return cachedBalance, nil
-	}
-
-	if !pgb.InReorg {
-		bal, _, err := pgb.AddressBalance(ctx, pgb.devAddress)
-		if err != nil {
-			return nil, err
-		}
-		return bal, nil
-	}
-
-	// In reorg and cache is stale.
-	if cachedBalance != nil {
-		return cachedBalance, nil
-	}
-	return nil, fmt.Errorf("unable to query for balance during reorg")
+	return nil
 }
 
 // AddressBalance attempts to retrieve balance information for a specific
@@ -2996,13 +2894,7 @@ func (pgb *ChainDB) FillAddressTransactions(ctx context.Context, addrInfo *dbtyp
 // number of unspent transaction outputs and number spent.
 func (pgb *ChainDB) AddressTotals(ctx context.Context, address string) (*apitypes.AddressTotals, error) {
 	// Fetch address totals
-	var err error
-	var ab *dbtypes.AddressBalance
-	if address == pgb.devAddress {
-		ab, err = pgb.DevBalance(ctx)
-	} else {
-		ab, _, err = pgb.AddressBalance(ctx, address)
-	}
+	ab, _, err := pgb.AddressBalance(ctx, address)
 
 	if err != nil || ab == nil {
 		return nil, err
@@ -4042,10 +3934,9 @@ func (pgb *ChainDB) StoreBlock(msgBlock *wire.MsgBlock, isValid, isMainchain,
 		}
 	}
 
-	// If not in batch sync, lazy update the dev fund balance, and expire cache
-	// data for the affected addresses.
+	// If not in batch sync, expire cache data for the affected addresses.
 	if !pgb.InBatchSync {
-		if err = pgb.FreshenAddressCaches(true, addresses); err != nil {
+		if err = pgb.FreshenAddressCaches(addresses); err != nil {
 			log.Warnf("FreshenAddressCaches: %v", err)
 		}
 	}
@@ -5547,7 +5438,6 @@ func (pgb *ChainDB) GetAPITransaction(ctx context.Context, txid *chainhash.Hash)
 		vin := &txraw.Vin[i]
 		tx.Vin[i].Coinbase = vin.Coinbase
 		tx.Vin[i].Stakebase = vin.Stakebase
-		tx.Vin[i].Treasurybase = vin.Treasurybase
 		tx.Vin[i].Txid = vin.Txid
 		tx.Vin[i].Vout = vin.Vout
 		tx.Vin[i].Tree = vin.Tree
@@ -5642,7 +5532,7 @@ func (pgb *ChainDB) GetVoteInfo(ctx context.Context, txhash *chainhash.Hash) (*a
 		return nil, err
 	}
 
-	validation, version, bits, choices, tspendVotes, err := txhelpers.SSGenVoteChoices(tx.MsgTx(), pgb.chainParams)
+	validation, version, bits, choices, _, err := txhelpers.SSGenVoteChoices(tx.MsgTx(), pgb.chainParams)
 	if err != nil {
 		return nil, err
 	}
@@ -5655,7 +5545,6 @@ func (pgb *ChainDB) GetVoteInfo(ctx context.Context, txhash *chainhash.Hash) (*a
 		Version: version,
 		Bits:    bits,
 		Choices: choices,
-		TSpends: apitypes.ConvertTSpendVotes(tspendVotes),
 	}
 	return vinfo, nil
 }
@@ -6180,10 +6069,6 @@ func (pgb *ChainDB) GetAddressTransactionsRawWithSkip(ctx context.Context, addr 
 					vin.Coinbase = true
 				case stake.TxTypeSSGen:
 					vin.Stakebase = true
-				case stake.TxTypeTSpend:
-					vin.TreasurySpend = true
-				case stake.TxTypeTreasuryBase:
-					vin.Treasurybase = true
 				}
 			} else {
 				// For regular transactions, determine the coin type of the spent output.
@@ -6317,10 +6202,6 @@ func (pgb *ChainDB) GetAddressTransactionsRawWithSkip(ctx context.Context, addr 
 						vin.Coinbase = true
 					case stake.TxTypeSSGen:
 						vin.Stakebase = true
-					case stake.TxTypeTSpend:
-						vin.TreasurySpend = true
-					case stake.TxTypeTreasuryBase:
-						vin.Treasurybase = true
 					}
 				}
 				tx.Vin = append(tx.Vin, *vin.VinShort)
@@ -6518,16 +6399,12 @@ func makeExplorerTxBasic(data *chainjson.TxRawResult, ticketPrice int64, msgTx *
 		tx.FeeRaw = "0"
 		tx.FeeRateRaw = "0"
 		tx.Coinbase = true
-	case v0.Treasurybase:
-		tx.Treasurybase = true
-	case v0.IsTreasurySpend():
-		// fmt.Printf("treasury spend: %v\n", data.Txid)
 	}
 
 	// Votes need VoteInfo set. Regular txns need to be screened for mixes.
 	switch txType {
 	case stake.TxTypeSSGen:
-		validation, version, bits, choices, tspendVotes, err := txhelpers.SSGenVoteChoices(msgTx, params)
+		validation, version, bits, choices, _, err := txhelpers.SSGenVoteChoices(msgTx, params)
 		if err != nil {
 			log.Debugf("Cannot get vote choices for %s", tx.TxID)
 			return tx, txType
@@ -6541,7 +6418,6 @@ func makeExplorerTxBasic(data *chainjson.TxRawResult, ticketPrice int64, msgTx *
 			Version: version,
 			Bits:    bits,
 			Choices: choices,
-			TSpends: exptypes.ConvertTSpendVotes(tspendVotes),
 		}
 	case stake.TxTypeRegular:
 		_, mixDenom, mixCount := txhelpers.IsMixTx(msgTx)
@@ -6619,13 +6495,12 @@ func (pgb *ChainDB) BlockSubsidy(_ context.Context, height int64, voters uint16)
 	} else if pgb.IsDCP0010Active(height) {
 		ssv = standalone.SSVDCP0010
 	}
-	work, stake, tax := txhelpers.RewardsAtBlock(height, voters, pgb.chainParams, ssv)
+	work, stake := txhelpers.RewardsAtBlock(height, voters, pgb.chainParams, ssv)
 	stake *= int64(voters)
 	return &chainjson.GetBlockSubsidyResult{
-		PoW:       work,
-		PoS:       stake,
-		Developer: tax,
-		Total:     work + stake + tax,
+		PoW:   work,
+		PoS:   stake,
+		Total: work + stake,
 	}
 }
 
@@ -6715,9 +6590,6 @@ func (pgb *ChainDB) GetExplorerBlock(ctx context.Context, hash string) *exptypes
 	tickets := make([]*exptypes.TrimmedTxInfo, 0, block.FreshStake)
 	var stakeFees []*exptypes.TrimmedTxInfo
 
-	var treasury []*exptypes.TrimmedTxInfo
-	// treasuryActive := txhelpers.IsTreasuryActive(pgb.chainParams.Net, b.Height)
-
 	sbits, _ := dcrutil.NewAmount(block.SBits) // sbits==0 for err!=nil
 	ticketPrice := int64(sbits)
 
@@ -6755,8 +6627,6 @@ func (pgb *ChainDB) GetExplorerBlock(ctx context.Context, hash string) *exptypes
 				}
 			}
 			revocations = append(revocations, stx)
-		case stake.TxTypeTAdd, stake.TxTypeTSpend, stake.TxTypeTreasuryBase:
-			treasury = append(treasury, stx)
 		case stake.TxTypeSSFee:
 			if len(msgTx.TxOut) > 0 {
 				// Determine coin type from the first SKA payout output.
@@ -6819,7 +6689,6 @@ func (pgb *ChainDB) GetExplorerBlock(ctx context.Context, hash string) *exptypes
 	}
 
 	block.Tx = txs
-	block.Treasury = treasury
 	block.Votes = votes
 	block.Revs = revocations
 	block.Tickets = tickets
@@ -6832,7 +6701,6 @@ func (pgb *ChainDB) GetExplorerBlock(ctx context.Context, hash string) *exptypes
 	}
 
 	sortTx(block.Tx)
-	sortTx(block.Treasury)
 	sortTx(block.Votes)
 	sortTx(block.Revs)
 	sortTx(block.Tickets)
@@ -6868,7 +6736,7 @@ func (pgb *ChainDB) GetExplorerBlock(ctx context.Context, hash string) *exptypes
 		}
 		return
 	}
-	block.TotalSent = (getTotalSent(block.Tx) + getTotalSent(block.Treasury) + getTotalSent(block.Revs) +
+	block.TotalSent = (getTotalSent(block.Tx) + getTotalSent(block.Revs) +
 		getTotalSent(block.Tickets) + getTotalSent(block.Votes) + getTotalSent(block.StakeFees)).ToCoin()
 	// This per-block fee total (regular-tree non-coinbase txs + ticket purchases)
 	// is the definition the Fees chart must mirror. Its SQL twin is
@@ -7197,128 +7065,13 @@ func (pgb *ChainDB) GetExplorerTx(ctx context.Context, txid string) *exptypes.Tx
 			}
 			tx.Maturity = int64(pgb.chainParams.CoinbaseMaturity) + 1 // Add one to reflect < instead of <=
 		}
-	} else if tx.Type == exptypes.CoinbaseTypeStr || tx.IsTreasurybase() || tx.IsRevocation() ||
-		tx.IsTreasuryAdd() || tx.IsTreasurySpend() {
+	} else if tx.Type == exptypes.CoinbaseTypeStr || tx.IsRevocation() {
 		if tx.Confirmations < int64(pgb.chainParams.CoinbaseMaturity) {
 			tx.Mature = "False"
 		} else {
 			tx.Mature = "True"
 		}
 		tx.Maturity = int64(pgb.chainParams.CoinbaseMaturity)
-
-		if tx.IsTreasurySpend() {
-			tSpendTally, err := pgb.TSpendVotes(ctx, txhash)
-			if err != nil {
-				log.Errorf("Failed to retrieve vote tally for tspend %v: %v", txid, err)
-			}
-			tx.TSpendMeta = new(dbtypes.TreasurySpendMetaData)
-			tx.TSpendMeta.TreasurySpendVotes = tSpendTally
-
-			tip, err := pgb.GetTip(ctx)
-			if err != nil {
-				log.Errorf("Failed to get the chain tip from the database.: %v", err)
-				return nil
-			}
-			tipHeight := int64(tip.Height)
-
-			totalVotes := tx.TSpendMeta.YesVotes + tx.TSpendMeta.NoVotes
-			targetBlockTimeSec := int64(pgb.chainParams.TargetTimePerBlock / time.Second)
-			voteStarted := tipHeight >= tx.TSpendMeta.VoteStart
-
-			tx.TSpendMeta.MaxVotes = int64(uint64(pgb.chainParams.TicketsPerBlock) * pgb.chainParams.TreasuryVoteInterval * pgb.chainParams.TreasuryVoteIntervalMultiplier)
-			tx.TSpendMeta.QuorumCount = tx.TSpendMeta.MaxVotes * int64(pgb.chainParams.TreasuryVoteQuorumMultiplier) / int64(pgb.chainParams.TreasuryVoteQuorumDivisor)
-			tx.TSpendMeta.QuorumAchieved = totalVotes >= tx.TSpendMeta.QuorumCount
-			tx.TSpendMeta.TotalVotes = totalVotes
-
-			var maxRemainingBlocks int64
-			if !voteStarted {
-				maxRemainingBlocks = tx.TSpendMeta.VoteEnd - tx.TSpendMeta.VoteStart
-			} else if tx.BlockHeight != 0 && tx.TSpendMeta.VoteEnd > tx.BlockHeight {
-				// tspend was short-circuited but we still account for the max
-				// remaining votes at the block it the short-circuited.
-				maxRemainingBlocks = tx.TSpendMeta.VoteEnd - tx.BlockHeight
-			} else if tx.TSpendMeta.VoteEnd > tipHeight {
-				maxRemainingBlocks = tx.TSpendMeta.VoteEnd - tipHeight
-			}
-			maxRemainingVotes := maxRemainingBlocks * int64(pgb.chainParams.TicketsPerBlock)
-
-			requiredYesVotes := (totalVotes + maxRemainingVotes) * int64(pgb.chainParams.TreasuryVoteRequiredMultiplier) / int64(pgb.chainParams.TreasuryVoteRequiredDivisor)
-			tx.TSpendMeta.RequiredYesVotes = requiredYesVotes
-			tx.TSpendMeta.Approved = tx.TSpendMeta.YesVotes >= requiredYesVotes && tx.TSpendMeta.TotalVotes >= tx.TSpendMeta.QuorumCount
-			tx.TSpendMeta.PassPercent = float32(pgb.chainParams.TreasuryVoteRequiredMultiplier) / float32(pgb.chainParams.TreasuryVoteRequiredDivisor)
-
-			if totalVotes > 0 {
-				tx.TSpendMeta.Approval = float32(tx.TSpendMeta.YesVotes) / float32(totalVotes)
-			}
-
-			secTillVoteStart := (tx.TSpendMeta.VoteStart - tipHeight) * targetBlockTimeSec
-			tx.TSpendMeta.VoteStartDate = time.Now().Add(time.Duration(secTillVoteStart) * time.Second).UTC()
-			if voteStarted { // started
-				voteStartTimeStamp, err := pgb.BlockTimeByHeight(ctx, tx.TSpendMeta.VoteStart)
-				if err != nil {
-					log.Errorf("Error fetching tspend start block time: %v", err)
-				}
-				tx.TSpendMeta.VoteStartDate = time.Unix(voteStartTimeStamp, 0).UTC()
-			}
-
-			secTillVoteEnd := (tx.TSpendMeta.VoteEnd - tipHeight) * targetBlockTimeSec
-			tx.TSpendMeta.VoteEndDate = time.Now().Add(time.Duration(secTillVoteEnd) * time.Second).UTC()
-			if tx.TSpendMeta.Approved && tx.BlockHeight == 0 { // tspend is approved, may have been short-circuited
-				// tspend yet to be mined, will go in next TVI block
-				blocksToNextTVI := pgb.chainParams.TreasuryVoteInterval - uint64(tipHeight)%pgb.chainParams.TreasuryVoteInterval
-				secsTillNextTVI := blocksToNextTVI * uint64(targetBlockTimeSec)
-				tx.TSpendMeta.NextTVITime = time.Now().Add(time.Duration(secsTillNextTVI) * time.Second).UTC()
-				tx.TSpendMeta.NextTVI = tipHeight + int64(blocksToNextTVI)
-			}
-			if tipHeight > tx.TSpendMeta.VoteEnd { // voting has ended
-				voteEndTimeStamp, err := pgb.BlockTimeByHeight(ctx, tx.TSpendMeta.VoteEnd)
-				if err != nil {
-					log.Errorf("Error fetching tspend end block time: %v", err)
-				}
-				tx.TSpendMeta.VoteEndDate = time.Unix(voteEndTimeStamp, 0).UTC()
-			}
-
-			if voteStarted {
-				// currentVoteEndBlock is the tspend vote end block, the block
-				// this tspend was mined or the currect block height if the
-				// tspend is still voting.
-				currentVoteEndBlock := tx.TSpendMeta.VoteEnd
-				if (tx.TSpendMeta.Approved && tx.BlockHeight > 0) && tx.BlockHeight < tx.TSpendMeta.VoteEnd { // short-circuited tspend
-					currentVoteEndBlock = tx.BlockHeight
-				} else if tx.TSpendMeta.VoteEnd > tipHeight { // still voting
-					currentVoteEndBlock = tipHeight
-				}
-
-				misses, err := pgb.missedVotesForBlockRange(ctx, tx.TSpendMeta.VoteStart, currentVoteEndBlock)
-				if err != nil {
-					log.Errorf("failed to get missed votes count for tspend voting window: %v", err)
-					return nil
-				}
-
-				// tx.TSpendMeta.EligibleVotes is the number of actual votes
-				// that were cast in the tspend voting window, including votes
-				// that did not indicate a tspend choice (aka abstain votes).
-				// This is used to calculate vote turnout and give information
-				// about the number of eligible votes that were cast in the
-				// current voting window.
-				tx.TSpendMeta.EligibleVotes = int64(pgb.chainParams.TicketsPerBlock)*(currentVoteEndBlock-tx.TSpendMeta.VoteStart) - misses
-			}
-
-			// Retrieve Public Key a.k.a Politieia key.
-			var pubKey []byte
-			txIn, err := hex.DecodeString(tx.Vin[0].TreasurySpend)
-			if err != nil {
-				log.Errorf("failed to retrieve pikey: %v", err)
-			}
-
-			// The length of the signature script in transaction input 0 must be
-			// 100 bytes according to dcp-0006: ([OP_DATA_64] [signature]
-			// [OP_DATA_33] [PiKey] [OP_TSPEND] = 1 + 64 + 1 + 33 + 1 = 100)
-			if len(txIn) == 100 {
-				pubKey = txIn[66 : 66+secp256k1.PubKeyBytesLenCompressed]
-			}
-			tx.TSpendMeta.PoliteiaKey = hex.EncodeToString(pubKey)
-		}
 	}
 
 	// tree := wire.TxTreeStake
@@ -7585,7 +7338,7 @@ func (pgb *ChainDB) GetMempool(ctx context.Context) []exptypes.MempoolTx {
 
 		var voteInfo *exptypes.VoteInfo
 		if txType == stake.TxTypeSSGen {
-			validation, version, bits, choices, tspendVotes, err := txhelpers.SSGenVoteChoices(msgTx, pgb.chainParams)
+			validation, version, bits, choices, _, err := txhelpers.SSGenVoteChoices(msgTx, pgb.chainParams)
 			if err != nil {
 				log.Debugf("Cannot get vote choices for %s", hash)
 			} else {
@@ -7599,7 +7352,6 @@ func (pgb *ChainDB) GetMempool(ctx context.Context) []exptypes.MempoolTx {
 					Bits:        bits,
 					Choices:     choices,
 					TicketSpent: msgTx.TxIn[1].PreviousOutPoint.Hash.String(),
-					TSpends:     exptypes.ConvertTSpendVotes(tspendVotes),
 				}
 			}
 		}

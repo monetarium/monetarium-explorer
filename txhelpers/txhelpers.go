@@ -41,27 +41,6 @@ var (
 var CoinbaseFlags = "/monetarium-node/"
 var CoinbaseScript = append([]byte{0x00, 0x00}, []byte(CoinbaseFlags)...)
 
-const (
-	treasuryHeightMainnet  = 552448 // lockedin at 544384
-	treasuryHeightTestnet3 = 560208
-)
-
-// IsTreasuryActive indicates if the decentralized treasury is active for the
-// given network and block height.
-func IsTreasuryActive(net wire.CurrencyNet, height int64) bool {
-	switch net {
-	case wire.MainNet:
-		return height >= treasuryHeightMainnet
-	case wire.TestNet3:
-		return height >= treasuryHeightTestnet3
-	case wire.SimNet:
-		return height >= 2
-	default:
-		fmt.Printf("unrecognized network %v\n", net)
-		return false
-	}
-}
-
 // SubsidySplitStakeVer locates the "changesubsidysplit" agenda item in the
 // consensus deployments defined in the provided chain parameters. If found, the
 // corresponding stake version is returned.
@@ -1182,16 +1161,13 @@ func MsgTxToHex(msgTx *wire.MsgTx) (string, error) {
 
 // Transaction type constants.
 const (
-	TxTypeVote          string = "Vote"
-	TxTypeTicket        string = "Ticket"
-	TxTypeRevocation    string = "Revocation"
-	TxTypeRegular       string = "Regular"
-	TxTypeTreasurybase  string = "Treasurybase"
-	TxTypeTreasurySpend string = "Treasury Spend"
-	TxTypeTreasuryAdd   string = "Treasury Add"
-	TxTypeSSFee         string = "Stake Fee"
-	TxTypeStakeReward   string = "Stake Reward"
-	TxTypePoWReward     string = "PoW Reward"
+	TxTypeVote        string = "Vote"
+	TxTypeTicket      string = "Ticket"
+	TxTypeRevocation  string = "Revocation"
+	TxTypeRegular     string = "Regular"
+	TxTypeSSFee       string = "Stake Fee"
+	TxTypeStakeReward string = "Stake Reward"
+	TxTypePoWReward   string = "PoW Reward"
 )
 
 // DB extension tx types mirroring db/dbtypes/types.go canonical constants.
@@ -1234,12 +1210,6 @@ func TxTypeToString(txType int) string {
 		return TxTypeTicket
 	case stake.TxTypeSSRtx:
 		return TxTypeRevocation
-	case stake.TxTypeTAdd:
-		return TxTypeTreasuryAdd
-	case stake.TxTypeTSpend:
-		return TxTypeTreasurySpend
-	case stake.TxTypeTreasuryBase:
-		return TxTypeTreasurybase
 	case stake.TxTypeSSFee:
 		return TxTypeSSFee
 	// DB extension subtypes (db/dbtypes/types.go)
@@ -1271,21 +1241,6 @@ func TxIsVote(txType int) bool {
 // TxIsRevoke indicates if the transaction type is a revocation (ssrtx).
 func TxIsRevoke(txType int) bool {
 	return stake.TxType(txType) == stake.TxTypeSSRtx
-}
-
-// TxIsTAdd indicates if the transaction type is a treasury add (tadd).
-func TxIsTAdd(txType int) bool {
-	return stake.TxType(txType) == stake.TxTypeTAdd
-}
-
-// TxIsTSpend indicates if the transaction type is a treasury spend (tspend).
-func TxIsTSpend(txType int) bool {
-	return stake.TxType(txType) == stake.TxTypeTSpend
-}
-
-// TxIsTreasuryBase indicates if the transaction type is a treasurybase.
-func TxIsTreasuryBase(txType int) bool {
-	return stake.TxType(txType) == stake.TxTypeTreasuryBase
 }
 
 // TxIsRegular indicates if the transaction type is a regular (non-stake)

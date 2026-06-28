@@ -232,7 +232,7 @@ const (
 	// Since part of the grouping is on "matching_tx_hash = ''", what is
 	// logically "any" empty matching is actually no_empty_matching.
 	SelectAddressSpentUnspentCountAndValue = `WITH spending_txs AS (
-			SELECT tx_hash 
+			SELECT DISTINCT tx_hash 
 			FROM addresses 
 			WHERE address = $1 AND valid_mainchain AND is_funding = false
 		)
@@ -249,12 +249,6 @@ const (
 		LEFT JOIN vouts v ON a.tx_vin_vout_row_id = v.id
 		LEFT JOIN spending_txs s ON a.tx_hash = s.tx_hash
 		WHERE a.address = $1 AND a.valid_mainchain
-		  AND (
-		      a.is_funding = false 
-		      OR (
-		          v.script_type IS DISTINCT FROM 'nulldata'
-		      )
-		  )
 		GROUP BY a.tx_type, a.coin_type, a.is_funding,
 			a.matching_tx_hash IS NULL,
 			is_change

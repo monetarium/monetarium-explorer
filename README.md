@@ -339,7 +339,6 @@ On first run against a new database the explorer creates the schema and begins s
 | `pq: relation does not exist`                                                         | Ensure the PostgreSQL options are set and the DB user has CREATE privileges                                                                                                                                            |
 | `Unable to initialize vote tracker: Unexpected number of blocks ... GetStakeVersions` | The node is below ~2016 blocks (e.g. a brand-new mainnet); the vote tracker needs a taller chain and recovers once it grows. To start the explorer earlier, build from the `hotfix/disable-vote-tracker-checks` branch |
 | `listen tcp ...:7777: bind: address already in use`                                   | Another instance already holds that web port — omit `apilisten` so each network uses its own default, or pick a distinct port                                                                                          |
-| `bad project fund address`                                                            | Safe to ignore; Monetarium has no treasury                                                                                                                                                                             |
 
 ---
 
