@@ -61,18 +61,6 @@ func TestGetBlockSummary_CoinAmounts(t *testing.T) {
 	}
 }
 
-func TestTreasuryRoute_Returns410(t *testing.T) {
-	mux := NewAPIRouter(&appContext{DataSource: noopDS{}}, "", false, false)
-	for _, path := range []string{"/treasury/balance", "/treasury/io/day"} {
-		req := httptest.NewRequest(http.MethodGet, path, nil)
-		w := httptest.NewRecorder()
-		mux.ServeHTTP(w, req)
-		if w.Code != http.StatusGone {
-			t.Errorf("GET %s: want 410, got %d", path, w.Code)
-		}
-	}
-}
-
 func TestProposalRoute_Returns410(t *testing.T) {
 	mux := NewAPIRouter(&appContext{DataSource: noopDS{}}, "", false, false)
 	req := httptest.NewRequest(http.MethodGet, "/proposal/sometoken", nil)

@@ -57,7 +57,7 @@ const (
 
 	// maxInsightAddrsUTXOs limits the number of UTXOs returned by the
 	// addrs[/{addresses}]/utxo endpoints when the {addresses} list has more
-	// than one address. The project fund address has 263383 UTXOs at block
+	// than one address. A single address can have hundreds of thousands of
 	// height 342553, and this is a ~75MB JSON payload.
 	maxInsightAddrsUTXOs = 500000
 

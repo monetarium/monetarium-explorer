@@ -145,7 +145,7 @@ type InsightTx struct {
 	Version        int32          `json:"version,omitempty"`
 	Locktime       uint32         `json:"locktime"`
 	IsCoinBase     bool           `json:"isCoinBase,omitempty"`
-	IsTreasurybase bool           `json:"isTreasurybase,omitempty"`
+	IsTreasurybase bool           `json:"isTreasurybase,omitempty"` // Deprecated: Monetarium has no treasury. Always false.
 	Vins           []*InsightVin  `json:"vin,omitempty"`
 	Vouts          []*InsightVout `json:"vout,omitempty"`
 	Blockhash      string         `json:"blockhash,omitempty"`

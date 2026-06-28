@@ -61,7 +61,6 @@ func TestStatusPageResponseCodes(t *testing.T) {
 		DataSource:    &chainDBStub,
 		UseRealIP:     false,
 		AppVersion:    "test",
-		DevPrefetch:   false,
 		Viewsfolder:   viewsPath,
 		Tracker:       nil,
 		AgendasSource: nil,

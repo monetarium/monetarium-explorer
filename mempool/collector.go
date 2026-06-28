@@ -116,7 +116,7 @@ func (t *DataCollector) mempoolTxns() ([]exptypes.MempoolTx, txhelpers.MempoolAd
 
 		var voteInfo *exptypes.VoteInfo
 		if txType == stake.TxTypeSSGen {
-			validation, version, bits, choices, tspendVotes, err := txhelpers.SSGenVoteChoices(msgTx, t.activeChain)
+			validation, version, bits, choices, _, err := txhelpers.SSGenVoteChoices(msgTx, t.activeChain)
 			if err != nil {
 				log.Debugf("Cannot get vote choices for %s", hash)
 			} else {
@@ -130,7 +130,6 @@ func (t *DataCollector) mempoolTxns() ([]exptypes.MempoolTx, txhelpers.MempoolAd
 					Bits:        bits,
 					Choices:     choices,
 					TicketSpent: msgTx.TxIn[1].PreviousOutPoint.Hash.String(),
-					TSpends:     exptypes.ConvertTSpendVotes(tspendVotes),
 				}
 				voteInfo.ForLastBlock = voteInfo.VotesOnBlock(blockhash)
 			}
@@ -496,21 +495,21 @@ func ParseTxns(txs []exptypes.MempoolTx, params *chaincfg.Params, lastBlock *Blo
 				continue
 			}
 			invStake[tx.TxID] = struct{}{}
+			// Deprecated: Monetarium has no treasury. Always 0.
 			tspendTotal += out
 			tspends = append(tspends, tx)
-			// mineable depends on vote choices and TreasuryVoteInterval
 
 		case stake.TxTypeTAdd:
 			if _, found := invStake[tx.TxID]; found {
 				continue
 			}
 			invStake[tx.TxID] = struct{}{}
+			// Deprecated: Monetarium has no treasury. Always 0.
 			taddTotal += out
 			tadds = append(tadds, tx)
 
+		// Deprecated: Monetarium has no treasury. TreasuryBase tx never appears in mempool.
 		case stake.TxTypeTreasuryBase:
-			// treasurybase won't be in mempool, but it certainly should not
-			// default to the regular tree txn map.
 			if _, found := invStake[tx.TxID]; found {
 				continue
 			}

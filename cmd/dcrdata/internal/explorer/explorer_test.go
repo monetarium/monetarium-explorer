@@ -61,9 +61,6 @@ func (m *mockDataSource) AddressHistory(ctx context.Context, address string, N, 
 func (m *mockDataSource) AddressData(ctx context.Context, address string, N, offset int64, txnType dbtypes.AddrTxnViewType, coinType uint8) (*dbtypes.AddressInfo, error) {
 	return nil, nil
 }
-func (m *mockDataSource) DevBalance(ctx context.Context) (*dbtypes.AddressBalance, error) {
-	return nil, nil
-}
 func (m *mockDataSource) FillAddressTransactions(ctx context.Context, addrInfo *dbtypes.AddressInfo) error {
 	return nil
 }
