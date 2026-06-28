@@ -213,3 +213,204 @@ func TestRetrieveAddressBalance_ExcludeBurn(t *testing.T) {
 		t.Error("SKA1 TotalSpentSKA is 0 — regression: spending row ska_value was lost (COALESCE/NULLIF fix missing)")
 	}
 }
+
+func TestRetrieveAddressBalance_NulldataFundingAndMultiVin(t *testing.T) {
+	// This tests both bugs that caused Spent > Received:
+	//
+	// Bug 1: The nulldata filter excluded funding rows with script_type='nulldata'
+	//        from Received, but spending rows always passed unconditionally.
+	//        Monetarium change outputs of regular transactions use script_type='nulldata'
+	//        and carry non-zero value — they must count toward Received.
+	//
+	// Bug 2: The spending_txs CTE lacked DISTINCT. When a transaction spends multiple
+	//        vouts from the same address, the CTE returns duplicate tx_hashes and the
+	//        LEFT JOIN multiplies rows, inflating every SUM by the number of duplicates.
+
+	ctx := context.Background()
+	address := fmt.Sprintf("TestNulldataMultiVin%d", time.Now().UnixNano())
+
+	tx, err := sqlDb.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+
+	// ---- Funding A: 100 VAR, script_type='pkh' (always counted) ----
+	txHashA := []byte(fmt.Sprintf("txA_%d", time.Now().UnixNano()))
+	var voutID_A uint64
+	err = tx.QueryRow(`INSERT INTO vouts (tx_hash, tx_index, tx_tree, value, coin_type, script_type)
+		VALUES ($1, 0, 0, 100, 0, 'pkh') RETURNING id`, txHashA).Scan(&voutID_A)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = tx.Exec(`INSERT INTO addresses
+		(address, tx_hash, value, coin_type, is_funding, tx_vin_vout_row_id, valid_mainchain, block_time, tx_type)
+		VALUES ($1, $2, $3, 0, true, $4, true, now(), 0)`,
+		address, txHashA, 100, voutID_A)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = tx.Exec(`INSERT INTO vins (tx_hash, tx_index, tx_tree, prev_tx_hash, prev_tx_index, prev_tx_tree, value_in, coin_type, tx_type)
+		VALUES ($1, 0, 0, $2, 0, 0, 100, 0, 0)`, txHashA, []byte("notzero"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// ---- Funding B: 150 VAR, script_type='pkh' (always counted) ----
+	txHashB := []byte(fmt.Sprintf("txB_%d", time.Now().UnixNano()))
+	var voutID_B uint64
+	err = tx.QueryRow(`INSERT INTO vouts (tx_hash, tx_index, tx_tree, value, coin_type, script_type)
+		VALUES ($1, 0, 0, 150, 0, 'pkh') RETURNING id`, txHashB).Scan(&voutID_B)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = tx.Exec(`INSERT INTO addresses
+		(address, tx_hash, value, coin_type, is_funding, tx_vin_vout_row_id, valid_mainchain, block_time, tx_type)
+		VALUES ($1, $2, $3, 0, true, $4, true, now(), 0)`,
+		address, txHashB, 150, voutID_B)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = tx.Exec(`INSERT INTO vins (tx_hash, tx_index, tx_tree, prev_tx_hash, prev_tx_index, prev_tx_tree, value_in, coin_type, tx_type)
+		VALUES ($1, 0, 0, $2, 0, 0, 150, 0, 0)`, txHashB, []byte("notzero"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// ---- Funding C: 300 VAR, script_type='nulldata' (FORMERLY excluded by filter) ----
+	txHashC := []byte(fmt.Sprintf("txC_%d", time.Now().UnixNano()))
+	var voutID_C uint64
+	err = tx.QueryRow(`INSERT INTO vouts (tx_hash, tx_index, tx_tree, value, coin_type, script_type)
+		VALUES ($1, 0, 0, 300, 0, 'nulldata') RETURNING id`, txHashC).Scan(&voutID_C)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = tx.Exec(`INSERT INTO addresses
+		(address, tx_hash, value, coin_type, is_funding, tx_vin_vout_row_id, valid_mainchain, block_time, tx_type)
+		VALUES ($1, $2, $3, 0, true, $4, true, now(), 0)`,
+		address, txHashC, 300, voutID_C)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = tx.Exec(`INSERT INTO vins (tx_hash, tx_index, tx_tree, prev_tx_hash, prev_tx_index, prev_tx_tree, value_in, coin_type, tx_type)
+		VALUES ($1, 0, 0, $2, 0, 0, 300, 0, 0)`, txHashC, []byte("notzero"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// ---- Multi-vin spending (Bug 2): txHashD spends BOTH Funding A AND Funding B ----
+	// Two spending rows with the same tx_hash — without DISTINCT, CTE returns 2 rows
+	// for txHashD, doubling all SUMs.
+	txHashD := []byte(fmt.Sprintf("txD_%d", time.Now().UnixNano()))
+
+	// Spending row 1: spends Funding A (100 VAR)
+	_, err = tx.Exec(`INSERT INTO addresses
+		(address, tx_hash, value, coin_type, is_funding, matching_tx_hash, tx_vin_vout_row_id, valid_mainchain, block_time, tx_type)
+		VALUES ($1, $2, $3, 0, false, $4, $5, true, now(), 0)`,
+		address, txHashD, 100, txHashA, voutID_A)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Spending row 2: spends Funding B (150 VAR) — same txHashD!
+	_, err = tx.Exec(`INSERT INTO addresses
+		(address, tx_hash, value, coin_type, is_funding, matching_tx_hash, tx_vin_vout_row_id, valid_mainchain, block_time, tx_type)
+		VALUES ($1, $2, $3, 0, false, $4, $5, true, now(), 0)`,
+		address, txHashD, 150, txHashB, voutID_B)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Mark funding A and B as spent.
+	_, err = tx.Exec(`UPDATE addresses SET matching_tx_hash = $1 WHERE address = $2 AND tx_hash = $3 AND is_funding = true`,
+		txHashD, address, txHashA)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = tx.Exec(`UPDATE addresses SET matching_tx_hash = $1 WHERE address = $2 AND tx_hash = $3 AND is_funding = true`,
+		txHashD, address, txHashB)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Change output from txHashD: 50 VAR back to address, script_type='pkh'.
+	var voutID_D_change uint64
+	err = tx.QueryRow(`INSERT INTO vouts (tx_hash, tx_index, tx_tree, value, coin_type, script_type)
+		VALUES ($1, 1, 0, 50, 0, 'pkh') RETURNING id`, txHashD).Scan(&voutID_D_change)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = tx.Exec(`INSERT INTO addresses
+		(address, tx_hash, value, coin_type, is_funding, tx_vin_vout_row_id, valid_mainchain, block_time, tx_type)
+		VALUES ($1, $2, $3, 0, true, $4, true, now(), 0)`,
+		address, txHashD, 50, voutID_D_change)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = tx.Exec(`INSERT INTO vins (tx_hash, tx_index, tx_tree, prev_tx_hash, prev_tx_index, prev_tx_tree, value_in, coin_type, tx_type)
+		VALUES ($1, 0, 0, $2, 0, 0, 50, 0, 0)`, txHashD, []byte("notzero"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// ---- Single-vin spending (no CTE duplication): txHashE spends Funding C ----
+	txHashE := []byte(fmt.Sprintf("txE_%d", time.Now().UnixNano()))
+	_, err = tx.Exec(`INSERT INTO addresses
+		(address, tx_hash, value, coin_type, is_funding, matching_tx_hash, tx_vin_vout_row_id, valid_mainchain, block_time, tx_type)
+		VALUES ($1, $2, $3, 0, false, $4, $5, true, now(), 0)`,
+		address, txHashE, 300, txHashC, voutID_C)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = tx.Exec(`UPDATE addresses SET matching_tx_hash = $1 WHERE address = $2 AND tx_hash = $3 AND is_funding = true`,
+		txHashE, address, txHashC)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		sqlDb.Exec(`DELETE FROM addresses WHERE address = $1`, address)
+		sqlDb.Exec(`DELETE FROM vouts WHERE tx_hash IN (SELECT tx_hash FROM addresses WHERE address = $1)`, address)
+		sqlDb.Exec(`DELETE FROM vins WHERE tx_hash IN (SELECT tx_hash FROM addresses WHERE address = $1)`, address)
+	}()
+
+	bal, err := retrieveAddressBalance(ctx, sqlDb, address)
+	if err != nil {
+		t.Fatalf("retrieveAddressBalance failed: %v", err)
+	}
+
+	cbVAR, ok := bal.Coins[0]
+	if !ok {
+		t.Fatal("Coin 0 balance not found")
+	}
+
+	// ---- Expected values with BOTH fixes applied ----
+	// Received: 100(A 'pkh') + 150(B 'pkh') + 300(C 'nulldata') + 50(change from D 'pkh') = 600
+	// Spent:    txHashD(100+150=250 from multi-vin, no duplication) + txHashE(300) = 550
+	// Unspent:  50(change from D, no matching_tx_hash)
+	// Invariant: 600 - 550 = 50 ✓
+	var wantUnspent int64 = 50
+	var wantSpent int64 = 550
+	var wantReceived int64 = 600
+
+	if cbVAR.TotalUnspent != wantUnspent {
+		t.Errorf("VAR TotalUnspent = %d, want %d", cbVAR.TotalUnspent, wantUnspent)
+	}
+	if cbVAR.TotalSpent != wantSpent {
+		t.Errorf("VAR TotalSpent = %d, want %d (if %d, the CTE DISTINCT fix is missing)",
+			cbVAR.TotalSpent, wantSpent, wantSpent*2)
+	}
+	if cbVAR.TotalReceived != wantReceived {
+		t.Errorf("VAR TotalReceived = %d, want %d (if %d, the nulldata filter is still present)",
+			cbVAR.TotalReceived, wantReceived, wantReceived-300)
+	}
+
+	// Verify the invariant holds.
+	if cbVAR.TotalReceived-cbVAR.TotalSpent != cbVAR.TotalUnspent {
+		t.Errorf("VAR invariant broken: Received(%d) - Spent(%d) = %d != Unspent(%d)",
+			cbVAR.TotalReceived, cbVAR.TotalSpent,
+			cbVAR.TotalReceived-cbVAR.TotalSpent, cbVAR.TotalUnspent)
+	}
+}
