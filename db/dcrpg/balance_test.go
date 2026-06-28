@@ -150,9 +150,9 @@ func TestRetrieveAddressBalance_ExcludeBurn(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() {
-		sqlDb.Exec(`DELETE FROM addresses WHERE address = $1`, address)
 		sqlDb.Exec(`DELETE FROM vouts WHERE tx_hash IN (SELECT tx_hash FROM addresses WHERE address = $1)`, address)
 		sqlDb.Exec(`DELETE FROM vins WHERE tx_hash IN (SELECT tx_hash FROM addresses WHERE address = $1)`, address)
+		sqlDb.Exec(`DELETE FROM addresses WHERE address = $1`, address)
 	}()
 
 	bal, err := retrieveAddressBalance(ctx, sqlDb, address)
@@ -371,9 +371,9 @@ func TestRetrieveAddressBalance_NulldataFundingAndMultiVin(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() {
-		sqlDb.Exec(`DELETE FROM addresses WHERE address = $1`, address)
 		sqlDb.Exec(`DELETE FROM vouts WHERE tx_hash IN (SELECT tx_hash FROM addresses WHERE address = $1)`, address)
 		sqlDb.Exec(`DELETE FROM vins WHERE tx_hash IN (SELECT tx_hash FROM addresses WHERE address = $1)`, address)
+		sqlDb.Exec(`DELETE FROM addresses WHERE address = $1`, address)
 	}()
 
 	bal, err := retrieveAddressBalance(ctx, sqlDb, address)
