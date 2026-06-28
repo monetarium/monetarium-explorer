@@ -232,7 +232,7 @@ const (
 	// Since part of the grouping is on "matching_tx_hash = ''", what is
 	// logically "any" empty matching is actually no_empty_matching.
 	SelectAddressSpentUnspentCountAndValue = `WITH spending_txs AS (
-			SELECT tx_hash 
+			SELECT DISTINCT tx_hash 
 			FROM addresses 
 			WHERE address = $1 AND valid_mainchain AND is_funding = false
 		)
