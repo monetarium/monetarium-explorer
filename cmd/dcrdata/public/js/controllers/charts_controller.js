@@ -55,8 +55,6 @@ export default class extends Controller {
     // containers here as a recovery. Also subscribe to turbo:before-cache so we can wipe
     // them BEFORE the snapshot is taken (prevention rather than recovery).
     this._clearChartContainers('connect')
-    this._boundBeforeCache = () => this._clearChartContainers('before-cache')
-    document.addEventListener('turbo:before-cache', this._boundBeforeCache)
 
     this.query = new TurboQuery()
     this.tps = parseInt(this.data.get('tps'))
@@ -119,6 +117,9 @@ export default class extends Controller {
     if (this.settings.interval) {
       this.setActiveOptionBtn(this.settings.interval, this.intervalOptionTargets)
     }
+    this._boundBeforeCache = () => this._clearChartContainers('before-cache')
+    document.addEventListener('turbo:before-cache', this._boundBeforeCache)
+
     await this.selectChart()
   }
 
@@ -136,6 +137,12 @@ export default class extends Controller {
   // from a cached snapshot that already has canvases) and at turbo:before-cache (prevention —
   // fires before Turbo snapshots, so the cached copy stays clean).
   _clearChartContainers(source) {
+    if (source !== 'connect') {
+      if (this.panel) {
+        this.panel.destroy()
+        this.panel = null
+      }
+    }
     const cv = this.chartsViewTarget
     const rv = this.hasRangerViewTarget ? this.rangerViewTarget : null
     const cvCount = cv.childElementCount
@@ -143,7 +150,7 @@ export default class extends Controller {
     cv.innerHTML = ''
     if (rv) rv.innerHTML = ''
     if (cvCount || rvCount) {
-      console.warn('charts:cleared', source || 'unknown', cvCount, rvCount)
+      console.debug('charts:cleared', source || 'unknown', cvCount, rvCount)
     }
   }
 
@@ -256,15 +263,16 @@ export default class extends Controller {
   }
 
   async renderChart(def) {
-    // Safety clear: strip any stale children before rendering, regardless of source.
-    // The connect() and turbo:before-cache clears already handle the common cases
-    // (Turbo cache snapshot contamination), but a race between async selectChart
-    // calls can also leave orphan canvases in the containers.
-    this.chartsViewTarget.innerHTML = ''
-    if (this.hasRangerViewTarget) this.rangerViewTarget.innerHTML = ''
-
     const renderDef = this.memoizedDef(def)
     this.currentDef = renderDef
+
+    // Refresh: a new def reference means the ChartPanel will recreate its uPlot
+    // (clean DOM). On def-reuse (same chart, new bin/axis/interval), _ensureChart
+    // returns early and setData updates in place — the DOM must stay intact.
+    if (this._defSig && renderDef !== this._memoDef) {
+      this.chartsViewTarget.innerHTML = ''
+      if (this.hasRangerViewTarget) this.rangerViewTarget.innerHTML = ''
+    }
     const settings = this.settingsForDef()
     const cols = renderDef.toColumns(this.payload, settings)
     // Compute the zoom target BEFORE render and pass it as { range } so the panel seeds the chart

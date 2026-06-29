@@ -21,12 +21,12 @@ export default class TurboQuery {
   }
 
   _replaceHistory() {
-    window.history.replaceState(window.history.state, '', this.url.href)
+    window.history.replaceState({}, '', this.url.href)
     this.replaceTimer = 0
   }
 
   _appendHistory() {
-    window.history.pushState(window.history.state, '', this.url.href)
+    window.history.pushState({}, '', this.url.href)
     this.appendTimer = 0
   }
 
