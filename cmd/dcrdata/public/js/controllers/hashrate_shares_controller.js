@@ -1,4 +1,5 @@
 /* global Turbo */
+import '@hotwired/turbo'
 import { Controller } from '@hotwired/stimulus'
 import { requestJSON } from '../helpers/http'
 import humanize from '../helpers/humanize_helper'

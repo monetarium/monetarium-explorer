@@ -1,4 +1,5 @@
 /* global Turbo */
+import '@hotwired/turbo'
 import Mousetrap from 'mousetrap'
 import { toggleMenu, toggleSun, closeMenu } from '../services/theme_service'
 import { addPauseToMousetrap } from '../vendor/mousetrap-pause'
