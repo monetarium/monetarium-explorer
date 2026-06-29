@@ -54,9 +54,9 @@ export function toggleSun() {
 
 document.addEventListener('turbo:before-render', (event) => {
   if (darkEnabled()) {
-    toggleToDarkClasses(event.data.newBody)
+    toggleToDarkClasses(event.detail.newBody)
   } else {
-    toggleToLightClasses(event.data.newBody)
+    toggleToLightClasses(event.detail.newBody)
   }
 })
 
