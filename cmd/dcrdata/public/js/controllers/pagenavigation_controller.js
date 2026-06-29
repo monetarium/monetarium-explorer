@@ -1,4 +1,5 @@
 /* global Turbo */
+import '@hotwired/turbo'
 import { Controller } from '@hotwired/stimulus'
 import Url from 'url-parse'
 
