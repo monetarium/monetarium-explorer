@@ -46,9 +46,9 @@
 						<a class="fs13" href="/mempool">mempool </a>|
 						{{- end}}
 						{{if .MainChain}}
-						<a class="fs13" href="/api/block/{{.Height}}/verbose?indent=true" data-turbolinks="false">api</a>
+						<a class="fs13" href="/api/block/{{.Height}}/verbose?indent=true" data-turbo="false">api</a>
 						{{- else}}
-						<a class="fs13" href="/api/block/hash/{{.Hash}}/verbose?indent=true" data-turbolinks="false">api</a>
+						<a class="fs13" href="/api/block/hash/{{.Hash}}/verbose?indent=true" data-turbo="false">api</a>
 						{{- end}}
 					</div>
 				</div>

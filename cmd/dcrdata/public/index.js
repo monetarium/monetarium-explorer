@@ -7,6 +7,7 @@ import globalEventBus from './js/services/event_bus_service'
 import ws from './js/services/messagesocket_service'
 import { darkEnabled } from './js/services/theme_service'
 
+import '@hotwired/turbo'
 import './scss/application.scss'
 import 'uplot/dist/uPlot.min.css'
 
@@ -19,7 +20,7 @@ const context = import.meta.webpackContext('./js/controllers', {
 })
 application.load(definitionsFromContext(context))
 
-document.addEventListener('turbolinks:load', (_e) => {
+document.addEventListener('turbo:load', (_e) => {
   document.querySelectorAll('.jsonly').forEach((el) => {
     el.classList.remove('jsonly')
   })

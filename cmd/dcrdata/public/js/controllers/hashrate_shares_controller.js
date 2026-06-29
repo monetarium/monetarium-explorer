@@ -1,8 +1,8 @@
-/* global Turbolinks */
+/* global Turbo */
 import { Controller } from '@hotwired/stimulus'
 import { requestJSON } from '../helpers/http'
 import humanize from '../helpers/humanize_helper'
-import TurboQuery from '../helpers/turbolinks_helper'
+import TurboQuery from '../helpers/turbo_helper'
 import { OTHERS_COLOR, colorForIndex } from '../helpers/chart_theme'
 
 // Pie geometry constants (SVG viewBox is 360x360).
@@ -241,7 +241,7 @@ export default class extends Controller {
   selectChart(e) {
     const value = e.currentTarget.value
     if (value === 'hashrate-shares') return
-    Turbolinks.visit(`/charts?chart=${encodeURIComponent(value)}`)
+    Turbo.visit(`/charts?chart=${encodeURIComponent(value)}`)
   }
 
   async fetchAndRender(seq) {

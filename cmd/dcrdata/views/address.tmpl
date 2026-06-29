@@ -294,7 +294,7 @@
                           data-address-target="pageminus">
                           <a  class="page-link"
                               href="{{.Path}}?n={{.Limit}}&start={{if gt (subtract .Offset .Limit) 0}}{{subtract .Offset .Limit}}{{else}}0{{end}}&txntype={{$txType}}"
-                              data-turbolinks="false"
+                              data-turbo="false"
                               data-address-target="paginator"
                               data-action="address#prevPage"
                           >Previous</a>
@@ -303,7 +303,7 @@
                           data-address-target="pageplus">
                           <a  class="page-link"
                               href="{{.Path}}?n={{.Limit}}&start={{add .Offset .Limit}}&txntype={{$txType}}"
-                              data-turbolinks="false"
+                              data-turbo="false"
                               data-address-target="paginator"
                               data-action="address#nextPage"
                           >Next</a>

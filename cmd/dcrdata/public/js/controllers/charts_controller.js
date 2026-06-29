@@ -1,8 +1,8 @@
-/* global Turbolinks */
+/* global Turbo */
 import { Controller } from '@hotwired/stimulus'
 import { requestJSON } from '../helpers/http'
 import humanize from '../helpers/humanize_helper'
-import TurboQuery from '../helpers/turbolinks_helper'
+import TurboQuery from '../helpers/turbo_helper'
 import Zoom from '../helpers/zoom_helper'
 import { createChartPanel } from '../helpers/chart_panel'
 import { getDefinition } from '../charts/registry'
@@ -175,7 +175,7 @@ export default class extends Controller {
   async selectChart() {
     const selection = (this.settings.chart = this.chartSelectTarget.value)
     if (selection === 'hashrate-shares') {
-      Turbolinks.visit('/hashrate-shares')
+      Turbo.visit('/hashrate-shares')
       return
     }
 
