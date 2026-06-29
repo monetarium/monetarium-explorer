@@ -1,6 +1,6 @@
 import { Controller } from '@hotwired/stimulus'
 import dompurify from 'dompurify'
-import TurboQuery from '../helpers/turbolinks_helper'
+import TurboQuery from '../helpers/turbo_helper'
 import globalEventBus from '../services/event_bus_service'
 import { loadUPlot, buildOpts } from '../helpers/uplot_adapter'
 import { darkEnabled } from '../services/theme_service'

@@ -220,8 +220,8 @@
               <tr>
                 <td class="text-end medium-sans text-nowrap pe-2 py-2">Raw Tx:</td>
                 <td class="text-start py-1 text-secondary">
-                  <a href="/api/tx/decoded/{{.TxID}}?indent=true" data-turbolinks="false">decoded</a> &middot;
-                  <a href="/api/tx/hex/{{.TxID}}" data-turbolinks="false">hex</a>
+                  <a href="/api/tx/decoded/{{.TxID}}?indent=true" data-turbo="false">decoded</a> &middot;
+                  <a href="/api/tx/hex/{{.TxID}}" data-turbo="false">hex</a>
                 </td>
                 <td class="text-end medium-sans text-nowrap pe-2 py-2">Time:</td>
                 <td class="text-start py-1 text-secondary" data-tx-target="formattedAge">{{.Time.String}}</td>
@@ -242,7 +242,7 @@
                     >Swaps Info:
                   </td>
                   <td class="text-start py-1 text-secondary"><a
-                    href="/api/tx/swaps/{{.TxID}}?indent=true" data-turbolinks="false">swaps</a>
+                    href="/api/tx/swaps/{{.TxID}}?indent=true" data-turbo="false">swaps</a>
                   </td>
                 </tr>
               {{end}}

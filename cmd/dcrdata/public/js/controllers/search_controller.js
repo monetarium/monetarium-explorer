@@ -1,4 +1,4 @@
-/* global Turbolinks */
+/* global Turbo */
 import { Controller } from '@hotwired/stimulus'
 
 export default class extends Controller {
@@ -8,6 +8,6 @@ export default class extends Controller {
     if (search === '') {
       return
     }
-    Turbolinks.visit(`/search?search=${search}`)
+    Turbo.visit(`/search?search=${search}`)
   }
 }

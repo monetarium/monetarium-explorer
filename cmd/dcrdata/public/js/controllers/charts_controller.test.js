@@ -11,7 +11,7 @@ vi.mock('@hotwired/stimulus', () => ({
   }
 }))
 
-vi.mock('../helpers/turbolinks_helper', () => {
+vi.mock('../helpers/turbo_helper', () => {
   return {
     default: class TurboQuery {
       constructor() {

@@ -1,5 +1,5 @@
 {{define "html-head"}}
-<head data-turbolinks-eval="false">
+<head>
 	<meta charset="utf-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
 	{{/* The above meta tags *must* come first in the head */ -}}
@@ -35,12 +35,11 @@
 	<link rel="manifest" href="/images/favicon/site.webmanifest?v=20260428">
   <!-- End favicon -->
 
-	<meta name="turbolinks-cache-control" content="no-cache">
+	<meta name="turbo-cache-control" content="no-cache">
 	<title>{{.Title}}</title>
 
 	<link href="{{asset "app.css"}}" rel="stylesheet">
 
-	<script src="/js/vendor/turbolinks.min.js?v=65DCG" defer></script>
 </head>
 {{end}}
 
@@ -69,7 +68,7 @@
 			/>
 			<button class="search-bttn" type="submit"><span class="monicon-search"></span></button>
 		</form>
-		<nav id="hamburger-menu" data-controller="menu" data-turbolinks-permanent>
+		<nav id="hamburger-menu" data-controller="menu" data-turbo-permanent>
 			<div id="menu-toggle">
 				<input type="checkbox" name="menu-toggle" aria-label="Toggle navigation menu" data-menu-target="toggle" data-action="change->menu#toggle"/>
 				<span class="patty"></span>
@@ -104,7 +103,7 @@
 								</div>
 						</button>
 					</form>
-					<a class="menu-item jsonly" data-keynav-skip data-turbolinks="false" href="#" id="keynav-toggle">
+					<a class="menu-item jsonly" data-keynav-skip data-turbo="false" href="#" id="keynav-toggle">
 						<span class="text">Enable Hot Keys</span><span class="keys-hint">(&nbsp;&nbsp;<span class="arrows"> &#8592;<br>&#8594;</span>&nbsp;&nbsp;enter&nbsp;&nbsp;\&nbsp;&nbsp;=&nbsp;&nbsp;)</span>
 					</a>
 					<a class="menu-item" data-keynav-skip href="{{.Links.APIDocs}}" title="API Endpoints" target="_blank" rel="noopener noreferrer">JSON API Docs</a>
@@ -148,7 +147,7 @@
 		<span
 			id="connection"
 			class="text-nowrap align-items-center clickable d-inline-block"
-			data-turbolinks-permanent
+			data-turbo-permanent
 			data-controller="connection"
 			data-connection-target="indicator"
 			data-action="click->connection#requestNotifyPermission"
@@ -158,14 +157,10 @@
 	</div>
 	<script
 		src="{{asset "js/4.bundle.js"}}"
-		data-turbolinks-eval="false"
-		data-turbolinks-suppress-warning
 		defer
 	></script>
 	<script
 		src="{{asset "app.js"}}"
-		data-turbolinks-eval="false"
-		data-turbolinks-suppress-warning
 		defer
 	></script>
 </footer>
