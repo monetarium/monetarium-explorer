@@ -263,13 +263,15 @@ export default class extends Controller {
   }
 
   async renderChart(def) {
+    // Snapshot prev memo before memoizedDef() overwrites it, so we can detect a def change.
+    const prevMemo = this._memoDef
     const renderDef = this.memoizedDef(def)
     this.currentDef = renderDef
 
     // Refresh: a new def reference means the ChartPanel will recreate its uPlot
     // (clean DOM). On def-reuse (same chart, new bin/axis/interval), _ensureChart
     // returns early and setData updates in place — the DOM must stay intact.
-    if (this._defSig && renderDef !== this._memoDef) {
+    if (prevMemo && renderDef !== prevMemo) {
       this.chartsViewTarget.innerHTML = ''
       if (this.hasRangerViewTarget) this.rangerViewTarget.innerHTML = ''
     }
