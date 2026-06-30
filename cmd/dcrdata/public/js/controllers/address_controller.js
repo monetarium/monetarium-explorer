@@ -775,14 +775,16 @@ export default class extends Controller {
     if (!this.hasPendingTarget) return
     this.pendingTargets.forEach((row) => {
       if (!txInBlock(row.dataset.txid, block)) return
+      // Validate all required DOM elements upfront so a partial match
+      // can't leave the row half-updated.
       const confirms = row.querySelector('td.addr-tx-confirms')
-      if (!confirms) return
+      const age = row.querySelector('td.addr-tx-age > span')
+      if (!confirms || !age) return
+      // All required elements present — safe to mutate.
       confirms.textContent = '1'
       confirms.dataset.confirmationBlockHeight = block.height
       const timeTd = row.querySelector('td.addr-tx-time')
       if (timeTd) timeTd.textContent = humanize.date(block.time, true)
-      const age = row.querySelector('td.addr-tx-age > span')
-      if (!age) return
       age.dataset.age = block.time
       age.textContent = humanize.timeSince(block.unixStamp)
       delete row.dataset.addressTarget
