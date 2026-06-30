@@ -2497,7 +2497,9 @@ func ReduceAddressHistory(addrHist []*AddressRow) (*AddressInfo, float64, float6
 				}
 				bigAddSKA(receivedSKAByCoin[coinType], addrOut.SKAValue)
 			}
-			coinBalance.NumUnspent++
+			if addrOut.MatchingTxHash == nil {
+				coinBalance.NumUnspent++
+			}
 			creditTxns = append(creditTxns, &tx)
 		} else {
 			if coinType == 0 {
