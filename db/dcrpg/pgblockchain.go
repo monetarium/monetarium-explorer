@@ -2920,11 +2920,19 @@ func (pgb *ChainDB) AddressTotals(ctx context.Context, address string) (*apitype
 		if skaBalances == nil {
 			skaBalances = make(map[uint8]apitypes.SKABalance, len(ab.Coins)-1)
 		}
+		coinsSpent := balance.TotalSpentSKA
+		if coinsSpent == "" {
+			coinsSpent = "0"
+		}
+		coinsUnspent := balance.TotalUnspentSKA
+		if coinsUnspent == "" {
+			coinsUnspent = "0"
+		}
 		skaBalances[coinType] = apitypes.SKABalance{
 			NumSpent:     balance.NumSpent,
 			NumUnspent:   balance.NumUnspent,
-			CoinsSpent:   balance.TotalSpentSKA,
-			CoinsUnspent: balance.TotalUnspentSKA,
+			CoinsSpent:   coinsSpent,
+			CoinsUnspent: coinsUnspent,
 		}
 	}
 
