@@ -6,18 +6,17 @@ export default class extends Controller {
     return ['confirmations']
   }
 
-  initialize() {
-    const that = this
-    globalEventBus.on('BLOCK_RECEIVED', (data) => {
-      that.refreshConfirmations(data.block.height)
-    })
-  }
-
   connect() {
     this.confirmationsTargets.forEach((el, _i) => {
       if (!el.dataset.confirmations) return
       this.setConfirmationText(el, el.dataset.confirmations)
     })
+    this._blockReceived = (data) => this.refreshConfirmations(data.block.height)
+    globalEventBus.on('BLOCK_RECEIVED', this._blockReceived)
+  }
+
+  disconnect() {
+    globalEventBus.off('BLOCK_RECEIVED', this._blockReceived)
   }
 
   setConfirmationText(el, confirmations) {
