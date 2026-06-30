@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import Zoom from '../helpers/zoom_helper'
 
 // Stub the @hotwired/stimulus import so the controller module loads in jsdom.
@@ -8,6 +8,13 @@ vi.mock('@hotwired/stimulus', () => ({
       this.element = element
     }
   }
+}))
+
+// Mocks for _confirmMempoolTxs dependencies.
+const mockTxInBlock = vi.fn()
+vi.mock('../helpers/block_helper', () => ({ default: mockTxInBlock }))
+vi.mock('../helpers/humanize_helper', () => ({
+  default: { date: vi.fn(() => 'formatted-date'), timeSince: vi.fn(() => '2m ago') }
 }))
 
 // ---------------------------------------------------------------------------
@@ -433,5 +440,227 @@ describe('address xExtent ms units (bug 3 regression)', () => {
     expect(chartDuration).toBeGreaterThan(Zoom.mapValue('week')) // 6.048e8 ms
     expect(chartDuration).toBeGreaterThan(Zoom.mapValue('day')) // 8.64e7 ms
     expect(chartDuration).toBeLessThan(Zoom.mapValue('year'))
+  })
+})
+
+describe('address _confirmMempoolTxs', () => {
+  let humanize
+
+  beforeAll(async () => {
+    humanize = (await import('../helpers/humanize_helper')).default
+  })
+
+  function makePendingRow(txid, coinType) {
+    const row = document.createElement('tr')
+    row.dataset.txid = txid
+    row.dataset.addressTarget = 'pending'
+    const ct = coinType != null ? coinType : 0
+    row.innerHTML = `<td class="addr-tx-confirms" data-confirmation-block-height="-1">0</td><td class="addr-tx-time">Unconfirmed</td><td class="addr-tx-age"><span data-age>just now</span></td><td data-coin-type="${ct}">VAR</td>`
+    return row
+  }
+
+  function makeConfirmController() {
+    const ctrl = new AddressController(document.createElement('div'))
+    ctrl.hasPendingTarget = false
+    ctrl.pendingTargets = []
+    ctrl.hasTxnCountTarget = false
+    ctrl.txnCountTarget = null
+    ctrl.numUnconfirmedTargets = []
+    return ctrl
+  }
+
+  beforeEach(() => {
+    mockTxInBlock.mockReset()
+    humanize.date.mockReset()
+    humanize.timeSince.mockReset()
+    humanize.date.mockReturnValue('formatted-date')
+    humanize.timeSince.mockReturnValue('2m ago')
+  })
+
+  it('returns early when there are no pending targets — no crash', () => {
+    const ctrl = makeConfirmController()
+    ctrl._confirmMempoolTxs({ block: { height: 100 } })
+  })
+
+  it('does nothing when the tx is not in the block', () => {
+    const ctrl = makeConfirmController()
+    ctrl.hasPendingTarget = true
+    const row = makePendingRow('tx1')
+    ctrl.pendingTargets = [row]
+    ctrl.hasTxnCountTarget = false
+    mockTxInBlock.mockReturnValue(false)
+
+    ctrl._confirmMempoolTxs({ block: { height: 100, Tx: [], Tickets: [], Revs: [], Votes: [] } })
+
+    expect(row.querySelector('.addr-tx-confirms').textContent).toBe('0')
+    expect(row.dataset.addressTarget).toBe('pending')
+  })
+
+  it('updates confirms, age, and counters when the tx is in the block', () => {
+    const ctrl = makeConfirmController()
+    ctrl.hasPendingTarget = true
+    const row = makePendingRow('tx1')
+    ctrl.pendingTargets = [row]
+    const countEl = document.createElement('span')
+    countEl.dataset.txnCount = '5'
+    ctrl.hasTxnCountTarget = true
+    ctrl.txnCountTarget = countEl
+    ctrl.numUnconfirmedTargets = []
+    mockTxInBlock.mockReturnValue(true)
+
+    ctrl._confirmMempoolTxs({
+      block: {
+        height: 200,
+        time: 1717000000000,
+        unixStamp: 1717000000,
+        Tx: [{ TxID: 'tx1' }],
+        Tickets: [],
+        Revs: [],
+        Votes: []
+      }
+    })
+
+    const confirms = row.querySelector('.addr-tx-confirms')
+    expect(confirms.textContent).toBe('1')
+    expect(confirms.dataset.confirmationBlockHeight).toBe('200')
+    expect(row.querySelector('.addr-tx-age span').textContent).toBe('2m ago')
+    expect(countEl.dataset.txnCount).toBe('6')
+    expect('addressTarget' in row.dataset).toBe(false)
+  })
+
+  it('bails without partial mutations when confirms cell is missing', () => {
+    const ctrl = makeConfirmController()
+    ctrl.hasPendingTarget = true
+    const row = document.createElement('tr')
+    row.dataset.txid = 'tx1'
+    row.dataset.addressTarget = 'pending'
+    row.innerHTML =
+      '<td class="addr-tx-time">Unconfirmed</td>' +
+      '<td class="addr-tx-age"><span data-age>just now</span></td>'
+    ctrl.pendingTargets = [row]
+    ctrl.hasTxnCountTarget = false
+    ctrl.numUnconfirmedTargets = []
+    mockTxInBlock.mockReturnValue(true)
+
+    ctrl._confirmMempoolTxs({ block: { height: 200, time: 1717000000000, unixStamp: 1717000000 } })
+
+    // No mutations happened — the row is unchanged and still a pending target.
+    expect(row.dataset.addressTarget).toBe('pending')
+    expect(ctrl.pendingTargets).toContain(row)
+  })
+
+  it('bails without partial mutations when age span is missing', () => {
+    const ctrl = makeConfirmController()
+    ctrl.hasPendingTarget = true
+    const row = document.createElement('tr')
+    row.dataset.txid = 'tx1'
+    row.dataset.addressTarget = 'pending'
+    row.innerHTML =
+      '<td class="addr-tx-confirms" data-confirmation-block-height="-1">0</td>' +
+      '<td class="addr-tx-time">Unconfirmed</td>' +
+      '<td class="addr-tx-age">N/A</td>' +
+      '<td data-coin-type="0">VAR</td>'
+    ctrl.pendingTargets = [row]
+    ctrl.hasTxnCountTarget = false
+    ctrl.numUnconfirmedTargets = []
+    mockTxInBlock.mockReturnValue(true)
+
+    ctrl._confirmMempoolTxs({ block: { height: 200, time: 1717000000000, unixStamp: 1717000000 } })
+
+    // No mutations — confirms cell still shows 0, row still pending.
+    expect(row.querySelector('.addr-tx-confirms').textContent).toBe('0')
+    expect(row.dataset.addressTarget).toBe('pending')
+    expect(ctrl.pendingTargets).toContain(row)
+  })
+
+  it('does not crash when txnCount target is absent (hasTxnCountTarget false)', () => {
+    const ctrl = makeConfirmController()
+    ctrl.hasPendingTarget = true
+    const row = makePendingRow('tx1')
+    ctrl.pendingTargets = [row]
+    ctrl.hasTxnCountTarget = false
+    ctrl.txnCountTarget = null
+    ctrl.numUnconfirmedTargets = []
+    mockTxInBlock.mockReturnValue(true)
+
+    ctrl._confirmMempoolTxs({
+      block: {
+        height: 200,
+        time: 1717000000000,
+        unixStamp: 1717000000,
+        Tx: [{ TxID: 'tx1' }],
+        Tickets: [],
+        Revs: [],
+        Votes: []
+      }
+    })
+
+    // Row was confirmed, count was skipped
+    expect(row.querySelector('.addr-tx-confirms').textContent).toBe('1')
+    expect('addressTarget' in row.dataset).toBe(false)
+  })
+
+  it('decrements the matching unconfirmed counter by coin type', () => {
+    const ctrl = makeConfirmController()
+    ctrl.hasPendingTarget = true
+    const row = makePendingRow('tx1', 1)
+    ctrl.pendingTargets = [row]
+    const countEl = document.createElement('span')
+    countEl.dataset.txnCount = '5'
+    ctrl.hasTxnCountTarget = false
+    const unconf = document.createElement('div')
+    unconf.dataset.addressTarget = 'numUnconfirmed'
+    unconf.dataset.coinType = '1'
+    unconf.dataset.count = '3'
+    unconf.innerHTML = '<span class="addr-unconfirmed-count">3</span>'
+    ctrl.numUnconfirmedTargets = [unconf]
+    mockTxInBlock.mockReturnValue(true)
+
+    ctrl._confirmMempoolTxs({
+      block: {
+        height: 200,
+        time: 1717000000000,
+        unixStamp: 1717000000,
+        Tx: [{ TxID: 'tx1' }],
+        Tickets: [],
+        Revs: [],
+        Votes: []
+      }
+    })
+
+    expect(unconf.dataset.count).toBe('2')
+    expect(unconf.querySelector('.addr-unconfirmed-count').textContent).toBe('2')
+  })
+
+  it('skips unconfirmed counters whose coin type does not match', () => {
+    const ctrl = makeConfirmController()
+    ctrl.hasPendingTarget = true
+    const row = makePendingRow('tx1', 0)
+    ctrl.pendingTargets = [row]
+    const countEl = document.createElement('span')
+    countEl.dataset.txnCount = '5'
+    ctrl.hasTxnCountTarget = false
+    const unconf = document.createElement('div')
+    unconf.dataset.addressTarget = 'numUnconfirmed'
+    unconf.dataset.coinType = '1'
+    unconf.dataset.count = '3'
+    unconf.innerHTML = '<span class="addr-unconfirmed-count">3</span>'
+    ctrl.numUnconfirmedTargets = [unconf]
+    mockTxInBlock.mockReturnValue(true)
+
+    ctrl._confirmMempoolTxs({
+      block: {
+        height: 200,
+        time: 1717000000000,
+        unixStamp: 1717000000,
+        Tx: [{ TxID: 'tx1' }],
+        Tickets: [],
+        Revs: [],
+        Votes: []
+      }
+    })
+
+    // Coin 1 counter unchanged — row coin is 0
+    expect(unconf.dataset.count).toBe('3')
   })
 })
