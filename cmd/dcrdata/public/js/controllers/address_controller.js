@@ -772,42 +772,45 @@ export default class extends Controller {
 
   _confirmMempoolTxs(blockData) {
     const block = blockData.block
-    if (this.hasPendingTarget) {
-      this.pendingTargets.forEach((row) => {
-        if (txInBlock(row.dataset.txid, block)) {
-          const confirms = row.querySelector('td.addr-tx-confirms')
-          confirms.textContent = '1'
-          confirms.dataset.confirmationBlockHeight = block.height
-          row.querySelector('td.addr-tx-time').textContent = humanize.date(block.time, true)
-          const age = row.querySelector('td.addr-tx-age > span')
-          age.dataset.age = block.time
-          age.textContent = humanize.timeSince(block.unixStamp)
-          delete row.dataset.addressTarget
-          // Increment the displayed tx count
-          const count = this.txnCountTarget
-          count.dataset.txnCount++
-          setTxnCountText(count, count.dataset.txnCount)
-          // Decrement only the unconfirmed counter whose coin matches the
-          // confirmed transaction. The coin type comes from the SSR-rendered
-          // data-coin-type attribute on the row's Coin column.
-          const rowCoinType = row.querySelector('[data-coin-type]')?.dataset.coinType
-          this.numUnconfirmedTargets.forEach((tr) => {
-            if (rowCoinType !== undefined && tr.dataset.coinType !== rowCoinType) return
-            const countSpan = tr.querySelector('.addr-unconfirmed-count')
-            let unconfirmedCount = parseInt(tr.dataset.count)
-            if (isNaN(unconfirmedCount)) unconfirmedCount = 0
-            if (unconfirmedCount > 0) unconfirmedCount--
-            tr.dataset.count = unconfirmedCount
-            if (unconfirmedCount === 0) {
-              tr.classList.add('d-hide')
-              delete tr.dataset.addressTarget
-            } else if (countSpan) {
-              countSpan.textContent = unconfirmedCount.toLocaleString()
-            }
-          })
+    if (!this.hasPendingTarget) return
+    this.pendingTargets.forEach((row) => {
+      if (!txInBlock(row.dataset.txid, block)) return
+      const confirms = row.querySelector('td.addr-tx-confirms')
+      if (!confirms) return
+      confirms.textContent = '1'
+      confirms.dataset.confirmationBlockHeight = block.height
+      const timeTd = row.querySelector('td.addr-tx-time')
+      if (timeTd) timeTd.textContent = humanize.date(block.time, true)
+      const age = row.querySelector('td.addr-tx-age > span')
+      if (!age) return
+      age.dataset.age = block.time
+      age.textContent = humanize.timeSince(block.unixStamp)
+      delete row.dataset.addressTarget
+      // Increment the displayed tx count
+      if (this.hasTxnCountTarget) {
+        const count = this.txnCountTarget
+        count.dataset.txnCount++
+        setTxnCountText(count, count.dataset.txnCount)
+      }
+      // Decrement only the unconfirmed counter whose coin matches the
+      // confirmed transaction. The coin type comes from the SSR-rendered
+      // data-coin-type attribute on the row's Coin column.
+      const rowCoinType = row.querySelector('[data-coin-type]')?.dataset.coinType
+      this.numUnconfirmedTargets.forEach((tr) => {
+        if (rowCoinType !== undefined && tr.dataset.coinType !== rowCoinType) return
+        const countSpan = tr.querySelector('.addr-unconfirmed-count')
+        let unconfirmedCount = parseInt(tr.dataset.count)
+        if (isNaN(unconfirmedCount)) unconfirmedCount = 0
+        if (unconfirmedCount > 0) unconfirmedCount--
+        tr.dataset.count = unconfirmedCount
+        if (unconfirmedCount === 0) {
+          tr.classList.add('d-hide')
+          delete tr.dataset.addressTarget
+        } else if (countSpan) {
+          countSpan.textContent = unconfirmedCount.toLocaleString()
         }
       })
-    }
+    })
   }
 
   hashOver(e) {
