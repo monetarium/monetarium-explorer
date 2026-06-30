@@ -364,6 +364,49 @@ func TestReduceAddressHistory_MixedCoin(t *testing.T) {
 	}
 }
 
+func TestReduceAddressHistory_NumUnspent_SpentUTXOs(t *testing.T) {
+	matchTxHash := ChainHash{99}
+	rows := []*AddressRow{
+		{
+			Address:        "SpentAddr",
+			TxHash:         ChainHash{1},
+			ValidMainChain: true,
+			IsFunding:      true,
+			CoinType:       0,
+			Value:          100000000,
+			MatchingTxHash: &matchTxHash, // SPENT → should NOT count as unspent
+		},
+		{
+			Address:        "SpentAddr",
+			TxHash:         ChainHash{2},
+			ValidMainChain: true,
+			IsFunding:      true,
+			CoinType:       0,
+			Value:          200000000, // unspent (no MatchingTxHash)
+		},
+		{
+			Address:        "SpentAddr",
+			TxHash:         ChainHash{3},
+			ValidMainChain: true,
+			IsFunding:      false,
+			CoinType:       0,
+			Value:          50000000,
+		},
+	}
+	ai, _, _ := ReduceAddressHistory(rows)
+	if ai == nil {
+		t.Fatal("expected AddressInfo")
+	}
+
+	varCoin := ai.Balance.Coins[0]
+	if varCoin.NumUnspent != 1 {
+		t.Errorf("NumUnspent: want 1 (row 1 is spent, only row 2 is unspent), got %d", varCoin.NumUnspent)
+	}
+	if varCoin.NumSpent != 1 {
+		t.Errorf("NumSpent: want 1 (row 3), got %d", varCoin.NumSpent)
+	}
+}
+
 // TestFormatSKACoins covers the label-free SKA atoms→coins formatter used by
 // the CSV export (the amount column must be a bare parseable number, with the
 // coin disambiguated by the separate coin_type column).
