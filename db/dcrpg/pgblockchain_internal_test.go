@@ -201,33 +201,6 @@ func TestTrimmedTxInfoFromMsgTx_Fees(t *testing.T) {
 	}
 }
 
-func skaBalancesFromCoins(coins map[uint8]*dbtypes.CoinBalance) map[uint8]apitypes.SKABalance {
-	var skaBalances map[uint8]apitypes.SKABalance
-	for coinType, balance := range coins {
-		if coinType == 0 {
-			continue
-		}
-		if skaBalances == nil {
-			skaBalances = make(map[uint8]apitypes.SKABalance, len(coins)-1)
-		}
-		coinsSpent := balance.TotalSpentSKA
-		if coinsSpent == "" {
-			coinsSpent = "0"
-		}
-		coinsUnspent := balance.TotalUnspentSKA
-		if coinsUnspent == "" {
-			coinsUnspent = "0"
-		}
-		skaBalances[coinType] = apitypes.SKABalance{
-			NumSpent:     balance.NumSpent,
-			NumUnspent:   balance.NumUnspent,
-			CoinsSpent:   coinsSpent,
-			CoinsUnspent: coinsUnspent,
-		}
-	}
-	return skaBalances
-}
-
 func TestBuildSKABalances(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -298,18 +271,18 @@ func TestBuildSKABalances(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := skaBalancesFromCoins(tt.coins)
+			got := buildSKABalances(tt.coins)
 			if len(got) != len(tt.want) {
-				t.Errorf("skaBalancesFromCoins() returned %d entries, want %d", len(got), len(tt.want))
+				t.Errorf("buildSKABalances() returned %d entries, want %d", len(got), len(tt.want))
 			}
 			for k, v := range tt.want {
 				g, ok := got[k]
 				if !ok {
-					t.Errorf("skaBalancesFromCoins() missing key %d", k)
+					t.Errorf("buildSKABalances() missing key %d", k)
 					continue
 				}
 				if g != v {
-					t.Errorf("skaBalancesFromCoins()[%d] = %+v, want %+v", k, g, v)
+					t.Errorf("buildSKABalances()[%d] = %+v, want %+v", k, g, v)
 				}
 			}
 		})
