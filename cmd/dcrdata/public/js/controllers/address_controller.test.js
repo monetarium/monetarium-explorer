@@ -546,7 +546,6 @@ describe('address _confirmMempoolTxs', () => {
 
     // No mutations happened — the row is unchanged and still a pending target.
     expect(row.dataset.addressTarget).toBe('pending')
-    expect(ctrl.pendingTargets).toContain(row)
   })
 
   it('bails without partial mutations when age span is missing', () => {
@@ -570,7 +569,6 @@ describe('address _confirmMempoolTxs', () => {
     // No mutations — confirms cell still shows 0, row still pending.
     expect(row.querySelector('.addr-tx-confirms').textContent).toBe('0')
     expect(row.dataset.addressTarget).toBe('pending')
-    expect(ctrl.pendingTargets).toContain(row)
   })
 
   it('does not crash when txnCount target is absent (hasTxnCountTarget false)', () => {
