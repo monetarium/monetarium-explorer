@@ -2912,6 +2912,22 @@ func (pgb *ChainDB) AddressTotals(ctx context.Context, address string) (*apitype
 		coinsUnspent = varBalance.TotalUnspent
 	}
 
+	var skaBalances map[uint8]apitypes.SKABalance
+	for coinType, balance := range ab.Coins {
+		if coinType == 0 {
+			continue
+		}
+		if skaBalances == nil {
+			skaBalances = make(map[uint8]apitypes.SKABalance, len(ab.Coins)-1)
+		}
+		skaBalances[coinType] = apitypes.SKABalance{
+			NumSpent:     balance.NumSpent,
+			NumUnspent:   balance.NumUnspent,
+			CoinsSpent:   balance.TotalSpentSKA,
+			CoinsUnspent: balance.TotalUnspentSKA,
+		}
+	}
+
 	return &apitypes.AddressTotals{
 		Address:      address,
 		BlockHeight:  uint64(bestHeight),
@@ -2920,6 +2936,7 @@ func (pgb *ChainDB) AddressTotals(ctx context.Context, address string) (*apitype
 		NumUnspent:   numUnspent,
 		CoinsSpent:   dcrutil.Amount(coinsSpent).ToCoin(),
 		CoinsUnspent: dcrutil.Amount(coinsUnspent).ToCoin(),
+		SKABalances:  skaBalances,
 	}, nil
 }
 
