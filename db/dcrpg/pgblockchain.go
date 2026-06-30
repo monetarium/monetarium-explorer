@@ -2890,6 +2890,36 @@ func (pgb *ChainDB) FillAddressTransactions(ctx context.Context, addrInfo *dbtyp
 	return nil
 }
 
+// buildSKABalances extracts SKA coin balances from an AddressBalance coin map,
+// normalizing empty string amounts to "0" so the API contract is always
+// consistent decimal atom strings.
+func buildSKABalances(coins map[uint8]*dbtypes.CoinBalance) map[uint8]apitypes.SKABalance {
+	var skaBalances map[uint8]apitypes.SKABalance
+	for coinType, balance := range coins {
+		if coinType == 0 {
+			continue
+		}
+		if skaBalances == nil {
+			skaBalances = make(map[uint8]apitypes.SKABalance, len(coins)-1)
+		}
+		coinsSpent := balance.TotalSpentSKA
+		if coinsSpent == "" {
+			coinsSpent = "0"
+		}
+		coinsUnspent := balance.TotalUnspentSKA
+		if coinsUnspent == "" {
+			coinsUnspent = "0"
+		}
+		skaBalances[coinType] = apitypes.SKABalance{
+			NumSpent:     balance.NumSpent,
+			NumUnspent:   balance.NumUnspent,
+			CoinsSpent:   coinsSpent,
+			CoinsUnspent: coinsUnspent,
+		}
+	}
+	return skaBalances
+}
+
 // AddressTotals queries for the following totals: amount spent, amount unspent,
 // number of unspent transaction outputs and number spent.
 func (pgb *ChainDB) AddressTotals(ctx context.Context, address string) (*apitypes.AddressTotals, error) {
@@ -2912,6 +2942,8 @@ func (pgb *ChainDB) AddressTotals(ctx context.Context, address string) (*apitype
 		coinsUnspent = varBalance.TotalUnspent
 	}
 
+	skaBalances := buildSKABalances(ab.Coins)
+
 	return &apitypes.AddressTotals{
 		Address:      address,
 		BlockHeight:  uint64(bestHeight),
@@ -2920,6 +2952,7 @@ func (pgb *ChainDB) AddressTotals(ctx context.Context, address string) (*apitype
 		NumUnspent:   numUnspent,
 		CoinsSpent:   dcrutil.Amount(coinsSpent).ToCoin(),
 		CoinsUnspent: dcrutil.Amount(coinsUnspent).ToCoin(),
+		SKABalances:  skaBalances,
 	}, nil
 }
 
