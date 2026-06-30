@@ -47,7 +47,7 @@ describe('newblock_controller subscription lifecycle', () => {
     expect(mockOff).toHaveBeenCalledWith('BLOCK_RECEIVED', registered)
   })
 
-  it('storing the callback on the instance keeps it stable across connect/disconnect cycles', () => {
+  it('creates a fresh callback reference on each connect so disconnect() can unregister it precisely', () => {
     const ctrl = makeCtrl()
     ctrl.connect()
     const firstCb = ctrl._blockReceived
