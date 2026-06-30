@@ -23,7 +23,7 @@ Go backend split across 10 modules (see [structure.md](structure.md)). Hotwired 
 
 * **Bundler:** Webpack 5 (`webpack@5.76.3`) with four `.cjs` configs (`common`, `dev`, `prod`, `analyze`).
 * **Controllers:** Stimulus 3 (`@hotwired/stimulus`). Multiple controllers per page is the norm — e.g. the home template attaches six (`time`, `home-latest-blocks`, `homepage`, `mining`, `supply`, `voting`) to a single container.
-* **Navigation enhancement:** Turbolinks 5.2.0, **vendored** at [cmd/dcrdata/public/js/vendor/turbolinks.min.js](../../cmd/dcrdata/public/js/vendor/turbolinks.min.js). Not the newer Hotwire Turbo.
+* **Navigation enhancement:** [Hotwire Turbo](https://turbo.hotwired.dev/) (`@hotwired/turbo` via npm, bundled in app.js). Replaced vendored Turbolinks 5.2.0.
 * **Templating:** server-side Go `html/template`, ~34 `.tmpl` files in [cmd/dcrdata/views/](../../cmd/dcrdata/views/), re-parsed on every request when started with `--reload-html`.
 * **CSS:** SCSS via `sass` + `sass-loader` layered on Bootstrap 5 (`bootstrap@5.3.8`).
 * **Charts:** Chart.js, vendored at [cmd/dcrdata/public/js/vendor/charts.min.js](../../cmd/dcrdata/public/js/vendor/charts.min.js).

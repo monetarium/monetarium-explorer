@@ -1,4 +1,5 @@
-/* global Turbolinks */
+/* global Turbo */
+import '@hotwired/turbo'
 import { Controller } from '@hotwired/stimulus'
 import Url from 'url-parse'
 
@@ -18,7 +19,7 @@ export default class extends Controller {
       q.byvotestatus = this.votestatusTarget.selectedOptions[0].value
     }
     url.set('query', q)
-    Turbolinks.visit(url.toString())
+    Turbo.visit(url.toString())
   }
 
   setFilterbyVoteStatus() {
@@ -26,7 +27,7 @@ export default class extends Controller {
     const q = {}
     q.byvotestatus = this.votestatusTarget.selectedOptions[0].value
     url.set('query', q)
-    Turbolinks.visit(url.toString())
+    Turbo.visit(url.toString())
   }
 
   setListView() {
@@ -36,6 +37,6 @@ export default class extends Controller {
       url.set('query', {})
     }
     url.set('pathname', newPeriod)
-    Turbolinks.visit(url.href)
+    Turbo.visit(url.href)
   }
 }

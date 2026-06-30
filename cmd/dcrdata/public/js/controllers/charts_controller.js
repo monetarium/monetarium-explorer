@@ -1,8 +1,9 @@
-/* global Turbolinks */
+/* global Turbo */
+import '@hotwired/turbo'
 import { Controller } from '@hotwired/stimulus'
 import { requestJSON } from '../helpers/http'
 import humanize from '../helpers/humanize_helper'
-import TurboQuery from '../helpers/turbolinks_helper'
+import TurboQuery from '../helpers/turbo_helper'
 import Zoom from '../helpers/zoom_helper'
 import { createChartPanel } from '../helpers/chart_panel'
 import { getDefinition } from '../charts/registry'
@@ -49,6 +50,13 @@ export default class extends Controller {
   }
 
   async connect() {
+    // Turbo caches the DOM before Stimulus disconnect fires. If the cached snapshot contains
+    // stale uPlot canvases, they end up in the live DOM on cache restore, and selectChart()
+    // below appends a fresh chart alongside them — accumulating duplicates. Clear both
+    // containers here as a recovery. Also subscribe to turbo:before-cache so we can wipe
+    // them BEFORE the snapshot is taken (prevention rather than recovery).
+    this._clearChartContainers('connect')
+
     this.query = new TurboQuery()
     this.tps = parseInt(this.data.get('tps'))
     this.windowSize = parseInt(this.data.get('windowSize'))
@@ -110,13 +118,40 @@ export default class extends Controller {
     if (this.settings.interval) {
       this.setActiveOptionBtn(this.settings.interval, this.intervalOptionTargets)
     }
+    this._boundBeforeCache = () => this._clearChartContainers('before-cache')
+    document.addEventListener('turbo:before-cache', this._boundBeforeCache)
+
     await this.selectChart()
   }
 
   disconnect() {
+    if (this._boundBeforeCache) {
+      document.removeEventListener('turbo:before-cache', this._boundBeforeCache)
+    }
     if (this.panel) {
       this.panel.destroy()
       this.panel = null
+    }
+  }
+
+  // Strip stale uPlot DOM from the chart/ranger containers. Used both at connect() (recovery
+  // from a cached snapshot that already has canvases) and at turbo:before-cache (prevention —
+  // fires before Turbo snapshots, so the cached copy stays clean).
+  _clearChartContainers(source) {
+    if (source !== 'connect') {
+      if (this.panel) {
+        this.panel.destroy()
+        this.panel = null
+      }
+    }
+    const cv = this.chartsViewTarget
+    const rv = this.hasRangerViewTarget ? this.rangerViewTarget : null
+    const cvCount = cv.childElementCount
+    const rvCount = rv ? rv.childElementCount : 0
+    cv.innerHTML = ''
+    if (rv) rv.innerHTML = ''
+    if (cvCount || rvCount) {
+      console.debug('charts:cleared', source || 'unknown', cvCount, rvCount)
     }
   }
 
@@ -175,7 +210,7 @@ export default class extends Controller {
   async selectChart() {
     const selection = (this.settings.chart = this.chartSelectTarget.value)
     if (selection === 'hashrate-shares') {
-      Turbolinks.visit('/hashrate-shares')
+      Turbo.visit('/hashrate-shares')
       return
     }
 
@@ -229,8 +264,18 @@ export default class extends Controller {
   }
 
   async renderChart(def) {
+    // Snapshot prev memo before memoizedDef() overwrites it, so we can detect a def change.
+    const prevMemo = this._memoDef
     const renderDef = this.memoizedDef(def)
     this.currentDef = renderDef
+
+    // Refresh: a new def reference means the ChartPanel will recreate its uPlot
+    // (clean DOM). On def-reuse (same chart, new bin/axis/interval), _ensureChart
+    // returns early and setData updates in place — the DOM must stay intact.
+    if (prevMemo && renderDef !== prevMemo) {
+      this.chartsViewTarget.innerHTML = ''
+      if (this.hasRangerViewTarget) this.rangerViewTarget.innerHTML = ''
+    }
     const settings = this.settingsForDef()
     const cols = renderDef.toColumns(this.payload, settings)
     // Compute the zoom target BEFORE render and pass it as { range } so the panel seeds the chart

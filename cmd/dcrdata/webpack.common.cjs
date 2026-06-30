@@ -8,10 +8,6 @@ module.exports = {
   entry: {
     app: './public/index.js'
   },
-  // Turbolinks is vendored and loaded via a <script> tag, not bundled.
-  externals: {
-    turbolinks: 'Turbolinks'
-  },
   optimization: {
     chunkIds: 'natural',
     splitChunks: {
