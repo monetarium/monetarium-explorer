@@ -22,13 +22,15 @@ templates). Backend Go and database code is out of scope.
 
 ## Modules
 
-| Area | Source files | Test coverage |
-|------|-------------|---------------|
-| Controllers | 46 files (18 with `.test.js`) | ~39% |
-| Helpers | 33 files (14 with `.test.js`) | ~42% |
-| Services | 7 files (2 with `.test.js`) | ~29% |
-| Chart definitions | 24 files (16 with `.test.js`) | ~67% |
-| SCSS partials | 28 files | — |
+Counts are source files only (test and vendor files excluded).
+
+| Area | Source files | With test file |
+|------|-------------|----------------|
+| Controllers | 27 | 17 |
+| Helpers | 20 | 11 |
+| Services | 5 | 2 |
+| Chart definitions | 16 | 16 |
+| SCSS partials | 28 | — |
 
 ## Files needing attention
 
@@ -84,7 +86,7 @@ templates). Backend Go and database code is out of scope.
 
 ### Dead / deprecated
 
-- `public/js/vendor/mousetrap-pause.js` — keyboard nav replaced by `keyboard_navigation_service`
+- *(None identified — all vendor files are actively referenced.)*
 
 ### Build config
 

@@ -14,7 +14,7 @@ Retype every `.js` file as `.ts`, add `ts-loader` to webpack config, install `ty
 configure `tsconfig.json`, and fix all type errors.
 
 **Pros**: Full IDE support, compile-time type checking, catches null refs and shape mismatches.
-**Cons**: ~80+ files to convert, webpack config changes, CI type-check step, learning curve for
+**Cons**: ~69 files to convert, webpack config changes, CI type-check step, learning curve for
 current developers.
 
 ### B: JSDoc-based typing (recommended first step)

@@ -13,10 +13,11 @@ Built on **Stimulus 3 + Turbo + Webpack 5 + Bootstrap 5 + uPlot + Partysocket + 
 
 | Metric | Count |
 |--------|-------|
-| Controllers | 46 |
-| Helpers | 33 |
-| Services | 7 |
-| JavaScript files (excl. test/vendor) | ~86 |
+| Controllers | 27 |
+| Helpers | 20 |
+| Services | 5 |
+| Chart definitions | 16 |
+| JavaScript files (excl. test/vendor) | ~69 |
 | SCSS partials | 28 |
 | Go HTML templates | 31 |
 | CI/CD | None |
@@ -29,7 +30,6 @@ Built on **Stimulus 3 + Turbo + Webpack 5 + Bootstrap 5 + uPlot + Partysocket + 
 - 10 controllers, 9 helpers, 3 services with zero tests
 - `address_controller` at 913 lines, `charts_controller` at 612, `humanize_helper` at 307
 - Dark mode via 200+ lines of `body.darkBG` CSS overrides (not using `data-bs-theme`)
-- Dead `vendor/mousetrap-pause.js`
 - `stylelint-webpack-plugin` in prod config (slows builds)
 - No user-facing error toast/banner
 - No CI/CD pipeline
@@ -59,7 +59,6 @@ Small, isolated fixes that improve correctness and build hygiene immediately.
 - Sanitize `humanize.decimalParts` HTML output
 - Move `stylelint-webpack-plugin` to dev config only
 - Move `CleanWebpackPlugin` to prod config only
-- Remove dead `vendor/mousetrap-pause.js`
 
 ### Stage 2 — Test gap closure
 
@@ -101,7 +100,7 @@ Surface errors and loading states to the user. Improve accessibility and resilie
 
 **Decision point: full TS migration vs lighter JSDoc typing.**
 
-- Full TS: webpack config changes, `ts-loader`, retype all 80+ files
+- Full TS: webpack config changes, `ts-loader`, retype ~69 source files
 - JSDoc: no build change, catches type errors via `tsc --noEmit`, works with existing Babel/ESLint
 
 Not committing to this yet — revisit after Stage 3 when the module structure is settled.

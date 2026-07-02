@@ -45,14 +45,7 @@ CleanWebpackPlugin is only useful before a production build (cleans stale chunks
 the watch rebuilds incrementally; clearing `dist/` on every compile breaks the dev experience and
 serves no purpose. Move to `webpack.prod.cjs`.
 
-### 1.6 Remove dead `mousetrap-pause.js`
-
-**Files**: `public/js/vendor/mousetrap-pause.js`
-
-Keyboard navigation was migrated to `keyboard_navigation_service.js`. The vendored mousetrap file
-is no longer imported anywhere.
-
-### 1.7 Switch `chunkIds` to `deterministic`
+### 1.6 Switch `chunkIds` to `deterministic`
 
 **File**: `webpack.common.cjs:12`
 
