@@ -26,7 +26,7 @@ const (
 	AppName  string = "monetarium-explorer"
 	AppMajor uint   = 1
 	AppMinor uint   = 0
-	AppPatch uint   = 0
+	AppPatch uint   = 1
 )
 
 // go build -v -ldflags "-X main.appPreRelease= -X main.appBuild=`git rev-parse --short HEAD`"
