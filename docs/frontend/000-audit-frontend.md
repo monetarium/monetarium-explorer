@@ -30,7 +30,7 @@ Counts are source files only (test and vendor files excluded).
 | Helpers | 20 | 11 |
 | Services | 5 | 2 |
 | Chart definitions | 16 | 16 |
-| SCSS partials | 28 | — |
+| SCSS partials | 29 | — |
 
 ## Files needing attention
 

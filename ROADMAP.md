@@ -18,7 +18,7 @@ Built on **Stimulus 3 + Turbo + Webpack 5 + Bootstrap 5 + uPlot + Partysocket + 
 | Services | 5 |
 | Chart definitions | 16 |
 | JavaScript files (excl. test/vendor) | ~69 |
-| SCSS partials | 28 |
+| SCSS partials | 29 |
 | Go HTML templates | 31 |
 | CI/CD | GitHub Actions: Go build/test ×2, `npm run check`→`test`→`build`, Docker publish |
 
