@@ -17,7 +17,7 @@ Built on **Stimulus 3 + Turbo + Webpack 5 + Bootstrap 5 + uPlot + Partysocket + 
 | Helpers | 20 |
 | Services | 5 |
 | Chart definitions | 16 |
-| JavaScript files (excl. test/vendor) | ~69 |
+| JavaScript files (excl. test/vendor) | ~71 |
 | SCSS partials | 29 |
 | Go HTML templates | 31 |
 | CI/CD | GitHub Actions: Go build/test ×2, `npm run check`→`test`→`build`, Docker publish |
@@ -99,7 +99,7 @@ Surface errors and loading states to the user. Improve accessibility and resilie
 
 **Decision point: full TS migration vs lighter JSDoc typing.**
 
-- Full TS: webpack config changes, `ts-loader`, retype ~69 source files
+- Full TS: webpack config changes, `ts-loader`, retype ~71 source files
 - JSDoc: no build change, catches type errors via `tsc --noEmit`, works with existing Babel/ESLint
 
 Not committing to this yet — revisit after Stage 3 when the module structure is settled.
