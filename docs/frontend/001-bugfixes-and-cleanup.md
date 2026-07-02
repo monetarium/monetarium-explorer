@@ -12,7 +12,10 @@ Fixes correctness bugs and build hygiene issues identified in the [audit](000-au
 
 **File**: `public/js/helpers/mempool_helper.js:125`
 
-The function returns `undefined` (implicit) when `tx.Type !== 'Vote'`. Add explicit `return false`.
+The function returns `undefined` (implicit) on the fallthrough path (line 132): when
+`tx.Type === 'Vote'`, `vote_info.last_block` is truthy, and no matching spent ticket is found in
+the loop. Add explicit `return false` after the loop so an early-return refactor can't break
+silently.
 
 ### 1.2 Sanitize `updateCoinFillBars` HTML
 

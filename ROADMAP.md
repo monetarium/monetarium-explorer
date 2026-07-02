@@ -20,7 +20,7 @@ Built on **Stimulus 3 + Turbo + Webpack 5 + Bootstrap 5 + uPlot + Partysocket + 
 | JavaScript files (excl. test/vendor) | ~69 |
 | SCSS partials | 28 |
 | Go HTML templates | 31 |
-| CI/CD | None |
+| CI/CD | GitHub Actions: Go build/test ×2, `npm run check`→`test`→`build`, Docker publish |
 
 **Known gaps** (from [v1.0.1 audit](docs/frontend/000-audit-frontend.md)):
 
@@ -32,7 +32,6 @@ Built on **Stimulus 3 + Turbo + Webpack 5 + Bootstrap 5 + uPlot + Partysocket + 
 - Dark mode via 200+ lines of `body.darkBG` CSS overrides (not using `data-bs-theme`)
 - `stylelint-webpack-plugin` in prod config (slows builds)
 - No user-facing error toast/banner
-- No CI/CD pipeline
 
 ---
 

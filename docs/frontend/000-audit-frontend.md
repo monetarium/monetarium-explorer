@@ -37,8 +37,10 @@ Counts are source files only (test and vendor files excluded).
 ### Bug hazards
 
 - `public/js/helpers/mempool_helper.js:125` — `isQuestionableVote` returns `undefined` (implicit)
-  instead of `false` when the tx type is not a vote. Works because `undefined` is falsy, but the
-  intent is unclear and an early-return refactor could break it silently.
+  on the fallthrough path (line 132): when `tx.Type === 'Vote'`, `vote_info.last_block` is truthy,
+  and no matching spent ticket is found in the loop. The `return false` on line 126 (non-vote case)
+  is correct. Works because `undefined` is falsy, but any early-return refactor or `&&`-chain could
+  break silently.
 - `public/js/controllers/homepage_controller.js:178` — `updateCoinFillBars` builds HTML via
   template literals with user-facing values. No DOMPurify.
 - `public/js/helpers/humanize_helper.js:36` — `decimalParts` builds HTML strings with label values.
