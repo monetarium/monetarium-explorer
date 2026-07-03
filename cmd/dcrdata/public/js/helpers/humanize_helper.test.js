@@ -243,29 +243,23 @@ describe('humanize.bytes', () => {
   it('formats 10000000000 as "10 GB"', () => expect(humanize.bytes(10000000000)).toBe('10 GB'))
 })
 
-describe('humanize.timeSince with clock-skew correction', () => {
-  const SERVER_NOW = 1_700_000_000
-  const CLIENT_BEHIND = 1_600_000_000 // 100M seconds behind server
-  const BLOCK_TIME = 1_699_999_900 // 100 s old on the server
-
+describe('humanize.timeSince clamps to 0', () => {
   afterEach(() => {
     vi.useRealTimers()
-    humanize.setServerTime(Math.floor(Date.now() / 1000))
   })
 
-  it('clamps to 0s when the result would be negative (future-dated block)', () => {
+  it('clamps negative result to 0s (clock skew / future-dated block)', () => {
     vi.useFakeTimers()
-    vi.setSystemTime(new Date(CLIENT_BEHIND * 1000))
-    humanize.setServerTime(SERVER_NOW)
-    // Block timestamp is 100s ahead of server now → seconds would be -100 → clamped to 0
-    expect(humanize.timeSince(BLOCK_TIME + 200)).toBe('\u00a00s')
+    vi.setSystemTime(new Date(1_600_000_000_000)) // client clock = 1_600_000_000
+    // Block timestamp is ahead of client clock → would be negative without clamp
+    expect(humanize.timeSince(1_700_000_000)).toBe('\u00a00s')
   })
 
-  it('shows correct age after setServerTime compensates for clock skew', () => {
+  it('still shows correct positive ages', () => {
     vi.useFakeTimers()
-    vi.setSystemTime(new Date(CLIENT_BEHIND * 1000))
-    humanize.setServerTime(SERVER_NOW)
-    expect(humanize.timeSince(BLOCK_TIME)).toBe('\u00a01m 40s')
+    vi.setSystemTime(new Date(1_700_000_100_000))
+    // Block is 100 seconds old
+    expect(humanize.timeSince(1_700_000_000)).toBe('\u00a01m 40s')
   })
 })
 

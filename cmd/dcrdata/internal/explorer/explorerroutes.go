@@ -59,7 +59,6 @@ type CommonPageData struct {
 	Version       string
 	ChainParams   *chaincfg.Params
 	BlockTimeUnix int64
-	ServerTime    int64 // time.Now().Unix() at render — used by the client to compute clock-skew-free block ages
 	Links         *links
 	NetName       string
 	Cookies       Cookies
@@ -2441,7 +2440,6 @@ func (exp *explorerUI) commonData(r *http.Request) *CommonPageData {
 		Version:       exp.Version,
 		ChainParams:   exp.ChainParams,
 		BlockTimeUnix: int64(exp.ChainParams.TargetTimePerBlock.Seconds()),
-		ServerTime:    time.Now().Unix(),
 		NetName:       exp.NetName,
 		Links:         explorerLinks,
 		Cookies: Cookies{

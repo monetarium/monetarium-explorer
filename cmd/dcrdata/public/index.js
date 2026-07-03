@@ -2,7 +2,6 @@
 import { Application } from '@hotwired/stimulus'
 import { definitionsFromContext } from '@hotwired/stimulus-webpack-helpers'
 import 'regenerator-runtime/runtime'
-import humanize from './js/helpers/humanize_helper'
 import { notificationPermission } from './js/helpers/notification_helper'
 import globalEventBus from './js/services/event_bus_service'
 import ws from './js/services/messagesocket_service'
@@ -25,10 +24,6 @@ document.addEventListener('turbo:load', (_e) => {
   document.querySelectorAll('.jsonly').forEach((el) => {
     el.classList.remove('jsonly')
   })
-  // Refresh server time offset on every page load (including Turbo visits) so block ages
-  // are computed relative to server wall-clock, not the potentially-skewed client clock.
-  const st = document.body && document.body.dataset.serverTime
-  if (st) humanize.setServerTime(parseInt(st, 10))
 })
 
 export function notifyNewBlock(newBlock) {

@@ -1,13 +1,5 @@
 // For all your value formatting needs...
 
-// Clock-skew correction: difference between server wall-clock and client wall-clock at page load
-// (serverUnix - clientUnix). Added to Date.now()/1000 inside timeSince() so ages are computed
-// relative to server time, not the (possibly-skewed) client clock. Set via setServerTime() or
-// auto-initialized from <body data-server-time> on the first call to timeSince().
-let _serverInitialized = false
-let _serverOffset = 0
-let _serverTimeAtInit = 0 // guards against reinit with the same stale timestamp
-
 function logn(n, b) {
   return Math.log(n) / Math.log(b)
 }
@@ -230,29 +222,8 @@ const humanize = {
     const precision = val < 10 ? 1 : 0
     return `${val.toFixed(precision)} ${suffix}`
   },
-  // Override the reference "now" used by timeSince(). Pass the server's current Unix timestamp
-  // once at page load; timeSince will then compute ages relative to server time, compensating
-  // for client clock skew. Re-calling with the same timestamp is a no-op — a stale reinit
-  // (e.g. turbo:load on the same page) would recompute the offset with a later Date.now(),
-  // freezing ages at the page render time.
-  setServerTime: function (serverUnix) {
-    if (_serverInitialized && serverUnix === _serverTimeAtInit) return
-    _serverOffset = serverUnix - Math.floor(Date.now() / 1000)
-    _serverTimeAtInit = serverUnix
-    _serverInitialized = true
-  },
-
   timeSince: function (unixTime, keepOnly) {
-    if (!_serverInitialized) {
-      const st = document.body && document.body.dataset && document.body.dataset.serverTime
-      if (st) {
-        const serverUnix = parseInt(st, 10)
-        _serverOffset = serverUnix - Math.floor(Date.now() / 1000)
-        _serverTimeAtInit = serverUnix
-        _serverInitialized = true
-      }
-    }
-    const seconds = Math.max(0, Math.floor(Date.now() / 1000 + _serverOffset - unixTime))
+    const seconds = Math.max(0, Math.floor(Date.now() / 1000 - unixTime))
     let interval = Math.floor(seconds / 31536000)
     if (interval >= 1) {
       const extra = Math.floor((seconds - interval * 31536000) / 2628000)
