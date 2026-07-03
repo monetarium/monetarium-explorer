@@ -1,5 +1,10 @@
 // For all your value formatting needs...
 
+// Clock-skew correction: difference between server wall-clock and client wall-clock at page load
+// (serverUnix - clientUnix). Added to Date.now()/1000 inside timeSince() so ages are computed
+// relative to server time, not the (possibly-skewed) client clock. Set via setServerTime().
+let _serverOffset = 0
+
 function logn(n, b) {
   return Math.log(n) / Math.log(b)
 }
@@ -222,8 +227,15 @@ const humanize = {
     const precision = val < 10 ? 1 : 0
     return `${val.toFixed(precision)} ${suffix}`
   },
+  // Override the reference "now" used by timeSince(). Pass the server's current Unix timestamp
+  // once at page load; timeSince will then compute ages relative to server time, compensating
+  // for client clock skew. Safe to call any time — the offset is computed once per call.
+  setServerTime: function (serverUnix) {
+    _serverOffset = serverUnix - Math.floor(Date.now() / 1000)
+  },
+
   timeSince: function (unixTime, keepOnly) {
-    const seconds = Math.floor(new Date().getTime() / 1000 - unixTime)
+    const seconds = Math.floor(Date.now() / 1000 + _serverOffset - unixTime)
     let interval = Math.floor(seconds / 31536000)
     if (interval >= 1) {
       const extra = Math.floor((seconds - interval * 31536000) / 2628000)

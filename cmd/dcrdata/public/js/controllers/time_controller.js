@@ -13,6 +13,7 @@ export default class extends Controller {
   }
 
   connect() {
+    this._initServerTime()
     this.startAgeRefresh()
     this.processBlock = this._processBlock.bind(this)
     this.targetBlockTime = parseInt(document.getElementById('navBar').dataset.blocktime)
@@ -132,5 +133,10 @@ export default class extends Controller {
         el.textContent = humanize.timeSince(Date.parse(el.dataset.age) / 1000)
       }
     })
+  }
+
+  _initServerTime() {
+    const st = document.body && document.body.dataset.serverTime
+    if (st) humanize.setServerTime(parseInt(st, 10))
   }
 }

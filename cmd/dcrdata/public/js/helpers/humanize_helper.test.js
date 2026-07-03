@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import humanize from './humanize_helper'
 
 describe('humanize.formatCoinAtoms', () => {
@@ -241,6 +241,31 @@ describe('humanize.bytes', () => {
   // GB range
   it('formats 1000000000 as "1.0 GB"', () => expect(humanize.bytes(1000000000)).toBe('1.0 GB'))
   it('formats 10000000000 as "10 GB"', () => expect(humanize.bytes(10000000000)).toBe('10 GB'))
+})
+
+describe('humanize.timeSince with clock-skew correction', () => {
+  const SERVER_NOW = 1_700_000_000
+  const CLIENT_BEHIND = 1_600_000_000 // 100M seconds behind server
+  const BLOCK_TIME = 1_699_999_900 // 100 s old on the server
+
+  afterEach(() => {
+    vi.useRealTimers()
+    humanize.setServerTime(Math.floor(Date.now() / 1000))
+  })
+
+  it('shows negative age when client clock is behind server (no correction)', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(CLIENT_BEHIND * 1000))
+    // _serverOffset is 0 — not calling setServerTime → bug reproduces
+    expect(humanize.timeSince(BLOCK_TIME)).toBe('-99999900s')
+  })
+
+  it('shows correct age after setServerTime compensates for clock skew', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(CLIENT_BEHIND * 1000))
+    humanize.setServerTime(SERVER_NOW)
+    expect(humanize.timeSince(BLOCK_TIME)).toBe('\u00a01m 40s')
+  })
 })
 
 describe('humanize.decimalParts', () => {

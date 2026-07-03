@@ -44,7 +44,7 @@
 {{end}}
 
 {{define "navbar"}}
-<body class="{{ theme }}{{if .Cookies.DarkMode}} darkBG{{end}}" data-theme-color="{{ if eq theme "theme-testnet" }}#1d331a{{ else if eq theme "theme-simnet" }}#076191{{ else }}#ffffff{{ end }}">
+<body class="{{ theme }}{{if .Cookies.DarkMode}} darkBG{{end}}" data-theme-color="{{ if eq theme "theme-testnet" }}#1d331a{{ else if eq theme "theme-simnet" }}#076191{{ else }}#ffffff{{ end }}" data-server-time="{{.ServerTime}}">
 <header class="top-nav d-flex align-items-center" id="navBar" data-blocktime="{{.BlockTimeUnix}}">
 	<div class="container d-flex justify-content-between align-items-center">
 		<a class="no-underline d-block home-link monetarium-logo" href="/"></a>
