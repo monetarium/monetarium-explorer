@@ -6,6 +6,7 @@
 // auto-initialized from <body data-server-time> on the first call to timeSince().
 let _serverInitialized = false
 let _serverOffset = 0
+let _serverTimeAtInit = 0 // guards against reinit with the same stale timestamp
 
 function logn(n, b) {
   return Math.log(n) / Math.log(b)
@@ -231,9 +232,13 @@ const humanize = {
   },
   // Override the reference "now" used by timeSince(). Pass the server's current Unix timestamp
   // once at page load; timeSince will then compute ages relative to server time, compensating
-  // for client clock skew. Safe to call any time — the offset is computed once per call.
+  // for client clock skew. Re-calling with the same timestamp is a no-op — a stale reinit
+  // (e.g. turbo:load on the same page) would recompute the offset with a later Date.now(),
+  // freezing ages at the page render time.
   setServerTime: function (serverUnix) {
+    if (_serverInitialized && serverUnix === _serverTimeAtInit) return
     _serverOffset = serverUnix - Math.floor(Date.now() / 1000)
+    _serverTimeAtInit = serverUnix
     _serverInitialized = true
   },
 
@@ -241,7 +246,9 @@ const humanize = {
     if (!_serverInitialized) {
       const st = document.body && document.body.dataset && document.body.dataset.serverTime
       if (st) {
-        _serverOffset = parseInt(st, 10) - Math.floor(Date.now() / 1000)
+        const serverUnix = parseInt(st, 10)
+        _serverOffset = serverUnix - Math.floor(Date.now() / 1000)
+        _serverTimeAtInit = serverUnix
         _serverInitialized = true
       }
     }
