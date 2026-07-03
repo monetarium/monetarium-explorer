@@ -135,6 +135,11 @@ export default class extends Controller {
     })
   }
 
+  // Called from connect() to set the clock-skew offset BEFORE our first setAges()
+  // fires (scheduled asynchronously via setTimeout(0) inside startAgeRefresh()). The
+  // turbo:load handler in index.js sets it too, but that fires after connect(), so the
+  // initial render would use offset=0 without this early call. The two calls are a few
+  // ms apart — harmless at second-level display precision.
   _initServerTime() {
     const st = document.body && document.body.dataset.serverTime
     if (st) humanize.setServerTime(parseInt(st, 10))
