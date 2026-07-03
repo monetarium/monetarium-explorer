@@ -296,10 +296,12 @@ export default class extends Controller {
     const xTime = this.settings.axis === 'time'
     const axisLabel = (renderDef.axes[0] && renderDef.axes[0].label) || ''
     const sig = `${renderDef.name}|${xTime}|${renderDef.series.length}|${axisLabel}`
-    if (this._defSig === sig && this._memoDef) return this._memoDef
+    const hit = this._defSig === sig && this._memoDef
+    if (hit) return this._memoDef
     this._defSig = sig
-    this._memoDef = renderDef
-    return renderDef
+    this._memoDef = { ...renderDef }
+
+    return this._memoDef
   }
 
   // chainwork/hashrate set a dynamic axis label; hashrate may drop its y2 series.

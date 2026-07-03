@@ -223,7 +223,7 @@ const humanize = {
     return `${val.toFixed(precision)} ${suffix}`
   },
   timeSince: function (unixTime, keepOnly) {
-    const seconds = Math.floor(new Date().getTime() / 1000 - unixTime)
+    const seconds = Math.max(0, Math.floor(Date.now() / 1000 - unixTime))
     let interval = Math.floor(seconds / 31536000)
     if (interval >= 1) {
       const extra = Math.floor((seconds - interval * 31536000) / 2628000)
