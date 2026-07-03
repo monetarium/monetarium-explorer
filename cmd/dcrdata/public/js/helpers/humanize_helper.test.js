@@ -253,11 +253,12 @@ describe('humanize.timeSince with clock-skew correction', () => {
     humanize.setServerTime(Math.floor(Date.now() / 1000))
   })
 
-  it('shows negative age when client clock is behind server (no correction)', () => {
+  it('clamps to 0s when the result would be negative (future-dated block)', () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date(CLIENT_BEHIND * 1000))
-    // _serverOffset is 0 — not calling setServerTime → bug reproduces
-    expect(humanize.timeSince(BLOCK_TIME)).toBe('-99999900s')
+    humanize.setServerTime(SERVER_NOW)
+    // Block timestamp is 100s ahead of server now → seconds would be -100 → clamped to 0
+    expect(humanize.timeSince(BLOCK_TIME + 200)).toBe('\u00a00s')
   })
 
   it('shows correct age after setServerTime compensates for clock skew', () => {
