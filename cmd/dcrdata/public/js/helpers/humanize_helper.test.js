@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import humanize from './humanize_helper'
 
 describe('humanize.formatCoinAtoms', () => {
@@ -241,6 +241,26 @@ describe('humanize.bytes', () => {
   // GB range
   it('formats 1000000000 as "1.0 GB"', () => expect(humanize.bytes(1000000000)).toBe('1.0 GB'))
   it('formats 10000000000 as "10 GB"', () => expect(humanize.bytes(10000000000)).toBe('10 GB'))
+})
+
+describe('humanize.timeSince clamps to 0', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('clamps negative result to 0s (clock skew / future-dated block)', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(1_600_000_000_000)) // client clock = 1_600_000_000
+    // Block timestamp is ahead of client clock → would be negative without clamp
+    expect(humanize.timeSince(1_700_000_000)).toBe('\u00a00s')
+  })
+
+  it('still shows correct positive ages', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(1_700_000_100_000))
+    // Block is 100 seconds old
+    expect(humanize.timeSince(1_700_000_000)).toBe('\u00a01m 40s')
+  })
 })
 
 describe('humanize.decimalParts', () => {
