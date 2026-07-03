@@ -389,6 +389,30 @@ describe('ChartsController def memoization', () => {
     const relabeled = { ...base, axes: [{ label: 'B' }] }
     expect(c.memoizedDef(relabeled)).not.toBe(a)
   })
+
+  it('an axis flip (time ↔ height) forces a new def reference (xTime in sig)', async () => {
+    const c = makeController()
+    await c.connect()
+    c.payload = {}
+    const base = {
+      name: 'demo',
+      axes: [{ label: 'A' }],
+      series: [{ label: 'S', kind: 'line' }],
+      toColumns: () => [[1], [2]],
+      formatValue: () => ''
+    }
+    const timeA = c.memoizedDef(base)
+    c.settings.axis = 'height'
+    const heightB = c.memoizedDef(base)
+    expect(heightB).not.toBe(timeA)
+    const heightB2 = c.memoizedDef(base)
+    expect(heightB2).toBe(heightB)
+    c.settings.axis = 'time'
+    const timeC = c.memoizedDef(base)
+    expect(timeC).not.toBe(timeA)
+    const timeC2 = c.memoizedDef(base)
+    expect(timeC2).toBe(timeC)
+  })
 })
 
 describe('ChartsController zoom target', () => {
