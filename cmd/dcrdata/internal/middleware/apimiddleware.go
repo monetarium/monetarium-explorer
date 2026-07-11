@@ -544,6 +544,20 @@ func CacheControl(maxAge int64) func(http.Handler) http.Handler {
 	}
 }
 
+// CacheControlImmutable creates a new middleware to set the HTTP response header
+// with "Cache-Control: public, max-age=maxAge, immutable" where maxAge is in
+// seconds. This is intended for content-hashed static assets whose bytes never
+// change under a given URL, allowing clients to cache them without
+// revalidation.
+func CacheControlImmutable(maxAge int64) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Cache-Control", "public, max-age="+strconv.FormatInt(maxAge, 10)+", immutable")
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 // Indent creates a middleware for using the specified JSON indentation string
 // when the "indent" URL query parameter parses to a true boolean value. Use
 // GetIndentCtx with request handlers with the Indent middleware.
