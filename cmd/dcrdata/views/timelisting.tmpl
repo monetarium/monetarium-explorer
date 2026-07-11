@@ -6,7 +6,7 @@
 {{template "html-head" headData .CommonPageData (printf "Monetarium %s List" .TimeGrouping)}}
     {{template "navbar" . }}
     {{template "blocksBanner" .}}
-    <div class="container main" data-controller="time pagenavigation">
+    <main class="container main" data-controller="time pagenavigation">
         {{$count := (int64 (len .Data))}}
         <div class="px-1 mb-1">
             {{if gt $count 0}}
@@ -143,7 +143,7 @@
           </div>
           {{end}}
         </div>
-    </div>
+    </main>
 
 {{ template "footer" . }}
 

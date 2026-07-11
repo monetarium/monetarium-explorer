@@ -3,7 +3,7 @@
 <html lang="en">
 {{template "html-head" headData .CommonPageData "Dev — Indicator Fixtures"}}
 {{template "navbar" .}}
-<div class="container main py-3">
+<main class="container main py-3">
     <h2 class="my-3">Mempool fill indicator — visual fixtures</h2>
     <p class="text-muted">
         Hand-crafted scenarios for the per-coin mempool fill indicators.
@@ -20,7 +20,7 @@
         {{template "mempoolCard" .}}
     </section>
     {{end}}
-</div>
+</main>
 {{template "footer" .}}
 </html>
 {{- end}}

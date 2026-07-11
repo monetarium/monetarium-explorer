@@ -7,7 +7,7 @@
 {{template "html-head" headData .CommonPageData "Monetarium Windows List"}}
     {{template "navbar" . }}
     {{template "blocksBanner" .}}
-    <div data-controller="pagenavigation" class="container main">
+    <main data-controller="pagenavigation" class="container main">
         {{$windowsCount := (int64 (len .Data))}}
         <div class="px-1 mb-1">
             {{if gt $windowsCount 0}}
@@ -151,7 +151,7 @@
           </div>
         </div>
         {{end}}
-    </div>
+    </main>
 
 {{ template "footer" . }}
 

@@ -4,7 +4,7 @@
 {{template "html-head" headData .CommonPageData "Monetarium Hashrate Shares"}}
     {{template "navbar" . }}
 
-    <div data-controller="hashrate-shares" class="container main">
+    <main data-controller="hashrate-shares" class="container main">
 
         <div class="d-flex flex-wrap justify-content-center align-items-center chart-controls mb-1 mt-1">
             <div class="chart-control-wrapper me-2 mb-1">
@@ -105,7 +105,7 @@
                 <td class="position-relative clipboard hashrate-shares-addr" data-type="addr"></td>
             </tr>
         </template>
-    </div>
+    </main>
 
 {{ template "footer" . }}
 </body>

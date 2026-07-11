@@ -4,7 +4,7 @@
 {{template "html-head" headData .CommonPageData (printf "Monetarium Transaction %.20s..." .Data.TxID)}}
 {{template "navbar" . }}
 {{with .Data}}
-<div class="container main" data-controller="time tx" data-tx-txid="{{.TxID}}">
+<main class="container main" data-controller="time tx" data-tx-txid="{{.TxID}}">
 {{$isMempool := (eq .BlockHeight 0)}}
     <div class="row mx-2 my-2">
         <div class="col-24 bg-white p-3 p-sm-4 position-relative">
@@ -106,6 +106,7 @@
                           class="progress-bar rounded"
                           data-tx-target="progressBar"
                           role="progressbar"
+                          aria-label="Ticket maturity progress"
                           style="width:{{if eq .Confirmations 0}}0{{else}}{{percentage (subtract .Confirmations 1) .TicketInfo.TicketMaturity}}%{{end}};"
                           aria-valuenow="{{.Confirmations}}"
                           aria-valuemin="0"
@@ -147,6 +148,7 @@
                         class="progress-bar rounded"
                         data-tx-target="progressBar"
                         role="progressbar"
+                        aria-label="Confirmation maturity progress"
                         style="width: {{percentage  .Confirmations .Maturity}}%;"
                         aria-valuenow="{{.Confirmations}}"
                         aria-valuemin="0"
@@ -177,6 +179,7 @@
                           class="progress-bar rounded"
                           data-tx-target="progressBar"
                           role="progressbar"
+                          aria-label="Ticket expiration progress"
                           style="width: {{percentage (subtract .TicketInfo.TicketLiveBlocks 1) .TicketInfo.TicketExpiry}}%;"
                           aria-valuenow="{{subtract .TicketInfo.TicketLiveBlocks 1}}"
                           aria-valuemin="0"
@@ -443,7 +446,7 @@
     </div>
     {{end}}
     {{end}}
-</div>
+</main>
 {{end}}
 
 {{ template "footer" . }}

@@ -4,7 +4,7 @@
 {{template "html-head" headData .CommonPageData "Monetarium Mempool"}}
     {{template "navbar" . }}
         {{with .Mempool -}}
-        <div class="container main"
+        <main class="container main"
         data-controller="mempool time"
         data-mempool-target="mempool"
         {{template "mempoolDump" .}}
@@ -408,7 +408,7 @@
                   </div>
               </div>
             </div>
-        </div>
+        </main>
         {{- end}}
         {{ template "footer" . }}
     </body>
