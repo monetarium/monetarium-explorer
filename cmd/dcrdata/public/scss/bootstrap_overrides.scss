@@ -1,6 +1,14 @@
 /* bootstrap overrides */
 // try to customize via _variables.scss first before authoring an override
 
+// Bootstrap's .text-black-50 utility is rgba(0 0 0 / 50%), only 3.95:1 on
+// white — below the WCAG AA 4.5:1 minimum for body text. Darken it just enough
+// to pass (4.74:1). Needs !important to beat Bootstrap's own !important utility;
+// dark theme overrides this separately in themes.scss (higher specificity wins).
+.text-black-50 {
+  color: rgba(0 0 0 / 55%) !important;
+}
+
 .progress-bar {
   text-shadow: 1px 1px 0 #00000012;
   overflow: visible;

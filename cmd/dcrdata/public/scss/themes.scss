@@ -210,7 +210,9 @@ body.darkBG {
   }
 
   .text-black-50 {
-    color: rgba(255 255 255 / 50%) !important;
+    // 50% white on the dark card bg is 4.45:1 — just under WCAG AA; 55% clears
+    // it (matches the light-theme .text-black-50 bump in bootstrap_overrides).
+    color: rgba(255 255 255 / 55%) !important;
   }
 
   .text-green {
