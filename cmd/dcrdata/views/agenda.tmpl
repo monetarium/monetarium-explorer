@@ -4,7 +4,7 @@
     {{template "html-head" headData .CommonPageData "Monetarium Agenda Charts"}}
         {{template "navbar" .}}
         {{with .Ai}}
-        <div class="container main">
+        <main class="container main">
             <div class="row justify-content-between">
                 <div class="col-lg-14 col-sm-12 d-flex">
                     <a class="small ms-2" href="/agendas">All Agendas</a>
@@ -143,7 +143,7 @@
               <div data-agenda-target="voteChoicesByBlock" class="agenda-chart agenda-chart--block"></div>
               <div data-agenda-target="blockRanger" class="chart-ranger"></div>
             </div>
-        </div>
+        </main>
         {{end}}
         {{template "footer" . }}
     </body>

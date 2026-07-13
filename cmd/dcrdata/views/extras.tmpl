@@ -54,7 +54,7 @@
 <body class="{{ theme }}{{if .Cookies.DarkMode}} darkBG{{end}}" data-theme-color="{{ if eq theme "theme-testnet" }}#1d331a{{ else if eq theme "theme-simnet" }}#076191{{ else }}#ffffff{{ end }}">
 <header class="top-nav d-flex align-items-center" id="navBar" data-blocktime="{{.BlockTimeUnix}}">
 	<div class="container d-flex justify-content-between align-items-center">
-		<a class="no-underline d-block home-link monetarium-logo" href="/"></a>
+		<a class="no-underline d-block home-link monetarium-logo" href="/" aria-label="Monetarium home"></a>
 		<form
 			class="search-form"
 			role="search"
@@ -73,7 +73,7 @@
 				spellcheck="false"
 				autocomplete="off"
 			/>
-			<button class="search-bttn" type="submit"><span class="monicon-search"></span></button>
+			<button class="search-bttn" type="submit" aria-label="Search"><span class="monicon-search"></span></button>
 		</form>
 		<nav id="hamburger-menu" data-controller="menu" data-turbo-permanent>
 			<div id="menu-toggle">

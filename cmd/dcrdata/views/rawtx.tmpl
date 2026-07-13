@@ -3,7 +3,7 @@
 <html lang="en">
     {{template "html-head" headData .CommonPageData "Decode Raw Monetarium Transaction"}}
         {{template "navbar" . }}
-        <div class="container main" data-controller="rawtx">
+        <main class="container main" data-controller="rawtx">
             <h4 class="mb-2">Monetarium transaction to decode or broadcast</h4>
             <form>
                 <textarea
@@ -36,7 +36,7 @@
                 class="json-block mono pt-3 pe-3 pb-3 ps-3"
             >
             </pre>
-        </div>
+        </main>
         {{ template "footer" . }}
     </body>
 </html>

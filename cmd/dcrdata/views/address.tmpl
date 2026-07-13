@@ -7,7 +7,7 @@
     {{- with .Data}}
     {{- $TxnCount := add .TxnCount .NumUnconfirmed}}
     {{- $txType := .TxnType -}}
-    <div class="container main"
+    <main class="container main"
       data-controller="address newblock"
       data-address-offset="{{.Offset}}"
       data-address-dcraddress="{{.Address}}"
@@ -426,7 +426,7 @@
         </div>
     </div>
     {{- end}}{{/* if not .IsDummyAddress */}}
-  </div>{{/* container main */}}
+  </main>{{/* container main */}}
   {{- end}} {{/* with .Data */}}
   {{template "footer" . }}
 </body>

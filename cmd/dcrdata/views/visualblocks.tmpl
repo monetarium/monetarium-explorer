@@ -4,7 +4,7 @@
 {{ template "html-head" headData .CommonPageData "Monetarium Block Explorer"}}
     {{ template "navbar" . }}
 
-    <div
+    <main
         id="mainContainer"
         class="container py-1"
         data-controller="time"
@@ -255,7 +255,7 @@
             </div>
             <a class="no-underline d-block mt-4" data-visualBlocks-target="showmore" href="/blocks"><div class="showmore"><p>View BlockChain History</p></div></a>
         </div>
-    </div>
+    </main>
 
     {{ template "footer" . }}
 </body>

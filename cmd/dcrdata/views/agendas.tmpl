@@ -21,7 +21,7 @@
 <html lang="en">
     {{template "html-head" headData .CommonPageData "Consensus Deployment Agendas"}}
         {{template "navbar" .}}
-        <div class="container main pb-5" data-controller="agendas">
+        <main class="container main pb-5" data-controller="agendas">
             {{- /* PRIMARY INFO CARD. LISTS AGENDAS AND SHOWS RCI/SVI PROGRESS BARS */}}
             {{with .VotingSummary}}
             <div class="row">
@@ -74,6 +74,7 @@
                                 <div
                                     class="progress-bar rounded text-start"
                                     role="progressbar"
+                                    aria-label="Rule change interval progress"
                                     style="width: {{f32x100 .RCIProgress}}%;"
                                     aria-valuenow="{{.RCIMined}}"
                                     aria-valuemin="0"
@@ -89,6 +90,7 @@
                                 <div
                                     class="progress-bar rounded text-start"
                                     role="progressbar"
+                                    aria-label="Stake version interval progress"
                                     style="width: {{f32x100 .SVIProgress}}%;"
                                     aria-valuenow="{{.SVIMined}}"
                                     aria-valuemin="0"
@@ -258,7 +260,7 @@
                 </tbody>
             </table>
             {{end}}{{/* END TOP CURRENT VOTE SUMMARY SECTION */}}
-        </div>
+        </main>
         {{template "footer" . }}
     </body>
 </html>

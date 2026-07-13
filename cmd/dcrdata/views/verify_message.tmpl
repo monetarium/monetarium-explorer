@@ -3,7 +3,7 @@
 <html lang="en">
 {{template "html-head" headData .CommonPageData "Verify Message"}}
 {{template "navbar" . }}
-<div class="container main">
+<main class="container main">
     <h4 class="mb-2">Verify Message</h4>
     <div class="mb-1 fs15">
         <p>Use this form to verify that the private key for a certain address was used to sign a message.</p>
@@ -48,7 +48,7 @@
     <span class="border row border-danger m-3 p-3 fs-15 fw-bold rounded text-danger">Message not signed by address</span>
     {{- end -}}
     {{- end -}}
-</div>
+</main>
 {{ template "footer" . }}
 </body>
 </html>
