@@ -1,10 +1,17 @@
 /* keyboard navigation */
 .keys-hint {
-  color: gray;
+  // `gray` (#808080) is 3.95:1 on white; #6c757d meets WCAG AA (4.69:1).
+  color: #6c757d;
   font-size: 12px;
   position: relative;
   top: -3px;
   left: 9px;
+}
+
+// A dark-enough grey for white can't also pass on the dark surface behind the
+// hint, so give dark mode a light grey (#adb5bd ≈ 6.8:1 on the ~#2a2a2a hint bg).
+body.darkBG .keys-hint {
+  color: #adb5bd;
 }
 
 .keys-hint .arrows {

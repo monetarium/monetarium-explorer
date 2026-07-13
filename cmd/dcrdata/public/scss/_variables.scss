@@ -83,6 +83,11 @@ $coin-ska-primary: #80868b;
 $sub-row-anchor-color: #c8d0d8;
 
 // links
+// Bootstrap derives link color from $primary ($blue #007bff), which is only
+// 3.98:1 on white — below WCAG AA 4.5:1. Set the link text color explicitly to
+// a slightly deeper blue (5.37:1) without darkening $primary itself, so button
+// backgrounds (white-on-blue, large text, 3:1 threshold) are left unchanged.
+$link-color: #0067d6;
 $link-decoration: none;
 $link-hover-decoration: underline;
 $dark-link-hover-color: #94ffca;
