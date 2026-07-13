@@ -38,6 +38,13 @@
 	<meta name="turbo-cache-control" content="no-cache">
 	<title>{{.Title}}</title>
 
+	{{/* Preload the above-the-fold web fonts so text (including the LCP element)
+	     is not blocked waiting for the stylesheet to be parsed first. The
+	     crossorigin attribute is required for font preloads even same-origin,
+	     because fonts are fetched in CORS mode. */ -}}
+	<link rel="preload" href="/fonts/source-sans-pro-v9-latin-regular.woff2" as="font" type="font/woff2" crossorigin>
+	<link rel="preload" href="/fonts/source-sans-pro-semibold.woff2" as="font" type="font/woff2" crossorigin>
+
 	<link href="{{asset "app.css"}}" rel="stylesheet">
 
 </head>
