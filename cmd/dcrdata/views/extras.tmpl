@@ -47,6 +47,8 @@
 
 	<link href="{{asset "app.css"}}" rel="stylesheet">
 
+	<script src="{{asset "js/4.bundle.js"}}" data-turbo-eval="false" defer></script>
+	<script src="{{asset "app.js"}}" data-turbo-eval="false" defer></script>
 </head>
 {{end}}
 
@@ -162,16 +164,6 @@
 			><span class="d-none d-sm-inline" data-connection-target="status">Connecting <span class="d-none d-md-inline-block">to WebSocket...</span></span><div></div>
 		</span>
 	</div>
-	<script
-		src="{{asset "js/4.bundle.js"}}"
-		data-turbo-eval="false"
-		defer
-	></script>
-	<script
-		src="{{asset "app.js"}}"
-		data-turbo-eval="false"
-		defer
-	></script>
 </footer>
 {{end}}
 
