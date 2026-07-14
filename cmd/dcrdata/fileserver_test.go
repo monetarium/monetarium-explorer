@@ -93,8 +93,8 @@ func TestFileServerCompression(t *testing.T) {
 	FileServer(mux, "/dist", dir, 31536000, true)
 
 	// assertGzipRoundTrip fetches path with gzip support and checks that the
-	// response is gzip-encoded, varies on Accept-Encoding, and decodes back to
-	// the original bytes.
+	// response is gzip-encoded, varies on Accept-Encoding, does not advertise
+	// byte ranges, and decodes back to the original bytes.
 	assertGzipRoundTrip := func(t *testing.T, path string, want []byte) {
 		t.Helper()
 		rec := httptest.NewRecorder()
@@ -110,6 +110,12 @@ func TestFileServerCompression(t *testing.T) {
 		// decode them.
 		if got := rec.Header().Get("Vary"); !strings.Contains(got, "Accept-Encoding") {
 			t.Errorf("Vary = %q, want it to contain %q", got, "Accept-Encoding")
+		}
+		// A gzip-encoded response must not advertise Accept-Ranges: a later
+		// byte-range request is answered from the uncompressed file, whose
+		// offsets don't line up with the gzip stream the client already holds.
+		if got := rec.Header().Get("Accept-Ranges"); got != "" {
+			t.Errorf("Accept-Ranges = %q, want empty on a gzip-encoded response", got)
 		}
 		gr, err := gzip.NewReader(rec.Body)
 		if err != nil {
@@ -140,6 +146,32 @@ func TestFileServerCompression(t *testing.T) {
 
 		if got := rec.Header().Get("Content-Encoding"); got != "" {
 			t.Errorf("Content-Encoding = %q, want empty (already-compressed binary must not be re-compressed)", got)
+		}
+		// The binary must be served byte-for-byte untouched, not merely with a
+		// blank Content-Encoding.
+		if got := rec.Body.Bytes(); !bytes.Equal(got, woff2) {
+			t.Errorf("served body (%d bytes) does not match original woff2 (%d bytes)", len(got), len(woff2))
+		}
+		// An uncompressed asset keeps its byte-range advertisement; only the
+		// gzip'ed representation drops it.
+		if got := rec.Header().Get("Accept-Ranges"); got != "bytes" {
+			t.Errorf("Accept-Ranges = %q, want %q for an uncompressed asset", got, "bytes")
+		}
+	})
+
+	// Without an Accept-Encoding: gzip request header, even a compressible asset
+	// must be served identity (uncompressed) so a client that cannot decode gzip
+	// gets a usable body.
+	t.Run("css asset is not compressed without Accept-Encoding", func(t *testing.T) {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/dist/asset.css", nil)
+		mux.ServeHTTP(rec, req)
+
+		if got := rec.Header().Get("Content-Encoding"); got != "" {
+			t.Errorf("Content-Encoding = %q, want empty when the client does not advertise gzip", got)
+		}
+		if got := rec.Body.Bytes(); !bytes.Equal(got, css) {
+			t.Errorf("served body (%d bytes) does not match original css (%d bytes)", len(got), len(css))
 		}
 	})
 
