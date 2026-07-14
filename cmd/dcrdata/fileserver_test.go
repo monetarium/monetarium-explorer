@@ -142,4 +142,29 @@ func TestFileServerCompression(t *testing.T) {
 			t.Errorf("Content-Encoding = %q, want empty (already-compressed binary must not be re-compressed)", got)
 		}
 	})
+
+	// A ranged request to a compressible asset must not be gzip-encoded: the
+	// 206 Content-Range describes offsets into the uncompressed file, which
+	// cannot be reconciled with a gzip'ed body (RFC 7233). It must serve the
+	// exact requested byte slice, uncompressed.
+	t.Run("range request to css asset is not compressed", func(t *testing.T) {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/dist/asset.css", nil)
+		req.Header.Set("Accept-Encoding", "gzip")
+		req.Header.Set("Range", "bytes=0-9")
+		mux.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusPartialContent {
+			t.Errorf("status = %d, want %d (206)", rec.Code, http.StatusPartialContent)
+		}
+		if got := rec.Header().Get("Content-Encoding"); got != "" {
+			t.Errorf("Content-Encoding = %q, want empty for a ranged response", got)
+		}
+		if cr := rec.Header().Get("Content-Range"); cr == "" {
+			t.Errorf("Content-Range header missing on 206 response")
+		}
+		if got := rec.Body.Bytes(); !bytes.Equal(got, css[:10]) {
+			t.Errorf("body = %q, want the first 10 uncompressed bytes %q", got, css[:10])
+		}
+	})
 }

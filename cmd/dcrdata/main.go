@@ -1221,5 +1221,22 @@ func FileServer(r chi.Router, pathRoot, fsRoot string, cacheControlMaxAge int64,
 	// efficient even when no compressing reverse proxy sits in front of us. The
 	// middleware selects by response Content-Type, so already-compressed binary
 	// assets (woff2 fonts, PNGs) are left untouched.
-	r.With(cacheMW, middleware.Compress(5)).Get(muxRoot, hf)
+	//
+	// Range requests are served uncompressed: http.ServeFile answers them with a
+	// 206 whose Content-Range refers to offsets in the uncompressed file, which
+	// cannot be reconciled with an independently gzip'ed body (RFC 7233).
+	// Skipping compression here keeps ranged responses valid, matching how
+	// reverse proxies (e.g. nginx) disable gzip for ranged responses.
+	compress := middleware.Compress(5)
+	compressExceptRange := func(next http.Handler) http.Handler {
+		compressed := compress(next)
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Header.Get("Range") != "" {
+				next.ServeHTTP(w, r)
+				return
+			}
+			compressed.ServeHTTP(w, r)
+		})
+	}
+	r.With(cacheMW, compressExceptRange).Get(muxRoot, hf)
 }
