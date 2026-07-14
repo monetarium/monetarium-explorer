@@ -1217,5 +1217,9 @@ func FileServer(r chi.Router, pathRoot, fsRoot string, cacheControlMaxAge int64,
 	if immutable {
 		cacheMW = mw.CacheControlImmutable(cacheControlMaxAge)
 	}
-	r.With(cacheMW).Get(muxRoot, hf)
+	// Compress compressible text assets (CSS, JS, SVG, JSON, ...) so delivery is
+	// efficient even when no compressing reverse proxy sits in front of us. The
+	// middleware selects by response Content-Type, so already-compressed binary
+	// assets (woff2 fonts, PNGs) are left untouched.
+	r.With(cacheMW, middleware.Compress(5)).Get(muxRoot, hf)
 }
