@@ -3,7 +3,7 @@
 <html lang="en">
     {{ template "html-head" headData .CommonPageData "Monetarium Chain Parameters"}}
         {{template "navbar" . }}
-        <div class="container main">
+        <main class="container main">
             <div class="row justify-content-between">
                 <div class="col-lg-14 col-sm-12 d-flex">
                     <h4 class="mb-2">Parameters for Monetarium {{.ChainParams.Name}}
@@ -394,7 +394,7 @@
                     {{end}}
                 </div>
             </div>
-        </div>
+        </main>
         {{ template "footer" . }}
     </body>
 </html>

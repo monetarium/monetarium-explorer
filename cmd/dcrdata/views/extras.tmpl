@@ -38,8 +38,17 @@
 	<meta name="turbo-cache-control" content="no-cache">
 	<title>{{.Title}}</title>
 
+	{{/* Preload the above-the-fold web fonts so text (including the LCP element)
+	     is not blocked waiting for the stylesheet to be parsed first. The
+	     crossorigin attribute is required for font preloads even same-origin,
+	     because fonts are fetched in CORS mode. */ -}}
+	<link rel="preload" href="/fonts/source-sans-pro-v9-latin-regular.woff2" as="font" type="font/woff2" crossorigin>
+	<link rel="preload" href="/fonts/source-sans-pro-semibold.woff2" as="font" type="font/woff2" crossorigin>
+
 	<link href="{{asset "app.css"}}" rel="stylesheet">
 
+	<script src="{{asset "js/4.bundle.js"}}" data-turbo-eval="false" defer></script>
+	<script src="{{asset "app.js"}}" data-turbo-eval="false" defer></script>
 </head>
 {{end}}
 
@@ -47,7 +56,7 @@
 <body class="{{ theme }}{{if .Cookies.DarkMode}} darkBG{{end}}" data-theme-color="{{ if eq theme "theme-testnet" }}#1d331a{{ else if eq theme "theme-simnet" }}#076191{{ else }}#ffffff{{ end }}">
 <header class="top-nav d-flex align-items-center" id="navBar" data-blocktime="{{.BlockTimeUnix}}">
 	<div class="container d-flex justify-content-between align-items-center">
-		<a class="no-underline d-block home-link monetarium-logo" href="/"></a>
+		<a class="no-underline d-block home-link monetarium-logo" href="/" aria-label="Monetarium home"></a>
 		<form
 			class="search-form"
 			role="search"
@@ -66,7 +75,7 @@
 				spellcheck="false"
 				autocomplete="off"
 			/>
-			<button class="search-bttn" type="submit"><span class="monicon-search"></span></button>
+			<button class="search-bttn" type="submit" aria-label="Search"><span class="monicon-search"></span></button>
 		</form>
 		<nav id="hamburger-menu" data-controller="menu" data-turbo-permanent>
 			<div id="menu-toggle">
@@ -155,16 +164,6 @@
 			><span class="d-none d-sm-inline" data-connection-target="status">Connecting <span class="d-none d-md-inline-block">to WebSocket...</span></span><div></div>
 		</span>
 	</div>
-	<script
-		src="{{asset "js/4.bundle.js"}}"
-		data-turbo-eval="false"
-		defer
-	></script>
-	<script
-		src="{{asset "app.js"}}"
-		data-turbo-eval="false"
-		defer
-	></script>
 </footer>
 {{end}}
 

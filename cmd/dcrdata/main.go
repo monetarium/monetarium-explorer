@@ -679,11 +679,15 @@ func _main(ctx context.Context) error {
 		})
 
 		cacheControlMaxAge := int64(cfg.CacheControlMaxAge)
-		FileServer(webMux, pathPrefix+"js", "./public/js", cacheControlMaxAge)
-		FileServer(webMux, pathPrefix+"css", "./public/css", cacheControlMaxAge)
-		FileServer(webMux, pathPrefix+"fonts", "./public/fonts", cacheControlMaxAge)
-		FileServer(webMux, pathPrefix+"images", "./public/images", cacheControlMaxAge)
-		FileServer(webMux, pathPrefix+"dist", "./public/dist", cacheControlMaxAge)
+		distCacheControlMaxAge := int64(defaultDistCacheControlMaxAge)
+		FileServer(webMux, pathPrefix+"js", "./public/js", cacheControlMaxAge, false)
+		FileServer(webMux, pathPrefix+"css", "./public/css", cacheControlMaxAge, false)
+		FileServer(webMux, pathPrefix+"fonts", "./public/fonts", cacheControlMaxAge, false)
+		FileServer(webMux, pathPrefix+"images", "./public/images", cacheControlMaxAge, false)
+		// The dist directory holds webpack content-hashed bundles whose URLs
+		// change whenever their contents change, so they are safe to cache
+		// long-term as immutable.
+		FileServer(webMux, pathPrefix+"dist", "./public/dist", distCacheControlMaxAge, true)
 	}
 	// Mount under root (e.g. /js, /css, etc.).
 	mountAssetPaths("/")
@@ -1153,8 +1157,10 @@ func listenAndServeProto(ctx context.Context, wg *sync.WaitGroup, listen, proto 
 
 // FileServer conveniently sets up a http.FileServer handler to serve static
 // files from path on the file system. Directory listings are denied, as are URL
-// paths containing "..".
-func FileServer(r chi.Router, pathRoot, fsRoot string, cacheControlMaxAge int64) {
+// paths containing "..". When immutable is true, assets are served with an
+// "immutable" cache directive; this must only be used for content-hashed assets
+// whose bytes never change under a given URL.
+func FileServer(r chi.Router, pathRoot, fsRoot string, cacheControlMaxAge int64, immutable bool) {
 	if strings.ContainsAny(pathRoot, "{}*") {
 		panic("FileServer does not permit URL parameters.")
 	}
@@ -1207,5 +1213,9 @@ func FileServer(r chi.Router, pathRoot, fsRoot string, cacheControlMaxAge int64)
 	muxRoot += "*"
 
 	// Mount the http.HandlerFunc on the pathRoot.
-	r.With(mw.CacheControl(cacheControlMaxAge)).Get(muxRoot, hf)
+	cacheMW := mw.CacheControl(cacheControlMaxAge)
+	if immutable {
+		cacheMW = mw.CacheControlImmutable(cacheControlMaxAge)
+	}
+	r.With(cacheMW).Get(muxRoot, hf)
 }

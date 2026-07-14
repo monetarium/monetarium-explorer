@@ -47,17 +47,21 @@ var (
 	defaultDaemonRPCCertFile = filepath.Join(dcrdHomeDir, "rpc.cert")
 	defaultMaxLogZips        = 16
 
-	defaultHost                = "localhost"
-	defaultHTTPProfPath        = "/p"
-	defaultAPIProto            = "http"
-	defaultMainnetPort         = "7777"
-	defaultTestnetPort         = "17778"
-	defaultSimnetPort          = "17779"
-	defaultIndentJSON          = "   "
-	defaultCacheControlMaxAge  = 86400
-	defaultInsightReqRateLimit = 20.0
-	defaultMaxCSVAddrs         = 25
-	defaultServerHeader        = "monetarium-explorer"
+	defaultHost               = "localhost"
+	defaultHTTPProfPath       = "/p"
+	defaultAPIProto           = "http"
+	defaultMainnetPort        = "7777"
+	defaultTestnetPort        = "17778"
+	defaultSimnetPort         = "17779"
+	defaultIndentJSON         = "   "
+	defaultCacheControlMaxAge = 2592000 // 30 days, for non-hashed static assets (fonts, images)
+	// defaultDistCacheControlMaxAge is the cache lifetime (1 year, the max
+	// recommended value) applied to webpack content-hashed assets under /dist,
+	// which are served as immutable since their URL changes with their contents.
+	defaultDistCacheControlMaxAge = 31536000
+	defaultInsightReqRateLimit    = 20.0
+	defaultMaxCSVAddrs            = 25
+	defaultServerHeader           = "monetarium-explorer"
 
 	defaultMempoolMinInterval = 2
 	defaultMempoolMaxInterval = 120
