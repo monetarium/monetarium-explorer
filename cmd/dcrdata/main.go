@@ -1155,6 +1155,43 @@ func listenAndServeProto(ctx context.Context, wg *sync.WaitGroup, listen, proto 
 	time.Sleep(250 * time.Millisecond)
 }
 
+// staticCompressor gzips compressible text assets (CSS, JS, SVG, JSON, ...) so
+// static-asset delivery is efficient even when no compressing reverse proxy
+// sits in front of the explorer. It selects by response Content-Type, leaving
+// already-compressed binary assets (woff2 fonts, PNGs) untouched. A single
+// instance is shared across every FileServer mount so its gzip encoder pools
+// are reused rather than reallocated per mount.
+var staticCompressor = middleware.Compress(5)
+
+// dropAcceptRangesWhenEncoded suppresses the "Accept-Ranges: bytes"
+// advertisement on responses that end up content-encoded (gzip). http.ServeFile
+// always advertises byte-range support, but our compress path only gzips full
+// 200 responses while ranged requests are answered uncompressed from the file's
+// byte offsets (see FileServer). Byte ranges taken against the gzip
+// representation therefore would not line up with the identity bytes a range
+// request returns, so a resumable-download client could corrupt the asset.
+// Dropping the advertisement on the compressed representation stops clients from
+// attempting such ranges — the same thing nginx does when it gzips a response.
+type dropAcceptRangesWhenEncoded struct {
+	http.ResponseWriter
+}
+
+func (w *dropAcceptRangesWhenEncoded) WriteHeader(status int) {
+	if w.Header().Get("Content-Encoding") != "" {
+		w.Header().Del("Accept-Ranges")
+	}
+	w.ResponseWriter.WriteHeader(status)
+}
+
+// Flush forwards to the underlying writer so wrapping does not hide the
+// http.Flusher that chi's compress middleware looks for on the writer beneath
+// it.
+func (w *dropAcceptRangesWhenEncoded) Flush() {
+	if f, ok := w.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
 // FileServer conveniently sets up a http.FileServer handler to serve static
 // files from path on the file system. Directory listings are denied, as are URL
 // paths containing "..". When immutable is true, assets are served with an
@@ -1217,5 +1254,26 @@ func FileServer(r chi.Router, pathRoot, fsRoot string, cacheControlMaxAge int64,
 	if immutable {
 		cacheMW = mw.CacheControlImmutable(cacheControlMaxAge)
 	}
-	r.With(cacheMW).Get(muxRoot, hf)
+	// Compress compressible text assets so delivery is efficient even when no
+	// compressing reverse proxy sits in front of us (see staticCompressor).
+	//
+	// Range requests are served uncompressed: http.ServeFile answers them with a
+	// 206 whose Content-Range refers to offsets in the uncompressed file, which
+	// cannot be reconciled with an independently gzip'ed body (RFC 7233).
+	// Skipping compression here keeps ranged responses valid, matching how
+	// reverse proxies (e.g. nginx) disable gzip for ranged responses. On the
+	// compressed path we also strip the Accept-Ranges advertisement so clients
+	// never attempt a byte-range resume against the gzip representation (see
+	// dropAcceptRangesWhenEncoded).
+	compressExceptRange := func(next http.Handler) http.Handler {
+		compressed := staticCompressor(next)
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Header.Get("Range") != "" {
+				next.ServeHTTP(w, r)
+				return
+			}
+			compressed.ServeHTTP(&dropAcceptRangesWhenEncoded{ResponseWriter: w}, r)
+		})
+	}
+	r.With(cacheMW, compressExceptRange).Get(muxRoot, hf)
 }
