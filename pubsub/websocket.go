@@ -234,7 +234,7 @@ func newClientID() uint64 {
 // to the new client data object. Use UnregisterClient on this object to stop
 // signaling messages, and close the signal channel.
 func (wsh *WebsocketHub) NewClientHubSpoke() *clientHubSpoke {
-	c := make(hubSpoke, 16)
+	c := make(hubSpoke, 64)
 	ch := &clientHubSpoke{
 		cl: newClient(),
 		c:  &c,
@@ -387,19 +387,12 @@ func (wsh *WebsocketHub) Run() {
 
 	// Only use sendMsg and sendToAll from inside the loop.
 	sendMsg := func(spoke *hubSpoke, client *client, hubMsg pstypes.HubMessage) {
-		// Signal or unregister the client.
-		timer := time.NewTimer(5 * time.Second)
 		select {
-		case <-client.killed:
-			log.Tracef("Unable to send %s message to client %d: gone (killed)",
-				hubMsg, client.id)
-			wsh.unregisterClient(spoke)
 		case *spoke <- hubMsg:
 			log.Tracef("Sent %s message to client %d.", hubMsg, client.id)
-		case <-timer.C:
-			// TODO: remove this case (and timer) once we are
-			// confident there is no change of a deadlock.
-			log.Errorf("Timeout sending %s message to client %d.", hubMsg, client.id)
+		default:
+			wsh.unregisterClient(spoke)
+			log.Warnf("Client %d is too slow; unregistered.", client.id)
 		}
 	}
 

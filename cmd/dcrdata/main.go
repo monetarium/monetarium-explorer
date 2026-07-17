@@ -1106,10 +1106,12 @@ func connectNodeRPC(cfg *config, ntfnHandlers *rpcclient.NotificationHandlers) (
 func listenAndServeProto(ctx context.Context, wg *sync.WaitGroup, listen, proto string, mux http.Handler) {
 	// Try to bind web server
 	server := http.Server{
-		Addr:         listen,
-		Handler:      mux,
-		ReadTimeout:  5 * time.Second,  // slow requests should not hold connections opened
-		WriteTimeout: 60 * time.Second, // hung responses must die
+		Addr:              listen,
+		Handler:           mux,
+		ReadTimeout:       5 * time.Second,  // slow requests should not hold connections opened
+		ReadHeaderTimeout: 10 * time.Second, // prevent slow-header attacks
+		WriteTimeout:      60 * time.Second, // hung responses must die
+		IdleTimeout:       30 * time.Second, // reap idle keep-alive connections
 	}
 
 	// Add the graceful shutdown to the waitgroup.

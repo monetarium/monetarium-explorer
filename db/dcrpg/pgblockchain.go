@@ -7432,8 +7432,8 @@ func (pgb *ChainDB) SignalHeight(height uint32) {
 		select {
 		case c <- height:
 		case <-time.NewTimer(time.Minute).C:
-			log.Criticalf("(*DBDataSaver).SignalHeight: heightClients[%d] timed out. Forcing a shutdown.", i)
-			pgb.shutdownDcrdata()
+			log.Errorf("(*DBDataSaver).SignalHeight: heightClients[%d] timed out. "+
+				"The receiver may have exited without closing the channel.", i)
 		}
 	}
 }
