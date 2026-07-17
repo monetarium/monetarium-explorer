@@ -213,7 +213,7 @@ func _main(ctx context.Context) error {
 
 	mpChecker := rpcutils.NewMempoolAddressChecker(dcrdClient, activeChain)
 	chainDB, err := dcrpg.NewChainDB(ctx, &dbCfg,
-		stakeDB, mpChecker, dcrdClient, requestShutdown)
+		stakeDB, mpChecker, dcrdClient)
 	if chainDB != nil {
 		defer chainDB.Close()
 	}

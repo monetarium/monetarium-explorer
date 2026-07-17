@@ -63,7 +63,7 @@ func openDB() (func() error, error) {
 		true, false, 24, 1024, 1 << 16,
 	}
 	var err error
-	db, err = NewChainDB(context.Background(), cfg, nil, nil, nil, func() {})
+	db, err = NewChainDB(context.Background(), cfg, nil, nil, nil)
 	cleanUp := func() error { return nil }
 	if db != nil {
 		cleanUp = db.Close

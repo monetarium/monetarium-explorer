@@ -479,7 +479,7 @@ const pgVerNumMin = 11_0000
 // and Decred network parameters. By default, duplicate row checks on insertion
 // are enabled. See EnableDuplicateCheckOnInsert to change this behavior.
 func NewChainDB(ctx context.Context, cfg *ChainDBCfg, stakeDB *stakedb.StakeDatabase,
-	mp rpcutils.MempoolAddressChecker, client *rpcclient.Client, shutdown func()) (*ChainDB, error) {
+	mp rpcutils.MempoolAddressChecker, client *rpcclient.Client) (*ChainDB, error) {
 	// Connect to the PostgreSQL daemon and return the *sql.DB.
 	dbi := cfg.DBi
 	db, err := Connect(dbi.Host, dbi.Port, dbi.User, dbi.Pass, dbi.DBName)
