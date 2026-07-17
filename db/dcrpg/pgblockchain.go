@@ -276,7 +276,6 @@ type ChainDB struct {
 	// in StoreBlock for quick retrieval without a DB query.
 	BlockCache        *apitypes.APICache
 	heightClients     []chan uint32
-	shutdownDcrdata   func()
 	Client            *rpcclient.Client
 	tipMtx            sync.Mutex
 	tipSummary        *apitypes.BlockDataBasic
@@ -725,7 +724,6 @@ func NewChainDB(ctx context.Context, cfg *ChainDBCfg, stakeDB *stakedb.StakeData
 		MPC:                new(mempool.DataCache),
 		BlockCache:         apitypes.NewAPICache(1e4),
 		heightClients:      make([]chan uint32, 0),
-		shutdownDcrdata:    shutdown,
 		Client:             client,
 	}
 	chainDB.lastExplorerBlock.difficulties = make(map[int64]float64)

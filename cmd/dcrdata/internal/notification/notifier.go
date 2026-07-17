@@ -328,7 +328,12 @@ func (notifier *Notifier) processBlock(bh *wire.BlockHeader) {
 
 	if handlerTimedOut {
 		log.Warnf("processBlock: handler deadline exceeded for block %d (%v), "+
-			"advancing previous block to prevent permanent chain desync",
+			"advancing previous block to prevent permanent chain desync. "+
+			"NOTE: timed-out handler goroutines keep running — they are not "+
+			"cancelled — so block N+1 handlers may run concurrently with "+
+			"stuck N handlers. This is a deliberate trade-off: a transient "+
+			"data race on shared state (DB, stakedb) is better than a "+
+			"permanent chain desync requiring restart.",
 			height, hash)
 	}
 
@@ -427,7 +432,9 @@ func (notifier *Notifier) signalReorg(d BranchTips) {
 
 	if handlerTimedOut {
 		log.Warnf("signalReorg: handler deadline exceeded for new chain head %s (%d), "+
-			"advancing previous block to prevent permanent chain desync",
+			"advancing previous block to prevent permanent chain desync. "+
+			"NOTE: timed-out handler goroutines keep running (not cancelled), "+
+			"so reorg handlers for N and N+1 may overlap on shared state.",
 			d.NewChainHead, d.NewChainHeight)
 	}
 

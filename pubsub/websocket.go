@@ -268,9 +268,15 @@ func (wsh *WebsocketHub) UnregisterClient(ch *clientHubSpoke) {
 	wsh.Unregister <- ch.c
 }
 
-// unregisterClient should only be called from the loop in run().
+// unregisterClient removes a client from the hub and closes its spoke
+// channel. Unlike unregisterAllClients, it does NOT wait for the client's
+// killed channel — the sendLoop may take minutes to drain a full buffer
+// (64 × 5s = 320s per wsjson.Write). Blocking on that from inside the
+// single-goroutine Run() loop would stall the entire hub, reintroducing
+// the exact deadlock this fix targets. The killed wait is instead collected
+// and waited on once, at shutdown, in unregisterAllClients.
 func (wsh *WebsocketHub) unregisterClient(c *hubSpoke) {
-	cl, ok := wsh.clients[c]
+	_, ok := wsh.clients[c]
 	if !ok {
 		// unknown client, do not close channel
 		log.Warnf("unknown client")
@@ -280,7 +286,6 @@ func (wsh *WebsocketHub) unregisterClient(c *hubSpoke) {
 	wsh.setNumClients(len(wsh.clients))
 
 	close(*c)
-	<-cl.killed
 }
 
 // unregisterAllClients should only be called from the loop in run() or when no
@@ -388,6 +393,10 @@ func (wsh *WebsocketHub) Run() {
 	// Only use sendMsg and sendToAll from inside the loop.
 	sendMsg := func(spoke *hubSpoke, client *client, hubMsg pstypes.HubMessage) {
 		select {
+		case <-client.killed:
+			log.Tracef("Unable to send %s message to client %d: gone (killed)",
+				hubMsg, client.id)
+			wsh.unregisterClient(spoke)
 		case *spoke <- hubMsg:
 			log.Tracef("Sent %s message to client %d.", hubMsg, client.id)
 		default:
