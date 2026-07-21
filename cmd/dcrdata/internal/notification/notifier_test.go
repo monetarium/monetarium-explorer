@@ -6,6 +6,7 @@ import (
 	"context"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/monetarium/monetarium-explorer/txhelpers"
 	"github.com/monetarium/monetarium-node/chaincfg/chainhash"
@@ -86,6 +87,48 @@ func testReorgHandler(reorg *txhelpers.ReorgData) error {
 	callCounter++
 	notifier.SetPreviousBlock(reorg.NewChainHead, uint32(reorg.NewChainHeight))
 	return nil
+}
+
+// TestProcessBlockAdvancesPreviousOnTimeout verifies that processBlock
+// always calls SetPreviousBlock even when a handler group exceeds the
+// SyncHandlerDeadline, preventing permanent chain desync.
+func TestProcessBlockAdvancesPreviousOnTimeout(t *testing.T) {
+	oldDeadline := SyncHandlerDeadline
+	SyncHandlerDeadline = 10 * time.Millisecond
+	defer func() { SyncHandlerDeadline = oldDeadline }()
+
+	n := NewNotifier()
+
+	// Register a handler that blocks forever.
+	blocked := make(chan struct{})
+	n.RegisterBlockHandlerGroup(func(_ *wire.BlockHeader) error {
+		<-blocked
+		return nil
+	})
+
+	prevBlock := newHash()
+	header := wire.BlockHeader{
+		PrevBlock: *prevBlock,
+		Height:    uint32(100),
+	}
+	n.previous.hash = *prevBlock
+
+	start := time.Now()
+	n.processBlock(&header)
+	elapsed := time.Since(start)
+
+	if elapsed > 5*time.Second {
+		t.Fatalf("processBlock took %v, expected << 5s (deadline was %v)", elapsed, SyncHandlerDeadline)
+	}
+
+	if n.previous.hash != header.BlockHash() {
+		t.Errorf("previous.hash not advanced after timeout: got %v, want %v",
+			n.previous.hash, header.BlockHash())
+	}
+	if n.previous.height != header.Height {
+		t.Errorf("previous.height not advanced after timeout: got %d, want %d",
+			n.previous.height, header.Height)
+	}
 }
 
 func TestNotifier(t *testing.T) {

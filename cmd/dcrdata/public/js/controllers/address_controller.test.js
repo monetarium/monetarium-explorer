@@ -125,43 +125,48 @@ function makeBtn(name, opts = {}) {
 }
 
 describe('address setButtonVisibility (active button survives a short range)', () => {
-  it('keeps the selected Group By button visible when the range is below its bin', () => {
+  it('keeps the selected zoom button visible when the range is below its threshold', () => {
     // 14 days of history (ms). Month threshold = Zoom.mapValue('month') = 2.628e9 ms, so a
-    // 14-day chartDuration (1.2096e9) is below it — without the guard the default/active
-    // "Month" Group By button would be hidden AND deselected (the SKA2 < 1-month bug).
+    // 14-day chartDuration (1.2096e9) is below it. However, a selected zoom button must
+    // survive the gate — hiding it would deselect the control, leaving it reading as empty.
     const c = makeRenderController('types', 0, {})
     c.xExtent = [0, 14 * 86400 * 1000]
-    const monthBin = makeBtn('month', { selected: true })
-    c.binputs = [
-      makeBtn('year'),
-      monthBin,
-      makeBtn('week'),
-      makeBtn('day', { fixed: true }),
-      makeBtn('all', { fixed: true })
-    ]
-    // Zoom set: "all" is the (fixed) active preset; Month is NOT selected here.
-    const zoomMonth = makeBtn('month')
-    c.zoomButtons = [makeBtn('all', { fixed: true, selected: true }), makeBtn('year'), zoomMonth]
+    const zoomMonth = makeBtn('month', { selected: true })
+    c.zoomButtons = [makeBtn('all', { fixed: true }), makeBtn('year'), zoomMonth]
+    c.binputs = []
 
     c.setButtonVisibility()
 
-    // The active Group By "Month" button stays visible and selected.
-    expect(monthBin.has('d-hide')).toBe(false)
-    expect(monthBin.has('btn-selected')).toBe(true)
-    // The unselected Zoom "Month" button still hides — zooming to a month with < 1 month
-    // of data is meaningless, so the duration gate correctly removes it.
-    expect(zoomMonth.has('d-hide')).toBe(true)
+    expect(zoomMonth.has('d-hide')).toBe(false)
+    expect(zoomMonth.has('btn-selected')).toBe(true)
   })
 
-  it('still hides a coarse bin button that is neither fixed nor selected', () => {
+  it('keeps a button visible when duration equals its threshold', () => {
+    // Exactly 1 day of data (ms). Day threshold = Zoom.mapValue('day') = 8.64e7 ms.
+    // With strict > the Day button would be hidden; with >= it stays visible. Week
+    // (6.048e8) is coarser so it still hides.
+    const c = makeRenderController('types', 0, {})
+    c.xExtent = [0, 86400000]
+    const zoomDay = makeBtn('day')
+    const zoomWeek = makeBtn('week')
+    c.zoomButtons = [makeBtn('all', { fixed: true, selected: true }), zoomWeek, zoomDay]
+    c.binputs = []
+    c.setButtonVisibility()
+    expect(zoomDay.has('d-hide')).toBe(false)
+    expect(zoomWeek.has('d-hide')).toBe(true)
+  })
+
+  it('keeps all Group By buttons visible regardless of chart duration', () => {
+    // Group By buttons control data aggregation, not zoom. They must always be
+    // available so the user can return to the default grouping at any time.
     const c = makeRenderController('types', 0, {})
     c.xExtent = [0, 14 * 86400 * 1000] // 14 days
-    const yearBin = makeBtn('year') // 14 days < 1 year, not selected → hide
-    const weekBin = makeBtn('week') // 14 days > 1 week → stays visible
+    const yearBin = makeBtn('year')
+    const weekBin = makeBtn('week')
     c.binputs = [yearBin, weekBin]
     c.zoomButtons = []
     c.setButtonVisibility()
-    expect(yearBin.has('d-hide')).toBe(true)
+    expect(yearBin.has('d-hide')).toBe(false)
     expect(weekBin.has('d-hide')).toBe(false)
   })
 })
