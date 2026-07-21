@@ -751,16 +751,13 @@ export default class extends Controller {
 
   setButtonVisibility() {
     const duration = this.chartDuration
-    const buttonSets = [this.zoomButtons, this.binputs]
+    const buttonSets = [this.zoomButtons]
     buttonSets.forEach((buttonSet) => {
       buttonSet.forEach((button) => {
         if (button.dataset.fixed) return
-        // Never hide the currently-selected button. It reflects the active zoom/bin, and
-        // hiding also deselects it — leaving the control reading as empty. The Group By
-        // default is "Month", so switching to a coin with < 1 month of history (e.g. a
-        // young SKA coin) would otherwise drop the Month button while the chart is still
-        // grouped by month. A selected button stays put regardless of the duration gate.
-        if (duration > Zoom.mapValue(button.name) || button.classList.contains('btn-selected')) {
+        // Never hide the currently-selected button. It reflects the active zoom, and
+        // hiding also deselects it — leaving the control reading as empty.
+        if (duration >= Zoom.mapValue(button.name) || button.classList.contains('btn-selected')) {
           button.classList.remove('d-hide')
         } else {
           button.classList.remove('btn-selected')
