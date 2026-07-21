@@ -305,14 +305,21 @@ loop:
 				exp.pageData.RLock()
 
 				block := exp.pageData.BlockInfo
+				bci := exp.pageData.BlockchainInfo
+				home := exp.pageData.HomeInfo
+				if block == nil || bci == nil || home == nil {
+					exp.pageData.RUnlock()
+					log.Debugf("websocket sigNewBlock skipped: page data not yet ready")
+					continue
+				}
 				// shallow copy to populate contract fields without mutating shared state
 				blockCopy := *block
 
-				issuedSKA := make([]uint8, 0, len(exp.pageData.HomeInfo.SKACoinSupply))
-				for _, entry := range exp.pageData.HomeInfo.SKACoinSupply {
+				issuedSKA := make([]uint8, 0, len(home.SKACoinSupply))
+				for _, entry := range home.SKACoinSupply {
 					issuedSKA = append(issuedSKA, entry.CoinType)
 				}
-				maxBlockSize := float64(exp.pageData.BlockchainInfo.MaxBlockSize)
+				maxBlockSize := float64(bci.MaxBlockSize)
 
 				trimmed := block.Trim(maxBlockSize, issuedSKA)
 				blockCopy.CoinFills = trimmed.CoinFills
