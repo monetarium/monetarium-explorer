@@ -622,6 +622,10 @@ func (psh *PubSubHub) WebSocketHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Clean up the client's subscriptions.
 	ch.cl.unsubscribeAll()
+
+	// Unregister the client from the hub immediately so it won't block
+	// future broadcasts.
+	psh.wsHub.UnregisterClient(ch)
 }
 
 // pingLoop sends an RFC 6455 ping every PingInterval and aborts the connection

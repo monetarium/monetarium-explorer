@@ -276,7 +276,6 @@ type ChainDB struct {
 	// in StoreBlock for quick retrieval without a DB query.
 	BlockCache        *apitypes.APICache
 	heightClients     []chan uint32
-	shutdownDcrdata   func()
 	Client            *rpcclient.Client
 	tipMtx            sync.Mutex
 	tipSummary        *apitypes.BlockDataBasic
@@ -480,7 +479,7 @@ const pgVerNumMin = 11_0000
 // and Decred network parameters. By default, duplicate row checks on insertion
 // are enabled. See EnableDuplicateCheckOnInsert to change this behavior.
 func NewChainDB(ctx context.Context, cfg *ChainDBCfg, stakeDB *stakedb.StakeDatabase,
-	mp rpcutils.MempoolAddressChecker, client *rpcclient.Client, shutdown func()) (*ChainDB, error) {
+	mp rpcutils.MempoolAddressChecker, client *rpcclient.Client) (*ChainDB, error) {
 	// Connect to the PostgreSQL daemon and return the *sql.DB.
 	dbi := cfg.DBi
 	db, err := Connect(dbi.Host, dbi.Port, dbi.User, dbi.Pass, dbi.DBName)
@@ -725,7 +724,6 @@ func NewChainDB(ctx context.Context, cfg *ChainDBCfg, stakeDB *stakedb.StakeData
 		MPC:                new(mempool.DataCache),
 		BlockCache:         apitypes.NewAPICache(1e4),
 		heightClients:      make([]chan uint32, 0),
-		shutdownDcrdata:    shutdown,
 		Client:             client,
 	}
 	chainDB.lastExplorerBlock.difficulties = make(map[int64]float64)
@@ -7432,8 +7430,8 @@ func (pgb *ChainDB) SignalHeight(height uint32) {
 		select {
 		case c <- height:
 		case <-time.NewTimer(time.Minute).C:
-			log.Criticalf("(*DBDataSaver).SignalHeight: heightClients[%d] timed out. Forcing a shutdown.", i)
-			pgb.shutdownDcrdata()
+			log.Errorf("(*DBDataSaver).SignalHeight: heightClients[%d] timed out. "+
+				"The receiver may have exited without closing the channel.", i)
 		}
 	}
 }

@@ -35,8 +35,9 @@ import (
 )
 
 // SyncHandlerDeadline is a hard deadline for handlers to finish handling before
-// an error is logged.
-const SyncHandlerDeadline = time.Minute * 5
+// an error is logged. Made a var (not const) so tests can inject a shorter
+// deadline.
+var SyncHandlerDeadline = time.Minute * 5
 
 // BranchTips describes the old and new chain tips involved in a reorganization.
 type BranchTips struct {
@@ -294,6 +295,7 @@ func (notifier *Notifier) processBlock(bh *wire.BlockHeader) {
 	}
 
 	start := time.Now()
+	handlerTimedOut := false
 	for _, handlers := range notifier.block {
 		wg := new(sync.WaitGroup)
 		for _, h := range handlers {
@@ -320,12 +322,25 @@ func (notifier *Notifier) processBlock(bh *wire.BlockHeader) {
 		case <-done:
 		case <-time.NewTimer(SyncHandlerDeadline).C:
 			log.Errorf("at least 1 block handler has not completed before the deadline")
-			return
+			handlerTimedOut = true
 		}
 	}
 	log.Debugf("handlers of Notifier.processBlock() completed in %v", time.Since(start))
 
-	// Record this block as the best block connected by the collectionQueue.
+	if handlerTimedOut {
+		log.Warnf("processBlock: handler deadline exceeded for block %d (%v), "+
+			"advancing previous block to prevent permanent chain desync. "+
+			"NOTE: timed-out handler goroutines keep running — they are not "+
+			"cancelled — so block N+1 handlers may run concurrently with "+
+			"stuck N handlers. This is a deliberate trade-off: a transient "+
+			"data race on shared state (DB, stakedb) is better than a "+
+			"permanent chain desync requiring restart.",
+			height, hash)
+	}
+
+	// Always advance previous block. If we skip this on timeout, the next
+	// block fails the PrevBlock check and is silently dropped, requiring
+	// a full restart to recover.
 	notifier.SetPreviousBlock(hash, height)
 }
 
@@ -388,6 +403,7 @@ func (notifier *Notifier) signalReorg(d BranchTips) {
 	}
 
 	start := time.Now()
+	handlerTimedOut := false
 	for i, handlers := range notifier.reorg {
 		wg := new(sync.WaitGroup)
 		for j, h := range handlers {
@@ -410,11 +426,20 @@ func (notifier *Notifier) signalReorg(d BranchTips) {
 		case <-done:
 		case <-time.NewTimer(SyncHandlerDeadline).C:
 			log.Errorf("at least 1 reorg handler has not completed before the deadline")
-			return
+			handlerTimedOut = true
 		}
 	}
 	log.Debugf("handlers of Notifier.signalReorg() completed in %v", time.Since(start))
 
-	// Update prevHash and prevHeight in collectionQueue.
+	if handlerTimedOut {
+		log.Warnf("signalReorg: handler deadline exceeded for new chain head %s (%d), "+
+			"advancing previous block to prevent permanent chain desync. "+
+			"NOTE: timed-out handler goroutines keep running (not cancelled), "+
+			"so reorg handlers for N and N+1 may overlap on shared state.",
+			d.NewChainHead, d.NewChainHeight)
+	}
+
+	// Always advance previous block on reorg, even on timeout, to prevent
+	// permanent chain desync requiring a restart.
 	notifier.SetPreviousBlock(d.NewChainHead, uint32(d.NewChainHeight))
 }
