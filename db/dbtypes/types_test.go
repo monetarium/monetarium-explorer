@@ -440,8 +440,8 @@ func TestTxTypeToString_MatchesDBExtensions(t *testing.T) {
 		dbValue int16
 		want    string
 	}{
-		{TxTypeBlockRewardPoS, "Stake Reward"},
-		{TxTypeBlockRewardPoW, "PoW Reward"},
+		{TxTypeBlockRewardPoS, "Miner Reward"},
+		{TxTypeBlockRewardPoW, "Miner Reward"},
 		{TxTypeSSFeePoS, "Stake Fee"},
 		{TxTypeSSFeePoW, "Stake Fee"},
 		{TxTypeTicketPurchase, "Ticket"},
