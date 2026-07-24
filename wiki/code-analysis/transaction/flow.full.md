@@ -65,7 +65,7 @@ The confirmed page is server-rendered once; it does **not** live-update over Web
   - The confirmed view uses a four-way branch for the fee/reward header cell (see Section 2 "Fee/Reward Display Path").
   - Fee rate display unified: `coinFeeRateDecimalParts .FeeRateRaw .CoinType` + `coinFeeRateUnit .CoinType` (replaces the old `.FeeRate`/`FeeRateRaw` split).
   - Vin rows: stakebase inputs now render "N/A" via `.IsStakeBase()` check (not just `AmountIn < 0`). This makes the Inputs Consumed table consistent with `.FeeReward()` which also skips stakebase.
-  - Coinbase type label shows "PoW Reward" (was raw `.Type`).
+  - Coinbase type label shows "Miner Reward" (was "PoW Reward", renamed from raw `.Type`).
   - USD conversion (`$conv`) blocks removed from tx page summary header.
   - `TicketInfo.PoolStatus` displayed on revocation pages.
 
