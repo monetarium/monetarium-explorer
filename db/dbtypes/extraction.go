@@ -247,7 +247,10 @@ func processTransactions(msgBlock *wire.MsgBlock, tree int8, chainParams *chainc
 				Mixed: ct == cointype.CoinTypeVAR && mixDenom > 0 && mixDenom == txout.Value,
 			}
 
-			// Coinbase outputs are split between index 0 and index > 0. Both go to the miner (not PoS).
+			// Coinbase vouts: index 0 tagged PoW, all others tagged PoS. In Decred this split
+			// mapped PoW-reward (miner) vs PoS-reward (stakers). In Monetarium all coinbase
+			// outputs go to the miner regardless of index; the two tags are kept for DB schema
+			// compatibility and both display as "Miner Reward".
 			if txhelpers.IsCoinBaseTx(tx) {
 				if io == 0 {
 					vout.TxType = TxTypeBlockRewardPoW
