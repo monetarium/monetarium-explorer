@@ -249,10 +249,10 @@ func processTransactions(msgBlock *wire.MsgBlock, tree int8, chainParams *chainc
 
 			// Coinbase vouts: index 0 tagged PoW, all others tagged PoS. In Decred this split
 			// mapped PoW-reward (miner) vs PoS-reward (stakers). In Monetarium the work
-			// subsidy (the miner reward) is at the last output; index 0 is a zero-value
-			// provably-pruneable output (no address, never credited in the addresses table).
-			// The two tags are kept for DB schema compatibility and both display as "Miner
-			// Reward" (re-labelled from the legacy names).
+			// subsidy (the miner reward) is at the last output (~index 2); index 0 is a
+			// zero-value provably-pruneable output (no address, never credited in the
+			// addresses table). The two tags are kept for DB schema compatibility and both
+			// display as "Miner Reward" (re-labelled from the legacy names).
 			if txhelpers.IsCoinBaseTx(tx) {
 				if io == 0 {
 					vout.TxType = TxTypeBlockRewardPoW
