@@ -21,7 +21,7 @@
             {{else}}
               <span class="fs22 monicon-coin-negative"></span>
             {{end}}
-            <span class="d-inline-block ps-1">{{if .Coinbase}}PoW Reward{{else}}{{.Type}}{{end}}</span>
+            <span class="d-inline-block ps-1">{{if .Coinbase}}Miner Reward{{else}}{{.Type}}{{end}}</span>
               <div class="d-inline-block confirmations-box{{if $.IsConfirmedMainchain}} confirmed{{end}} mx-2 fs14"
                 data-controller="newblock"
                 data-newblock-target="confirmations"

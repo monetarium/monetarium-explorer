@@ -247,7 +247,7 @@ func processTransactions(msgBlock *wire.MsgBlock, tree int8, chainParams *chainc
 				Mixed: ct == cointype.CoinTypeVAR && mixDenom > 0 && mixDenom == txout.Value,
 			}
 
-			// Coinbase outputs are split between PoW (index 0) and PoS (index > 0).
+			// Coinbase outputs are split between index 0 and index > 0. Both go to the miner (not PoS).
 			if txhelpers.IsCoinBaseTx(tx) {
 				if io == 0 {
 					vout.TxType = TxTypeBlockRewardPoW
