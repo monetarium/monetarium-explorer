@@ -1166,8 +1166,8 @@ const (
 	TxTypeRevocation  string = "Revocation"
 	TxTypeRegular     string = "Regular"
 	TxTypeSSFee       string = "Stake Fee"
-	TxTypeStakeReward string = "Stake Reward"
-	TxTypePoWReward   string = "PoW Reward"
+	TxTypeStakeReward string = "Miner Reward"
+	TxTypePoWReward   string = "Miner Reward"
 )
 
 // DB extension tx types mirroring db/dbtypes/types.go canonical constants.

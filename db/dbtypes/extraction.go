@@ -247,7 +247,12 @@ func processTransactions(msgBlock *wire.MsgBlock, tree int8, chainParams *chainc
 				Mixed: ct == cointype.CoinTypeVAR && mixDenom > 0 && mixDenom == txout.Value,
 			}
 
-			// Coinbase outputs are split between PoW (index 0) and PoS (index > 0).
+			// Coinbase vouts: index 0 tagged PoW, all others tagged PoS. In Decred this split
+			// mapped PoW-reward (miner) vs PoS-reward (stakers). In Monetarium the output
+			// order is: [0] zero-value treasury placeholder (no address), [1] OP_RETURN
+			// with block height / extra nonce (value=0, no address), [2+] work subsidy
+			// (the actual miner reward — the only output credited to an address). The two
+			// tags are kept for DB schema compatibility and both display as "Miner Reward".
 			if txhelpers.IsCoinBaseTx(tx) {
 				if io == 0 {
 					vout.TxType = TxTypeBlockRewardPoW
