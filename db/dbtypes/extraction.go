@@ -248,11 +248,11 @@ func processTransactions(msgBlock *wire.MsgBlock, tree int8, chainParams *chainc
 			}
 
 			// Coinbase vouts: index 0 tagged PoW, all others tagged PoS. In Decred this split
-			// mapped PoW-reward (miner) vs PoS-reward (stakers). In Monetarium the work
-			// subsidy (the miner reward) is the last output; index 0 is the OP_RETURN
-			// carrying the block height and extra nonce (value=0, no address, never credited
-			// in the addresses table). The two tags are kept for DB schema compatibility
-			// and both display as "Miner Reward" (re-labelled from the legacy names).
+			// mapped PoW-reward (miner) vs PoS-reward (stakers). In Monetarium the output
+			// order is: [0] zero-value treasury placeholder (no address), [1] OP_RETURN
+			// with block height / extra nonce (value=0, no address), [2+] work subsidy
+			// (the actual miner reward — the only output credited to an address). The two
+			// tags are kept for DB schema compatibility and both display as "Miner Reward".
 			if txhelpers.IsCoinBaseTx(tx) {
 				if io == 0 {
 					vout.TxType = TxTypeBlockRewardPoW
