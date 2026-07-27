@@ -437,9 +437,9 @@ func TestPostProcess_SortOrder(t *testing.T) {
 	t2 := NewTimeDefFromUNIX(3000)
 
 	tests := []struct {
-		name     string
-		txs      []*AddressTx
-		wantIDs  []uint32 // expected InOutID order after PostProcess
+		name    string
+		txs     []*AddressTx
+		wantIDs []uint32 // expected InOutID order after PostProcess
 	}{
 		{
 			name: "unconfirmed first regardless of time",
@@ -469,8 +469,8 @@ func TestPostProcess_SortOrder(t *testing.T) {
 			wantIDs: []uint32{1, 3, 2},
 		},
 		{
-			name: "empty list",
-			txs:  []*AddressTx{},
+			name:    "empty list",
+			txs:     []*AddressTx{},
 			wantIDs: []uint32{},
 		},
 		{
