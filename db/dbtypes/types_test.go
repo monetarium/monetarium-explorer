@@ -431,6 +431,107 @@ func TestFormatSKACoins(t *testing.T) {
 	}
 }
 
+func TestPostProcess_SortOrder(t *testing.T) {
+	t0 := NewTimeDefFromUNIX(1000)
+	t1 := NewTimeDefFromUNIX(2000)
+	t2 := NewTimeDefFromUNIX(3000)
+
+	tests := []struct {
+		name    string
+		txs     []*AddressTx
+		wantIDs []uint32 // expected InOutID order after PostProcess
+	}{
+		{
+			name: "unconfirmed first regardless of time",
+			txs: []*AddressTx{
+				{InOutID: 1, Confirmations: 10, Time: t2},
+				{InOutID: 2, Confirmations: 0, Time: t0},
+				{InOutID: 3, Confirmations: 5, Time: t1},
+			},
+			wantIDs: []uint32{2, 1, 3},
+		},
+		{
+			name: "unconfirmed sorted by time descending",
+			txs: []*AddressTx{
+				{InOutID: 1, Confirmations: 0, Time: t0},
+				{InOutID: 2, Confirmations: 0, Time: t2},
+				{InOutID: 3, Confirmations: 0, Time: t1},
+			},
+			wantIDs: []uint32{2, 3, 1},
+		},
+		{
+			name: "confirmed sorted by time descending",
+			txs: []*AddressTx{
+				{InOutID: 1, Confirmations: 5, Time: t2},
+				{InOutID: 2, Confirmations: 3, Time: t0},
+				{InOutID: 3, Confirmations: 10, Time: t1},
+			},
+			wantIDs: []uint32{1, 3, 2},
+		},
+		{
+			name:    "empty list",
+			txs:     []*AddressTx{},
+			wantIDs: []uint32{},
+		},
+		{
+			name: "single unconfirmed",
+			txs: []*AddressTx{
+				{InOutID: 42, Confirmations: 0, Time: t0},
+			},
+			wantIDs: []uint32{42},
+		},
+		{
+			name: "single confirmed",
+			txs: []*AddressTx{
+				{InOutID: 99, Confirmations: 1, Time: t0},
+			},
+			wantIDs: []uint32{99},
+		},
+		{
+			name: "same time tie-break by InOutID",
+			txs: []*AddressTx{
+				{InOutID: 1, Confirmations: 5, Time: t0},
+				{InOutID: 2, Confirmations: 5, Time: t0},
+			},
+			wantIDs: []uint32{2, 1},
+		},
+		{
+			name: "mixed unconfirmed and confirmed with same time",
+			txs: []*AddressTx{
+				{InOutID: 1, Confirmations: 5, Time: t0},
+				{InOutID: 2, Confirmations: 0, Time: t0},
+			},
+			wantIDs: []uint32{2, 1},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ai := &AddressInfo{Transactions: tt.txs}
+			ai.PostProcess(100)
+			got := make([]uint32, len(ai.Transactions))
+			for i, tx := range ai.Transactions {
+				got[i] = tx.InOutID
+			}
+			if !equalSlices(got, tt.wantIDs) {
+				t.Errorf("PostProcess order: got %v, want %v", got, tt.wantIDs)
+			}
+		})
+	}
+}
+
+func equalSlices(a, b []uint32) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
 // TestTxTypeToString_MatchesDBExtensions asserts that txhelpers.TxTypeToString
 // correctly maps the canonical db/dbtypes extension constants (101–105) to the
 // expected display strings. If a db/dbtypes constant value changes, this test

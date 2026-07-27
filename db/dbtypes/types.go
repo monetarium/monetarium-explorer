@@ -2591,8 +2591,15 @@ func ReduceAddressHistory(addrHist []*AddressRow) (*AddressInfo, float64, float6
 
 // PostProcess performs time/vin/vout sorting and block height calculations.
 func (a *AddressInfo) PostProcess(tipHeight uint32) {
-	// Sort the transactions by date and vin/vout index
+	// Sort the transactions: unconfirmed (0 confirmations) always at the
+	// top, then by date and vin/vout index descending.
 	sort.Slice(a.Transactions, func(i, j int) bool {
+		if a.Transactions[i].Confirmations == 0 && a.Transactions[j].Confirmations != 0 {
+			return true
+		}
+		if a.Transactions[i].Confirmations != 0 && a.Transactions[j].Confirmations == 0 {
+			return false
+		}
 		if a.Transactions[i].Time == a.Transactions[j].Time {
 			return a.Transactions[i].InOutID > a.Transactions[j].InOutID
 		}
