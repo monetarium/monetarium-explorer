@@ -43,6 +43,7 @@
           </div>
           {{template "addressSummary" .}}
           {{template "addressUnconfirmedBadges" .}}
+          <div class="row pb-2">
             {{- if .Balance.HasStakeOutputs}}
               <div class="col-12 pb-2 fs14 text-secondary text-start">
                 <span class="fw-bold">Stake income</span>:

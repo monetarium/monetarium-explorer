@@ -568,15 +568,26 @@ describe('address applyBlockStats', () => {
     expect(varUnconf.classList.contains('d-hide')).toBe(true)
   })
 
-  it('is a no-op when unconfirmed_by_coin is missing', () => {
+  it('hides badges when unconfirmed_by_coin is missing', () => {
     const ctrl = makeStatsController()
     const varUnconf = makeUnconfirmedCounter(0, 1)
     ctrl.numUnconfirmedTargets = [varUnconf]
 
     ctrl.applyBlockStats({ tx_count: 10 })
 
-    expect(varUnconf.dataset.count).toBe('1')
-    expect(varUnconf.classList.contains('d-hide')).toBe(false)
+    expect(varUnconf.dataset.count).toBe('0')
+    expect(varUnconf.classList.contains('d-hide')).toBe(true)
+  })
+
+  it('hides badges when unconfirmed_by_coin is null (no mempool entries)', () => {
+    const ctrl = makeStatsController()
+    const varUnconf = makeUnconfirmedCounter(0, 1)
+    ctrl.numUnconfirmedTargets = [varUnconf]
+
+    ctrl.applyBlockStats({ tx_count: 10, unconfirmed_by_coin: null })
+
+    expect(varUnconf.dataset.count).toBe('0')
+    expect(varUnconf.classList.contains('d-hide')).toBe(true)
   })
 })
 

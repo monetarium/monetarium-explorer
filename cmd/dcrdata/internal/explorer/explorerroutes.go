@@ -1616,9 +1616,12 @@ func (exp *explorerUI) AddressTable(w http.ResponseWriter, r *http.Request) {
 		Pages             []pageNumber    `json:"pages"`
 		UnconfirmedByCoin map[uint8]int64 `json:"unconfirmed_by_coin"`
 	}{
-		TxnCount:          addrData.TxnCount + addrData.NumUnconfirmed,
-		Pages:             calcPages(int(addrData.TxnCount), int(limitN), int(offsetAddrOuts), linkTemplate),
-		UnconfirmedByCoin: addrData.NumUnconfirmedByCoin,
+		TxnCount: addrData.TxnCount + addrData.NumUnconfirmed,
+		Pages:    calcPages(int(addrData.TxnCount), int(limitN), int(offsetAddrOuts), linkTemplate),
+		// UnconfirmedTxnsForAddress returns a nil map when the address has no
+		// mempool entries, which would marshal to JSON null and make the client
+		// treat it as "no data" instead of "zero pending". Always emit a map.
+		UnconfirmedByCoin: nonNilUnconfirmedByCoin(addrData.NumUnconfirmedByCoin),
 	}
 
 	response.HTML, err = exp.templates.exec("addresstable", struct {
@@ -1643,6 +1646,16 @@ func (exp *explorerUI) AddressTable(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Debug(err)
 	}
+}
+
+// nonNilUnconfirmedByCoin returns the per-coin unconfirmed count map, or an
+// empty map when the caller had none. A nil map marshals to JSON null, which
+// clients interpret as "no data" rather than "zero pending".
+func nonNilUnconfirmedByCoin(m map[uint8]int64) map[uint8]int64 {
+	if m == nil {
+		return make(map[uint8]int64)
+	}
+	return m
 }
 
 // AddressSummary is the handler for the "/addresssummary" path. It re-renders

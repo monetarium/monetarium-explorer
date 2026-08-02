@@ -794,8 +794,9 @@ export default class extends Controller {
         setTxnCountText(this.txnCountTarget, total)
       }
     }
-    const unconfirmed = resp.unconfirmed_by_coin
-    if (!unconfirmed) return
+    // Default to an empty map: a nil map from the server (no mempool entries)
+    // would otherwise marshal as null and leave stale badges on screen.
+    const unconfirmed = resp.unconfirmed_by_coin || {}
     this.numUnconfirmedTargets.forEach((tr) => {
       const ct = tr.dataset.coinType
       const count = unconfirmed[ct] !== undefined ? unconfirmed[ct] : 0

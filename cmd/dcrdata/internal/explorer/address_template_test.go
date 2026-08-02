@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/monetarium/monetarium-explorer/db/dbtypes"
+	"github.com/monetarium/monetarium-explorer/explorer/types"
 )
 
 func TestAddressSummaryTemplate(t *testing.T) {
@@ -134,5 +135,86 @@ func TestAddressSummaryTemplate_EmptyBalance(t *testing.T) {
 	}
 	if strings.Contains(out, "nil") || strings.Contains(out, "<no value>") {
 		t.Errorf("unexpected nil rendering in addressSummary output:\n%s", out)
+	}
+}
+
+// TestAddressPageDivBalance renders the full address page and verifies the
+// div structure stays balanced. This guards against template extraction
+// leaving orphaned opening/closing tags (a stray </div> silently moves the
+// chart column out of its row without failing template execution).
+func TestAddressPageDivBalance(t *testing.T) {
+	tmpl := newTestTemplates(t)
+	if err := tmpl.addTemplate("address"); err != nil {
+		t.Fatalf("addTemplate address: %v", err)
+	}
+
+	addrInfo := &dbtypes.AddressInfo{
+		Address:     "TtestAddress",
+		ActiveCoins: []uint8{0, 1},
+		NumUnconfirmedByCoin: map[uint8]int64{
+			0: 3,
+			1: 0,
+		},
+		Balance: &dbtypes.AddressBalance{
+			Coins: map[uint8]*dbtypes.CoinBalance{
+				0: {
+					CoinType:      0,
+					TotalReceived: 123456789000,
+					TotalSpent:    23456789000,
+					TotalUnspent:  100000000000,
+					FromStake:     0.1,
+					ToStake:       0.2,
+					NumSpent:      2,
+					NumUnspent:    1,
+				},
+				1: {
+					CoinType:         1,
+					TotalReceivedSKA: "5000000000000000000000",
+					TotalSpentSKA:    "2000000000000000000000",
+					TotalUnspentSKA:  "3000000000000000000000",
+					FromStake:        0.05,
+					ToStake:          0.03,
+					NumSpent:         1,
+					NumUnspent:       1,
+				},
+			},
+			TotalOutputs: 5,
+			TotalInputs:  3,
+		},
+		Path: "/address/TtestAddress",
+	}
+
+	data := struct {
+		*CommonPageData
+		Data         *dbtypes.AddressInfo
+		Pages        []pageNumber
+		CRLFDownload bool
+	}{
+		CommonPageData: &CommonPageData{
+			Path:  "/address/TtestAddress",
+			Tip:   &types.WebBasicBlock{},
+			Links: &links{},
+		},
+		Data:  addrInfo,
+		Pages: nil, // empty triggers zero pages
+	}
+
+	out, err := tmpl.exec("address", data)
+	if err != nil {
+		t.Fatalf("address page template exec: %v", err)
+	}
+
+	opens := strings.Count(out, "<div")
+	closes := strings.Count(out, "</div>")
+	if opens != closes {
+		t.Errorf("unbalanced divs in address page: %d opens vs %d closes\n%s", opens, closes, out)
+	}
+
+	// Stake blocks must render inside a .row (regression: the badge partial
+	// extraction previously orphaned their row's closing tag).
+	for _, label := range []string{">Stake income</span>", ">Stake spending</span>"} {
+		if !strings.Contains(out, label) {
+			t.Errorf("expected %q in address page output:\n%s", label, out)
+		}
 	}
 }
