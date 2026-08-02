@@ -1611,12 +1611,17 @@ func (exp *explorerUI) AddressTable(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response := struct {
-		TxnCount int64        `json:"tx_count"`
-		HTML     string       `json:"html"`
-		Pages    []pageNumber `json:"pages"`
+		TxnCount          int64           `json:"tx_count"`
+		HTML              string          `json:"html"`
+		Pages             []pageNumber    `json:"pages"`
+		UnconfirmedByCoin map[uint8]int64 `json:"unconfirmed_by_coin"`
 	}{
 		TxnCount: addrData.TxnCount + addrData.NumUnconfirmed,
 		Pages:    calcPages(int(addrData.TxnCount), int(limitN), int(offsetAddrOuts), linkTemplate),
+		// UnconfirmedTxnsForAddress returns a nil map when the address has no
+		// mempool entries, which would marshal to JSON null and make the client
+		// treat it as "no data" instead of "zero pending". Always emit a map.
+		UnconfirmedByCoin: nonNilUnconfirmedByCoin(addrData.NumUnconfirmedByCoin),
 	}
 
 	response.HTML, err = exp.templates.exec("addresstable", struct {
@@ -1638,6 +1643,58 @@ func (exp *explorerUI) AddressTable(w http.ResponseWriter, r *http.Request) {
 	enc := json.NewEncoder(w)
 	//enc.SetEscapeHTML(false)
 	err = enc.Encode(response)
+	if err != nil {
+		log.Debug(err)
+	}
+}
+
+// nonNilUnconfirmedByCoin returns the per-coin unconfirmed count map, or an
+// empty map when the caller had none. A nil map marshals to JSON null, which
+// clients interpret as "no data" rather than "zero pending".
+func nonNilUnconfirmedByCoin(m map[uint8]int64) map[uint8]int64 {
+	if m == nil {
+		return make(map[uint8]int64)
+	}
+	return m
+}
+
+// AddressSummary is the handler for the "/addresssummary" path. It re-renders
+// the Received/Spent/Balance summary card for an address so the address page
+// can live-update it when pending (mempool) transactions confirm in a new
+// block, without a full page reload. The balance is always computed across all
+// coin types (CoinTypeAll) so the card shows every active coin, matching the
+// initial page render.
+func (exp *explorerUI) AddressSummary(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	address, _, _, _, err := parseAddressParams(r)
+	if err != nil {
+		log.Errorf("AddressSummary request error: %v", err)
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return
+	}
+
+	addrData, err := exp.AddressListData(ctx, address, dbtypes.AddrTxnAll, 1, 0, dbtypes.CoinTypeAll)
+	if err != nil {
+		log.Errorf("AddressListData error: %v", err)
+		http.Error(w, http.StatusText(http.StatusInternalServerError),
+			http.StatusInternalServerError)
+		return
+	}
+
+	html, err := exp.templates.execPartial("address", "addressSummary", addrData)
+	if err != nil {
+		log.Errorf("Template execute failure: %v", err)
+		http.Error(w, http.StatusText(http.StatusInternalServerError),
+			http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	enc := json.NewEncoder(w)
+	err = enc.Encode(struct {
+		HTML string `json:"html"`
+	}{HTML: html})
 	if err != nil {
 		log.Debug(err)
 	}

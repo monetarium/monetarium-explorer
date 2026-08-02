@@ -1,4 +1,4 @@
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import Zoom from '../helpers/zoom_helper'
 
 // Stub the @hotwired/stimulus import so the controller module loads in jsdom.
@@ -10,12 +10,12 @@ vi.mock('@hotwired/stimulus', () => ({
   }
 }))
 
-// Mocks for _confirmMempoolTxs dependencies.
-const mockTxInBlock = vi.fn()
-vi.mock('../helpers/block_helper', () => ({ default: mockTxInBlock }))
+// Mocks for address_controller dependencies.
 vi.mock('../helpers/humanize_helper', () => ({
   default: { date: vi.fn(() => 'formatted-date'), timeSince: vi.fn(() => '2m ago') }
 }))
+const mockRequestJSON = vi.fn(() => Promise.resolve({ html: '' }))
+vi.mock('../helpers/http', () => ({ requestJSON: mockRequestJSON }))
 
 // ---------------------------------------------------------------------------
 // Fake ChartPanel: the controller now owns one panel instead of a raw handle + ranger.
@@ -448,222 +448,205 @@ describe('address xExtent ms units (bug 3 regression)', () => {
   })
 })
 
-describe('address _confirmMempoolTxs', () => {
-  let humanize
-
-  beforeAll(async () => {
-    humanize = (await import('../helpers/humanize_helper')).default
-  })
-
-  function makePendingRow(txid, coinType) {
-    const row = document.createElement('tr')
-    row.dataset.txid = txid
-    row.dataset.addressTarget = 'pending'
-    const ct = coinType != null ? coinType : 0
-    row.innerHTML = `<td class="addr-tx-confirms" data-confirmation-block-height="-1">0</td><td class="addr-tx-time">Unconfirmed</td><td class="addr-tx-age"><span data-age>just now</span></td><td data-coin-type="${ct}">VAR</td>`
-    return row
-  }
-
-  function makeConfirmController() {
+describe('address _refreshOnBlock', () => {
+  function makeRefreshController() {
     const ctrl = new AddressController(document.createElement('div'))
-    ctrl.hasPendingTarget = false
-    ctrl.pendingTargets = []
-    ctrl.hasTxnCountTarget = false
-    ctrl.txnCountTarget = null
-    ctrl.numUnconfirmedTargets = []
+    ctrl.dcrAddress = 'abc'
+    ctrl.paginationParams = { offset: 40, count: 25, pagesize: 20, txntype: 'all' }
+    // Stub the txnType/pageSize getters (they read from DOM selects).
+    Object.defineProperty(ctrl, 'txnType', { value: 'all', configurable: true })
+    Object.defineProperty(ctrl, 'pageSize', { value: 20, configurable: true })
+    ctrl.fetchTable = vi.fn().mockResolvedValue(undefined)
+    ctrl.refreshSummary = vi.fn().mockResolvedValue(undefined)
     return ctrl
   }
 
   beforeEach(() => {
-    mockTxInBlock.mockReset()
-    humanize.date.mockReset()
-    humanize.timeSince.mockReset()
-    humanize.date.mockReturnValue('formatted-date')
-    humanize.timeSince.mockReturnValue('2m ago')
+    mockRequestJSON.mockReset()
   })
 
-  it('returns early when there are no pending targets — no crash', () => {
-    const ctrl = makeConfirmController()
-    ctrl._confirmMempoolTxs({ block: { height: 100 } })
+  it('re-fetches the current table page and refreshes the summary on a block', async () => {
+    const ctrl = makeRefreshController()
+
+    await ctrl._refreshOnBlock()
+
+    expect(ctrl.fetchTable).toHaveBeenCalledTimes(1)
+    expect(ctrl.fetchTable).toHaveBeenCalledWith('all', 20, 40)
+    expect(ctrl.refreshSummary).toHaveBeenCalledTimes(1)
   })
 
-  it('does nothing when the tx is not in the block', () => {
-    const ctrl = makeConfirmController()
-    ctrl.hasPendingTarget = true
-    const row = makePendingRow('tx1')
-    ctrl.pendingTargets = [row]
-    ctrl.hasTxnCountTarget = false
-    mockTxInBlock.mockReturnValue(false)
+  it('skips the summary refresh when the table fetch fails', async () => {
+    const ctrl = makeRefreshController()
+    ctrl.fetchTable.mockRejectedValue(new Error('boom'))
 
-    ctrl._confirmMempoolTxs({ block: { height: 100, Tx: [], Tickets: [], Revs: [], Votes: [] } })
+    await expect(ctrl._refreshOnBlock()).resolves.toBeUndefined()
 
-    expect(row.querySelector('.addr-tx-confirms').textContent).toBe('0')
-    expect(row.dataset.addressTarget).toBe('pending')
+    expect(ctrl.refreshSummary).not.toHaveBeenCalled()
   })
+})
 
-  it('updates confirms, age, and counters when the tx is in the block', () => {
-    const ctrl = makeConfirmController()
-    ctrl.hasPendingTarget = true
-    const row = makePendingRow('tx1')
-    ctrl.pendingTargets = [row]
+describe('address applyBlockStats', () => {
+  function makeStatsController() {
+    const ctrl = new AddressController(document.createElement('div'))
+    ctrl.paginationParams = { count: 0 }
     const countEl = document.createElement('span')
-    countEl.dataset.txnCount = '5'
+    countEl.dataset.txnCount = '0'
     ctrl.hasTxnCountTarget = true
     ctrl.txnCountTarget = countEl
     ctrl.numUnconfirmedTargets = []
-    mockTxInBlock.mockReturnValue(true)
+    return ctrl
+  }
 
-    ctrl._confirmMempoolTxs({
-      block: {
-        height: 200,
-        time: 1717000000000,
-        unixStamp: 1717000000,
-        Tx: [{ TxID: 'tx1' }],
-        Tickets: [],
-        Revs: [],
-        Votes: []
-      }
-    })
+  function makeUnconfirmedCounter(coinType, count) {
+    const el = document.createElement('div')
+    el.dataset.addressTarget = 'numUnconfirmed'
+    el.dataset.coinType = String(coinType)
+    el.dataset.count = String(count)
+    el.innerHTML = `<span class="addr-unconfirmed-count">${count}</span>`
+    return el
+  }
 
-    const confirms = row.querySelector('.addr-tx-confirms')
-    expect(confirms.textContent).toBe('1')
-    expect(confirms.dataset.confirmationBlockHeight).toBe('200')
-    expect(row.querySelector('.addr-tx-age span').textContent).toBe('2m ago')
-    expect(countEl.dataset.txnCount).toBe('6')
-    expect('addressTarget' in row.dataset).toBe(false)
+  it('updates the header tx count from tx_count', () => {
+    const ctrl = makeStatsController()
+
+    ctrl.applyBlockStats({ tx_count: 27, unconfirmed_by_coin: {} })
+
+    expect(ctrl.paginationParams.count).toBe(27)
+    expect(ctrl.txnCountTarget.dataset.txnCount).toBe('27')
+    expect(ctrl.txnCountTarget.textContent).toBe('27')
   })
 
-  it('bails without partial mutations when confirms cell is missing', () => {
-    const ctrl = makeConfirmController()
-    ctrl.hasPendingTarget = true
-    const row = document.createElement('tr')
-    row.dataset.txid = 'tx1'
-    row.dataset.addressTarget = 'pending'
-    row.innerHTML =
-      '<td class="addr-tx-time">Unconfirmed</td>' +
-      '<td class="addr-tx-age"><span data-age>just now</span></td>'
-    ctrl.pendingTargets = [row]
-    ctrl.hasTxnCountTarget = false
-    ctrl.numUnconfirmedTargets = []
-    mockTxInBlock.mockReturnValue(true)
+  it('does not touch the count when tx_count is absent', () => {
+    const ctrl = makeStatsController()
+    ctrl.paginationParams.count = 5
+    ctrl.txnCountTarget.dataset.txnCount = '5'
 
-    ctrl._confirmMempoolTxs({ block: { height: 200, time: 1717000000000, unixStamp: 1717000000 } })
+    ctrl.applyBlockStats({ unconfirmed_by_coin: {} })
 
-    // No mutations happened — the row is unchanged and still a pending target.
-    expect(row.dataset.addressTarget).toBe('pending')
+    expect(ctrl.paginationParams.count).toBe(5)
+    expect(ctrl.txnCountTarget.dataset.txnCount).toBe('5')
   })
 
-  it('bails without partial mutations when age span is missing', () => {
-    const ctrl = makeConfirmController()
-    ctrl.hasPendingTarget = true
-    const row = document.createElement('tr')
-    row.dataset.txid = 'tx1'
-    row.dataset.addressTarget = 'pending'
-    row.innerHTML =
-      '<td class="addr-tx-confirms" data-confirmation-block-height="-1">0</td>' +
-      '<td class="addr-tx-time">Unconfirmed</td>' +
-      '<td class="addr-tx-age">N/A</td>' +
-      '<td data-coin-type="0">VAR</td>'
-    ctrl.pendingTargets = [row]
-    ctrl.hasTxnCountTarget = false
-    ctrl.numUnconfirmedTargets = []
-    mockTxInBlock.mockReturnValue(true)
+  it('sets per-coin unconfirmed counters from the response', () => {
+    const ctrl = makeStatsController()
+    const varUnconf = makeUnconfirmedCounter(0, 1)
+    const skaUnconf = makeUnconfirmedCounter(1, 3)
+    ctrl.numUnconfirmedTargets = [varUnconf, skaUnconf]
 
-    ctrl._confirmMempoolTxs({ block: { height: 200, time: 1717000000000, unixStamp: 1717000000 } })
+    ctrl.applyBlockStats({ tx_count: 10, unconfirmed_by_coin: { 0: 2, 1: 0 } })
 
-    // No mutations — confirms cell still shows 0, row still pending.
-    expect(row.querySelector('.addr-tx-confirms').textContent).toBe('0')
-    expect(row.dataset.addressTarget).toBe('pending')
+    expect(varUnconf.dataset.count).toBe('2')
+    expect(varUnconf.querySelector('.addr-unconfirmed-count').textContent).toBe('2')
+    expect(varUnconf.classList.contains('d-hide')).toBe(false)
+    // Coin 1 is now zero — hidden but still a target so it can reappear later.
+    expect(skaUnconf.dataset.count).toBe('0')
+    expect(skaUnconf.classList.contains('d-hide')).toBe(true)
+    expect(skaUnconf.dataset.addressTarget).toBe('numUnconfirmed')
   })
 
-  it('does not crash when txnCount target is absent (hasTxnCountTarget false)', () => {
-    const ctrl = makeConfirmController()
-    ctrl.hasPendingTarget = true
-    const row = makePendingRow('tx1')
-    ctrl.pendingTargets = [row]
-    ctrl.hasTxnCountTarget = false
-    ctrl.txnCountTarget = null
-    ctrl.numUnconfirmedTargets = []
-    mockTxInBlock.mockReturnValue(true)
+  it('shows a badge that was hidden (zero at load) once a pending tx arrives', () => {
+    const ctrl = makeStatsController()
+    const varUnconf = makeUnconfirmedCounter(0, 0)
+    varUnconf.classList.add('d-hide')
+    ctrl.numUnconfirmedTargets = [varUnconf]
 
-    ctrl._confirmMempoolTxs({
-      block: {
-        height: 200,
-        time: 1717000000000,
-        unixStamp: 1717000000,
-        Tx: [{ TxID: 'tx1' }],
-        Tickets: [],
-        Revs: [],
-        Votes: []
-      }
-    })
+    ctrl.applyBlockStats({ tx_count: 10, unconfirmed_by_coin: { 0: 1 } })
 
-    // Row was confirmed, count was skipped
-    expect(row.querySelector('.addr-tx-confirms').textContent).toBe('1')
-    expect('addressTarget' in row.dataset).toBe(false)
+    expect(varUnconf.classList.contains('d-hide')).toBe(false)
+    expect(varUnconf.dataset.count).toBe('1')
+    expect(varUnconf.querySelector('.addr-unconfirmed-count').textContent).toBe('1')
   })
 
-  it('decrements the matching unconfirmed counter by coin type', () => {
-    const ctrl = makeConfirmController()
-    ctrl.hasPendingTarget = true
-    const row = makePendingRow('tx1', 1)
-    ctrl.pendingTargets = [row]
-    const countEl = document.createElement('span')
-    countEl.dataset.txnCount = '5'
-    ctrl.hasTxnCountTarget = false
-    const unconf = document.createElement('div')
-    unconf.dataset.addressTarget = 'numUnconfirmed'
-    unconf.dataset.coinType = '1'
-    unconf.dataset.count = '3'
-    unconf.innerHTML = '<span class="addr-unconfirmed-count">3</span>'
-    ctrl.numUnconfirmedTargets = [unconf]
-    mockTxInBlock.mockReturnValue(true)
+  it('defaults missing coin types to zero', () => {
+    const ctrl = makeStatsController()
+    const varUnconf = makeUnconfirmedCounter(0, 1)
+    ctrl.numUnconfirmedTargets = [varUnconf]
 
-    ctrl._confirmMempoolTxs({
-      block: {
-        height: 200,
-        time: 1717000000000,
-        unixStamp: 1717000000,
-        Tx: [{ TxID: 'tx1' }],
-        Tickets: [],
-        Revs: [],
-        Votes: []
-      }
-    })
+    ctrl.applyBlockStats({ tx_count: 10, unconfirmed_by_coin: { 1: 4 } })
 
-    expect(unconf.dataset.count).toBe('2')
-    expect(unconf.querySelector('.addr-unconfirmed-count').textContent).toBe('2')
+    expect(varUnconf.dataset.count).toBe('0')
+    expect(varUnconf.classList.contains('d-hide')).toBe(true)
   })
 
-  it('skips unconfirmed counters whose coin type does not match', () => {
-    const ctrl = makeConfirmController()
-    ctrl.hasPendingTarget = true
-    const row = makePendingRow('tx1', 0)
-    ctrl.pendingTargets = [row]
-    const countEl = document.createElement('span')
-    countEl.dataset.txnCount = '5'
-    ctrl.hasTxnCountTarget = false
-    const unconf = document.createElement('div')
-    unconf.dataset.addressTarget = 'numUnconfirmed'
-    unconf.dataset.coinType = '1'
-    unconf.dataset.count = '3'
-    unconf.innerHTML = '<span class="addr-unconfirmed-count">3</span>'
-    ctrl.numUnconfirmedTargets = [unconf]
-    mockTxInBlock.mockReturnValue(true)
+  it('hides badges when unconfirmed_by_coin is missing', () => {
+    const ctrl = makeStatsController()
+    const varUnconf = makeUnconfirmedCounter(0, 1)
+    ctrl.numUnconfirmedTargets = [varUnconf]
 
-    ctrl._confirmMempoolTxs({
-      block: {
-        height: 200,
-        time: 1717000000000,
-        unixStamp: 1717000000,
-        Tx: [{ TxID: 'tx1' }],
-        Tickets: [],
-        Revs: [],
-        Votes: []
-      }
-    })
+    ctrl.applyBlockStats({ tx_count: 10 })
 
-    // Coin 1 counter unchanged — row coin is 0
-    expect(unconf.dataset.count).toBe('3')
+    expect(varUnconf.dataset.count).toBe('0')
+    expect(varUnconf.classList.contains('d-hide')).toBe(true)
+  })
+
+  it('hides badges when unconfirmed_by_coin is null (no mempool entries)', () => {
+    const ctrl = makeStatsController()
+    const varUnconf = makeUnconfirmedCounter(0, 1)
+    ctrl.numUnconfirmedTargets = [varUnconf]
+
+    ctrl.applyBlockStats({ tx_count: 10, unconfirmed_by_coin: null })
+
+    expect(varUnconf.dataset.count).toBe('0')
+    expect(varUnconf.classList.contains('d-hide')).toBe(true)
+  })
+})
+
+describe('address refreshSummary', () => {
+  function makeSummaryController() {
+    const host = document.createElement('div')
+    host.innerHTML = '<div data-address-summary><div>Old summary</div></div>'
+    const ctrl = new AddressController(host)
+    ctrl.dcrAddress = 'abc'
+    return ctrl
+  }
+
+  beforeEach(() => {
+    mockRequestJSON.mockReset()
+  })
+
+  it('replaces the summary card with the sanitized server html', async () => {
+    const ctrl = makeSummaryController()
+    const newHtml = '<div data-address-summary><div>New summary</div></div>'
+    mockRequestJSON.mockResolvedValue({ html: newHtml })
+
+    await ctrl.refreshSummary()
+
+    expect(mockRequestJSON).toHaveBeenCalledWith('/addresssummary/abc')
+    expect(ctrl.element.querySelector('[data-address-summary]').textContent).toContain(
+      'New summary'
+    )
+  })
+
+  it('ignores a stale response superseded by a newer request', async () => {
+    const ctrl = makeSummaryController()
+    const stale = Promise.resolve({ html: '<div data-address-summary>stale</div>' })
+    const fresh = Promise.resolve({ html: '<div data-address-summary>fresh</div>' })
+    mockRequestJSON.mockResolvedValueOnce(stale).mockResolvedValueOnce(fresh)
+
+    const p1 = ctrl.refreshSummary()
+    const p2 = ctrl.refreshSummary()
+    await Promise.all([p1, p2])
+
+    expect(ctrl.element.querySelector('[data-address-summary]').textContent).toContain('fresh')
+  })
+
+  it('keeps the current summary when the fetch fails', async () => {
+    const ctrl = makeSummaryController()
+    mockRequestJSON.mockRejectedValue(new Error('boom'))
+
+    await expect(ctrl.refreshSummary()).resolves.toBeUndefined()
+
+    expect(ctrl.element.querySelector('[data-address-summary]').textContent).toContain(
+      'Old summary'
+    )
+  })
+
+  it('is a no-op when no summary card exists in the DOM', async () => {
+    const ctrl = new AddressController(document.createElement('div'))
+    ctrl.dcrAddress = 'abc'
+
+    await expect(ctrl.refreshSummary()).resolves.toBeUndefined()
+
+    expect(mockRequestJSON).toHaveBeenCalledWith('/addresssummary/abc')
   })
 })

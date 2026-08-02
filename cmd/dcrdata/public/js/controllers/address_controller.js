@@ -2,7 +2,6 @@ import { Controller } from '@hotwired/stimulus'
 import dompurify from 'dompurify'
 import { isEmpty } from 'lodash-es'
 import { animationFrame, fadeIn } from '../helpers/animation_helper'
-import txInBlock from '../helpers/block_helper'
 import { requestJSON } from '../helpers/http'
 import humanize from '../helpers/humanize_helper'
 import { getDefault } from '../helpers/module_helper'
@@ -110,7 +109,7 @@ export default class extends Controller {
     ctrl.currentDef = null
     ctrl.xExtent = [0, 0]
     ctrl.lastEnd = 0
-    ctrl.confirmMempoolTxs = ctrl._confirmMempoolTxs.bind(ctrl)
+    ctrl.refreshOnBlock = ctrl._refreshOnBlock.bind(ctrl)
     ctrl.bindElements()
     ctrl.bindEvents()
     ctrl.query = new TurboQuery()
@@ -189,7 +188,7 @@ export default class extends Controller {
       this.panel.destroy()
       this.panel = null
     }
-    globalEventBus.off('BLOCK_RECEIVED', this.confirmMempoolTxs)
+    globalEventBus.off('BLOCK_RECEIVED', this.refreshOnBlock)
     this.retrievedData = {}
   }
 
@@ -209,7 +208,7 @@ export default class extends Controller {
   }
 
   bindEvents() {
-    globalEventBus.on('BLOCK_RECEIVED', this.confirmMempoolTxs)
+    globalEventBus.on('BLOCK_RECEIVED', this.refreshOnBlock)
     ctrl.paginatorTargets.forEach((link) => {
       link.addEventListener('click', (e) => {
         e.preventDefault()
@@ -346,15 +345,17 @@ export default class extends Controller {
   }
 
   async fetchTable(txType, count, offset) {
+    const seq = (this._tableSeq = (this._tableSeq || 0) + 1)
     ctrl.listLoaderTarget.classList.add('loading')
     const requestCount = count > 20 ? count : 20
     const tableResponse = await requestJSON(ctrl.makeTableUrl(txType, requestCount, offset))
+    if (seq !== this._tableSeq) return // superseded by a newer request
     ctrl.tableTarget.innerHTML = dompurify.sanitize(tableResponse.html)
     const settings = ctrl.settings
     settings.n = count
     settings.start = offset
     settings.txntype = txType
-    ctrl.paginationParams.count = tableResponse.tx_count
+    ctrl.applyBlockStats(tableResponse)
     ctrl.query.replace(settings)
     ctrl.paginationParams.offset = offset
     ctrl.paginationParams.pagesize = count
@@ -767,49 +768,62 @@ export default class extends Controller {
     })
   }
 
-  _confirmMempoolTxs(blockData) {
-    const block = blockData.block
-    if (!this.hasPendingTarget) return
-    this.pendingTargets.forEach((row) => {
-      if (!txInBlock(row.dataset.txid, block)) return
-      // Validate all required DOM elements upfront so a partial match
-      // can't leave the row half-updated.
-      const confirms = row.querySelector('td.addr-tx-confirms')
-      const age = row.querySelector('td.addr-tx-age > span')
-      if (!confirms || !age) return
-      // All required elements present — safe to mutate.
-      confirms.textContent = '1'
-      confirms.dataset.confirmationBlockHeight = block.height
-      const timeTd = row.querySelector('td.addr-tx-time')
-      if (timeTd) timeTd.textContent = humanize.date(block.time, true)
-      age.dataset.age = block.time
-      age.textContent = humanize.timeSince(block.unixStamp)
-      delete row.dataset.addressTarget
-      // Increment the displayed tx count
+  // BLOCK_RECEIVED handler. The server render is authoritative: re-fetch the
+  // current table page (which includes new pending/mempool txs and freshly
+  // mined txs), reconcile the address-level counters, and refresh the summary
+  // card. No reliance on the block payload — the server knows what happened.
+  async _refreshOnBlock() {
+    try {
+      await this.fetchTable(this.txnType, this.pageSize, this.paginationParams.offset)
+      await this.refreshSummary()
+    } catch (e) {
+      // Non-fatal: the page stays as-is until the next block or a reload.
+      console.error('Address block refresh failed', e)
+    }
+  }
+
+  // Apply server-authoritative address-level stats from an /addresstable
+  // response to the page header: the total tx count and the per-coin
+  // unconfirmed counters.
+  applyBlockStats(resp) {
+    const total = resp.tx_count
+    if (typeof total === 'number') {
+      this.paginationParams.count = total
       if (this.hasTxnCountTarget) {
-        const count = this.txnCountTarget
-        count.dataset.txnCount++
-        setTxnCountText(count, count.dataset.txnCount)
+        this.txnCountTarget.dataset.txnCount = total
+        setTxnCountText(this.txnCountTarget, total)
       }
-      // Decrement only the unconfirmed counter whose coin matches the
-      // confirmed transaction. The coin type comes from the SSR-rendered
-      // data-coin-type attribute on the row's Coin column.
-      const rowCoinType = row.querySelector('[data-coin-type]')?.dataset.coinType
-      this.numUnconfirmedTargets.forEach((tr) => {
-        if (rowCoinType !== undefined && tr.dataset.coinType !== rowCoinType) return
+    }
+    // Default to an empty map: a nil map from the server (no mempool entries)
+    // would otherwise marshal as null and leave stale badges on screen.
+    const unconfirmed = resp.unconfirmed_by_coin || {}
+    this.numUnconfirmedTargets.forEach((tr) => {
+      const ct = tr.dataset.coinType
+      const count = unconfirmed[ct] !== undefined ? unconfirmed[ct] : 0
+      tr.dataset.count = count
+      // Keep the element as a target even when zero, so a badge can reappear
+      // for a coin that had no pending txs at page load.
+      if (count === 0) {
+        tr.classList.add('d-hide')
+      } else {
+        tr.classList.remove('d-hide')
         const countSpan = tr.querySelector('.addr-unconfirmed-count')
-        let unconfirmedCount = parseInt(tr.dataset.count)
-        if (isNaN(unconfirmedCount)) unconfirmedCount = 0
-        if (unconfirmedCount > 0) unconfirmedCount--
-        tr.dataset.count = unconfirmedCount
-        if (unconfirmedCount === 0) {
-          tr.classList.add('d-hide')
-          delete tr.dataset.addressTarget
-        } else if (countSpan) {
-          countSpan.textContent = unconfirmedCount.toLocaleString()
-        }
-      })
+        if (countSpan) countSpan.textContent = count.toLocaleString()
+      }
     })
+  }
+
+  async refreshSummary() {
+    const seq = (this._summarySeq = (this._summarySeq || 0) + 1)
+    try {
+      const data = await requestJSON(`/addresssummary/${this.dcrAddress}`)
+      if (seq !== this._summarySeq) return // superseded by a newer request
+      const summaryEl = this.element.querySelector('[data-address-summary]')
+      if (summaryEl && data.html) summaryEl.outerHTML = dompurify.sanitize(data.html)
+    } catch (e) {
+      // Non-fatal: the page keeps its current summary until the next reload.
+      console.error('Address summary refresh failed', e)
+    }
   }
 
   hashOver(e) {
