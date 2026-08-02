@@ -1611,12 +1611,14 @@ func (exp *explorerUI) AddressTable(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response := struct {
-		TxnCount int64        `json:"tx_count"`
-		HTML     string       `json:"html"`
-		Pages    []pageNumber `json:"pages"`
+		TxnCount          int64           `json:"tx_count"`
+		HTML              string          `json:"html"`
+		Pages             []pageNumber    `json:"pages"`
+		UnconfirmedByCoin map[uint8]int64 `json:"unconfirmed_by_coin"`
 	}{
-		TxnCount: addrData.TxnCount + addrData.NumUnconfirmed,
-		Pages:    calcPages(int(addrData.TxnCount), int(limitN), int(offsetAddrOuts), linkTemplate),
+		TxnCount:          addrData.TxnCount + addrData.NumUnconfirmed,
+		Pages:             calcPages(int(addrData.TxnCount), int(limitN), int(offsetAddrOuts), linkTemplate),
+		UnconfirmedByCoin: addrData.NumUnconfirmedByCoin,
 	}
 
 	response.HTML, err = exp.templates.exec("addresstable", struct {
@@ -1638,6 +1640,48 @@ func (exp *explorerUI) AddressTable(w http.ResponseWriter, r *http.Request) {
 	enc := json.NewEncoder(w)
 	//enc.SetEscapeHTML(false)
 	err = enc.Encode(response)
+	if err != nil {
+		log.Debug(err)
+	}
+}
+
+// AddressSummary is the handler for the "/addresssummary" path. It re-renders
+// the Received/Spent/Balance summary card for an address so the address page
+// can live-update it when pending (mempool) transactions confirm in a new
+// block, without a full page reload. The balance is always computed across all
+// coin types (CoinTypeAll) so the card shows every active coin, matching the
+// initial page render.
+func (exp *explorerUI) AddressSummary(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	address, _, _, _, err := parseAddressParams(r)
+	if err != nil {
+		log.Errorf("AddressSummary request error: %v", err)
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return
+	}
+
+	addrData, err := exp.AddressListData(ctx, address, dbtypes.AddrTxnAll, 1, 0, dbtypes.CoinTypeAll)
+	if err != nil {
+		log.Errorf("AddressListData error: %v", err)
+		http.Error(w, http.StatusText(http.StatusInternalServerError),
+			http.StatusInternalServerError)
+		return
+	}
+
+	html, err := exp.templates.execPartial("address", "addressSummary", addrData)
+	if err != nil {
+		log.Errorf("Template execute failure: %v", err)
+		http.Error(w, http.StatusText(http.StatusInternalServerError),
+			http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	enc := json.NewEncoder(w)
+	err = enc.Encode(struct {
+		HTML string `json:"html"`
+	}{HTML: html})
 	if err != nil {
 		log.Debug(err)
 	}

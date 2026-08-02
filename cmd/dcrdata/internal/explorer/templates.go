@@ -45,6 +45,7 @@ type templates struct {
 	folder    string
 	helpers   template.FuncMap
 	exec      func(string, interface{}) (string, error)
+	reload    bool
 }
 
 func newTemplates(folder string, reload bool, common []string, helpers template.FuncMap) templates {
@@ -57,6 +58,7 @@ func newTemplates(folder string, reload bool, common []string, helpers template.
 		common:    com,
 		folder:    folder,
 		helpers:   helpers,
+		reload:    reload,
 	}
 	t.exec = t.execTemplateToString
 	if reload {
@@ -117,6 +119,25 @@ func (t *templates) execWithReload(name string, data interface{}) (string, error
 	}
 	log.Debugf("reloaded HTML template %q", name)
 	return t.execTemplateToString(name, data)
+}
+
+// execPartial executes a named {{define}} block within an already-registered
+// page template's parsed set (e.g. the "addressSummary" partial defined in
+// address.tmpl). The partial shares the page's funcMap and common templates,
+// and is re-parsed from disk on each call when --reload-html is active.
+func (t *templates) execPartial(pageName, partialName string, data interface{}) (string, error) {
+	if t.reload {
+		if err := t.addTemplate(pageName); err != nil {
+			return "", fmt.Errorf("execPartial: %v", err)
+		}
+	}
+	temp, ok := t.templates[pageName]
+	if !ok {
+		return "", fmt.Errorf("Template %s not known", pageName)
+	}
+	var page strings.Builder
+	err := temp.template.ExecuteTemplate(&page, partialName, data)
+	return page.String(), err
 }
 
 var toInt64 = func(v interface{}) int64 {
