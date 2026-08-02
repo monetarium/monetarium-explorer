@@ -775,7 +775,7 @@ export default class extends Controller {
   async _refreshOnBlock() {
     try {
       await this.fetchTable(this.txnType, this.pageSize, this.paginationParams.offset)
-      this.refreshSummary()
+      await this.refreshSummary()
     } catch (e) {
       // Non-fatal: the page stays as-is until the next block or a reload.
       console.error('Address block refresh failed', e)
