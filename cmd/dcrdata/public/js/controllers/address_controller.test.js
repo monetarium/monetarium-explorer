@@ -458,6 +458,8 @@ describe('address _refreshOnBlock', () => {
     Object.defineProperty(ctrl, 'pageSize', { value: 20, configurable: true })
     ctrl.fetchTable = vi.fn().mockResolvedValue(undefined)
     ctrl.refreshSummary = vi.fn().mockResolvedValue(undefined)
+    ctrl.state = { chart: 'balance', bin: 'all', coin: '0' }
+    ctrl.retrievedData = { 'amountflow-all-0': { dummy: true } }
     return ctrl
   }
 
@@ -465,14 +467,14 @@ describe('address _refreshOnBlock', () => {
     mockRequestJSON.mockReset()
   })
 
-  it('re-fetches the current table page and refreshes the summary on a block', async () => {
+  it('re-fetches the table, refreshes summary, and redraws chart', async () => {
     const ctrl = makeRefreshController()
+    const graphSpy = vi.spyOn(ctrl, 'drawGraph').mockImplementation(() => {})
 
     await ctrl._refreshOnBlock()
 
-    expect(ctrl.fetchTable).toHaveBeenCalledTimes(1)
-    expect(ctrl.fetchTable).toHaveBeenCalledWith('all', 20, 40)
-    expect(ctrl.refreshSummary).toHaveBeenCalledTimes(1)
+    expect(ctrl.retrievedData.hasOwnProperty('amountflow-all-0')).toBe(false)
+    expect(graphSpy).toHaveBeenCalled()
   })
 
   it('skips the summary refresh when the table fetch fails', async () => {

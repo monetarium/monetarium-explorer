@@ -776,6 +776,12 @@ export default class extends Controller {
     try {
       await this.fetchTable(this.txnType, this.pageSize, this.paginationParams.offset)
       await this.refreshSummary()
+
+      // Invalidate chart cache and redraw to include updated data
+      const chartKey = this.state.chart === 'balance' ? 'amountflow' : this.state.chart
+      const cacheKey = `${chartKey}-${this.state.bin}-${this.state.coin}`
+      delete this.retrievedData[cacheKey]
+      this.drawGraph() // Forces re-fetch of chart data
     } catch (e) {
       // Non-fatal: the page stays as-is until the next block or a reload.
       console.error('Address block refresh failed', e)
