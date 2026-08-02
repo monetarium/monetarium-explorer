@@ -499,6 +499,7 @@ describe('address applyBlockStats', () => {
 
   function makeUnconfirmedCounter(coinType, count) {
     const el = document.createElement('div')
+    el.dataset.addressTarget = 'numUnconfirmed'
     el.dataset.coinType = String(coinType)
     el.dataset.count = String(count)
     el.innerHTML = `<span class="addr-unconfirmed-count">${count}</span>`
@@ -537,10 +538,23 @@ describe('address applyBlockStats', () => {
     expect(varUnconf.dataset.count).toBe('2')
     expect(varUnconf.querySelector('.addr-unconfirmed-count').textContent).toBe('2')
     expect(varUnconf.classList.contains('d-hide')).toBe(false)
-    // Coin 1 is now zero — hidden and no longer a target.
+    // Coin 1 is now zero — hidden but still a target so it can reappear later.
     expect(skaUnconf.dataset.count).toBe('0')
     expect(skaUnconf.classList.contains('d-hide')).toBe(true)
-    expect('addressTarget' in skaUnconf.dataset).toBe(false)
+    expect(skaUnconf.dataset.addressTarget).toBe('numUnconfirmed')
+  })
+
+  it('shows a badge that was hidden (zero at load) once a pending tx arrives', () => {
+    const ctrl = makeStatsController()
+    const varUnconf = makeUnconfirmedCounter(0, 0)
+    varUnconf.classList.add('d-hide')
+    ctrl.numUnconfirmedTargets = [varUnconf]
+
+    ctrl.applyBlockStats({ tx_count: 10, unconfirmed_by_coin: { 0: 1 } })
+
+    expect(varUnconf.classList.contains('d-hide')).toBe(false)
+    expect(varUnconf.dataset.count).toBe('1')
+    expect(varUnconf.querySelector('.addr-unconfirmed-count').textContent).toBe('1')
   })
 
   it('defaults missing coin types to zero', () => {

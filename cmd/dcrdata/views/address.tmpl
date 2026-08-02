@@ -42,22 +42,7 @@
           {{.Type}}
           </div>
           {{template "addressSummary" .}}
-          <div class="row pb-2">
-              {{- if ne .NumUnconfirmed 0}}
-                {{- $unconf := .NumUnconfirmedByCoin}}
-                {{- range $ct := $active}}
-                  {{- $count := index $unconf $ct}}
-                  {{- if gt $count 0}}
-                    <div class="col-12 pb-2 fs14 text-secondary text-start"
-                         data-address-target="numUnconfirmed"
-                         data-coin-type="{{$ct}}"
-                         data-count="{{$count}}">
-                      <span class="fw-bold">Unconfirmed {{coinSymbol $ct}}</span>:
-                      <span class="addr-unconfirmed-count">{{intComma $count}}</span>
-                    </div>
-                  {{- end}}
-                {{- end}}
-              {{- end}}
+          {{template "addressUnconfirmedBadges" .}}
             {{- if .Balance.HasStakeOutputs}}
               <div class="col-12 pb-2 fs14 text-secondary text-start">
                 <span class="fw-bold">Stake income</span>:
@@ -439,5 +424,25 @@
               {{- end}}
             </div>
             <span></span>
+          </div>
+{{- end}}
+
+{{- /* addressUnconfirmedBadges renders a per-coin "Unconfirmed" badge for every
+       active coin type. Badges for coins with zero pending txns are hidden with
+       d-hide but stay in the DOM so the address controller can reveal them when
+       a pending txn arrives after page load. Takes an *dbtypes.AddressInfo. */}}
+{{define "addressUnconfirmedBadges"}}
+          <div class="row pb-2">
+              {{- $unconf := .NumUnconfirmedByCoin}}
+              {{- range $ct := .ActiveCoins}}
+                {{- $count := index $unconf $ct}}
+                <div class="col-12 pb-2 fs14 text-secondary text-start{{if eq $count 0}} d-hide{{end}}"
+                     data-address-target="numUnconfirmed"
+                     data-coin-type="{{$ct}}"
+                     data-count="{{$count}}">
+                  <span class="fw-bold">Unconfirmed {{coinSymbol $ct}}</span>:
+                  <span class="addr-unconfirmed-count">{{intComma $count}}</span>
+                </div>
+              {{- end}}
           </div>
 {{- end}}

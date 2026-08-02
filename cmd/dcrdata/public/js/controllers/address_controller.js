@@ -800,12 +800,12 @@ export default class extends Controller {
       const ct = tr.dataset.coinType
       const count = unconfirmed[ct] !== undefined ? unconfirmed[ct] : 0
       tr.dataset.count = count
+      // Keep the element as a target even when zero, so a badge can reappear
+      // for a coin that had no pending txs at page load.
       if (count === 0) {
         tr.classList.add('d-hide')
-        delete tr.dataset.addressTarget
       } else {
         tr.classList.remove('d-hide')
-        tr.dataset.addressTarget = 'numUnconfirmed'
         const countSpan = tr.querySelector('.addr-unconfirmed-count')
         if (countSpan) countSpan.textContent = count.toLocaleString()
       }

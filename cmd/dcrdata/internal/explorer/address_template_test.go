@@ -70,6 +70,50 @@ func TestAddressSummaryTemplate(t *testing.T) {
 	}
 }
 
+func TestAddressUnconfirmedBadgesTemplate(t *testing.T) {
+	tmpl := newTestTemplates(t)
+	if err := tmpl.addTemplate("address"); err != nil {
+		t.Fatalf("addTemplate address: %v", err)
+	}
+
+	addrInfo := &dbtypes.AddressInfo{
+		Address:     "TtestAddress",
+		ActiveCoins: []uint8{0, 1},
+		NumUnconfirmedByCoin: map[uint8]int64{
+			0: 3,
+			1: 0,
+		},
+	}
+
+	out, err := tmpl.execPartial("address", "addressUnconfirmedBadges", addrInfo)
+	if err != nil {
+		t.Fatalf("addressUnconfirmedBadges template exec: %v", err)
+	}
+
+	// A badge is rendered for every active coin type, even at zero count —
+	// the zero-count one is hidden with d-hide so the controller can reveal
+	// it later without recreating the element.
+	for _, symbol := range []string{"VAR", "SKA1"} {
+		if !strings.Contains(out, "Unconfirmed "+symbol) {
+			t.Errorf("expected %q badge to appear in addressUnconfirmedBadges output:\n%s", symbol, out)
+		}
+	}
+	// Strip whitespace so attribute spread across template lines still matches.
+	compact := strings.Map(func(r rune) rune {
+		if r == ' ' || r == '\n' || r == '\t' {
+			return -1
+		}
+		return r
+	}, out)
+	if !strings.Contains(compact, `data-coin-type="0"data-count="3"`) {
+		t.Errorf("expected VAR badge with count 3 in addressUnconfirmedBadges output:\n%s", out)
+	}
+	if !strings.Contains(compact, `data-coin-type="1"data-count="0"`) ||
+		!strings.Contains(compact, `text-startd-hide`) {
+		t.Errorf("expected zero-count SKA1 badge to be d-hide in addressUnconfirmedBadges output:\n%s", out)
+	}
+}
+
 func TestAddressSummaryTemplate_EmptyBalance(t *testing.T) {
 	tmpl := newTestTemplates(t)
 	if err := tmpl.addTemplate("address"); err != nil {
