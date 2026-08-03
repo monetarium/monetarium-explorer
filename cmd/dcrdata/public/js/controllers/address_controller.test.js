@@ -470,9 +470,9 @@ describe('address _refreshOnBlock', () => {
     mockRequestJSON.mockReset()
   })
 
-  it('re-fetches the table, refreshes summary, and force-redraws chart', async () => {
+  it('re-fetches the table, refreshes summary, and invalidates chart cache', async () => {
     const ctrl = makeRefreshController()
-    const graphSpy = vi.spyOn(ctrl, 'drawGraph').mockImplementation(() => {})
+    const invalidateSpy = vi.spyOn(ctrl, 'invalidateChartCache').mockImplementation(() => {})
 
     await ctrl._refreshOnBlock()
 
@@ -481,10 +481,8 @@ describe('address _refreshOnBlock', () => {
     expect(ctrl.fetchTable).toHaveBeenCalledWith('all', 20, 40)
     expect(ctrl.refreshSummary).toHaveBeenCalledTimes(1)
 
-    // Cache key uses effectiveCoin(), not state.coin (which is null by default).
-    expect(Object.prototype.hasOwnProperty.call(ctrl.retrievedData, 'amountflow-all-0')).toBe(false)
-    expect(ctrl.state.chart).toBe('__force_refetch__')
-    expect(graphSpy).toHaveBeenCalled()
+    // Chart cache invalidation is delegated to invalidateChartCache.
+    expect(invalidateSpy).toHaveBeenCalled()
   })
 
   it('skips the summary refresh when the table fetch fails', async () => {
@@ -494,6 +492,23 @@ describe('address _refreshOnBlock', () => {
     await expect(ctrl._refreshOnBlock()).resolves.toBeUndefined()
 
     expect(ctrl.refreshSummary).not.toHaveBeenCalled()
+  })
+})
+
+describe('address invalidateChartCache', () => {
+  it('deletes the cache entry, sets sentinel, and calls drawGraph', () => {
+    const ctrl = new AddressController(document.createElement('div'))
+    ctrl.settings = { chart: 'balance', bin: 'all', coin: null }
+    ctrl.state = { chart: 'balance', bin: 'all', coin: null }
+    ctrl.activeCoins = [0]
+    ctrl.retrievedData = { 'amountflow-all-0': { dummy: true } }
+    const graphSpy = vi.spyOn(ctrl, 'drawGraph').mockImplementation(() => {})
+
+    ctrl.invalidateChartCache()
+
+    expect(Object.prototype.hasOwnProperty.call(ctrl.retrievedData, 'amountflow-all-0')).toBe(false)
+    expect(ctrl.state.chart).toBe('__force_refetch__')
+    expect(graphSpy).toHaveBeenCalled()
   })
 })
 

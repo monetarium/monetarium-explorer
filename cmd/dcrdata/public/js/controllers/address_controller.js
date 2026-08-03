@@ -468,17 +468,18 @@ export default class extends Controller {
 
   async fetchGraphData(chart, bin) {
     const coin = ctrl.effectiveCoin()
-    const cacheKey = `${chart}-${bin}-${coin}`
-    if (ctrl.ajaxing === cacheKey) {
+    const requestKey = `${chart}-${bin}-${coin}`
+    if (ctrl.ajaxing === requestKey) {
       return
     }
-    ctrl.requestedChart = cacheKey
-    ctrl.ajaxing = cacheKey
+    ctrl.requestedChart = requestKey
+    ctrl.ajaxing = requestKey
 
     ctrl.chartLoaderTarget.classList.add('loading')
 
-    // Check for cached data
-    if (ctrl.retrievedData[cacheKey]) {
+    // Check for cached data using the remapped key (balance→amountflow).
+    const dataCacheKey = this.chartDataKey(chart, bin, coin)
+    if (ctrl.retrievedData[dataCacheKey]) {
       // Queue the function to allow the loader to display.
       setTimeout(() => {
         ctrl.popChartCache(chart, bin)
@@ -792,21 +793,20 @@ export default class extends Controller {
     try {
       await this.fetchTable(this.txnType, this.pageSize, this.paginationParams.offset)
       await this.refreshSummary()
-
-      // Invalidate chart cache and force a redraw.
-      // drawGraph() short-circuits when state matches settings, so we must
-      // force a state mismatch to make it reach fetchGraphData.
-      // Use effectiveCoin() because state.coin mirrors settings.coin, which
-      // is null by default (no ?coin= param), while the cache keys use the
-      // resolved coin type from effectiveCoin().
-      const cacheKey = this.chartDataKey(this.state.chart, this.state.bin, this.effectiveCoin())
-      delete this.retrievedData[cacheKey]
-      this.state.chart = '__force_refetch__'
-      this.drawGraph()
+      this.invalidateChartCache()
     } catch (e) {
       // Non-fatal: the page stays as-is until the next block or a reload.
       console.error('Address block refresh failed', e)
     }
+  }
+
+  // invalidateChartCache removes the cached chart data for the current view
+  // and forces drawGraph() to re-fetch by writing a sentinel into state.chart.
+  invalidateChartCache() {
+    const cacheKey = this.chartDataKey(this.state.chart, this.state.bin, this.effectiveCoin())
+    delete this.retrievedData[cacheKey]
+    this.state.chart = '__force_refetch__'
+    this.drawGraph()
   }
 
   // Apply server-authoritative address-level stats from an /addresstable
