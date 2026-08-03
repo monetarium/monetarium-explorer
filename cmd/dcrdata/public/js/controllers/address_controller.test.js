@@ -57,6 +57,7 @@ afterEach(() => {
 
 const {
   default: AddressController,
+  _setCtrl,
   flowVisibility,
   rangerColumn
 } = await import('./address_controller.js')
@@ -458,6 +459,11 @@ describe('address _refreshOnBlock', () => {
     Object.defineProperty(ctrl, 'pageSize', { value: 20, configurable: true })
     ctrl.fetchTable = vi.fn().mockResolvedValue(undefined)
     ctrl.refreshSummary = vi.fn().mockResolvedValue(undefined)
+    ctrl.settings = { chart: 'balance', bin: 'all', coin: null }
+    ctrl.state = { chart: 'balance', bin: 'all', coin: null }
+    ctrl.retrievedData = { 'amountflow-all-0': { dummy: true } }
+    // effectiveCoin() falls back to activeCoins[0] or 0 when settings.coin is null.
+    ctrl.activeCoins = [0]
     return ctrl
   }
 
@@ -465,14 +471,19 @@ describe('address _refreshOnBlock', () => {
     mockRequestJSON.mockReset()
   })
 
-  it('re-fetches the current table page and refreshes the summary on a block', async () => {
+  it('re-fetches the table, refreshes summary, and invalidates chart cache', async () => {
     const ctrl = makeRefreshController()
+    const invalidateSpy = vi.spyOn(ctrl, 'invalidateChartCache').mockImplementation(() => {})
 
     await ctrl._refreshOnBlock()
 
+    // Table and summary refresh still happen (carried forward from #591).
     expect(ctrl.fetchTable).toHaveBeenCalledTimes(1)
     expect(ctrl.fetchTable).toHaveBeenCalledWith('all', 20, 40)
     expect(ctrl.refreshSummary).toHaveBeenCalledTimes(1)
+
+    // Chart cache invalidation is delegated to invalidateChartCache.
+    expect(invalidateSpy).toHaveBeenCalled()
   })
 
   it('skips the summary refresh when the table fetch fails', async () => {
@@ -482,6 +493,91 @@ describe('address _refreshOnBlock', () => {
     await expect(ctrl._refreshOnBlock()).resolves.toBeUndefined()
 
     expect(ctrl.refreshSummary).not.toHaveBeenCalled()
+  })
+})
+
+describe('address invalidateChartCache', () => {
+  it('deletes the cache entry, sets sentinel, and calls drawGraph', () => {
+    const ctrl = new AddressController(document.createElement('div'))
+    ctrl.settings = { chart: 'balance', bin: 'all', coin: null }
+    ctrl.state = { chart: 'balance', bin: 'all', coin: null }
+    ctrl.activeCoins = [0]
+    ctrl.retrievedData = { 'amountflow-all-0': { dummy: true } }
+    const graphSpy = vi.spyOn(ctrl, 'drawGraph').mockImplementation(() => {})
+
+    ctrl.invalidateChartCache()
+
+    expect(Object.prototype.hasOwnProperty.call(ctrl.retrievedData, 'amountflow-all-0')).toBe(false)
+    expect(ctrl.state.chart).toBe('__force_refetch__')
+    expect(graphSpy).toHaveBeenCalled()
+  })
+})
+
+describe('address fetchGraphData', () => {
+  function makeFetchController() {
+    const controller = new AddressController(document.createElement('div'))
+    controller.dcrAddress = 'abc'
+    controller.chartLoaderTarget = {
+      classList: { add: vi.fn(), remove: vi.fn() }
+    }
+    controller.ajaxing = false
+    controller.retrievedData = {}
+    controller.settings = { coin: null }
+    controller.activeCoins = [0]
+    controller.chartDataKey = AddressController.prototype.chartDataKey
+    controller.popChartCache = vi.fn()
+    controller.processData = vi.fn()
+    controller.renderChart = vi.fn()
+    controller.flowTarget = { classList: { add: vi.fn(), remove: vi.fn() } }
+    return controller
+  }
+
+  beforeEach(() => {
+    mockRequestJSON.mockReset()
+    _setCtrl(makeFetchController())
+  })
+
+  afterEach(() => {
+    _setCtrl(null)
+  })
+
+  it('clears ajaxing and loader on fetch failure', async () => {
+    const ctrl = makeFetchController()
+    _setCtrl(ctrl)
+    mockRequestJSON.mockRejectedValue(new Error('502'))
+
+    await expect(ctrl.fetchGraphData('types', 'all')).rejects.toThrow('502')
+    expect(ctrl.ajaxing).toBe(false)
+  })
+
+  it('hits the remapped cache key for the balance chart', async () => {
+    const ctrl = makeFetchController()
+    _setCtrl(ctrl)
+    ctrl.retrievedData['amountflow-all-0'] = { cached: true }
+
+    await ctrl.fetchGraphData('balance', 'all')
+
+    expect(mockRequestJSON).not.toHaveBeenCalled()
+  })
+
+  it('hits the raw cache key for the types chart', async () => {
+    const ctrl = makeFetchController()
+    _setCtrl(ctrl)
+    ctrl.retrievedData['types-all-0'] = { cached: true }
+
+    await ctrl.fetchGraphData('types', 'all')
+
+    expect(mockRequestJSON).not.toHaveBeenCalled()
+  })
+
+  it('fetches when the cache is empty', async () => {
+    const ctrl = makeFetchController()
+    _setCtrl(ctrl)
+    mockRequestJSON.mockResolvedValue({})
+
+    await ctrl.fetchGraphData('types', 'all')
+
+    expect(mockRequestJSON).toHaveBeenCalled()
   })
 })
 
