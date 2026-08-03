@@ -489,6 +489,7 @@ export default class extends Controller {
     if (ctrl.retrievedData[dataCacheKey]) {
       // Queue the function to allow the loader to display.
       setTimeout(() => {
+        if (!ctrl) return
         ctrl.popChartCache(chart, bin)
         ctrl.chartLoaderTarget.classList.remove('loading')
         ctrl.ajaxing = false
