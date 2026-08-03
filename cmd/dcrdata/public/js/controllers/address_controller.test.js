@@ -458,8 +458,11 @@ describe('address _refreshOnBlock', () => {
     Object.defineProperty(ctrl, 'pageSize', { value: 20, configurable: true })
     ctrl.fetchTable = vi.fn().mockResolvedValue(undefined)
     ctrl.refreshSummary = vi.fn().mockResolvedValue(undefined)
-    ctrl.state = { chart: 'balance', bin: 'all', coin: '0' }
+    ctrl.settings = { chart: 'balance', bin: 'all', coin: null }
+    ctrl.state = { chart: 'balance', bin: 'all', coin: null }
     ctrl.retrievedData = { 'amountflow-all-0': { dummy: true } }
+    // effectiveCoin() falls back to activeCoins[0] or 0 when settings.coin is null.
+    ctrl.activeCoins = [0]
     return ctrl
   }
 
@@ -473,6 +476,7 @@ describe('address _refreshOnBlock', () => {
 
     await ctrl._refreshOnBlock()
 
+    // Cache key uses effectiveCoin(), not state.coin (which is null by default).
     expect(Object.prototype.hasOwnProperty.call(ctrl.retrievedData, 'amountflow-all-0')).toBe(false)
     expect(ctrl.state.chart).toBe('__force_refetch__')
     expect(graphSpy).toHaveBeenCalled()

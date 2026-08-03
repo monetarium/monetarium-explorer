@@ -780,8 +780,11 @@ export default class extends Controller {
       // Invalidate chart cache and force a redraw.
       // drawGraph() short-circuits when state matches settings, so we must
       // force a state mismatch to make it reach fetchGraphData.
+      // Use effectiveCoin() because state.coin mirrors settings.coin, which
+      // is null by default (no ?coin= param), while the cache keys use the
+      // resolved coin type from effectiveCoin().
       const chartKey = this.state.chart === 'balance' ? 'amountflow' : this.state.chart
-      const cacheKey = `${chartKey}-${this.state.bin}-${this.state.coin}`
+      const cacheKey = `${chartKey}-${this.state.bin}-${this.effectiveCoin()}`
       delete this.retrievedData[cacheKey]
       this.state.chart = '__force_refetch__'
       this.drawGraph()
