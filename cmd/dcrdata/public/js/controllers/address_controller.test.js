@@ -467,13 +467,14 @@ describe('address _refreshOnBlock', () => {
     mockRequestJSON.mockReset()
   })
 
-  it('re-fetches the table, refreshes summary, and redraws chart', async () => {
+  it('re-fetches the table, refreshes summary, and force-redraws chart', async () => {
     const ctrl = makeRefreshController()
     const graphSpy = vi.spyOn(ctrl, 'drawGraph').mockImplementation(() => {})
 
     await ctrl._refreshOnBlock()
 
     expect(ctrl.retrievedData.hasOwnProperty('amountflow-all-0')).toBe(false)
+    expect(ctrl.state.chart).toBe('__force_refetch__')
     expect(graphSpy).toHaveBeenCalled()
   })
 
