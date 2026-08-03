@@ -473,7 +473,7 @@ describe('address _refreshOnBlock', () => {
 
     await ctrl._refreshOnBlock()
 
-    expect(ctrl.retrievedData.hasOwnProperty('amountflow-all-0')).toBe(false)
+    expect(Object.prototype.hasOwnProperty.call(ctrl.retrievedData, 'amountflow-all-0')).toBe(false)
     expect(ctrl.state.chart).toBe('__force_refetch__')
     expect(graphSpy).toHaveBeenCalled()
   })
