@@ -476,6 +476,11 @@ describe('address _refreshOnBlock', () => {
 
     await ctrl._refreshOnBlock()
 
+    // Table and summary refresh still happen (carried forward from #591).
+    expect(ctrl.fetchTable).toHaveBeenCalledTimes(1)
+    expect(ctrl.fetchTable).toHaveBeenCalledWith('all', 20, 40)
+    expect(ctrl.refreshSummary).toHaveBeenCalledTimes(1)
+
     // Cache key uses effectiveCoin(), not state.coin (which is null by default).
     expect(Object.prototype.hasOwnProperty.call(ctrl.retrievedData, 'amountflow-all-0')).toBe(false)
     expect(ctrl.state.chart).toBe('__force_refetch__')
