@@ -54,6 +54,13 @@ export function rangerColumn(col) {
 
 let ctrl = null
 
+// _setCtrl is a test-only hook for setting the module-level `ctrl` binding.
+// Instance methods (e.g. fetchGraphData) reference this closure rather than
+// `this`, so tests need a way to install their own controller instance.
+export function _setCtrl(c) {
+  ctrl = c
+}
+
 export default class extends Controller {
   static get targets() {
     return [
@@ -155,7 +162,7 @@ export default class extends Controller {
         button.classList.remove('btn-selected')
       })
     }
-    if (settings.bin == null) {
+    if (settings.bin == null || !ctrl.validGraphInterval(settings.bin)) {
       settings.bin = ctrl.getBin()
     }
     if (settings.chart == null || !ctrl.validChartType(settings.chart)) {
@@ -468,19 +475,21 @@ export default class extends Controller {
 
   async fetchGraphData(chart, bin) {
     const coin = ctrl.effectiveCoin()
-    const cacheKey = `${chart}-${bin}-${coin}`
-    if (ctrl.ajaxing === cacheKey) {
+    const requestKey = `${chart}-${bin}-${coin}`
+    if (ctrl.ajaxing === requestKey) {
       return
     }
-    ctrl.requestedChart = cacheKey
-    ctrl.ajaxing = cacheKey
+    ctrl.requestedChart = requestKey
+    ctrl.ajaxing = requestKey
 
     ctrl.chartLoaderTarget.classList.add('loading')
 
-    // Check for cached data
-    if (ctrl.retrievedData[cacheKey]) {
+    // Check for cached data using the remapped key (balance→amountflow).
+    const dataCacheKey = this.chartDataKey(chart, bin, coin)
+    if (ctrl.retrievedData[dataCacheKey]) {
       // Queue the function to allow the loader to display.
       setTimeout(() => {
+        if (!ctrl) return
         ctrl.popChartCache(chart, bin)
         ctrl.chartLoaderTarget.classList.remove('loading')
         ctrl.ajaxing = false
@@ -488,13 +497,29 @@ export default class extends Controller {
       return
     }
 
-    const chartKey = chart === 'balance' ? 'amountflow' : chart
+    const chartKey = this.chartApiSegment(chart)
     const url = `/api/address/${ctrl.dcrAddress}/${chartKey}/${bin}?coin=${coin}`
 
-    const graphDataResponse = await requestJSON(url)
-    ctrl.processData(chart, bin, graphDataResponse)
-    ctrl.ajaxing = false
-    ctrl.chartLoaderTarget.classList.remove('loading')
+    try {
+      const graphDataResponse = await requestJSON(url)
+      ctrl.processData(chart, bin, graphDataResponse)
+    } finally {
+      ctrl.ajaxing = false
+      ctrl.chartLoaderTarget.classList.remove('loading')
+    }
+  }
+
+  // chartApiSegment returns the API path segment for a chart type. The balance
+  // chart fetches its data from the amountflow endpoint but renders differently.
+  chartApiSegment(chart) {
+    return chart === 'balance' ? 'amountflow' : chart
+  }
+
+  // chartDataKey builds the full cache key for chart responses. balance and
+  // amountflow share one backend endpoint, so both are stored under
+  // 'amountflow-<bin>-<coin>'.
+  chartDataKey(chart, bin, coin) {
+    return `${this.chartApiSegment(chart)}-${bin}-${coin}`
   }
 
   // Store the raw API payload per cache key. amountflow + balance share one
@@ -505,8 +530,7 @@ export default class extends Controller {
       return
     }
     const coin = ctrl.effectiveCoin()
-    const key = chart === 'balance' ? 'amountflow' : chart
-    ctrl.retrievedData[`${key}-${bin}-${coin}`] = data
+    ctrl.retrievedData[this.chartDataKey(chart, bin, coin)] = data
     setTimeout(() => ctrl.popChartCache(chart, bin), 0)
   }
 
@@ -519,7 +543,7 @@ export default class extends Controller {
 
   async popChartCache(chart, bin) {
     const coin = ctrl.effectiveCoin()
-    const dataKey = `${chart === 'balance' ? 'amountflow' : chart}-${bin}-${coin}`
+    const dataKey = this.chartDataKey(chart, bin, coin)
     if (!ctrl.retrievedData[dataKey] || ctrl.requestedChart !== `${chart}-${bin}-${coin}`) return
     ctrl.payload = ctrl.retrievedData[dataKey]
     ctrl.currentDef = ctrl.defFor(chart, coin)
@@ -770,16 +794,27 @@ export default class extends Controller {
 
   // BLOCK_RECEIVED handler. The server render is authoritative: re-fetch the
   // current table page (which includes new pending/mempool txs and freshly
-  // mined txs), reconcile the address-level counters, and refresh the summary
-  // card. No reliance on the block payload — the server knows what happened.
+  // mined txs), reconcile the address-level counters, refresh the summary
+  // card, and force-redraw the chart with updated data. No reliance on the
+  // block payload — the server knows what happened.
   async _refreshOnBlock() {
     try {
       await this.fetchTable(this.txnType, this.pageSize, this.paginationParams.offset)
       await this.refreshSummary()
+      this.invalidateChartCache()
     } catch (e) {
       // Non-fatal: the page stays as-is until the next block or a reload.
       console.error('Address block refresh failed', e)
     }
+  }
+
+  // invalidateChartCache removes the cached chart data for the current view
+  // and forces drawGraph() to re-fetch by writing a sentinel into state.chart.
+  invalidateChartCache() {
+    const cacheKey = this.chartDataKey(this.state.chart, this.state.bin, this.effectiveCoin())
+    delete this.retrievedData[cacheKey]
+    this.state.chart = '__force_refetch__'
+    this.drawGraph()
   }
 
   // Apply server-authoritative address-level stats from an /addresstable
