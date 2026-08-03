@@ -54,6 +54,13 @@ export function rangerColumn(col) {
 
 let ctrl = null
 
+// _setCtrl is a test-only hook for setting the module-level `ctrl` binding.
+// Instance methods (e.g. fetchGraphData) reference this closure rather than
+// `this`, so tests need a way to install their own controller instance.
+export function _setCtrl(c) {
+  ctrl = c
+}
+
 export default class extends Controller {
   static get targets() {
     return [
