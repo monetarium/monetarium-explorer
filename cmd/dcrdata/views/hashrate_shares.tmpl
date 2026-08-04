@@ -56,6 +56,28 @@
             </div>
         </div>
 
+        {{- /* Custom block-range interval row. Hidden by default; the controller
+           reveals it when the user activates the custom interval mode. The inputs
+           accept block heights; the Apply button triggers fetching miner shares
+           between firstBlock and lastBlock (inclusive). */}}
+        <div class="d-flex flex-wrap justify-content-center align-items-center mb-2 d-hide"
+             data-hashrate-shares-target="customInterval">
+            <div class="d-flex flex-wrap align-items-center gap-2">
+                <label class="fs14 mb-0 text-secondary" for="firstBlock">First Block:</label>
+                <input id="firstBlock" type="number" min="1"
+                       class="form-control form-control-sm" style="width: 7em;"
+                       data-hashrate-shares-target="firstBlockInput" placeholder="0">
+                <label class="fs14 mb-0 ms-2 text-secondary" for="lastBlock">Last Block:</label>
+                <input id="lastBlock" type="number" min="1"
+                       class="form-control form-control-sm" style="width: 7em;"
+                       data-hashrate-shares-target="lastBlockInput" placeholder="tip">
+                <button class="btn btn-sm btn-primary ms-2"
+                        data-action="click->hashrate-shares#applyCustomInterval">
+                    Apply
+                </button>
+            </div>
+        </div>
+
         <p class="hashrate-shares-heading text-center text-secondary fs15">
             Network hashrate shares, approximated from PoW reward (coinbase) transactions,
             per <strong>reward address</strong>. An operator using multiple payout addresses
