@@ -30,6 +30,52 @@ export function emptyStateMessage(isError) {
   return isError ? ERROR_MESSAGE : EMPTY_MESSAGE
 }
 
+// customRangeFromParams validates raw URL query values for a custom block range
+// and returns { first, last }, or null when absent/invalid (non-numeric,
+// out of the positive range, or first > last).
+export function customRangeFromParams(firstRaw, lastRaw) {
+  const first = Number(firstRaw)
+  const last = Number(lastRaw)
+  if (
+    !Number.isInteger(first) ||
+    !Number.isInteger(last) ||
+    first < 1 ||
+    last < 1 ||
+    first > last
+  ) {
+    return null
+  }
+  return { first, last }
+}
+
+// dataUrl builds the /hashrate-shares/data endpoint URL for the current view
+// state: a custom block range when active, otherwise the interval param.
+export function dataUrl(customBlockRange, interval) {
+  if (customBlockRange) {
+    return `/hashrate-shares/data?first_block=${customBlockRange.first}&last_block=${customBlockRange.last}`
+  }
+  return `/hashrate-shares/data?interval=${interval}`
+}
+
+// syncUrlQuery projects the view state onto the URL query settings. The custom
+// range is written as interval=custom plus first_block/last_block so a shared
+// link reproduces the exact view; a null first_block/last_block drops those
+// params (TurboQuery.filteredQuery skips nulls).
+export function syncUrlQuery(interval, customBlockRange, defaultInterval = DEFAULT_INTERVAL) {
+  if (customBlockRange) {
+    return {
+      interval: 'custom',
+      first_block: customBlockRange.first,
+      last_block: customBlockRange.last
+    }
+  }
+  return {
+    interval: interval === defaultInterval ? null : interval,
+    first_block: null,
+    last_block: null
+  }
+}
+
 // swatchColor maps a 1-based miner rank to its color: ranks drawn in the pie get
 // their slice color; ranks folded into "Others" get the grey aggregate color.
 export function swatchColor(rank) {
@@ -175,12 +221,28 @@ export default class extends Controller {
     this.customBlockRange = null
 
     // Project the URL query onto the view state so the selected interval is
-    // shareable and survives reload (mirrors the address page).
+    // shareable and survives reload (mirrors the address page). The custom
+    // block range is carried as first_block/last_block; when both are present
+    // and valid it takes precedence over any interval param.
     this.query = new TurboQuery()
-    const settings = (this.settings = TurboQuery.nullTemplate(['interval']))
+    const settings = (this.settings = TurboQuery.nullTemplate([
+      'interval',
+      'first_block',
+      'last_block'
+    ]))
     this.query.update(settings)
 
-    this.interval = INTERVALS.includes(settings.interval) ? settings.interval : DEFAULT_INTERVAL
+    const customRange = customRangeFromParams(settings.first_block, settings.last_block)
+    if (customRange) {
+      this.customBlockRange = customRange
+      this.interval = 'custom'
+      // Populate the From/To inputs so the view reproduces exactly what the
+      // sender shared (not just the resulting data).
+      this.firstBlockInputTarget.value = customRange.first
+      this.lastBlockInputTarget.value = customRange.last
+    } else {
+      this.interval = INTERVALS.includes(settings.interval) ? settings.interval : DEFAULT_INTERVAL
+    }
 
     this.syncControlsUI()
     this.syncUrl()
@@ -200,11 +262,15 @@ export default class extends Controller {
     })
   }
 
-  // syncUrl writes the canonical state back to the address bar, omitting the
-  // interval when it equals the default so a pristine view stays at a clean
-  // /hashrate-shares.
+  // syncUrl writes the canonical state back to the address bar. The interval
+  // is omitted when it equals the default so a pristine view stays at a clean
+  // /hashrate-shares; the custom block range is written as first_block/
+  // last_block (with interval=custom) so the exact view is shareable.
   syncUrl() {
-    this.settings.interval = this.interval === DEFAULT_INTERVAL ? null : this.interval
+    const q = syncUrlQuery(this.interval, this.customBlockRange)
+    this.settings.interval = q.interval
+    this.settings.first_block = q.first_block
+    this.settings.last_block = q.last_block
     this.query.replace(this.settings)
   }
 
@@ -273,10 +339,7 @@ export default class extends Controller {
   async fetchAndRender(seq) {
     let data
     try {
-      const url = this.customBlockRange
-        ? `/hashrate-shares/data?first_block=${this.customBlockRange.first}&last_block=${this.customBlockRange.last}`
-        : `/hashrate-shares/data?interval=${this.interval}`
-      data = await requestJSON(url)
+      data = await requestJSON(dataUrl(this.customBlockRange, this.interval))
     } catch (err) {
       if (seq !== this._reqSeq) return
       console.error('hashrate-shares fetch failed', err)

@@ -8,6 +8,9 @@ import {
   buildRows,
   pieSlices,
   buildCsv,
+  customRangeFromParams,
+  dataUrl,
+  syncUrlQuery,
   EMPTY_MESSAGE,
   ERROR_MESSAGE,
   PIE,
@@ -187,5 +190,65 @@ describe('emptyStateMessage', () => {
   })
   it('never conflates the empty period and the fetch-error states', () => {
     expect(ERROR_MESSAGE).not.toBe(EMPTY_MESSAGE)
+  })
+})
+
+describe('customRangeFromParams', () => {
+  it('parses a valid range from URL query values', () => {
+    expect(customRangeFromParams('20000', '20001')).toEqual({ first: 20000, last: 20001 })
+  })
+  it('accepts numeric values', () => {
+    expect(customRangeFromParams(10, 20)).toEqual({ first: 10, last: 20 })
+  })
+  it('returns null when either value is missing', () => {
+    expect(customRangeFromParams(undefined, undefined)).toBeNull()
+    expect(customRangeFromParams('20000', undefined)).toBeNull()
+    expect(customRangeFromParams(undefined, '20001')).toBeNull()
+  })
+  it('rejects non-numeric values', () => {
+    expect(customRangeFromParams('abc', '20001')).toBeNull()
+    expect(customRangeFromParams('20.5', '20001')).toBeNull()
+  })
+  it('rejects heights below 1', () => {
+    expect(customRangeFromParams('0', '20001')).toBeNull()
+    expect(customRangeFromParams('-5', '20001')).toBeNull()
+  })
+  it('rejects first > last', () => {
+    expect(customRangeFromParams('20001', '20000')).toBeNull()
+  })
+})
+
+describe('dataUrl', () => {
+  it('uses the block-range params for a custom range', () => {
+    expect(dataUrl({ first: 20000, last: 20001 }, 'custom')).toBe(
+      '/hashrate-shares/data?first_block=20000&last_block=20001'
+    )
+  })
+  it('falls back to the interval param otherwise', () => {
+    expect(dataUrl(null, 'week')).toBe('/hashrate-shares/data?interval=week')
+  })
+})
+
+describe('syncUrlQuery', () => {
+  it('persists a custom range as interval=custom plus block params', () => {
+    expect(syncUrlQuery('custom', { first: 20000, last: 20001 })).toEqual({
+      interval: 'custom',
+      first_block: 20000,
+      last_block: 20001
+    })
+  })
+  it('omits the default interval and clears the block params', () => {
+    expect(syncUrlQuery('week', null)).toEqual({
+      interval: null,
+      first_block: null,
+      last_block: null
+    })
+  })
+  it('persists a non-default interval and clears the block params', () => {
+    expect(syncUrlQuery('year', null)).toEqual({
+      interval: 'year',
+      first_block: null,
+      last_block: null
+    })
   })
 })
