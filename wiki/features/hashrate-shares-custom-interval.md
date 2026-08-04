@@ -65,6 +65,12 @@ default `"week"`).
   - standard: `/hashrate-shares/data?interval=<interval>`
 - CSV download filename for custom ranges:
   `hashrate-shares-<first>-<last>.csv`.
+- **URL persistence / shareability**: the custom range is written to the
+  address bar as `?interval=custom&first_block=X&last_block=Y` by `syncUrl()`
+  (via `syncUrlQuery`), and `connect()` rehydrates from those params on load —
+  validating them with `customRangeFromParams` and pre-filling the From/To
+  inputs — so a shared link reproduces the exact view. Extracted pure helpers
+  `customRangeFromParams`, `dataUrl`, `syncUrlQuery` are unit-tested.
 
 ## Acceptance criteria
 
@@ -76,3 +82,6 @@ default `"week"`).
 4. Clicking a standard interval pill clears custom mode and fetches with that
    interval.
 5. CSV export works for both standard and custom ranges.
+6. Selecting a custom range writes `?interval=custom&first_block=X&last_block=Y`
+   to the URL; opening that URL reproduces the exact same view (data + From/To
+   inputs populated).
