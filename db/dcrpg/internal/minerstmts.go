@@ -98,4 +98,25 @@ const (
 		WHERE sub.addr IS NOT NULL AND sub.addr != ''
 		GROUP BY sub.addr
 		ORDER BY reward_tx_count DESC`
+
+	SelectMinerRewardCountsRange = `
+		SELECT sub.addr, COUNT(*)::INT8 AS reward_tx_count
+		FROM (
+			SELECT DISTINCT v.script_addresses AS addr, t.block_height AS height
+			FROM vouts v
+			JOIN transactions t ON v.tx_hash = t.tx_hash
+			WHERE t.tree = 0
+			  AND t.block_index = 0
+			  AND t.is_mainchain = true
+			  AND t.block_height >= $1
+			  AND t.block_height <= $2
+			  AND v.script_type IN ('pubkeyhash', 'scripthash', 'pubkey', 'pubkeyalt', 'pubkeyhashalt')
+			  AND v.value > 0
+			  AND v.script_addresses IS NOT NULL
+			  AND v.script_addresses NOT IN ('', 'unknown')
+			  AND v.script_addresses NOT LIKE '{%}'
+		) sub
+		WHERE sub.addr IS NOT NULL AND sub.addr != ''
+		GROUP BY sub.addr
+		ORDER BY reward_tx_count DESC`
 )

@@ -126,6 +126,7 @@ type explorerDataSource interface {
 	GetVoteTicketDataByBlock(ctx context.Context, blockHash string) ([]dbtypes.VoteTicketData, error)
 	ActiveMiners(ctx context.Context, minHeight int64) (int64, error)
 	MinerHashrateShares(ctx context.Context, minHeight int64) ([]dbtypes.MinerRewardCount, error)
+	MinerHashrateSharesRange(ctx context.Context, firstBlock, lastBlock int64) ([]dbtypes.MinerRewardCount, error)
 }
 
 type PoliteiaBackend interface {

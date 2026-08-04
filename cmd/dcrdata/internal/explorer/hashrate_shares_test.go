@@ -1,10 +1,103 @@
 package explorer
 
 import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/monetarium/monetarium-explorer/db/dbtypes"
+	"github.com/monetarium/monetarium-explorer/explorer/types"
 )
+
+// TestHashrateSharesData_CustomRange drives the custom first_block/last_block
+// branch of HashrateSharesData. It verifies param validation (including the
+// chain-tip cap), that the data source receives the parsed range, and that the
+// response JSON carries the custom interval label and shares.
+func TestHashrateSharesData_CustomRange(t *testing.T) {
+	const tipHeight = int64(5000)
+	mockDS := &mockDataSource{
+		blocks:  make(map[string]*types.BlockInfo),
+		heights: make(map[int64]string),
+		hashrateRangeRows: []dbtypes.MinerRewardCount{
+			{Address: "Vsaaa", Count: 7},
+			{Address: "Vsbbb", Count: 3},
+		},
+	}
+	exp := &explorerUI{
+		dataSource: mockDS,
+		pageData: &pageData{
+			BlockInfo: &types.BlockInfo{
+				BlockBasic: &types.BlockBasic{Height: tipHeight},
+			},
+		},
+	}
+
+	call := func(query string) *httptest.ResponseRecorder {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodGet, "/hashrate-shares/data"+query, nil)
+		rec := httptest.NewRecorder()
+		exp.HashrateSharesData(rec, req)
+		return rec
+	}
+
+	t.Run("passes parsed range to the data source", func(t *testing.T) {
+		rec := call("?first_block=1000&last_block=2000")
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status: want 200, got %d", rec.Code)
+		}
+		if mockDS.gotHashrateFirst != 1000 || mockDS.gotHashrateLast != 2000 {
+			t.Fatalf("range: want (1000, 2000), got (%d, %d)",
+				mockDS.gotHashrateFirst, mockDS.gotHashrateLast)
+		}
+
+		var resp struct {
+			Interval string           `json:"interval"`
+			Total    int64            `json:"total"`
+			Miners   []MinerShareView `json:"miners"`
+		}
+		if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		if resp.Interval != "custom:1000-2000" {
+			t.Fatalf("interval: want %q, got %q", "custom:1000-2000", resp.Interval)
+		}
+		if resp.Total != 10 {
+			t.Fatalf("total: want 10, got %d", resp.Total)
+		}
+		if len(resp.Miners) != 2 || resp.Miners[0].Rank != 1 || resp.Miners[0].Address != "Vsaaa" {
+			t.Fatalf("miners: %#v", resp.Miners)
+		}
+	})
+
+	t.Run("rejects first > last", func(t *testing.T) {
+		rec := call("?first_block=2000&last_block=1000")
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("status: want 400, got %d", rec.Code)
+		}
+	})
+
+	t.Run("rejects negative heights", func(t *testing.T) {
+		rec := call("?first_block=-1&last_block=100")
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("status: want 400, got %d", rec.Code)
+		}
+	})
+
+	t.Run("rejects last beyond chain tip", func(t *testing.T) {
+		rec := call("?first_block=10&last_block=999999")
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("status: want 400, got %d", rec.Code)
+		}
+	})
+
+	t.Run("rejects non-numeric heights", func(t *testing.T) {
+		rec := call("?first_block=abc&last_block=100")
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("status: want 400, got %d", rec.Code)
+		}
+	})
+}
 
 func TestMinerShares(t *testing.T) {
 	t.Run("empty input", func(t *testing.T) {

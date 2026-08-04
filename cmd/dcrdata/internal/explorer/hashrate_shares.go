@@ -3,6 +3,7 @@ package explorer
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"sort"
@@ -91,24 +92,65 @@ func (exp *explorerUI) intervalMinHeight(ctx context.Context, interval string) (
 }
 
 // HashrateSharesData serves the per-interval miner hashrate-share data as JSON
-// for the /hashrate-shares page controller. Query param: ?interval=all|year|month|week|day.
+// for the /hashrate-shares page controller. Query params:
+//
+//	?interval=all|year|month|week|day    — standard time window
+//	?first_block=N&last_block=N          — custom block range
 func (exp *explorerUI) HashrateSharesData(w http.ResponseWriter, r *http.Request) {
-	interval := r.URL.Query().Get("interval")
-	switch interval {
-	case "all", "year", "month", "week", "day":
-	default:
-		interval = "week"
-	}
+	firstStr := r.URL.Query().Get("first_block")
+	lastStr := r.URL.Query().Get("last_block")
+
+	var (
+		rows     []dbtypes.MinerRewardCount
+		interval string
+		err      error
+	)
 
 	ctx := r.Context()
-	minHeight, err := exp.intervalMinHeight(ctx, interval)
-	if err != nil {
-		log.Errorf("hashrate-shares: intervalMinHeight: %v", err)
-		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-		return
+
+	if firstStr != "" && lastStr != "" {
+		first, err1 := strconv.ParseInt(firstStr, 10, 64)
+		last, err2 := strconv.ParseInt(lastStr, 10, 64)
+		if err1 != nil || err2 != nil || first < 0 || last < 0 || first > last {
+			http.Error(w, `{"error":"Invalid block range. Provide first_block <= last_block with valid block heights."}`,
+				http.StatusBadRequest)
+			return
+		}
+
+		exp.pageData.RLock()
+		hasTip := exp.pageData.BlockInfo != nil && exp.pageData.BlockInfo.BlockBasic != nil
+		var tipHeight int64
+		if hasTip {
+			tipHeight = exp.pageData.BlockInfo.Height
+		}
+		exp.pageData.RUnlock()
+
+		if hasTip && last > tipHeight {
+			http.Error(w, fmt.Sprintf(`{"error":"last_block %d exceeds chain tip %d"}`, last, tipHeight),
+				http.StatusBadRequest)
+			return
+		}
+
+		rows, err = exp.dataSource.MinerHashrateSharesRange(ctx, first, last)
+		interval = fmt.Sprintf("custom:%d-%d", first, last)
+	} else {
+		interval = r.URL.Query().Get("interval")
+		switch interval {
+		case "all", "year", "month", "week", "day":
+		default:
+			interval = "week"
+		}
+
+		minHeight, minErr := exp.intervalMinHeight(ctx, interval)
+		if minErr != nil {
+			log.Errorf("hashrate-shares: intervalMinHeight: %v", minErr)
+			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+			return
+		}
+
+		rows, err = exp.dataSource.MinerHashrateShares(ctx, minHeight)
 	}
 
-	rows, err := exp.dataSource.MinerHashrateShares(ctx, minHeight)
 	if err != nil {
 		log.Errorf("hashrate-shares: MinerHashrateShares: %v", err)
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)

@@ -164,12 +164,15 @@ export default class extends Controller {
     'intervalOption',
     'empty',
     'pieWrap',
-    'downloadWrap'
+    'downloadWrap',
+    'firstBlockInput',
+    'lastBlockInput'
   ]
 
   connect() {
     this.miners = []
     this._reqSeq = 0
+    this.customBlockRange = null
 
     // Project the URL query onto the view state so the selected interval is
     // shareable and survives reload (mirrors the address page).
@@ -207,7 +210,27 @@ export default class extends Controller {
 
   setInterval(e) {
     const option = e.currentTarget.dataset.option
+    if (option === 'custom') {
+      const first = parseInt(this.firstBlockInputTarget.value, 10)
+      const last = parseInt(this.lastBlockInputTarget.value, 10)
+      if (
+        !Number.isInteger(first) ||
+        first < 1 ||
+        !Number.isInteger(last) ||
+        last < 1 ||
+        first > last
+      ) {
+        return
+      }
+      this.interval = option
+      this.customBlockRange = { first, last }
+      this.syncControlsUI()
+      this.syncUrl()
+      this.fetchAndRender(this.nextSeq())
+      return
+    }
     if (option === this.interval) return
+    this.customBlockRange = null
     this.interval = option
     this.syncControlsUI()
     this.syncUrl()
@@ -227,7 +250,9 @@ export default class extends Controller {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `hashrate-shares-${this.interval}.csv`
+    a.download = this.customBlockRange
+      ? `hashrate-shares-${this.customBlockRange.first}-${this.customBlockRange.last}.csv`
+      : `hashrate-shares-${this.interval}.csv`
     document.body.appendChild(a)
     a.click()
     a.remove()
@@ -248,7 +273,10 @@ export default class extends Controller {
   async fetchAndRender(seq) {
     let data
     try {
-      data = await requestJSON(`/hashrate-shares/data?interval=${this.interval}`)
+      const url = this.customBlockRange
+        ? `/hashrate-shares/data?first_block=${this.customBlockRange.first}&last_block=${this.customBlockRange.last}`
+        : `/hashrate-shares/data?interval=${this.interval}`
+      data = await requestJSON(url)
     } catch (err) {
       if (seq !== this._reqSeq) return
       console.error('hashrate-shares fetch failed', err)

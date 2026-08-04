@@ -5175,6 +5175,26 @@ func retrieveMinerRewardCounts(ctx context.Context, db *sql.DB, minHeight int64)
 	return out, rows.Err()
 }
 
+// retrieveMinerRewardCountsRange returns per-miner reward-transaction counts
+// between firstBlock and lastBlock (inclusive), ordered descending by count.
+func retrieveMinerRewardCountsRange(ctx context.Context, db *sql.DB, firstBlock, lastBlock int64) ([]dbtypes.MinerRewardCount, error) {
+	rows, err := db.QueryContext(ctx, internal.SelectMinerRewardCountsRange, firstBlock, lastBlock)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []dbtypes.MinerRewardCount
+	for rows.Next() {
+		var m dbtypes.MinerRewardCount
+		if err := rows.Scan(&m.Address, &m.Count); err != nil {
+			return nil, err
+		}
+		out = append(out, m)
+	}
+	return out, rows.Err()
+}
+
 // bigAddSKA adds a decimal-string SKA atom value into a *big.Int accumulator.
 func bigAddSKA(acc *big.Int, s string) {
 	if s == "" || s == "0" {
