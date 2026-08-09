@@ -143,6 +143,27 @@ func TestHashrateSharesData_BlockRange(t *testing.T) {
 		}
 	})
 
+	t.Run("does not claim truncation when the whole range is beyond the tip", func(t *testing.T) {
+		// from > tip: nothing in the range exists yet, so the range is left
+		// untouched (no clamp, no inverted from/to) and truncated stays false —
+		// "showing up to the tip only" would be misleading.
+		rec := call("?from=6000&to=6001")
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status: want 200, got %d", rec.Code)
+		}
+		if mockDS.gotHashrateMin != 6000 || mockDS.gotHashrateMax != 6001 {
+			t.Fatalf("window: want (6000, 6001), got (%d, %d)",
+				mockDS.gotHashrateMin, mockDS.gotHashrateMax)
+		}
+		var out resp
+		if err := json.NewDecoder(rec.Body).Decode(&out); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		if out.Truncated {
+			t.Fatalf("truncated: want false, got true")
+		}
+	})
+
 	t.Run("interval branch passes tip as the upper bound", func(t *testing.T) {
 		rec := call("?interval=week")
 		if rec.Code != http.StatusOK {

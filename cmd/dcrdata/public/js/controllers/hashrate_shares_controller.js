@@ -440,13 +440,14 @@ export default class extends Controller {
   }
 
   // showEmpty displays a message in the table's empty slot and hides the table
-  // furniture (pie, totals, download) around it.
+  // furniture (pie, totals, download, truncation note) around it.
   showEmpty(message) {
     this.emptyTarget.textContent = message
     this.emptyTarget.classList.remove('d-hide')
     this.tableBodyTarget.replaceChildren()
     this.pieWrapTarget.classList.add('d-hide')
     if (this.hasDownloadWrapTarget) this.downloadWrapTarget.classList.add('d-hide')
+    this.truncatedNoteTarget.classList.add('d-hide')
     this.renderTotals(false)
   }
 
