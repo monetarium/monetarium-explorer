@@ -5,14 +5,16 @@ import {
   sliceLabelFits,
   arcPath,
   emptyStateMessage,
+  errorStateMessage,
   buildRows,
   pieSlices,
   buildCsv,
-  customRangeFromParams,
+  blockRangeFromParams,
   dataUrl,
   syncUrlQuery,
   EMPTY_MESSAGE,
   ERROR_MESSAGE,
+  INVALID_MESSAGE,
   PIE,
   PIE_SLICES
 } from './hashrate_shares_controller'
@@ -82,31 +84,53 @@ describe('buildRows', () => {
       '<td class="text-end" data-type="rank"></td>' +
       '<td><span class="hashrate-shares-swatch" data-type="swatch"></span></td>' +
       '<td class="text-end mono" data-type="percent"></td>' +
+      '<td class="text-end mono" data-type="blocks"></td>' +
+      '<td class="text-end mono" data-type="minerReward"></td>' +
+      '<td class="text-end mono" data-type="fees"></td>' +
       '<td class="position-relative clipboard hashrate-shares-addr" data-type="addr"></td>' +
       '</tr>'
     return t
   }
 
   const ADDR = 'VsAbCdEfGhIjKlMnOpQrStUvWxYz1234'
+  const MINER = {
+    rank: 1,
+    percent: '91.0',
+    address: ADDR,
+    count: 9,
+    miner_reward: '9000000000',
+    fees: '15490'
+  }
 
   // Regression guard for the layout bug: rows must be real <tr>/<td> elements,
   // not loose text/inline nodes.
-  it('builds one <tr> with four <td> cells per miner', () => {
+  it('builds one <tr> with seven <td> cells per miner', () => {
     const tbody = document.createElement('tbody')
     tbody.replaceChildren(
       ...buildRows(rowTemplate(), [
-        { rank: 1, percent: '91.0', address: ADDR, count: 9 },
-        { rank: 2, percent: '9.0', address: 'VsZZZ', count: 1 }
+        MINER,
+        {
+          rank: 2,
+          percent: '9.0',
+          address: 'VsZZZ',
+          count: 1,
+          miner_reward: '1000000000',
+          fees: '0'
+        }
       ])
     )
     expect(tbody.querySelectorAll('tr')).toHaveLength(2)
-    expect(tbody.querySelectorAll('td')).toHaveLength(8)
+    expect(tbody.querySelectorAll('td')).toHaveLength(14)
   })
 
-  it('populates rank, percent, swatch color and a full-address link', () => {
-    const tr = buildRows(rowTemplate(), [{ rank: 1, percent: '91.0', address: ADDR, count: 9 }])[0]
+  it('populates rank, percent, blocks, money cells, swatch and a full-address link', () => {
+    const tr = buildRows(rowTemplate(), [MINER])[0]
     expect(tr.querySelector('[data-type="rank"]').textContent).toBe('1')
     expect(tr.querySelector('[data-type="percent"]').textContent).toBe('91.0%')
+    expect(tr.querySelector('[data-type="blocks"]').textContent).toBe('9')
+    // atom strings are formatted client-side as coin strings (spec §4.6)
+    expect(tr.querySelector('[data-type="minerReward"]').textContent).toBe('90.00')
+    expect(tr.querySelector('[data-type="fees"]').textContent).toBe('0.0001549')
     expect(tr.querySelector('[data-type="swatch"]').style.background).not.toBe('')
     const a = tr.querySelector('a.elidedhash')
     expect(a.getAttribute('href')).toBe(`/address/${ADDR}`)
@@ -116,7 +140,7 @@ describe('buildRows', () => {
   })
 
   it('adds a clipboard copy control to each address cell', () => {
-    const tr = buildRows(rowTemplate(), [{ rank: 1, percent: '91.0', address: ADDR, count: 9 }])[0]
+    const tr = buildRows(rowTemplate(), [MINER])[0]
     const addr = tr.querySelector('[data-type="addr"]')
     const copy = addr.querySelector('.monicon-copy')
     expect(copy).not.toBeNull()
@@ -127,28 +151,11 @@ describe('buildRows', () => {
     expect(addr.textContent.trim().split(' ')[0]).toBe(ADDR)
   })
 
-  it('renders the "Others" aggregate as plain text with no rank, link or copy icon', () => {
-    const tr = buildRows(rowTemplate(), [
-      { isOthers: true, percent: '5.0', count: 1, addressCount: 3 }
-    ])[0]
-    expect(tr.querySelector('[data-type="rank"]').textContent).toBe('')
-    expect(tr.querySelector('[data-type="percent"]').textContent).toBe('5.0%')
-    expect(tr.querySelector('a')).toBeNull()
-    expect(tr.querySelector('.monicon-copy')).toBeNull()
-    expect(tr.querySelector('[data-type="swatch"]').style.background).not.toBe('')
-    expect(tr.querySelector('[data-type="addr"]').textContent).toBe('Other 3 addresses')
-  })
-
-  it('uses singular "address" when exactly one miner is folded into Others', () => {
-    const tr = buildRows(rowTemplate(), [
-      { isOthers: true, percent: '0.1', count: 1, addressCount: 1 }
-    ])[0]
-    expect(tr.querySelector('[data-type="addr"]').textContent).toBe('Other 1 address')
-  })
-
   it('never interprets an address as HTML (XSS-safe, no sanitizer needed)', () => {
     const evil = '<b>x</b>'
-    const tr = buildRows(rowTemplate(), [{ rank: 1, percent: '1.0', address: evil, count: 1 }])[0]
+    const tr = buildRows(rowTemplate(), [
+      { rank: 1, percent: '1.0', address: evil, count: 1, miner_reward: '0', fees: '0' }
+    ])[0]
     expect(tr.querySelector('b')).toBeNull()
     expect(tr.querySelector('a.elidedhash').textContent).toBe(evil)
   })
@@ -159,25 +166,50 @@ describe('buildRows', () => {
 })
 
 describe('buildCsv', () => {
-  it('emits a header plus one CRLF-terminated record per miner', () => {
+  it('emits the extended header plus one CRLF-terminated record per miner', () => {
     const csv = buildCsv([
-      { rank: 1, address: 'VsAbc', count: 9, percent: '90.0' },
-      { rank: 2, address: 'VsXyz', count: 1, percent: '10.0' }
+      {
+        rank: 1,
+        address: 'VsAbc',
+        count: 9,
+        miner_reward: '9000000000',
+        fees: '10000',
+        percent: '90.0'
+      },
+      {
+        rank: 2,
+        address: 'VsXyz',
+        count: 1,
+        miner_reward: '1000000000',
+        fees: '0',
+        percent: '10.0'
+      }
     ])
     expect(csv).toBe(
-      'rank,reward_address,reward_tx_count,percent\r\n' +
-        '1,VsAbc,9,90.0\r\n' +
-        '2,VsXyz,1,10.0\r\n'
+      'rank,reward_address,blocks,miner_reward,fees,percent\r\n' +
+        '1,VsAbc,9,90.00,0.0001,90.0\r\n' +
+        '2,VsXyz,1,10.00,0.00,10.0\r\n'
     )
   })
 
   it('quotes and escapes fields containing commas or quotes (RFC 4180)', () => {
-    const csv = buildCsv([{ rank: 1, address: 'a,b"c', count: 1, percent: '100.0' }])
-    expect(csv).toBe('rank,reward_address,reward_tx_count,percent\r\n1,"a,b""c",1,100.0\r\n')
+    const csv = buildCsv([
+      {
+        rank: 1,
+        address: 'a,b"c',
+        count: 1,
+        miner_reward: '100000000',
+        fees: '0',
+        percent: '100.0'
+      }
+    ])
+    expect(csv).toBe(
+      'rank,reward_address,blocks,miner_reward,fees,percent\r\n1,"a,b""c",1,1.00,0.00,100.0\r\n'
+    )
   })
 
   it('returns just the header for an empty list (still a valid CSV file)', () => {
-    expect(buildCsv([])).toBe('rank,reward_address,reward_tx_count,percent\r\n')
+    expect(buildCsv([])).toBe('rank,reward_address,blocks,miner_reward,fees,percent\r\n')
   })
 })
 
@@ -193,35 +225,65 @@ describe('emptyStateMessage', () => {
   })
 })
 
-describe('customRangeFromParams', () => {
+describe('errorStateMessage', () => {
+  it('surfaces the backend 400 JSON error body verbatim', () => {
+    const err = new Error(
+      '{"error":"Block range too long. Maximum range length is 100000 blocks."}'
+    )
+    expect(errorStateMessage(err)).toBe(
+      'Block range too long. Maximum range length is 100000 blocks.'
+    )
+  })
+  it('falls back to the generic error for a network failure', () => {
+    expect(errorStateMessage(new Error('Failed to fetch'))).toBe(ERROR_MESSAGE)
+    expect(errorStateMessage(new Error('plain text 500'))).toBe(ERROR_MESSAGE)
+  })
+})
+
+describe('blockRangeFromParams', () => {
   it('parses a valid range from URL query values', () => {
-    expect(customRangeFromParams('20000', '20001')).toEqual({ first: 20000, last: 20001 })
+    expect(blockRangeFromParams('20000', '20001')).toEqual({ from: 20000, to: 20001 })
   })
   it('accepts numeric values', () => {
-    expect(customRangeFromParams(10, 20)).toEqual({ first: 10, last: 20 })
+    expect(blockRangeFromParams(10, 20)).toEqual({ from: 10, to: 20 })
+  })
+  it('accepts a range starting at block 0 (genesis)', () => {
+    expect(blockRangeFromParams('0', '20001')).toEqual({ from: 0, to: 20001 })
   })
   it('returns null when either value is missing', () => {
-    expect(customRangeFromParams(undefined, undefined)).toBeNull()
-    expect(customRangeFromParams('20000', undefined)).toBeNull()
-    expect(customRangeFromParams(undefined, '20001')).toBeNull()
+    expect(blockRangeFromParams(undefined, undefined)).toBeNull()
+    expect(blockRangeFromParams('20000', undefined)).toBeNull()
+    expect(blockRangeFromParams(undefined, '20001')).toBeNull()
+  })
+  // Regression: on a clean /hashrate-shares the settings carry null for both
+  // params, and Number(null) === 0 — absent values must NOT parse as {0, 0}
+  // (which would activate range mode instead of the default Week interval).
+  it('returns null when both values are null (clean URL)', () => {
+    expect(blockRangeFromParams(null, null)).toBeNull()
+    expect(blockRangeFromParams(null, '20001')).toBeNull()
+    expect(blockRangeFromParams('20000', null)).toBeNull()
+  })
+  it('returns null for empty-string params', () => {
+    expect(blockRangeFromParams('', '')).toBeNull()
+    expect(blockRangeFromParams('', '20001')).toBeNull()
+    expect(blockRangeFromParams('20000', '')).toBeNull()
   })
   it('rejects non-numeric values', () => {
-    expect(customRangeFromParams('abc', '20001')).toBeNull()
-    expect(customRangeFromParams('20.5', '20001')).toBeNull()
+    expect(blockRangeFromParams('abc', '20001')).toBeNull()
+    expect(blockRangeFromParams('20.5', '20001')).toBeNull()
   })
-  it('rejects heights below 1', () => {
-    expect(customRangeFromParams('0', '20001')).toBeNull()
-    expect(customRangeFromParams('-5', '20001')).toBeNull()
+  it('rejects negative heights', () => {
+    expect(blockRangeFromParams('-1', '20001')).toBeNull()
   })
-  it('rejects first > last', () => {
-    expect(customRangeFromParams('20001', '20000')).toBeNull()
+  it('rejects from > to', () => {
+    expect(blockRangeFromParams('20001', '20000')).toBeNull()
   })
 })
 
 describe('dataUrl', () => {
-  it('uses the block-range params for a custom range', () => {
-    expect(dataUrl({ first: 20000, last: 20001 }, 'custom')).toBe(
-      '/hashrate-shares/data?first_block=20000&last_block=20001'
+  it('uses the from/to params for a block range', () => {
+    expect(dataUrl({ from: 20000, to: 20001 }, 'custom')).toBe(
+      '/hashrate-shares/data?from=20000&to=20001'
     )
   })
   it('falls back to the interval param otherwise', () => {
@@ -230,25 +292,49 @@ describe('dataUrl', () => {
 })
 
 describe('syncUrlQuery', () => {
-  it('persists a custom range as interval=custom plus block params', () => {
-    expect(syncUrlQuery('custom', { first: 20000, last: 20001 })).toEqual({
-      interval: 'custom',
-      first_block: 20000,
-      last_block: 20001
-    })
-  })
-  it('omits the default interval and clears the block params', () => {
-    expect(syncUrlQuery('week', null)).toEqual({
+  it('persists a block range as from/to with no interval param', () => {
+    expect(syncUrlQuery('custom', { from: 20000, to: 20001 }, '')).toEqual({
       interval: null,
-      first_block: null,
-      last_block: null
+      from: 20000,
+      to: 20001,
+      address: null
     })
   })
-  it('persists a non-default interval and clears the block params', () => {
-    expect(syncUrlQuery('year', null)).toEqual({
-      interval: 'year',
-      first_block: null,
-      last_block: null
+  it('omits the default interval and clears the range params', () => {
+    expect(syncUrlQuery('week', null, '')).toEqual({
+      interval: null,
+      from: null,
+      to: null,
+      address: null
     })
+  })
+  it('persists a non-default interval and clears the range params', () => {
+    expect(syncUrlQuery('year', null, '')).toEqual({
+      interval: 'year',
+      from: null,
+      to: null,
+      address: null
+    })
+  })
+  it('keeps the address filter orthogonal to the period mode', () => {
+    expect(syncUrlQuery('year', null, 'VsAbc')).toEqual({
+      interval: 'year',
+      from: null,
+      to: null,
+      address: 'VsAbc'
+    })
+    expect(syncUrlQuery('custom', { from: 1, to: 2 }, 'VsAbc')).toEqual({
+      interval: null,
+      from: 1,
+      to: 2,
+      address: 'VsAbc'
+    })
+  })
+})
+
+describe('INVALID_MESSAGE', () => {
+  it('is a distinct message from the empty and error states', () => {
+    expect(INVALID_MESSAGE).not.toBe(EMPTY_MESSAGE)
+    expect(INVALID_MESSAGE).not.toBe(ERROR_MESSAGE)
   })
 })

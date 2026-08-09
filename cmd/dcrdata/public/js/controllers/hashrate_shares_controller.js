@@ -9,9 +9,10 @@ import { OTHERS_COLOR, colorForIndex } from '../helpers/chart_theme'
 // Pie geometry constants (SVG viewBox is 360x360).
 export const PIE = { cx: 180, cy: 180, r: 165, labelR: 110 }
 
-// Number of individually-drawn pie slices / individually-listed table rows.
-// Miners ranked beyond this are folded into a single "Others" slice and a single
-// "Others" table row. Matches the shared PALETTE length (in chart_theme) so every drawn slice has its own color.
+// Number of individually-drawn pie slices. Miners ranked beyond this are folded
+// into a single "Others" slice. Matches the shared PALETTE length (in
+// chart_theme) so every drawn slice has its own color. This limits the PIE
+// only — the table draws the full list (spec §5.3).
 export const PIE_SLICES = 25
 
 // Minimum slice sweep (radians) for a rank number to fit inside the slice.
@@ -21,58 +22,85 @@ export const MIN_LABEL_SWEEP = 0.18 // ~10.3 degrees
 export const INTERVALS = ['all', 'year', 'month', 'week', 'day']
 export const DEFAULT_INTERVAL = 'week'
 
-// Distinct empty-table messages: a genuinely empty period and a fetch failure
-// must read differently so a 500/network error is not mistaken for "no data".
+// Distinct empty-table messages: a genuinely empty period, a fetch failure and
+// invalid block-range input must read differently so a 500/network error or a
+// bad range is not mistaken for "no data" (spec §3.3).
 export const EMPTY_MESSAGE = 'No PoW Reward transactions in the selected period.'
 export const ERROR_MESSAGE = 'Could not load hashrate shares. Please try again.'
+export const INVALID_MESSAGE = 'Invalid block range. Enter non-negative heights with from ≤ to.'
 
 export function emptyStateMessage(isError) {
   return isError ? ERROR_MESSAGE : EMPTY_MESSAGE
 }
 
-// customRangeFromParams validates raw URL query values for a custom block range
-// and returns { first, last }, or null when absent/invalid (non-numeric,
-// out of the positive range, or first > last).
-export function customRangeFromParams(firstRaw, lastRaw) {
-  const first = Number(firstRaw)
-  const last = Number(lastRaw)
+// errorStateMessage surfaces the backend's validation message when the failure
+// is a 400 JSON error body ({ "error": "..." }), and falls back to the generic
+// ERROR_MESSAGE for network failures / server errors (which have no body).
+export function errorStateMessage(err) {
+  if (err && err.message) {
+    try {
+      const body = JSON.parse(err.message)
+      if (body && typeof body.error === 'string') return body.error
+    } catch {
+      // not the JSON error shape
+    }
+  }
+  return ERROR_MESSAGE
+}
+
+// blockRangeFromParams validates raw URL query values for an explicit block
+// range and returns { from, to }, or null when absent/invalid (non-numeric,
+// negative, or from > to). Missing params (null/undefined/empty) mean "no range"
+// and must return null — Number(null) is 0, so absent values must be rejected
+// before coercion or a clean /hashrate-shares would parse as { from: 0, to: 0 }
+// and activate range mode. The client check is convenience only — the server
+// is authoritative (spec §3.3).
+export function blockRangeFromParams(fromRaw, toRaw) {
   if (
-    !Number.isInteger(first) ||
-    !Number.isInteger(last) ||
-    first < 1 ||
-    last < 1 ||
-    first > last
+    fromRaw === null ||
+    fromRaw === undefined ||
+    fromRaw === '' ||
+    toRaw === null ||
+    toRaw === undefined ||
+    toRaw === ''
   ) {
     return null
   }
-  return { first, last }
+  const from = Number(fromRaw)
+  const to = Number(toRaw)
+  if (!Number.isInteger(from) || !Number.isInteger(to) || from < 0 || to < 0 || from > to) {
+    return null
+  }
+  return { from, to }
 }
 
 // dataUrl builds the /hashrate-shares/data endpoint URL for the current view
-// state: a custom block range when active, otherwise the interval param.
-export function dataUrl(customBlockRange, interval) {
-  if (customBlockRange) {
-    return `/hashrate-shares/data?first_block=${customBlockRange.first}&last_block=${customBlockRange.last}`
+// state: an explicit block range when active, otherwise the interval param.
+export function dataUrl(blockRange, interval) {
+  if (blockRange) {
+    return `/hashrate-shares/data?from=${blockRange.from}&to=${blockRange.to}`
   }
   return `/hashrate-shares/data?interval=${interval}`
 }
 
-// syncUrlQuery projects the view state onto the URL query settings. The custom
-// range is written as interval=custom plus first_block/last_block so a shared
-// link reproduces the exact view; a null first_block/last_block drops those
-// params (TurboQuery.filteredQuery skips nulls).
-export function syncUrlQuery(interval, customBlockRange, defaultInterval = DEFAULT_INTERVAL) {
-  if (customBlockRange) {
+// syncUrlQuery projects the view state onto the URL query settings. The block
+// range is written as from/to (no interval param — the range has priority on
+// the server, spec §3.2); a null from/to drops those params (TurboQuery's
+// filteredQuery skips nulls). The address filter is orthogonal and shared.
+export function syncUrlQuery(interval, blockRange, address, defaultInterval = DEFAULT_INTERVAL) {
+  if (blockRange) {
     return {
-      interval: 'custom',
-      first_block: customBlockRange.first,
-      last_block: customBlockRange.last
+      interval: null,
+      from: blockRange.from,
+      to: blockRange.to,
+      address: address || null
     }
   }
   return {
     interval: interval === defaultInterval ? null : interval,
-    first_block: null,
-    last_block: null
+    from: null,
+    to: null,
+    address: address || null
   }
 }
 
@@ -82,12 +110,11 @@ export function swatchColor(rank) {
   return rank >= 1 && rank <= PIE_SLICES ? colorForIndex(rank - 1) : OTHERS_COLOR
 }
 
-// pieSlices reduces the full ranked miner list to what the pie and the table draw:
-// the top PIE_SLICES miners verbatim, plus a single { isOthers, count, percent }
-// aggregate for the remainder, where percent is the combined share of every miner
-// ranked beyond PIE_SLICES (1 decimal place, matching the per-miner percents).
-// Returns the input unchanged when it already fits, so a list of <= PIE_SLICES
-// miners draws no "Others" slice and shows no "Others" row.
+// pieSlices reduces the full ranked miner list to what the pie draws: the top
+// PIE_SLICES miners verbatim, plus a single { isOthers, count, percent }
+// aggregate for the remainder, where percent is the combined share of every
+// miner ranked beyond PIE_SLICES (1 decimal place, matching the per-miner
+// percents). Returns the input unchanged when it already fits.
 export function pieSlices(miners, maxSlices = PIE_SLICES) {
   if (miners.length <= maxSlices) return miners
   const top = miners.slice(0, maxSlices)
@@ -123,7 +150,8 @@ function copyIconNode() {
 
 // buildRows clones the row <template> once per entry and fills each cell via
 // textContent / DOM nodes, returning the resulting <tr> elements. Each entry is
-// either a ranked miner or the trailing { isOthers, count, percent } aggregate.
+// a ranked miner: the table draws the full list (spec §5.3), so there is no
+// "Others" aggregate row here — the pie derives it separately via pieSlices.
 //
 // No HTML is parsed from the data, so untrusted values (reward addresses) stay
 // inert without a sanitizer — humanize.hashElide sets the address via
@@ -133,34 +161,35 @@ function copyIconNode() {
 export function buildRows(rowTemplate, miners) {
   return miners.map((m) => {
     const row = document.importNode(rowTemplate.content, true).querySelector('tr')
-    row.querySelector('[data-type="rank"]').textContent = m.isOthers ? '' : String(m.rank)
-    row.querySelector('[data-type="swatch"]').style.background = m.isOthers
-      ? OTHERS_COLOR
-      : swatchColor(m.rank)
+    row.querySelector('[data-type="rank"]').textContent = String(m.rank)
+    row.querySelector('[data-type="swatch"]').style.background = swatchColor(m.rank)
     row.querySelector('[data-type="percent"]').textContent = `${m.percent}%`
+    row.querySelector('[data-type="blocks"]').textContent = String(m.count)
+    row.querySelector('[data-type="minerReward"]').textContent = humanize.formatAtomsAsCoinString(
+      m.miner_reward,
+      0,
+      2
+    )
+    row.querySelector('[data-type="fees"]').textContent = humanize.formatAtomsAsCoinString(
+      m.fees,
+      0,
+      2
+    )
 
+    // Responsive, copyable address: hashElide renders the full address (shown in
+    // full when the column is wide, middle-elided when narrow), and the copy
+    // icon copies the cell's text — the address — via the clipboard controller.
     const addr = row.querySelector('[data-type="addr"]')
-    if (m.isOthers) {
-      // The aggregate of every miner ranked beyond the pie — no address, no link.
-      const span = document.createElement('span')
-      span.className = 'text-secondary'
-      const n = m.addressCount
-      span.textContent = `Other ${n} ${n === 1 ? 'address' : 'addresses'}`
-      addr.appendChild(span)
-    } else {
-      // Responsive, copyable address: hashElide renders the full address (shown in
-      // full when the column is wide, middle-elided when narrow), and the copy
-      // icon copies the cell's text — the address — via the clipboard controller.
-      addr.append(humanize.hashElide(m.address, `/address/${m.address}`, true), copyIconNode())
-    }
+    addr.append(humanize.hashElide(m.address, `/address/${m.address}`, true), copyIconNode())
     return row
   })
 }
 
 // CSV_HEADER names the Download CSV columns. snake_case mirrors the address
 // page's server-streamed CSV (tx_hash, io_index, …) for a consistent export
-// convention across the explorer.
-export const CSV_HEADER = ['rank', 'reward_address', 'reward_tx_count', 'percent']
+// convention across the explorer. The per-row total (miner_reward + fees) is
+// deliberately not exported — it is derived (spec §6).
+export const CSV_HEADER = ['rank', 'reward_address', 'blocks', 'miner_reward', 'fees', 'percent']
 
 // csvField escapes one value per RFC 4180: a field is quoted only when it
 // contains a comma, double-quote, or newline, and embedded quotes are doubled.
@@ -173,13 +202,25 @@ function csvField(value) {
 
 // buildCsv serializes the full ranked miner list to an RFC 4180 CSV string. The
 // whole dataset already lives client-side (this.miners), so the export needs no
-// server round-trip — and it exports every miner individually, not the capped
-// top-25 + "Others" view shown in the table. Records are CRLF-terminated
-// (including the last), matching Go's csv.Writer.
+// server round-trip — and it exports every miner individually, not the pie's
+// top-25 + "Others" view. Money columns are formatted as coin strings, matching
+// the table. Records are CRLF-terminated (including the last), matching Go's
+// csv.Writer.
 export function buildCsv(miners) {
   const lines = [CSV_HEADER.join(',')]
   for (const m of miners) {
-    lines.push([m.rank, m.address, m.count, m.percent].map(csvField).join(','))
+    lines.push(
+      [
+        m.rank,
+        m.address,
+        m.count,
+        humanize.formatAtomsAsCoinString(m.miner_reward, 0, 2),
+        humanize.formatAtomsAsCoinString(m.fees, 0, 2),
+        m.percent
+      ]
+        .map(csvField)
+        .join(',')
+    )
   }
   return lines.map((line) => `${line}\r\n`).join('')
 }
@@ -211,37 +252,52 @@ export default class extends Controller {
     'empty',
     'pieWrap',
     'downloadWrap',
-    'firstBlockInput',
-    'lastBlockInput'
+    'blockRangeWrap',
+    'fromInput',
+    'toInput',
+    'addressInput',
+    'totalsRow',
+    'truncatedNote'
   ]
 
   connect() {
     this.miners = []
+    this.totals = null
+    this.truncated = false
+    this.blockRange = null
+    this.addressFilter = ''
     this._reqSeq = 0
-    this.customBlockRange = null
+    this._pendingAddressScroll = null
 
-    // Project the URL query onto the view state so the selected interval is
-    // shareable and survives reload (mirrors the address page). The custom
-    // block range is carried as first_block/last_block; when both are present
-    // and valid it takes precedence over any interval param.
+    // Project the URL query onto the view state so the selected period is
+    // shareable and survives reload. The block range is carried as from/to; when
+    // both are present and valid it takes precedence over any interval param.
+    // The address filter is orthogonal and applies in either mode (spec §3.2).
     this.query = new TurboQuery()
     const settings = (this.settings = TurboQuery.nullTemplate([
       'interval',
-      'first_block',
-      'last_block'
+      'from',
+      'to',
+      'address'
     ]))
     this.query.update(settings)
 
-    const customRange = customRangeFromParams(settings.first_block, settings.last_block)
-    if (customRange) {
-      this.customBlockRange = customRange
+    const blockRange = blockRangeFromParams(settings.from, settings.to)
+    if (blockRange) {
+      this.blockRange = blockRange
       this.interval = 'custom'
       // Populate the From/To inputs so the view reproduces exactly what the
       // sender shared (not just the resulting data).
-      this.firstBlockInputTarget.value = customRange.first
-      this.lastBlockInputTarget.value = customRange.last
+      this.fromInputTarget.value = blockRange.from
+      this.toInputTarget.value = blockRange.to
     } else {
       this.interval = INTERVALS.includes(settings.interval) ? settings.interval : DEFAULT_INTERVAL
+    }
+
+    if (settings.address) {
+      this.addressFilter = settings.address
+      this.addressInputTarget.value = settings.address
+      this._pendingAddressScroll = settings.address
     }
 
     this.syncControlsUI()
@@ -254,61 +310,84 @@ export default class extends Controller {
     return this._reqSeq
   }
 
-  // syncControlsUI reflects the current state onto the interval pills (which are
-  // server-rendered with a static default).
+  // syncControlsUI reflects the current mode onto the controls: the interval
+  // pills (which are server-rendered with a static default) and the block-range
+  // From/To + Apply group, which lights up when a range is active.
   syncControlsUI() {
     this.intervalOptionTargets.forEach((el) => {
       el.classList.toggle('active', el.dataset.option === this.interval)
     })
+    this.blockRangeWrapTarget.classList.toggle(
+      'block-range-active',
+      this.interval === 'custom' && !!this.blockRange
+    )
   }
 
-  // syncUrl writes the canonical state back to the address bar. The interval
-  // is omitted when it equals the default so a pristine view stays at a clean
-  // /hashrate-shares; the custom block range is written as first_block/
-  // last_block (with interval=custom) so the exact view is shareable.
+  // syncUrl writes the canonical state back to the address bar. The interval is
+  // omitted when it equals the default so a pristine view stays at a clean
+  // /hashrate-shares; the block range is written as from/to (no interval param)
+  // and the address filter as address, both only when non-empty.
   syncUrl() {
-    const q = syncUrlQuery(this.interval, this.customBlockRange)
+    const q = syncUrlQuery(this.interval, this.blockRange, this.addressFilter)
     this.settings.interval = q.interval
-    this.settings.first_block = q.first_block
-    this.settings.last_block = q.last_block
+    this.settings.from = q.from
+    this.settings.to = q.to
+    this.settings.address = q.address
     this.query.replace(this.settings)
   }
 
+  // setInterval switches to one of the interval pills. Picking an interval
+  // deactivates the block-range mode and clears its inputs (spec §3.1).
   setInterval(e) {
     const option = e.currentTarget.dataset.option
-    if (option === 'custom') {
-      const first = parseInt(this.firstBlockInputTarget.value, 10)
-      const last = parseInt(this.lastBlockInputTarget.value, 10)
-      if (
-        !Number.isInteger(first) ||
-        first < 1 ||
-        !Number.isInteger(last) ||
-        last < 1 ||
-        first > last
-      ) {
-        return
-      }
-      this.interval = option
-      this.customBlockRange = { first, last }
-      this.syncControlsUI()
-      this.syncUrl()
-      this.fetchAndRender(this.nextSeq())
-      return
-    }
     if (option === this.interval) return
-    this.customBlockRange = null
+    this.blockRange = null
     this.interval = option
+    this.clearRangeInputs()
     this.syncControlsUI()
     this.syncUrl()
     this.fetchAndRender(this.nextSeq())
   }
 
-  // downloadCsv exports the full ranked miner list (every miner, not the capped
+  // applyBlockRange activates the explicit block-range mode from the From/To
+  // inputs (spec §3.1). Client-side validation is convenience only — the server
+  // re-validates and rejects with its own message (§3.3).
+  applyBlockRange(e) {
+    if (e) e.preventDefault()
+    const range = blockRangeFromParams(this.fromInputTarget.value, this.toInputTarget.value)
+    if (!range) {
+      this.showEmpty(INVALID_MESSAGE)
+      return
+    }
+    this.blockRange = range
+    this.interval = 'custom'
+    this.syncControlsUI()
+    this.syncUrl()
+    this.fetchAndRender(this.nextSeq())
+  }
+
+  // clearRangeInputs empties the From/To fields when leaving the block-range
+  // mode (spec §3.1).
+  clearRangeInputs() {
+    this.fromInputTarget.value = ''
+    this.toInputTarget.value = ''
+  }
+
+  // filterByAddress narrows the already-loaded list to addresses containing the
+  // query, keeping the real rank. It never affects the pie, percents or totals,
+  // which are computed over the whole period (spec §3.2).
+  filterByAddress() {
+    this.addressFilter = this.addressInputTarget.value.trim()
+    this.syncUrl()
+    this.renderTable()
+  }
+
+  // downloadCsv exports the full ranked miner list (every miner, not the pie's
   // top-25 + "Others" view) as a CSV file, built client-side from this.miners.
   // The address page streams its CSV from the server because its rows are
   // server-paginated; here the whole dataset is already in the browser, so a Blob
-  // download avoids a round-trip. The interval is baked into the filename so the
-  // export is self-describing.
+  // download avoids a round-trip. The period is baked into the filename so the
+  // export is self-describing (spec §6).
   downloadCsv(e) {
     if (e) e.preventDefault()
     if (!this.miners.length) return
@@ -316,8 +395,8 @@ export default class extends Controller {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = this.customBlockRange
-      ? `hashrate-shares-${this.customBlockRange.first}-${this.customBlockRange.last}.csv`
+    a.download = this.blockRange
+      ? `hashrate-shares-${this.blockRange.from}-${this.blockRange.to}.csv`
       : `hashrate-shares-${this.interval}.csv`
     document.body.appendChild(a)
     a.click()
@@ -339,39 +418,87 @@ export default class extends Controller {
   async fetchAndRender(seq) {
     let data
     try {
-      data = await requestJSON(dataUrl(this.customBlockRange, this.interval))
+      data = await requestJSON(dataUrl(this.blockRange, this.interval))
     } catch (err) {
       if (seq !== this._reqSeq) return
       console.error('hashrate-shares fetch failed', err)
       this.miners = []
-      this.renderTable([], true)
+      this.totals = null
+      this.truncated = false
+      this.showEmpty(errorStateMessage(err))
       this.renderPie([])
       return
     }
     if (seq !== this._reqSeq) return
     this.miners = (data && data.miners) || []
-    // Compute the top-PIE_SLICES + "Others" view once and render the table and the
-    // pie from the same array, so the two can never disagree (issue #474 AC4).
-    const slices = pieSlices(this.miners)
-    this.renderTable(slices)
-    this.renderPie(slices)
+    this.totals = (data && data.totals) || null
+    this.truncated = !!(data && data.truncated)
+    this.renderTable()
+    this.renderPie(pieSlices(this.miners))
+    if (this._pendingAddressScroll) this.scrollToAddress(this._pendingAddressScroll)
+    this._pendingAddressScroll = null
   }
 
-  renderTable(slices, isError = false) {
-    const empty = !slices.length
-    this.emptyTarget.classList.toggle('d-hide', !empty)
-    this.pieWrapTarget.classList.toggle('d-hide', empty)
-    // The Download CSV control only makes sense when there is data to export.
-    if (this.hasDownloadWrapTarget) this.downloadWrapTarget.classList.toggle('d-hide', empty)
-    if (empty) {
-      this.emptyTarget.textContent = emptyStateMessage(isError)
-      this.tableBodyTarget.replaceChildren()
+  // showEmpty displays a message in the table's empty slot and hides the table
+  // furniture (pie, totals, download) around it.
+  showEmpty(message) {
+    this.emptyTarget.textContent = message
+    this.emptyTarget.classList.remove('d-hide')
+    this.tableBodyTarget.replaceChildren()
+    this.pieWrapTarget.classList.add('d-hide')
+    if (this.hasDownloadWrapTarget) this.downloadWrapTarget.classList.add('d-hide')
+    this.renderTotals(false)
+  }
+
+  renderTable() {
+    const hasData = this.miners.length > 0
+    this.pieWrapTarget.classList.toggle('d-hide', !hasData)
+    if (this.hasDownloadWrapTarget) this.downloadWrapTarget.classList.toggle('d-hide', !hasData)
+
+    if (!hasData) {
+      this.showEmpty(EMPTY_MESSAGE)
       return
     }
-    // slices is the same array the pie renders: the top PIE_SLICES miners
-    // individually, plus a single "Others" aggregate row when there are more
-    // (issue #474).
-    this.tableBodyTarget.replaceChildren(...buildRows(this.rowTemplateTarget, slices))
+
+    // The table draws the full ranked list (spec §5.3); the address filter
+    // narrows the view without touching ranks, percents or totals.
+    const filtered = this.addressFilter
+      ? this.miners.filter((m) => m.address.includes(this.addressFilter))
+      : this.miners
+    this.tableBodyTarget.replaceChildren(...buildRows(this.rowTemplateTarget, filtered))
+    this.emptyTarget.classList.toggle('d-hide', filtered.length > 0)
+    if (!filtered.length) {
+      this.emptyTarget.textContent = `No reward addresses match “${this.addressFilter}”.`
+    }
+    this.renderTotals(hasData)
+  }
+
+  renderTotals(show) {
+    this.totalsRowTarget.classList.toggle('d-hide', !show || !this.totals)
+    if (!show || !this.totals) return
+    const t = this.totals
+    this.totalsRowTarget.querySelector('[data-type="totalsBlocks"]').textContent = String(t.blocks)
+    this.totalsRowTarget.querySelector('[data-type="totalsReward"]').textContent =
+      humanize.formatAtomsAsCoinString(t.miner_reward, 0, 2)
+    this.totalsRowTarget.querySelector('[data-type="totalsFees"]').textContent =
+      humanize.formatAtomsAsCoinString(t.fees, 0, 2)
+    this.totalsRowTarget.querySelector('[data-type="totalsAddr"]').textContent =
+      `${t.addresses} addresses · total ${humanize.formatAtomsAsCoinString(t.total, 0, 2)}`
+    this.truncatedNoteTarget.classList.toggle('d-hide', !this.truncated)
+  }
+
+  // scrollToAddress brings the row for the address carried by ?address= into
+  // view and highlights it (spec §5.3), so a shared link lands the participant
+  // on their own row.
+  scrollToAddress(address) {
+    const rows = [...this.tableBodyTarget.querySelectorAll('tr')]
+    const row = rows.find((tr) => {
+      const addr = tr.querySelector('[data-type="addr"]')
+      return addr && addr.textContent.includes(address)
+    })
+    if (!row) return
+    row.classList.add('hashrate-shares-highlight')
+    row.scrollIntoView({ block: 'center' })
   }
 
   renderPie(slices) {

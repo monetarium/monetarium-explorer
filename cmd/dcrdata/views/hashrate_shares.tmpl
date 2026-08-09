@@ -51,19 +51,26 @@
                             data-action="click->hashrate-shares#setInterval" data-option="week">Week</li>
                         <li class="nav-item nav-link" data-hashrate-shares-target="intervalOption"
                             data-action="click->hashrate-shares#setInterval" data-option="day">Day</li>
-                        <li class="nav-item d-flex align-items-center gap-1 ps-2 ms-1 border-start">
-                            <span class="text-secondary fs12">From</span>
-                            <input type="number" min="1"
-                                   class="form-control form-control-sm" style="width: 6em;"
-                                   data-hashrate-shares-target="firstBlockInput" placeholder="0">
-                            <span class="text-secondary fs12">To</span>
-                            <input type="number" min="1"
-                                   class="form-control form-control-sm" style="width: 6em;"
-                                   data-hashrate-shares-target="lastBlockInput" placeholder="tip">
-                            <li class="nav-item nav-link" data-hashrate-shares-target="intervalOption"
-                                data-action="click->hashrate-shares#setInterval" data-option="custom">Custom</li>
-                        </li>
                     </ul>
+                </div>
+            </div>
+
+            <div class="chart-control-wrapper me-2 mb-1">
+                <div class="chart-control-label">BLOCK RANGE</div>
+                <div class="chart-control">
+                    <div class="d-flex align-items-center gap-1 flex-wrap" data-hashrate-shares-target="blockRangeWrap">
+                        <span class="text-secondary fs12">From</span>
+                        <input type="number" min="0"
+                               class="form-control form-control-sm" style="width: 6em;"
+                               data-hashrate-shares-target="fromInput" placeholder="0">
+                        <span class="text-secondary fs12">To</span>
+                        <input type="number" min="0"
+                               class="form-control form-control-sm" style="width: 6em;"
+                               data-hashrate-shares-target="toInput" placeholder="tip">
+                        <a class="btn btn-sm btn-primary" href="#"
+                           data-action="click->hashrate-shares#applyBlockRange">Apply</a>
+                    </div>
+                    <div class="text-secondary fs12 mt-1">Range includes blocks from and to.</div>
                 </div>
             </div>
         </div>
@@ -74,22 +81,50 @@
             will appear as multiple separate entries.
         </p>
 
+        <div class="d-hide text-secondary fs12 text-center mb-2" data-hashrate-shares-target="truncatedNote">
+            The requested range extends past the current chain tip; showing blocks up to the tip only.
+        </div>
+
         <div class="hashrate-shares-layout d-flex flex-wrap justify-content-center align-items-start">
             <div class="hashrate-shares-pie-wrap" data-hashrate-shares-target="pieWrap">
                 <svg data-hashrate-shares-target="pie" viewBox="0 0 360 360" class="hashrate-shares-pie"></svg>
             </div>
             <div class="hashrate-shares-table-wrap">
-                <table class="table table-sm hashrate-shares-table">
-                    <thead>
-                        <tr>
-                            <th class="text-end">#</th>
-                            <th></th>
-                            <th class="text-end">%</th>
-                            <th>Reward Address</th>
-                        </tr>
-                    </thead>
-                    <tbody data-hashrate-shares-target="tableBody"></tbody>
-                </table>
+                <div class="d-flex align-items-center gap-2 mb-2">
+                    <span class="text-secondary fs12">Filter by address</span>
+                    <input type="text" class="form-control form-control-sm"
+                           style="max-width: 16em;"
+                           data-hashrate-shares-target="addressInput"
+                           data-action="input->hashrate-shares#filterByAddress"
+                           placeholder="Search reward address…" autocomplete="off">
+                </div>
+                <div class="hashrate-shares-scroll">
+                    <table class="table table-sm hashrate-shares-table">
+                        <thead>
+                            <tr>
+                                <th class="text-end">#</th>
+                                <th></th>
+                                <th class="text-end">%</th>
+                                <th class="text-end">Blocks</th>
+                                <th class="text-end">Miner Reward</th>
+                                <th class="text-end">Fees</th>
+                                <th>Reward Address</th>
+                            </tr>
+                        </thead>
+                        <tbody data-hashrate-shares-target="tableBody"></tbody>
+                        <tfoot data-hashrate-shares-target="totalsRow" class="hashrate-shares-totals d-hide">
+                            <tr>
+                                <td>Totals</td>
+                                <td></td>
+                                <td></td>
+                                <td class="text-end" data-type="totalsBlocks"></td>
+                                <td class="text-end" data-type="totalsReward"></td>
+                                <td class="text-end" data-type="totalsFees"></td>
+                                <td data-type="totalsAddr"></td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
                 <div class="d-hide text-secondary p-3" data-hashrate-shares-target="empty">
                     No PoW Reward transactions in the selected period.
                 </div>
@@ -114,6 +149,9 @@
                 <td class="text-end" data-type="rank"></td>
                 <td><span class="hashrate-shares-swatch" data-type="swatch"></span></td>
                 <td class="text-end mono" data-type="percent"></td>
+                <td class="text-end mono" data-type="blocks"></td>
+                <td class="text-end mono" data-type="minerReward"></td>
+                <td class="text-end mono" data-type="fees"></td>
                 <td class="position-relative clipboard hashrate-shares-addr" data-type="addr"></td>
             </tr>
         </template>
