@@ -5155,10 +5155,12 @@ func retrieveMiners(ctx context.Context, db *sql.DB) (*sql.Rows, error) {
 	return db.QueryContext(ctx, internal.SelectMiners)
 }
 
-// retrieveMinerRewardCounts returns per-miner reward-transaction counts at or
-// above minHeight, ordered descending by count.
-func retrieveMinerRewardCounts(ctx context.Context, db *sql.DB, minHeight int64) ([]dbtypes.MinerRewardCount, error) {
-	rows, err := db.QueryContext(ctx, internal.SelectMinerRewardCounts, minHeight)
+// retrieveMinerRewardCounts returns per-miner reward data for the inclusive
+// block-height window [minHeight, maxHeight], ordered descending by block
+// count. Each MinerRewardCount carries the distinct coinbase-block count and
+// the VAR atoms the address received (see internal.SelectMinerRewardCounts).
+func retrieveMinerRewardCounts(ctx context.Context, db *sql.DB, minHeight, maxHeight int64) ([]dbtypes.MinerRewardCount, error) {
+	rows, err := db.QueryContext(ctx, internal.SelectMinerRewardCounts, minHeight, maxHeight)
 	if err != nil {
 		return nil, err
 	}
@@ -5167,7 +5169,36 @@ func retrieveMinerRewardCounts(ctx context.Context, db *sql.DB, minHeight int64)
 	var out []dbtypes.MinerRewardCount
 	for rows.Next() {
 		var m dbtypes.MinerRewardCount
-		if err := rows.Scan(&m.Address, &m.Count); err != nil {
+		if err := rows.Scan(&m.Address, &m.Count, &m.RewardAtoms, &m.PaidAtoms); err != nil {
+			return nil, err
+		}
+		out = append(out, m)
+	}
+	return out, rows.Err()
+}
+
+// retrieveMultiAddressCoinbases returns any coinbase transactions in the
+// inclusive window [minHeight, maxHeight] that pay more than one distinct
+// payment address, per internal.SelectMultiAddressCoinbases. Such a coinbase
+// breaks the single-payment-output assumption behind Miner Reward attribution
+// (spec §10.4); callers log the result as a tripwire.
+type multiAddressCoinbase struct {
+	height    int64
+	txHash    dbtypes.ChainHash // BYTEA column; ChainHash byte-reverses + hex-encodes for logging
+	addrCount int64
+}
+
+func retrieveMultiAddressCoinbases(ctx context.Context, db *sql.DB, minHeight, maxHeight int64) ([]multiAddressCoinbase, error) {
+	rows, err := db.QueryContext(ctx, internal.SelectMultiAddressCoinbases, minHeight, maxHeight)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []multiAddressCoinbase
+	for rows.Next() {
+		var m multiAddressCoinbase
+		if err := rows.Scan(&m.height, &m.txHash, &m.addrCount); err != nil {
 			return nil, err
 		}
 		out = append(out, m)

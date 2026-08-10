@@ -2614,10 +2614,16 @@ func (a *AddressInfo) PostProcess(tipHeight uint32) {
 }
 
 // MinerRewardCount is one miner reward address and how many PoW-reward (coinbase)
-// transactions paid it within a queried block-height window. Used by the
-// hashrate-shares page. Count is the number of distinct coinbase blocks that paid
-// the address (DISTINCT (address, height)).
+// transactions paid it within a queried block-height window, plus the VAR atoms
+// the address received for those blocks. Used by the hashrate-shares page.
+// Count is the number of distinct coinbase blocks that paid the address
+// (DISTINCT (address, height)); RewardAtoms is the sum of those coinbases'
+// ValueIn (the consensus-checked miner subsidy without fees), and PaidAtoms is
+// the sum of their payment outputs to the address. Fees = PaidAtoms -
+// RewardAtoms is computed by callers, not stored.
 type MinerRewardCount struct {
-	Address string
-	Count   int64
+	Address     string
+	Count       int64
+	RewardAtoms int64
+	PaidAtoms   int64
 }
