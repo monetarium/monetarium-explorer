@@ -255,6 +255,7 @@ export default class extends Controller {
     'blockRangeWrap',
     'fromInput',
     'toInput',
+    'applyButton',
     'addressInput',
     'totalsRow',
     'truncatedNote'
@@ -318,15 +319,16 @@ export default class extends Controller {
 
   // syncControlsUI reflects the current mode onto the controls: the interval
   // pills (which are server-rendered with a static default) and the block-range
-  // From/To + Apply group, which lights up when a range is active.
+  // From/To + Apply group. The Apply control is styled as an interval pill, so
+  // it lights up exactly like a selected pill while a custom range is active
+  // and reads as a plain inactive pill when any interval is selected.
   syncControlsUI() {
     this.intervalOptionTargets.forEach((el) => {
       el.classList.toggle('active', el.dataset.option === this.interval)
     })
-    this.blockRangeWrapTarget.classList.toggle(
-      'block-range-active',
-      this.interval === 'custom' && !!this.blockRange
-    )
+    const rangeActive = this.interval === 'custom' && !!this.blockRange
+    this.applyButtonTarget.classList.toggle('active', rangeActive)
+    this.blockRangeWrapTarget.classList.toggle('block-range-active', rangeActive)
   }
 
   // syncUrl writes the canonical state back to the address bar. The interval is
