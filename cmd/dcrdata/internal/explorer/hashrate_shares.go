@@ -179,20 +179,20 @@ func (exp *explorerUI) HashrateSharesData(w http.ResponseWriter, r *http.Request
 			hashrateError(w, "Invalid block range. from must be <= to.")
 			return
 		}
-		if to-from > maxHashrateShareRange {
-			hashrateError(w, fmt.Sprintf("Block range too long. Maximum range length is %d blocks.", maxHashrateShareRange))
-			return
-		}
-
-		// to beyond the chain tip is clamped, not rejected (spec §3.3): the
-		// request runs and the response notes the range is not yet complete.
-		// A range entirely ahead of the tip (from > tip) has nothing to clamp
-		// and nothing to show, so it is left untouched (the query returns
-		// empty) and truncated stays false — claiming a partial result would
-		// be misleading.
+		// to beyond the chain tip is clamped, not rejected (spec §3.3), and the
+		// length cap is applied to the effective (clamped) range: a to far past
+		// the tip just means "to now". A range entirely ahead of the tip
+		// (from > tip) has nothing to clamp and nothing to show, so it is left
+		// untouched and truncated stays false — claiming a partial result would
+		// be misleading. Without a known tip there is nothing to clamp to, so
+		// the raw range length is still capped (the hostile-request guard).
 		if tip, ok := exp.tipHeight(); ok && to > tip && from <= tip {
 			truncated = true
 			to = tip
+		}
+		if to-from > maxHashrateShareRange {
+			hashrateError(w, fmt.Sprintf("Block range too long. Maximum range length is %d blocks.", maxHashrateShareRange))
+			return
 		}
 
 		rows, err = exp.dataSource.MinerHashrateShares(ctx, from, to)

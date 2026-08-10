@@ -79,12 +79,17 @@ const (
 	// without fees) and the sum of their payment outputs to the address
 	// (paid_atoms). Fees = paid_atoms - reward_atoms is computed by callers.
 	//
-	// The predicate matches BackfillMiners exactly (the codebase's canonical
-	// definition of a miner-reward output): coinbase = tree 0 / block_index 0 /
-	// mainchain; recipient = a single payment-script address (no multisig sets)
-	// with value > 0. coin_type = 0 restricts the sums to VAR explicitly per the
-	// hashrate-shares spec §4.5 (SKA vouts carry their amount in ska_value and
-	// leave value empty today, but the money columns must not depend on that).
+	// The payment-output predicate matches BackfillMiners and
+	// RevertOrphanMinerUpdate verbatim (the codebase's canonical definition of
+	// a miner-reward output): coinbase = tree 0 / block_index 0 / mainchain;
+	// recipient = a single payment-script address (no multisig sets) with
+	// value > 0. This predicate stays in lockstep with those two queries so the
+	// page count never diverges from the main-page active-miner counter (spec
+	// §4.3). The additions on top of it are deliberate and inert: the
+	// block_height bounds ($1/$2), the explicit coin_type = 0 (spec §4.5 — VAR
+	// only; SKA vouts carry their amount in ska_value and leave value empty
+	// today, so value > 0 already excludes them) and the vins join that feeds
+	// the money columns (spec §9).
 	// $1 = 0 selects the whole chain below $2 ("All").
 	//
 	// Aggregation is two-level (spec §9): the inner level folds each coinbase to

@@ -119,8 +119,33 @@ func TestHashrateSharesData_BlockRange(t *testing.T) {
 		}
 	})
 
-	t.Run("rejects a range longer than the cap", func(t *testing.T) {
+	t.Run("clamps a to far beyond the tip before the cap applies", func(t *testing.T) {
+		// Spec §3.3 order: to beyond the tip is clamped first, then the cap
+		// bounds the effective range — a to far past the tip just means
+		// "to now", so this huge request succeeds as a truncated range instead
+		// of being refused.
 		rec := call("?from=1&to=100000000")
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status: want 200, got %d", rec.Code)
+		}
+		if mockDS.gotHashrateMin != 1 || mockDS.gotHashrateMax != tipHeight {
+			t.Fatalf("window: want (1, %d), got (%d, %d)",
+				tipHeight, mockDS.gotHashrateMin, mockDS.gotHashrateMax)
+		}
+		var out resp
+		if err := json.NewDecoder(rec.Body).Decode(&out); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		if !out.Truncated {
+			t.Fatalf("truncated: want true, got false")
+		}
+	})
+
+	t.Run("rejects a range beyond the tip that exceeds the cap", func(t *testing.T) {
+		// from > tip leaves nothing to clamp (the range is entirely ahead of the
+		// chain), so the raw length is what the cap bounds — this stays a
+		// refused hostile/oversized request, not a truncated success.
+		rec := call("?from=6000&to=100000000")
 		if rec.Code != http.StatusBadRequest {
 			t.Fatalf("status: want 400, got %d", rec.Code)
 		}
@@ -196,6 +221,28 @@ func TestHashrateSharesData_IntervalNoTip(t *testing.T) {
 	}
 	if mockDS.gotHashrateMax != math.MaxInt64 {
 		t.Fatalf("max: want %d (open), got %d", math.MaxInt64, mockDS.gotHashrateMax)
+	}
+}
+
+// TestHashrateSharesData_BlockRangeNoTip locks in the cap as the raw
+// hostile-request guard when no chain tip is known: with nothing to clamp to,
+// an oversized range is refused outright rather than run against the whole
+// chain.
+func TestHashrateSharesData_BlockRangeNoTip(t *testing.T) {
+	mockDS := &mockDataSource{
+		blocks:       make(map[string]*types.BlockInfo),
+		heights:      make(map[int64]string),
+		hashrateRows: []dbtypes.MinerRewardCount{},
+	}
+	exp := &explorerUI{
+		dataSource: mockDS,
+		pageData:   &pageData{},
+	}
+	req := httptest.NewRequest(http.MethodGet, "/hashrate-shares/data?from=1&to=100000000", nil)
+	rec := httptest.NewRecorder()
+	exp.HashrateSharesData(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status: want 400, got %d", rec.Code)
 	}
 }
 

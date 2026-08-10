@@ -350,11 +350,18 @@ export default class extends Controller {
   }
 
   // applyBlockRange activates the explicit block-range mode from the From/To
-  // inputs (spec §3.1). Client-side validation is convenience only — the server
-  // re-validates and rejects with its own message (§3.3).
+  // inputs (spec §3.1). Empty From and To mean the range mode is not active, so
+  // a blank form leaves the current mode untouched — erroring there would fight
+  // the spec, which says the page then behaves as today (default week). A
+  // half-filled form (one field blank) is incomplete input and is rejected like
+  // any other invalid range. Client-side validation is convenience only — the
+  // server re-validates and rejects with its own message (§3.3).
   applyBlockRange(e) {
     if (e) e.preventDefault()
-    const range = blockRangeFromParams(this.fromInputTarget.value, this.toInputTarget.value)
+    const fromRaw = this.fromInputTarget.value
+    const toRaw = this.toInputTarget.value
+    if (fromRaw.trim() === '' && toRaw.trim() === '') return
+    const range = blockRangeFromParams(fromRaw, toRaw)
     if (!range) {
       this.showEmpty(INVALID_MESSAGE)
       return
@@ -422,9 +429,7 @@ export default class extends Controller {
     } catch (err) {
       if (seq !== this._reqSeq) return
       console.error('hashrate-shares fetch failed', err)
-      this.miners = []
-      this.totals = null
-      this.truncated = false
+      // showEmpty is the single data reset point — it drops miners/totals too.
       this.showEmpty(errorStateMessage(err))
       this.renderPie([])
       return
@@ -440,8 +445,15 @@ export default class extends Controller {
   }
 
   // showEmpty displays a message in the table's empty slot and hides the table
-  // furniture (pie, totals, download, truncation note) around it.
+  // furniture (pie, totals, download, truncation note) around it. It also
+  // drops any previously loaded data so a failed or invalidated request cannot
+  // leave stale rows behind (e.g. a CSV export or a later renderTable reusing
+  // the old list). It is the single state reset point for the data-bearing
+  // fields — every caller relies on it.
   showEmpty(message) {
+    this.miners = []
+    this.totals = null
+    this.truncated = false
     this.emptyTarget.textContent = message
     this.emptyTarget.classList.remove('d-hide')
     this.tableBodyTarget.replaceChildren()

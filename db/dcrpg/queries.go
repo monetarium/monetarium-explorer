@@ -5184,7 +5184,7 @@ func retrieveMinerRewardCounts(ctx context.Context, db *sql.DB, minHeight, maxHe
 // (spec §10.4); callers log the result as a tripwire.
 type multiAddressCoinbase struct {
 	height    int64
-	txHash    string
+	txHash    dbtypes.ChainHash // BYTEA column; ChainHash byte-reverses + hex-encodes for logging
 	addrCount int64
 }
 

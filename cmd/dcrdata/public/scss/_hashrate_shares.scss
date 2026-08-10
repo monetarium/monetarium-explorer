@@ -70,14 +70,20 @@
   table-layout: fixed;
 }
 
-.hashrate-shares-table thead th,
-.hashrate-shares-table tfoot td {
+// Sticky edges need explicit insets (top/bottom: 0) or the element never
+// sticks — a sticky rule without an offset is inert.
+.hashrate-shares-table thead th {
   position: sticky;
+  top: 0;
   z-index: 1;
   background: #fff;
 }
 
 .hashrate-shares-table tfoot td {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  background: #fff;
   border-top: 2px solid #b8c2cc;
   font-weight: 600;
 }
