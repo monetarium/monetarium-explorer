@@ -35,6 +35,12 @@ type mockDataSource struct {
 	explorerBlocks []*explorerTypes.BlockBasic
 	gotBlocksStart int
 	gotBlocksEnd   int
+
+	// hashrateRows is returned by MinerHashrateShares; the last min/max args
+	// are recorded in gotHashrateMin/Max.
+	hashrateRows   []dbtypes.MinerRewardCount
+	gotHashrateMin int64
+	gotHashrateMax int64
 }
 
 func (m *mockDataSource) BlockHeight(ctx context.Context, hash string) (int64, error) { return 0, nil }
@@ -201,8 +207,10 @@ func (m *mockDataSource) ActiveMiners(_ context.Context, _ int64) (int64, error)
 	return 0, nil
 }
 
-func (m *mockDataSource) MinerHashrateShares(_ context.Context, _ int64) ([]dbtypes.MinerRewardCount, error) {
-	return nil, nil
+func (m *mockDataSource) MinerHashrateShares(_ context.Context, minHeight, maxHeight int64) ([]dbtypes.MinerRewardCount, error) {
+	m.gotHashrateMin = minHeight
+	m.gotHashrateMax = maxHeight
+	return m.hashrateRows, nil
 }
 
 // TestStore_PoWSKARewardsFromMFMarker verifies that "PoW SKA Fee Reward" is

@@ -5318,14 +5318,37 @@ func (pgb *ChainDB) ActiveMiners(ctx context.Context, minHeight int64) (int64, e
 	return CountActiveMiners(ctx, pgb.db, minHeight)
 }
 
-// MinerHashrateShares returns per-miner PoW-reward (coinbase) transaction counts
-// for all reward addresses that received at least one reward at or above
-// minHeight, ordered descending by count. minHeight = 0 covers the whole chain.
-func (pgb *ChainDB) MinerHashrateShares(ctx context.Context, minHeight int64) ([]dbtypes.MinerRewardCount, error) {
+// MinerHashrateShares returns per-miner PoW-reward (coinbase) data for the
+// inclusive block-height window [minHeight, maxHeight], ordered descending by
+// block count: the number of distinct coinbase blocks that paid each reward
+// address plus the VAR atoms the address received for them (see
+// internal.SelectMinerRewardCounts). minHeight = 0 covers the whole chain below
+// maxHeight.
+//
+// It also runs the multi-address coinbase tripwire (spec §10.4): a coinbase
+// paying more than one payment address breaks the single-payment-output
+// assumption behind Miner Reward attribution, so any such coinbase in the
+// window is logged rather than silently mis-attributed.
+func (pgb *ChainDB) MinerHashrateShares(ctx context.Context, minHeight, maxHeight int64) ([]dbtypes.MinerRewardCount, error) {
 	ctx, cancel := context.WithTimeout(ctx, pgb.queryTimeout)
 	defer cancel()
-	rows, err := retrieveMinerRewardCounts(ctx, pgb.db, minHeight)
-	return rows, pgb.replaceCancelError(err)
+
+	rows, err := retrieveMinerRewardCounts(ctx, pgb.db, minHeight, maxHeight)
+	if err != nil {
+		return nil, pgb.replaceCancelError(err)
+	}
+
+	multi, err := retrieveMultiAddressCoinbases(ctx, pgb.db, minHeight, maxHeight)
+	if err != nil {
+		log.Errorf("MinerHashrateShares: multi-address coinbase check failed: %v", err)
+		return rows, nil
+	}
+	for _, m := range multi {
+		log.Errorf("MinerHashrateShares: coinbase at height %d (%s) pays %d distinct addresses; "+
+			"Miner Reward attribution is unreliable (spec §10.4)", m.height, m.txHash, m.addrCount)
+	}
+
+	return rows, nil
 }
 
 // GetBlockSKAFees calculates SKA PoW fees (transaction fees) for a block by fetching
