@@ -5,6 +5,16 @@
   line-height: 1.45;
 }
 
+// The truncation notice (the range request ran past the tip) reads at the
+// heading's size (fs15 in the template) and sits as part of the intro, not as a
+// control caption: the negative top margin pulls it up into the heading's
+// bottom margin (heading→notice ≈ 0.5rem), while the bottom margin keeps it
+// clear of the filter row below (notice→layout ≈ 1.25rem).
+.hashrate-shares-truncated {
+  margin-top: -1rem;
+  margin-bottom: 1.25rem;
+}
+
 .hashrate-shares-layout {
   gap: 2rem;
 }
@@ -64,14 +74,18 @@
 // swatch and % at the left edge. Fixed layout makes the percentage widths exact;
 // the address keeps the largest share so it still shows in full when there is
 // room (the elided hash handles the overflow when there isn't). Column order:
-// # | swatch | % | Blocks | Miner Reward | Fees | Reward Address.
+// # | swatch | % | Blocks | Miner Coinbase Reward | Miner Fee Reward | Reward Address.
 .hashrate-shares-table {
   width: 100%;
   table-layout: fixed;
 }
 
 // Sticky edges need explicit insets (top/bottom: 0) or the element never
-// sticks — a sticky rule without an offset is inert.
+// sticks — a sticky rule without an offset is inert. The totals band sticks as
+// the <tfoot> row-group element (not per-cell): applying the sticky positioning
+// and the opaque background to the row group is what reliably paints over the
+// scrolling rows — per-cell sticky tfoot cells can leave their background
+// unpainted in some browsers, reading as "transparent".
 .hashrate-shares-table thead th {
   position: sticky;
   top: 0;
@@ -79,11 +93,14 @@
   background: #fff;
 }
 
-.hashrate-shares-table tfoot td {
+.hashrate-shares-table tfoot {
   position: sticky;
   bottom: 0;
   z-index: 1;
   background: #fff;
+}
+
+.hashrate-shares-table tfoot td {
   border-top: 2px solid #b8c2cc;
   font-weight: 600;
 }
@@ -131,6 +148,17 @@
   white-space: nowrap;
 }
 
+// Right-aligned fee values sit flush against the left-aligned reward address.
+// At the small breakpoint the shared cell padding drops to 0.25em (table.scss),
+// so the address gets extra leading to keep it clearly separated from the fee
+// column on mobile.
+@media (max-width: #{$breakpoint-sm}) {
+  .hashrate-shares-table th:nth-child(7),
+  .hashrate-shares-table td:nth-child(7) {
+    padding-left: 1em;
+  }
+}
+
 .hashrate-shares-addr .elidedhash {
   // Reserve room for the trailing copy icon so a full-width address never pushes
   // it onto a second line.
@@ -152,7 +180,7 @@
 }
 
 body.darkBG .hashrate-shares-table thead th,
-body.darkBG .hashrate-shares-table tfoot td {
+body.darkBG .hashrate-shares-table tfoot {
   background: #2d2d2d;
 }
 
