@@ -264,6 +264,12 @@ export default class extends Controller {
     this.miners = []
     this.totals = null
     this.truncated = false
+    // emptyState is why the empty slot is showing: null (no active message —
+    // renderTable may write the generic empty message), 'invalid' (bad range
+    // input) or 'error' (fetch failure). The last two are sticky until a
+    // successful fetch, so an unrelated renderTable (typing in the address
+    // filter) can't mislabel the message (spec §3.3).
+    this.emptyState = null
     this.blockRange = null
     this.addressFilter = ''
     this._reqSeq = 0
@@ -363,6 +369,9 @@ export default class extends Controller {
     if (fromRaw.trim() === '' && toRaw.trim() === '') return
     const range = blockRangeFromParams(fromRaw, toRaw)
     if (!range) {
+      // Mark the state sticky: only a successful fetch clears it, so the
+      // message survives later renderTable calls.
+      this.emptyState = 'invalid'
       this.showEmpty(INVALID_MESSAGE)
       return
     }
@@ -429,12 +438,17 @@ export default class extends Controller {
     } catch (err) {
       if (seq !== this._reqSeq) return
       console.error('hashrate-shares fetch failed', err)
+      this.emptyState = 'error'
       // showEmpty is the single data reset point — it drops miners/totals too.
       this.showEmpty(errorStateMessage(err))
       this.renderPie([])
       return
     }
     if (seq !== this._reqSeq) return
+    // A successful fetch is the only thing that clears a sticky invalid/error
+    // empty state: whatever the outcome — data, or a genuinely empty period —
+    // the message now reflects a real server result.
+    this.emptyState = null
     this.miners = (data && data.miners) || []
     this.totals = (data && data.totals) || null
     this.truncated = !!(data && data.truncated)
@@ -449,7 +463,9 @@ export default class extends Controller {
   // drops any previously loaded data so a failed or invalidated request cannot
   // leave stale rows behind (e.g. a CSV export or a later renderTable reusing
   // the old list). It is the single state reset point for the data-bearing
-  // fields — every caller relies on it.
+  // fields — every caller relies on it. The emptyState flavor is NOT reset
+  // here: callers set it before showing a sticky message, and only a
+  // successful fetch clears it (see renderTable).
   showEmpty(message) {
     this.miners = []
     this.totals = null
@@ -469,7 +485,14 @@ export default class extends Controller {
     if (this.hasDownloadWrapTarget) this.downloadWrapTarget.classList.toggle('d-hide', !hasData)
 
     if (!hasData) {
-      this.showEmpty(EMPTY_MESSAGE)
+      // Only the generic empty-period message may be written here. A sticky
+      // invalid/error state (bad range input, fetch failure) is left as-is, so
+      // an interaction that re-enters renderTable — typing in the address
+      // filter — can't relabel "Invalid block range…" as an empty period
+      // (spec §3.3 keeps the three messages distinct).
+      if (!this.emptyState) {
+        this.showEmpty(EMPTY_MESSAGE)
+      }
       return
     }
 

@@ -10,6 +10,11 @@ vi.mock('@hotwired/stimulus', () => ({
     }
   }
 }))
+// requestJSON is exercised only by fetchAndRender; vi.hoisted keeps the mock
+// factory free of the top-level-variable TDZ (the controller is statically
+// imported above).
+const { mockRequestJSON } = vi.hoisted(() => ({ mockRequestJSON: vi.fn() }))
+vi.mock('../helpers/http', () => ({ requestJSON: mockRequestJSON }))
 import {
   swatchColor,
   sliceLabelFits,
@@ -372,11 +377,14 @@ describe('controller applyBlockRange and showEmpty', () => {
     ctrl.hasDownloadWrapTarget = true
     ctrl.truncatedNoteTarget = document.createElement('div')
     ctrl.totalsRowTarget = document.createElement('tr')
+    ctrl.pieTarget = document.createElement('div')
     ctrl.miners = []
     ctrl.totals = null
     ctrl.truncated = false
+    ctrl.emptyState = null
     ctrl.blockRange = null
     ctrl.interval = 'week'
+    ctrl._reqSeq = 0
     return ctrl
   }
 
@@ -415,9 +423,45 @@ describe('controller applyBlockRange and showEmpty', () => {
     ctrl.applyBlockRange()
     expect(ctrl.emptyTarget.textContent).toBe(INVALID_MESSAGE)
     expect(ctrl.emptyTarget.classList.contains('d-hide')).toBe(false)
+    expect(ctrl.emptyState).toBe('invalid')
     expect(ctrl.miners).toEqual([])
     expect(ctrl.totals).toBeNull()
     expect(ctrl.truncated).toBe(false)
+  })
+
+  it('keeps the invalid-range message when a later renderTable re-enters', () => {
+    // The address filter triggers renderTable; with miners cleared, it would
+    // otherwise relabel the sticky invalid message as a (valid but) empty
+    // period — spec §3.3 keeps the three messages distinct.
+    const ctrl = buildCtrl()
+    ctrl.fromInputTarget.value = '10'
+    ctrl.toInputTarget.value = '5'
+    ctrl.applyBlockRange()
+    expect(ctrl.emptyTarget.textContent).toBe(INVALID_MESSAGE)
+    ctrl.renderTable()
+    expect(ctrl.emptyTarget.textContent).toBe(INVALID_MESSAGE)
+    expect(ctrl.emptyTarget.classList.contains('d-hide')).toBe(false)
+    expect(ctrl.emptyState).toBe('invalid')
+  })
+
+  it('shows the generic empty message for a valid empty period', () => {
+    const ctrl = buildCtrl()
+    ctrl.renderTable()
+    expect(ctrl.emptyTarget.textContent).toBe(EMPTY_MESSAGE)
+  })
+
+  it('a successful fetch clears a sticky invalid state', async () => {
+    const ctrl = buildCtrl()
+    ctrl.fromInputTarget.value = '10'
+    ctrl.toInputTarget.value = '5'
+    ctrl.applyBlockRange()
+    expect(ctrl.emptyState).toBe('invalid')
+    mockRequestJSON.mockResolvedValueOnce({ miners: [], totals: null, truncated: false })
+    ctrl.blockRange = { from: 10, to: 20 }
+    ctrl.interval = 'custom'
+    await ctrl.fetchAndRender(ctrl.nextSeq())
+    expect(ctrl.emptyState).toBeNull()
+    expect(ctrl.emptyTarget.textContent).toBe(EMPTY_MESSAGE)
   })
 
   it('showEmpty resets data and hides the table furniture', () => {
