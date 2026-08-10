@@ -62,13 +62,16 @@
                         <span class="text-secondary fs12">From</span>
                         <input type="number" min="0"
                                class="form-control form-control-sm" style="width: 6em;"
-                               data-hashrate-shares-target="fromInput" placeholder="1000">
+                               data-hashrate-shares-target="fromInput">
                         <span class="text-secondary fs12">To</span>
                         <input type="number" min="0"
                                class="form-control form-control-sm" style="width: 6em;"
-                               data-hashrate-shares-target="toInput" placeholder="2000">
-                        <a class="btn btn-sm btn-primary" href="#"
-                           data-action="click->hashrate-shares#applyBlockRange">Apply</a>
+                               data-hashrate-shares-target="toInput">
+                        <ul class="nav nav-pills">
+                            <li class="nav-item nav-link" role="button" tabindex="0"
+                                data-hashrate-shares-target="applyButton"
+                                data-action="click->hashrate-shares#applyBlockRange keydown.enter->hashrate-shares#applyBlockRange keydown.space->hashrate-shares#applyBlockRange">Apply</li>
+                        </ul>
                     </div>
                     <div class="text-secondary fs12 mt-1">Range includes blocks from and to.</div>
                 </div>
@@ -81,7 +84,7 @@
             will appear as multiple separate entries.
         </p>
 
-        <div class="d-hide text-secondary fs12 text-center mb-2" data-hashrate-shares-target="truncatedNote">
+        <div class="d-hide hashrate-shares-truncated text-secondary fs15 text-center" data-hashrate-shares-target="truncatedNote">
             The requested range extends past the current chain tip; showing blocks up to the tip only.
         </div>
 
@@ -106,8 +109,8 @@
                                 <th></th>
                                 <th class="text-end">%</th>
                                 <th class="text-end">Blocks</th>
-                                <th class="text-end">Miner Reward</th>
-                                <th class="text-end">Fees</th>
+                                <th class="text-end">Miner Coinbase Reward</th>
+                                <th class="text-end">Miner Fee Reward</th>
                                 <th>Reward Address</th>
                             </tr>
                         </thead>
