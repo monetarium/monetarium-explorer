@@ -1,5 +1,15 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { colorForIndex, OTHERS_COLOR } from '../helpers/chart_theme'
+// Stub the @hotwired/stimulus import so the controller module loads in jsdom
+// and can be constructed directly — Stimulus registration is not involved in
+// these tests (same convention as voting_controller.test.js).
+vi.mock('@hotwired/stimulus', () => ({
+  Controller: class {
+    constructor(element) {
+      this.element = element
+    }
+  }
+}))
 import {
   swatchColor,
   sliceLabelFits,
@@ -16,7 +26,8 @@ import {
   ERROR_MESSAGE,
   INVALID_MESSAGE,
   PIE,
-  PIE_SLICES
+  PIE_SLICES,
+  default as HashrateSharesController
 } from './hashrate_shares_controller'
 
 describe('swatchColor', () => {
@@ -336,5 +347,93 @@ describe('INVALID_MESSAGE', () => {
   it('is a distinct message from the empty and error states', () => {
     expect(INVALID_MESSAGE).not.toBe(EMPTY_MESSAGE)
     expect(INVALID_MESSAGE).not.toBe(ERROR_MESSAGE)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Controller behavior: block-range mode state transitions
+// ---------------------------------------------------------------------------
+// The review-flagged bugs (blank-range handling and the stale-data reset) live
+// in stateful controller methods, not the pure functions above, so these tests
+// construct the controller directly (Stimulus is stubbed at the top) and drive
+// applyBlockRange / showEmpty against real DOM nodes.
+describe('controller applyBlockRange and showEmpty', () => {
+  // buildCtrl assembles exactly the targets these two methods touch on the
+  // paths under test; the rest are left unset because neither method reaches
+  // them before the relevant early return.
+  function buildCtrl() {
+    const ctrl = new HashrateSharesController(document.body)
+    ctrl.fromInputTarget = document.createElement('input')
+    ctrl.toInputTarget = document.createElement('input')
+    ctrl.emptyTarget = document.createElement('div')
+    ctrl.tableBodyTarget = document.createElement('tbody')
+    ctrl.pieWrapTarget = document.createElement('div')
+    ctrl.downloadWrapTarget = document.createElement('div')
+    ctrl.hasDownloadWrapTarget = true
+    ctrl.truncatedNoteTarget = document.createElement('div')
+    ctrl.totalsRowTarget = document.createElement('tr')
+    ctrl.miners = []
+    ctrl.totals = null
+    ctrl.truncated = false
+    ctrl.blockRange = null
+    ctrl.interval = 'week'
+    return ctrl
+  }
+
+  it('leaves the current mode untouched when From and To are both blank (spec 3.1)', () => {
+    const ctrl = buildCtrl()
+    ctrl.blockRange = { from: 10, to: 20 }
+    ctrl.interval = 'custom'
+    ctrl.fromInputTarget.value = ''
+    ctrl.toInputTarget.value = ''
+    ctrl.applyBlockRange()
+    expect(ctrl.blockRange).toEqual({ from: 10, to: 20 })
+    expect(ctrl.interval).toBe('custom')
+    expect(ctrl.emptyTarget.textContent).toBe('')
+    expect(ctrl.miners).toEqual([])
+  })
+
+  it('rejects a half-filled range as incomplete input', () => {
+    const ctrl = buildCtrl()
+    ctrl.fromInputTarget.value = '10'
+    ctrl.toInputTarget.value = ''
+    ctrl.applyBlockRange()
+    expect(ctrl.emptyTarget.textContent).toBe(INVALID_MESSAGE)
+    expect(ctrl.emptyTarget.classList.contains('d-hide')).toBe(false)
+  })
+
+  it('shows the invalid-range message and drops previously loaded rows', () => {
+    // The stale-data bug: applying an invalid range while a previous valid
+    // period's rows are showing must not leave them behind for renderTable or
+    // the CSV export to reuse.
+    const ctrl = buildCtrl()
+    ctrl.miners = [{ rank: 1, address: 'Vsaaa', count: 7 }]
+    ctrl.totals = { addresses: 1, blocks: 7, miner_reward: '0', fees: '0', total: '0' }
+    ctrl.truncated = true
+    ctrl.fromInputTarget.value = '10'
+    ctrl.toInputTarget.value = '5' // from > to
+    ctrl.applyBlockRange()
+    expect(ctrl.emptyTarget.textContent).toBe(INVALID_MESSAGE)
+    expect(ctrl.emptyTarget.classList.contains('d-hide')).toBe(false)
+    expect(ctrl.miners).toEqual([])
+    expect(ctrl.totals).toBeNull()
+    expect(ctrl.truncated).toBe(false)
+  })
+
+  it('showEmpty resets data and hides the table furniture', () => {
+    const ctrl = buildCtrl()
+    ctrl.miners = [{ rank: 1 }]
+    ctrl.totals = { addresses: 1 }
+    ctrl.showEmpty(EMPTY_MESSAGE)
+    expect(ctrl.miners).toEqual([])
+    expect(ctrl.totals).toBeNull()
+    expect(ctrl.truncated).toBe(false)
+    expect(ctrl.emptyTarget.textContent).toBe(EMPTY_MESSAGE)
+    expect(ctrl.emptyTarget.classList.contains('d-hide')).toBe(false)
+    expect(ctrl.pieWrapTarget.classList.contains('d-hide')).toBe(true)
+    expect(ctrl.downloadWrapTarget.classList.contains('d-hide')).toBe(true)
+    expect(ctrl.truncatedNoteTarget.classList.contains('d-hide')).toBe(true)
+    expect(ctrl.totalsRowTarget.classList.contains('d-hide')).toBe(true)
+    expect(ctrl.tableBodyTarget.children.length).toBe(0)
   })
 })
