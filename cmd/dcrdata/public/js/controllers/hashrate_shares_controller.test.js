@@ -480,4 +480,28 @@ describe('controller applyBlockRange and showEmpty', () => {
     expect(ctrl.totalsRowTarget.classList.contains('d-hide')).toBe(true)
     expect(ctrl.tableBodyTarget.children.length).toBe(0)
   })
+
+  it('lights the Apply control only while a custom range is active', () => {
+    const ctrl = buildCtrl()
+    ctrl.intervalOptionTargets = []
+    ctrl.blockRangeWrapTarget = document.createElement('div')
+    ctrl.applyButtonTarget = document.createElement('li')
+    ctrl.interval = 'week'
+    ctrl.blockRange = null
+    ctrl.syncControlsUI()
+    expect(ctrl.applyButtonTarget.classList.contains('active')).toBe(false)
+    expect(ctrl.blockRangeWrapTarget.classList.contains('block-range-active')).toBe(false)
+
+    ctrl.interval = 'custom'
+    ctrl.blockRange = { from: 10, to: 20 }
+    ctrl.syncControlsUI()
+    expect(ctrl.applyButtonTarget.classList.contains('active')).toBe(true)
+    expect(ctrl.blockRangeWrapTarget.classList.contains('block-range-active')).toBe(true)
+
+    // Switching back to an interval deactivates the Apply control.
+    ctrl.interval = 'year'
+    ctrl.blockRange = null
+    ctrl.syncControlsUI()
+    expect(ctrl.applyButtonTarget.classList.contains('active')).toBe(false)
+  })
 })

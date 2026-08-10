@@ -78,29 +78,34 @@
 .hashrate-shares-table {
   width: 100%;
   table-layout: fixed;
+
+  // Sticky thead/tfoot need separate borders: in a collapsed-border table some
+  // browsers paint the sticky band's background under the scrolling rows, so the
+  // totals text reads over rows showing through. border-spacing: 0 keeps the
+  // per-cell bottom borders from table.scss forming the row separators.
+  border-collapse: separate;
+  border-spacing: 0;
 }
 
-// Sticky edges need explicit insets (top/bottom: 0) or the element never
-// sticks — a sticky rule without an offset is inert. The totals band sticks as
-// the <tfoot> row-group element (not per-cell): applying the sticky positioning
-// and the opaque background to the row group is what reliably paints over the
-// scrolling rows — per-cell sticky tfoot cells can leave their background
-// unpainted in some browsers, reading as "transparent".
+// Sticky edges need explicit insets (top/bottom: 0) or the rule never sticks.
+// The opaque background goes on the CELLS, not the row-group element: sticky
+// cells with a background are the reliable way to paint the band over the
+// scrolling rows. The z-index must clear the reward-address elided hashes
+// (typography.scss: .elidedhash is position: relative; z-index: 20) — those
+// live in every tbody row and otherwise paint above the band, so the addresses
+// read through the totals row while scrolling.
 .hashrate-shares-table thead th {
   position: sticky;
   top: 0;
-  z-index: 1;
-  background: #fff;
-}
-
-.hashrate-shares-table tfoot {
-  position: sticky;
-  bottom: 0;
-  z-index: 1;
+  z-index: 30;
   background: #fff;
 }
 
 .hashrate-shares-table tfoot td {
+  position: sticky;
+  bottom: 0;
+  z-index: 30;
+  background: #fff;
   border-top: 2px solid #b8c2cc;
   font-weight: 600;
 }
@@ -132,12 +137,19 @@
 .hashrate-shares-table th:nth-child(5),
 .hashrate-shares-table td:nth-child(5) {
   width: 20%;
-  white-space: nowrap;
 }
 
 .hashrate-shares-table th:nth-child(6),
 .hashrate-shares-table td:nth-child(6) {
   width: 16%;
+}
+
+// The money columns' long, unbreakable values stay on one line, but their
+// headers must wrap: at narrow widths the fixed column clips nowrap header
+// text ("Miner Coinbase Reward"), cutting it off. Wrapping keeps the headers
+// fully readable, folding to two rows where one line does not fit.
+.hashrate-shares-table td:nth-child(5),
+.hashrate-shares-table td:nth-child(6) {
   white-space: nowrap;
 }
 
@@ -148,14 +160,34 @@
   white-space: nowrap;
 }
 
-// Right-aligned fee values sit flush against the left-aligned reward address.
-// At the small breakpoint the shared cell padding drops to 0.25em (table.scss),
-// so the address gets extra leading to keep it clearly separated from the fee
-// column on mobile.
+// Mobile: the money columns get the width they need for the headers to wrap to
+// two readable rows (shrinking % and the elided address to pay for it), and the
+// address keeps clear leading so right-aligned fee values don't crowd it.
 @media (max-width: #{$breakpoint-sm}) {
+  .hashrate-shares-table th:nth-child(3),
+  .hashrate-shares-table td:nth-child(3) {
+    width: 8%;
+  }
+
+  .hashrate-shares-table th:nth-child(5),
+  .hashrate-shares-table td:nth-child(5) {
+    width: 30%;
+  }
+
+  .hashrate-shares-table th:nth-child(6),
+  .hashrate-shares-table td:nth-child(6) {
+    width: 19%;
+  }
+
   .hashrate-shares-table th:nth-child(7),
   .hashrate-shares-table td:nth-child(7) {
+    width: 17%;
     padding-left: 1em;
+  }
+
+  .hashrate-shares-table th:nth-child(5),
+  .hashrate-shares-table th:nth-child(6) {
+    font-size: 12px;
   }
 }
 
@@ -180,7 +212,7 @@
 }
 
 body.darkBG .hashrate-shares-table thead th,
-body.darkBG .hashrate-shares-table tfoot {
+body.darkBG .hashrate-shares-table tfoot td {
   background: #2d2d2d;
 }
 
