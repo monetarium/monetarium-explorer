@@ -504,4 +504,17 @@ describe('controller applyBlockRange and showEmpty', () => {
     ctrl.syncControlsUI()
     expect(ctrl.applyButtonTarget.classList.contains('active')).toBe(false)
   })
+
+  it('swallows the activating event via preventDefault (keyboard Enter/Space)', () => {
+    // Apply is wired to keydown.enter / keydown.space as well as click; Space
+    // must not also scroll the page. applyBlockRange calls preventDefault on the
+    // event it receives, so a keyboard event reaches the same guard the click
+    // path uses. The blank range early-returns before any state changes.
+    const ctrl = buildCtrl()
+    ctrl.fromInputTarget.value = ''
+    ctrl.toInputTarget.value = ''
+    const evt = { preventDefault: vi.fn() }
+    ctrl.applyBlockRange(evt)
+    expect(evt.preventDefault).toHaveBeenCalledTimes(1)
+  })
 })
