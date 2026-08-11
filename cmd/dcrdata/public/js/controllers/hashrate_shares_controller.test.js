@@ -519,11 +519,11 @@ describe('controller applyBlockRange and showEmpty', () => {
     expect(evt.preventDefault).toHaveBeenCalledTimes(1)
   })
 
-  // totalsRow assembles a totals <tr> with the four data-type cells renderTotals
-  // fills, mirroring the template's tfoot.
+  // totalsRow assembles a totals <tr> with the five data-type cells renderTotals
+  // fills, mirroring the template's tfoot (label + four numbers).
   function totalsRow() {
     const tr = document.createElement('tr')
-    for (const t of ['totalsBlocks', 'totalsReward', 'totalsFees', 'totalsAddr']) {
+    for (const t of ['totalsLabel', 'totalsBlocks', 'totalsReward', 'totalsFees', 'totalsAddr']) {
       const td = document.createElement('td')
       td.dataset.type = t
       tr.appendChild(td)
@@ -542,6 +542,7 @@ describe('controller applyBlockRange and showEmpty', () => {
       total: '3200020110'
     }
     ctrl.renderTotals(true)
+    expect(ctrl.totalsRowTarget.querySelector('[data-type="totalsLabel"]').textContent).toBe('')
     expect(ctrl.totalsRowTarget.querySelector('[data-type="totalsBlocks"]').textContent).toBe('')
     expect(ctrl.totalsRowTarget.querySelector('[data-type="totalsReward"]').textContent).toBe('')
     expect(ctrl.totalsRowTarget.querySelector('[data-type="totalsFees"]').textContent).toBe('')
@@ -555,7 +556,7 @@ describe('controller applyBlockRange and showEmpty', () => {
     ctrl.totalsRowTarget = totalsRow()
     ctrl.totals = { addresses: 13, blocks: 200, miner_reward: '0', fees: '0', total: '0' }
     ctrl.renderTotals(true, true)
-    expect(ctrl.totalsRowTarget.querySelector('[data-type="totalsBlocks"]').textContent).toBe('')
+    expect(ctrl.totalsRowTarget.querySelector('[data-type="totalsLabel"]').textContent).toBe('')
     expect(ctrl.totalsRowTarget.querySelector('[data-type="totalsAddr"]').textContent).toBe('')
   })
 
@@ -570,6 +571,9 @@ describe('controller applyBlockRange and showEmpty', () => {
       total: '6400001000'
     }
     ctrl.renderTotals(true, false)
+    expect(ctrl.totalsRowTarget.querySelector('[data-type="totalsLabel"]').textContent).toBe(
+      'Totals'
+    )
     expect(ctrl.totalsRowTarget.querySelector('[data-type="totalsBlocks"]').textContent).toBe('50')
     expect(ctrl.totalsRowTarget.querySelector('[data-type="totalsReward"]').textContent).toBe(
       humanize.formatAtomsAsCoinString('6400000000', 0, 2)

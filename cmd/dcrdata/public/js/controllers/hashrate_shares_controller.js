@@ -515,21 +515,25 @@ export default class extends Controller {
   // address — either because the period has one address, or the address filter
   // narrowed the view to one row — the totals are identical to that one row, so
   // showing them again reads as confusing duplication (PO). The band stays, but
-  // empty: only the static "Totals" label remains.
+  // empty: even the "Totals" label goes, since a label with no numbers beside it
+  // is just noise.
   renderTotals(show, singleAddress = false) {
     this.totalsRowTarget.classList.toggle('d-hide', !show || !this.totals)
     if (!show || !this.totals) return
     const t = this.totals
+    const label = this.totalsRowTarget.querySelector('[data-type="totalsLabel"]')
     const blocks = this.totalsRowTarget.querySelector('[data-type="totalsBlocks"]')
     const reward = this.totalsRowTarget.querySelector('[data-type="totalsReward"]')
     const fees = this.totalsRowTarget.querySelector('[data-type="totalsFees"]')
     const addr = this.totalsRowTarget.querySelector('[data-type="totalsAddr"]')
     if (singleAddress || t.addresses === 1) {
+      label.textContent = ''
       blocks.textContent = ''
       reward.textContent = ''
       fees.textContent = ''
       addr.textContent = ''
     } else {
+      label.textContent = 'Totals'
       blocks.textContent = String(t.blocks)
       reward.textContent = humanize.formatAtomsAsCoinString(t.miner_reward, 0, 2)
       fees.textContent = humanize.formatAtomsAsCoinString(t.fees, 0, 2)
