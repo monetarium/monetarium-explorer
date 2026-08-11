@@ -43,8 +43,8 @@
 
 // The full (uncapped) miner list lives in a height-limited, scrollable
 // container (spec §5.3): the pie keeps its top-25 + "Others" cut, the table
-// draws every miner. The header and the totals row stick to the container
-// edges so the period totals stay visible while scrolling a long list.
+// draws every miner. The header sticks to the container top so the column
+// labels stay visible while scrolling a long list.
 .hashrate-shares-scroll {
   max-height: 480px;
   overflow-y: auto;
@@ -80,10 +80,10 @@
   width: 100%;
   table-layout: fixed;
 
-  // Sticky thead/tfoot need separate borders: in a collapsed-border table some
-  // browsers paint the sticky band's background under the scrolling rows, so the
-  // totals text reads over rows showing through. border-spacing: 0 keeps the
-  // per-cell bottom borders from table.scss forming the row separators.
+  // Sticky thead needs separate borders: in a collapsed-border table some
+  // browsers paint the sticky band's background under the scrolling rows, so
+  // the header text reads over rows showing through. border-spacing: 0 keeps
+  // the per-cell bottom borders from table.scss forming the row separators.
   border-collapse: separate;
   border-spacing: 0;
 }
@@ -94,21 +94,12 @@
 // scrolling rows. The z-index must clear the reward-address elided hashes
 // (typography.scss: .elidedhash is position: relative; z-index: 20) — those
 // live in every tbody row and otherwise paint above the band, so the addresses
-// read through the totals row while scrolling.
+// read through the header while scrolling.
 .hashrate-shares-table thead th {
   position: sticky;
   top: 0;
   z-index: 30;
   background: #fff;
-}
-
-.hashrate-shares-table tfoot td {
-  position: sticky;
-  bottom: 0;
-  z-index: 30;
-  background: #fff;
-  border-top: 2px solid #b8c2cc;
-  font-weight: 600;
 }
 
 .hashrate-shares-table th:nth-child(1),
@@ -159,8 +150,8 @@
 // to the two money columns, whose long unbreakable values would otherwise sit
 // on top of the neighbor column's. The leading padding keeps right-aligned fee
 // values from crowding the address. Apply to the 7th column's cells across the
-// header, body and totals row alike — the body's td.hashrate-shares-addr class
-// alone misses the header and the totals cell, which then lose the left inset.
+// header and body alike — the body's td.hashrate-shares-addr class alone misses
+// the header, which then loses the left inset.
 .hashrate-shares-table th:nth-child(7),
 .hashrate-shares-table td:nth-child(7) {
   width: 17%;
@@ -205,13 +196,8 @@
   border-radius: 4px;
 }
 
-body.darkBG .hashrate-shares-table thead th,
-body.darkBG .hashrate-shares-table tfoot td {
+body.darkBG .hashrate-shares-table thead th {
   background: #2d2d2d;
-}
-
-body.darkBG .hashrate-shares-table tfoot td {
-  border-top-color: #5a5f66;
 }
 
 body.darkBG .hashrate-shares-highlight {

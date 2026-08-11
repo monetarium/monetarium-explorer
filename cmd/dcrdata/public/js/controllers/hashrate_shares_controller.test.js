@@ -1,5 +1,4 @@
 import { describe, it, expect, vi } from 'vitest'
-import humanize from '../helpers/humanize_helper'
 import { colorForIndex, OTHERS_COLOR } from '../helpers/chart_theme'
 // Stub the @hotwired/stimulus import so the controller module loads in jsdom
 // and can be constructed directly — Stimulus registration is not involved in
@@ -377,10 +376,8 @@ describe('controller applyBlockRange and showEmpty', () => {
     ctrl.downloadWrapTarget = document.createElement('div')
     ctrl.hasDownloadWrapTarget = true
     ctrl.truncatedNoteTarget = document.createElement('div')
-    ctrl.totalsRowTarget = document.createElement('tr')
     ctrl.pieTarget = document.createElement('div')
     ctrl.miners = []
-    ctrl.totals = null
     ctrl.truncated = false
     ctrl.emptyState = null
     ctrl.blockRange = null
@@ -417,7 +414,6 @@ describe('controller applyBlockRange and showEmpty', () => {
     // the CSV export to reuse.
     const ctrl = buildCtrl()
     ctrl.miners = [{ rank: 1, address: 'Vsaaa', count: 7 }]
-    ctrl.totals = { addresses: 1, blocks: 7, miner_reward: '0', fees: '0', total: '0' }
     ctrl.truncated = true
     ctrl.fromInputTarget.value = '10'
     ctrl.toInputTarget.value = '5' // from > to
@@ -426,7 +422,6 @@ describe('controller applyBlockRange and showEmpty', () => {
     expect(ctrl.emptyTarget.classList.contains('d-hide')).toBe(false)
     expect(ctrl.emptyState).toBe('invalid')
     expect(ctrl.miners).toEqual([])
-    expect(ctrl.totals).toBeNull()
     expect(ctrl.truncated).toBe(false)
   })
 
@@ -457,7 +452,7 @@ describe('controller applyBlockRange and showEmpty', () => {
     ctrl.toInputTarget.value = '5'
     ctrl.applyBlockRange()
     expect(ctrl.emptyState).toBe('invalid')
-    mockRequestJSON.mockResolvedValueOnce({ miners: [], totals: null, truncated: false })
+    mockRequestJSON.mockResolvedValueOnce({ miners: [], truncated: false })
     ctrl.blockRange = { from: 10, to: 20 }
     ctrl.interval = 'custom'
     await ctrl.fetchAndRender(ctrl.nextSeq())
@@ -468,17 +463,14 @@ describe('controller applyBlockRange and showEmpty', () => {
   it('showEmpty resets data and hides the table furniture', () => {
     const ctrl = buildCtrl()
     ctrl.miners = [{ rank: 1 }]
-    ctrl.totals = { addresses: 1 }
     ctrl.showEmpty(EMPTY_MESSAGE)
     expect(ctrl.miners).toEqual([])
-    expect(ctrl.totals).toBeNull()
     expect(ctrl.truncated).toBe(false)
     expect(ctrl.emptyTarget.textContent).toBe(EMPTY_MESSAGE)
     expect(ctrl.emptyTarget.classList.contains('d-hide')).toBe(false)
     expect(ctrl.pieWrapTarget.classList.contains('d-hide')).toBe(true)
     expect(ctrl.downloadWrapTarget.classList.contains('d-hide')).toBe(true)
     expect(ctrl.truncatedNoteTarget.classList.contains('d-hide')).toBe(true)
-    expect(ctrl.totalsRowTarget.classList.contains('d-hide')).toBe(true)
     expect(ctrl.tableBodyTarget.children.length).toBe(0)
   })
 
@@ -517,72 +509,5 @@ describe('controller applyBlockRange and showEmpty', () => {
     const evt = { preventDefault: vi.fn() }
     ctrl.applyBlockRange(evt)
     expect(evt.preventDefault).toHaveBeenCalledTimes(1)
-  })
-
-  // totalsRow assembles a totals <tr> with the five data-type cells renderTotals
-  // fills, mirroring the template's tfoot (label + four numbers).
-  function totalsRow() {
-    const tr = document.createElement('tr')
-    for (const t of ['totalsLabel', 'totalsBlocks', 'totalsReward', 'totalsFees', 'totalsAddr']) {
-      const td = document.createElement('td')
-      td.dataset.type = t
-      tr.appendChild(td)
-    }
-    return tr
-  }
-
-  it('renderTotals blanks the band when the period has a single address', () => {
-    const ctrl = buildCtrl()
-    ctrl.totalsRowTarget = totalsRow()
-    ctrl.totals = {
-      addresses: 1,
-      blocks: 1,
-      miner_reward: '3200000000',
-      fees: '20110',
-      total: '3200020110'
-    }
-    ctrl.renderTotals(true)
-    expect(ctrl.totalsRowTarget.querySelector('[data-type="totalsLabel"]').textContent).toBe('')
-    expect(ctrl.totalsRowTarget.querySelector('[data-type="totalsBlocks"]').textContent).toBe('')
-    expect(ctrl.totalsRowTarget.querySelector('[data-type="totalsReward"]').textContent).toBe('')
-    expect(ctrl.totalsRowTarget.querySelector('[data-type="totalsFees"]').textContent).toBe('')
-    expect(ctrl.totalsRowTarget.querySelector('[data-type="totalsAddr"]').textContent).toBe('')
-  })
-
-  it('renderTotals blanks the band when the filter narrows to one row', () => {
-    // The period has several addresses, but the address filter shows exactly
-    // one row — the totals would otherwise contradict the single visible row.
-    const ctrl = buildCtrl()
-    ctrl.totalsRowTarget = totalsRow()
-    ctrl.totals = { addresses: 13, blocks: 200, miner_reward: '0', fees: '0', total: '0' }
-    ctrl.renderTotals(true, true)
-    expect(ctrl.totalsRowTarget.querySelector('[data-type="totalsLabel"]').textContent).toBe('')
-    expect(ctrl.totalsRowTarget.querySelector('[data-type="totalsAddr"]').textContent).toBe('')
-  })
-
-  it('renderTotals fills the band when more than one address is shown', () => {
-    const ctrl = buildCtrl()
-    ctrl.totalsRowTarget = totalsRow()
-    ctrl.totals = {
-      addresses: 2,
-      blocks: 50,
-      miner_reward: '6400000000',
-      fees: '1000',
-      total: '6400001000'
-    }
-    ctrl.renderTotals(true, false)
-    expect(ctrl.totalsRowTarget.querySelector('[data-type="totalsLabel"]').textContent).toBe(
-      'Totals'
-    )
-    expect(ctrl.totalsRowTarget.querySelector('[data-type="totalsBlocks"]').textContent).toBe('50')
-    expect(ctrl.totalsRowTarget.querySelector('[data-type="totalsReward"]').textContent).toBe(
-      humanize.formatAtomsAsCoinString('6400000000', 0, 2)
-    )
-    expect(ctrl.totalsRowTarget.querySelector('[data-type="totalsFees"]').textContent).toBe(
-      humanize.formatAtomsAsCoinString('1000', 0, 2)
-    )
-    expect(ctrl.totalsRowTarget.querySelector('[data-type="totalsAddr"]').textContent).toBe(
-      `2 addresses · total ${humanize.formatAtomsAsCoinString('6400001000', 0, 2)}`
-    )
   })
 })
