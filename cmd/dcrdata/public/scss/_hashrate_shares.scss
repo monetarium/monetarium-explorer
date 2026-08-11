@@ -158,11 +158,19 @@
 // it never needs the width a full hash would; 17% is plenty and the spare goes
 // to the two money columns, whose long unbreakable values would otherwise sit
 // on top of the neighbor column's. The leading padding keeps right-aligned fee
-// values from crowding the address. nowrap keeps the address and its copy icon
-// on one line — the elided hash handles the overflow itself.
-.hashrate-shares-table .hashrate-shares-addr {
+// values from crowding the address. Apply to the 7th column's cells across the
+// header, body and totals row alike — the body's td.hashrate-shares-addr class
+// alone misses the header and the totals cell, which then lose the left inset.
+.hashrate-shares-table th:nth-child(7),
+.hashrate-shares-table td:nth-child(7) {
   width: 17%;
   padding-left: 1em;
+}
+
+// nowrap keeps the address and its copy icon on one line — the elided hash
+// handles the overflow itself. The header ("Reward Address") is left
+// wrap-eligible so it folds like the money headers at narrow widths.
+.hashrate-shares-table .hashrate-shares-addr {
   white-space: nowrap;
 }
 
