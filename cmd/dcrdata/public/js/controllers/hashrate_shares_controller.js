@@ -257,13 +257,11 @@ export default class extends Controller {
     'toInput',
     'applyButton',
     'addressInput',
-    'totalsRow',
     'truncatedNote'
   ]
 
   connect() {
     this.miners = []
-    this.totals = null
     this.truncated = false
     // emptyState is why the empty slot is showing: null (no active message —
     // renderTable may write the generic empty message), 'invalid' (bad range
@@ -392,8 +390,8 @@ export default class extends Controller {
   }
 
   // filterByAddress narrows the already-loaded list to addresses containing the
-  // query, keeping the real rank. It never affects the pie, percents or totals,
-  // which are computed over the whole period (spec §3.2).
+  // query, keeping the real rank. It never affects the pie or percents, which
+  // are computed over the whole period (spec §3.2).
   filterByAddress() {
     this.addressFilter = this.addressInputTarget.value.trim()
     this.syncUrl()
@@ -441,7 +439,7 @@ export default class extends Controller {
       if (seq !== this._reqSeq) return
       console.error('hashrate-shares fetch failed', err)
       this.emptyState = 'error'
-      // showEmpty is the single data reset point — it drops miners/totals too.
+      // showEmpty is the single data reset point — it drops miners too.
       this.showEmpty(errorStateMessage(err))
       this.renderPie([])
       return
@@ -452,7 +450,6 @@ export default class extends Controller {
     // the message now reflects a real server result.
     this.emptyState = null
     this.miners = (data && data.miners) || []
-    this.totals = (data && data.totals) || null
     this.truncated = !!(data && data.truncated)
     this.renderTable()
     this.renderPie(pieSlices(this.miners))
@@ -461,16 +458,15 @@ export default class extends Controller {
   }
 
   // showEmpty displays a message in the table's empty slot and hides the table
-  // furniture (pie, totals, download, truncation note) around it. It also
-  // drops any previously loaded data so a failed or invalidated request cannot
-  // leave stale rows behind (e.g. a CSV export or a later renderTable reusing
-  // the old list). It is the single state reset point for the data-bearing
-  // fields — every caller relies on it. The emptyState flavor is NOT reset
-  // here: callers set it before showing a sticky message, and only a
-  // successful fetch clears it (see renderTable).
+  // furniture (pie, download, truncation note) around it. It also drops any
+  // previously loaded data so a failed or invalidated request cannot leave stale
+  // rows behind (e.g. a CSV export or a later renderTable reusing the old
+  // list). It is the single state reset point for the data-bearing fields —
+  // every caller relies on it. The emptyState flavor is NOT reset here: callers
+  // set it before showing a sticky message, and only a successful fetch clears
+  // it (see renderTable).
   showEmpty(message) {
     this.miners = []
-    this.totals = null
     this.truncated = false
     this.emptyTarget.textContent = message
     this.emptyTarget.classList.remove('d-hide')
@@ -478,7 +474,6 @@ export default class extends Controller {
     this.pieWrapTarget.classList.add('d-hide')
     if (this.hasDownloadWrapTarget) this.downloadWrapTarget.classList.add('d-hide')
     this.truncatedNoteTarget.classList.add('d-hide')
-    this.renderTotals(false)
   }
 
   renderTable() {
@@ -499,7 +494,7 @@ export default class extends Controller {
     }
 
     // The table draws the full ranked list (spec §5.3); the address filter
-    // narrows the view without touching ranks, percents or totals.
+    // narrows the view without touching ranks or percents.
     const filtered = this.addressFilter
       ? this.miners.filter((m) => m.address.includes(this.addressFilter))
       : this.miners
@@ -507,37 +502,6 @@ export default class extends Controller {
     this.emptyTarget.classList.toggle('d-hide', filtered.length > 0)
     if (!filtered.length) {
       this.emptyTarget.textContent = `No reward addresses match “${this.addressFilter}”.`
-    }
-    this.renderTotals(hasData, filtered.length === 1)
-  }
-
-  // renderTotals fills the period totals into the sticky band. With a single
-  // address — either because the period has one address, or the address filter
-  // narrowed the view to one row — the totals are identical to that one row, so
-  // showing them again reads as confusing duplication (PO). The band stays, but
-  // empty: even the "Totals" label goes, since a label with no numbers beside it
-  // is just noise.
-  renderTotals(show, singleAddress = false) {
-    this.totalsRowTarget.classList.toggle('d-hide', !show || !this.totals)
-    if (!show || !this.totals) return
-    const t = this.totals
-    const label = this.totalsRowTarget.querySelector('[data-type="totalsLabel"]')
-    const blocks = this.totalsRowTarget.querySelector('[data-type="totalsBlocks"]')
-    const reward = this.totalsRowTarget.querySelector('[data-type="totalsReward"]')
-    const fees = this.totalsRowTarget.querySelector('[data-type="totalsFees"]')
-    const addr = this.totalsRowTarget.querySelector('[data-type="totalsAddr"]')
-    if (singleAddress || t.addresses === 1) {
-      label.textContent = ''
-      blocks.textContent = ''
-      reward.textContent = ''
-      fees.textContent = ''
-      addr.textContent = ''
-    } else {
-      label.textContent = 'Totals'
-      blocks.textContent = String(t.blocks)
-      reward.textContent = humanize.formatAtomsAsCoinString(t.miner_reward, 0, 2)
-      fees.textContent = humanize.formatAtomsAsCoinString(t.fees, 0, 2)
-      addr.textContent = `${t.addresses} addresses · total ${humanize.formatAtomsAsCoinString(t.total, 0, 2)}`
     }
     this.truncatedNoteTarget.classList.toggle('d-hide', !this.truncated)
   }
