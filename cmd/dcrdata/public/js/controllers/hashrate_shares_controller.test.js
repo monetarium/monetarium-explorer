@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
+import humanize from '../helpers/humanize_helper'
 import { colorForIndex, OTHERS_COLOR } from '../helpers/chart_theme'
 // Stub the @hotwired/stimulus import so the controller module loads in jsdom
 // and can be constructed directly — Stimulus registration is not involved in
@@ -516,5 +517,68 @@ describe('controller applyBlockRange and showEmpty', () => {
     const evt = { preventDefault: vi.fn() }
     ctrl.applyBlockRange(evt)
     expect(evt.preventDefault).toHaveBeenCalledTimes(1)
+  })
+
+  // totalsRow assembles a totals <tr> with the four data-type cells renderTotals
+  // fills, mirroring the template's tfoot.
+  function totalsRow() {
+    const tr = document.createElement('tr')
+    for (const t of ['totalsBlocks', 'totalsReward', 'totalsFees', 'totalsAddr']) {
+      const td = document.createElement('td')
+      td.dataset.type = t
+      tr.appendChild(td)
+    }
+    return tr
+  }
+
+  it('renderTotals blanks the band when the period has a single address', () => {
+    const ctrl = buildCtrl()
+    ctrl.totalsRowTarget = totalsRow()
+    ctrl.totals = {
+      addresses: 1,
+      blocks: 1,
+      miner_reward: '3200000000',
+      fees: '20110',
+      total: '3200020110'
+    }
+    ctrl.renderTotals(true)
+    expect(ctrl.totalsRowTarget.querySelector('[data-type="totalsBlocks"]').textContent).toBe('')
+    expect(ctrl.totalsRowTarget.querySelector('[data-type="totalsReward"]').textContent).toBe('')
+    expect(ctrl.totalsRowTarget.querySelector('[data-type="totalsFees"]').textContent).toBe('')
+    expect(ctrl.totalsRowTarget.querySelector('[data-type="totalsAddr"]').textContent).toBe('')
+  })
+
+  it('renderTotals blanks the band when the filter narrows to one row', () => {
+    // The period has several addresses, but the address filter shows exactly
+    // one row — the totals would otherwise contradict the single visible row.
+    const ctrl = buildCtrl()
+    ctrl.totalsRowTarget = totalsRow()
+    ctrl.totals = { addresses: 13, blocks: 200, miner_reward: '0', fees: '0', total: '0' }
+    ctrl.renderTotals(true, true)
+    expect(ctrl.totalsRowTarget.querySelector('[data-type="totalsBlocks"]').textContent).toBe('')
+    expect(ctrl.totalsRowTarget.querySelector('[data-type="totalsAddr"]').textContent).toBe('')
+  })
+
+  it('renderTotals fills the band when more than one address is shown', () => {
+    const ctrl = buildCtrl()
+    ctrl.totalsRowTarget = totalsRow()
+    ctrl.totals = {
+      addresses: 2,
+      blocks: 50,
+      miner_reward: '6400000000',
+      fees: '1000',
+      total: '6400001000'
+    }
+    ctrl.renderTotals(true, false)
+    expect(ctrl.totalsRowTarget.querySelector('[data-type="totalsBlocks"]').textContent).toBe('50')
+    expect(ctrl.totalsRowTarget.querySelector('[data-type="totalsReward"]').textContent).toBe(
+      humanize.formatAtomsAsCoinString('6400000000', 0, 2)
+    )
+    expect(ctrl.totalsRowTarget.querySelector('[data-type="totalsFees"]').textContent).toBe(
+      humanize.formatAtomsAsCoinString('1000', 0, 2)
+    )
+    expect(ctrl.totalsRowTarget.querySelector('[data-type="totalsAddr"]').textContent).toBe(
+      `2 addresses · total ${humanize.formatAtomsAsCoinString('6400001000', 0, 2)}`
+    )
   })
 })
