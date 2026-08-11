@@ -80,8 +80,8 @@
 
         <p class="hashrate-shares-heading text-center text-secondary fs15">
             Network hashrate shares, approximated from PoW reward (coinbase) transactions,
-            per <strong>reward address</strong>. An operator using multiple payout addresses
-            will appear as multiple separate entries.
+            per <strong>reward address</strong>. All amounts are in <strong>VAR</strong>;
+            an operator using multiple payout addresses will appear as multiple separate entries.
         </p>
 
         <div class="d-hide hashrate-shares-truncated text-secondary fs15 text-center" data-hashrate-shares-target="truncatedNote">
@@ -117,7 +117,7 @@
                         <tbody data-hashrate-shares-target="tableBody"></tbody>
                         <tfoot data-hashrate-shares-target="totalsRow" class="hashrate-shares-totals d-hide">
                             <tr>
-                                <td>Totals</td>
+                                <td data-type="totalsLabel">Totals</td>
                                 <td></td>
                                 <td></td>
                                 <td class="text-end" data-type="totalsBlocks"></td>
