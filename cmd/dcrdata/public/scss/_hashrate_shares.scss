@@ -71,9 +71,10 @@
 }
 
 // Distribute the columns across the full table width instead of clustering #,
-// swatch and % at the left edge. Fixed layout makes the percentage widths exact;
-// the address keeps the largest share so it still shows in full when there is
-// room (the elided hash handles the overflow when there isn't). Column order:
+// swatch and % at the left edge. Fixed layout makes the percentage widths exact.
+// The two money columns take the largest shares because their long, unbreakable
+// values need the room; the elided reward address always fits in less. Column
+// order:
 // # | swatch | % | Blocks | Miner Coinbase Reward | Miner Fee Reward | Reward Address.
 .hashrate-shares-table {
   width: 100%;
@@ -124,7 +125,7 @@
 
 .hashrate-shares-table th:nth-child(3),
 .hashrate-shares-table td:nth-child(3) {
-  width: 10%;
+  width: 8%;
   white-space: nowrap;
 }
 
@@ -136,12 +137,12 @@
 
 .hashrate-shares-table th:nth-child(5),
 .hashrate-shares-table td:nth-child(5) {
-  width: 20%;
+  width: 30%;
 }
 
 .hashrate-shares-table th:nth-child(6),
 .hashrate-shares-table td:nth-child(6) {
-  width: 16%;
+  width: 19%;
 }
 
 // The money columns' long, unbreakable values stay on one line, but their
@@ -153,38 +154,23 @@
   white-space: nowrap;
 }
 
-// nowrap keeps the address and its copy icon on one line — the elided hash
-// handles the overflow itself.
+// The reward address is always elided (humanize.hashElide shows head…tail), so
+// it never needs the width a full hash would; 17% is plenty and the spare goes
+// to the two money columns, whose long unbreakable values would otherwise sit
+// on top of the neighbor column's. The leading padding keeps right-aligned fee
+// values from crowding the address. nowrap keeps the address and its copy icon
+// on one line — the elided hash handles the overflow itself.
 .hashrate-shares-table .hashrate-shares-addr {
-  width: 28%;
+  width: 17%;
+  padding-left: 1em;
   white-space: nowrap;
 }
 
-// Mobile: the money columns get the width they need for the headers to wrap to
-// two readable rows (shrinking % and the elided address to pay for it), and the
-// address keeps clear leading so right-aligned fee values don't crowd it.
+// Portrait phones: the money-column headers fold to two rows at the narrowest
+// table widths and shrink to 12px so the wrapped labels stay legible. Wider
+// viewports keep the default header size — the money columns are roomy enough
+// for the headers to fit on one line.
 @media (max-width: #{$breakpoint-sm}) {
-  .hashrate-shares-table th:nth-child(3),
-  .hashrate-shares-table td:nth-child(3) {
-    width: 8%;
-  }
-
-  .hashrate-shares-table th:nth-child(5),
-  .hashrate-shares-table td:nth-child(5) {
-    width: 30%;
-  }
-
-  .hashrate-shares-table th:nth-child(6),
-  .hashrate-shares-table td:nth-child(6) {
-    width: 19%;
-  }
-
-  .hashrate-shares-table th:nth-child(7),
-  .hashrate-shares-table td:nth-child(7) {
-    width: 17%;
-    padding-left: 1em;
-  }
-
   .hashrate-shares-table th:nth-child(5),
   .hashrate-shares-table th:nth-child(6) {
     font-size: 12px;
