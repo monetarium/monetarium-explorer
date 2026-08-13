@@ -25,6 +25,7 @@ import (
 
 	apitypes "github.com/monetarium/monetarium-explorer/api/types"
 	m "github.com/monetarium/monetarium-explorer/cmd/dcrdata/internal/middleware"
+	"github.com/monetarium/monetarium-explorer/cmd/dcrdata/internal/verifymessage"
 	"github.com/monetarium/monetarium-explorer/db/cache"
 	"github.com/monetarium/monetarium-explorer/db/dbtypes"
 	"github.com/monetarium/monetarium-explorer/gov/agendas"
@@ -370,7 +371,16 @@ type activeMinersResponse struct {
 // miner reward addresses active within a fixed 7-day window ending at the chain
 // tip, mirroring the home page's active-miner computation (explorer.Store):
 // tip time - 7 days → block height via GetHeightByTimestamp → count of miner
-// addresses whose last_used height exceeds that threshold.
+// addresses whose last_used height exceeds that threshold. The same window
+// constant and computation also live in the home page (explorer.go) and pubsub
+// (pubsubhub.go); change all three together.
+//
+// A since_height of 0 means the lookback predates genesis and the window covers
+// all mined history (the DB reports it as a real height-0 value, since
+// GetHeightByTimestamp returns (0, nil) for a lookback older than the chain).
+// A query failure, by contrast, is an error and surfaces as 422 rather than
+// silently widening the window, since a consumer labels the figure with the
+// window from the response.
 func (c *appContext) getActiveMiners(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -384,10 +394,9 @@ func (c *appContext) getActiveMiners(w http.ResponseWriter, r *http.Request) {
 	const windowDays = 7
 	sinceHeight, err := c.DataSource.GetHeightByTimestamp(ctx, best.Time.S.T.Add(-windowDays*24*time.Hour))
 	if err != nil {
-		// Fall back to the whole chain, as the home page does when the
-		// lookback height query fails.
-		apiLog.Warnf("getActiveMiners: failed to query lookback height: %v", err)
-		sinceHeight = 0
+		apiLog.Errorf("getActiveMiners: failed to query lookback height: %v", err)
+		http.Error(w, http.StatusText(422), 422)
+		return
 	}
 
 	count, err := c.DataSource.ActiveMiners(ctx, sinceHeight)
@@ -412,10 +421,13 @@ type verifyMessageResult struct {
 
 // verifyMessage handles "POST /verify-message". It is the machine-readable
 // counterpart of the HTML /verify-message form: it verifies an address+message+
-// signature triple via dcrutil.VerifyMessage and reports the outcome as
-// "match" (valid signature), "mismatch" (signature valid but signed by a
-// different address), or "error" with a human-readable reason. It always
-// answers 200; the result is carried in the body.
+// signature triple and reports the outcome as "match" (valid signature),
+// "mismatch" (signature valid but signed by a different address), or "error"
+// with a fixed-vocabulary reason. It always answers 200; the result is carried
+// in the body. Verification goes through the shared verifymessage classifier,
+// which validates the address, signature encoding and compact length up front
+// so each failure mode is known by construction rather than by matching
+// upstream error prose.
 func (c *appContext) verifyMessage(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Address   string `json:"address"`
@@ -435,21 +447,15 @@ func (c *appContext) verifyMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := dcrutil.VerifyMessage(req.Address, req.Signature, req.Message, c.Params); err != nil {
-		switch {
-		case strings.Contains(err.Error(), "message not signed by address"):
-			writeJSON(w, verifyMessageResult{Result: "mismatch"}, m.GetIndentCtx(r))
-		case strings.Contains(err.Error(), "malformed base64 encoding"):
-			writeJSON(w, verifyMessageResult{Result: "error", Error: "invalid signature encoding"},
-				m.GetIndentCtx(r))
-		default:
-			writeJSON(w, verifyMessageResult{Result: "error", Error: err.Error()},
-				m.GetIndentCtx(r))
-		}
-		return
+	res := verifymessage.Verify(req.Address, req.Signature, req.Message, c.Params)
+	switch {
+	case res.Match:
+		writeJSON(w, verifyMessageResult{Result: "match"}, m.GetIndentCtx(r))
+	case res.Mismatch:
+		writeJSON(w, verifyMessageResult{Result: "mismatch"}, m.GetIndentCtx(r))
+	default:
+		writeJSON(w, verifyMessageResult{Result: "error", Error: res.ErrMsg}, m.GetIndentCtx(r))
 	}
-
-	writeJSON(w, verifyMessageResult{Result: "match"}, m.GetIndentCtx(r))
 }
 
 func (c *appContext) currentHeight(w http.ResponseWriter, _ *http.Request) {

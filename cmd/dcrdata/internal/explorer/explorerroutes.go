@@ -26,6 +26,7 @@ import (
 
 	ticketvotev1 "github.com/decred/politeia/politeiawww/api/ticketvote/v1"
 	"github.com/monetarium/monetarium-explorer/cmd/dcrdata/internal/middleware"
+	"github.com/monetarium/monetarium-explorer/cmd/dcrdata/internal/verifymessage"
 	"github.com/monetarium/monetarium-explorer/db/dbtypes"
 	"github.com/monetarium/monetarium-explorer/explorer/types"
 	"github.com/monetarium/monetarium-explorer/gov/agendas"
@@ -2741,15 +2742,13 @@ func (exp *explorerUI) VerifyMessageHandler(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	if err := dcrutil.VerifyMessage(address, signature, message, exp.ChainParams); err != nil {
-		if strings.Contains(err.Error(), "message not signed by address") {
-			displayPage("", false)
-		} else if strings.Contains(err.Error(), "malformed base64 encoding") {
-			displayPage("invalid signature encoding", false)
-		} else {
-			displayPage(err.Error(), false)
-		}
-		return
+	res := verifymessage.Verify(address, signature, message, exp.ChainParams)
+	switch {
+	case res.Match:
+		displayPage("", true)
+	case res.Mismatch:
+		displayPage("", false)
+	default:
+		displayPage(res.ErrMsg, false)
 	}
-	displayPage("", true)
 }
