@@ -9,7 +9,7 @@ HTTP API обозревателя (`/api/...`, роутер [apirouter.go](../..
 
 **Зачем.** Обе операции нужны автоматизации: оператору ноды и валидатору — получать текущее число активных майнеров без парсинга HTML, а участникам промо-программ — программно подтверждать владение адресом (подписывая запрос) и проверять ответ. Это базовые, уже существующие в системе вычисления, которым не хватает API-обёртки.
 
-> **Оговорка про websocket.** Тот же счётчик уже рассылается pubsub: `pubsubhub.go:698-711` считает `lookback := now.Add(-7*24h)` → `GetHeightByTimestamp` → `ActiveMiners` и кладёт результат в `GeneralInfo.ActiveMiners` (JSON-поле `active_miners`, [pubsubhub.go:755](../../../cmd/dcrdata/internal/pubsub/pubsubhub.go)). Новый эндпоинт не добавляет вычисления — он делает уже существующее доступным по запросу без постоянного websocket-соединения и без получения всего состояния главной страницы.
+> **Оговорка про websocket.** Тот же счётчик уже рассылается pubsub: [pubsubhub.go:695-711](../../../pubsub/pubsubhub.go) считает `lookback := newBlockData.BlockTime.T.Add(-7*24h)` (время блока, не настенное) → `GetHeightByTimestamp` → `ActiveMiners` и кладёт результат в `GeneralInfo.ActiveMiners` (JSON-поле `active_miners`, [pubsubhub.go:755](../../../pubsub/pubsubhub.go)). Новый эндпоинт не добавляет вычисления — он делает уже существующее доступным по запросу без постоянного websocket-соединения и без получения всего состояния главной страницы.
 
 Инварианты Monetarium, на которые опирается документ:
 
@@ -21,7 +21,7 @@ HTTP API обозревателя (`/api/...`, роутер [apirouter.go](../..
 
 | Вопрос | Решение |
 | --- | --- |
-| Почему эндпоинты в `/api`, а не на web-роутере? | API-роутер (`apiMux`) — единственный, кто применяет `cors.Default()` ([main.go:713](../../../cmd/dcrdata/main.go)); web-роутер (`webMux`) таких заголовков не ставит. Чтобы внешний JS/интеграции могли делать кросс-доменные запросы, обе ручки живут в `/api`. (Обратная сторона — на API-роутере нет ограничения частоты, см. ниже.) |
+| Почему эндпоинты в `/api`, а не на web-роутере? | API-роутер применяет `cors.Default()` на весь мьютекс ([apirouter.go:323](../../../cmd/dcrdata/internal/api/apirouter.go)); основной web-роутер таких заголовков не ставит (cors есть только у legacy-редиректа `/explorer`, [explorer.go:973](../../../cmd/dcrdata/internal/explorer/explorer.go)). Чтобы внешний JS/интеграции могли делать кросс-доменные запросы, обе ручки живут в `/api`. (Обратная сторона — на API-роутере нет ограничения частоты, см. ниже.) |
 | Параметр окна для `/miners/active`? | **Нет.** Окно фиксированное — 7 дней, как на главной странице. В ответе возвращается `window_days: 7` и вычисленная граница `since_height`, чтобы потребителю не приходилось повторять расчёт |
 | Ограничение частоты запросов к `/verify-message`? | **Нет, неограниченно — осознанное отклонение от прецедента HTML-страницы.** HTML-маршрут `POST /verify-message` ограничен 5 req/s-per-IP через `mw.Tollbooth(limiter)` ([main.go:766](../../../cmd/dcrdata/main.go)), а API-роутер в принципе не применяет rate-limit — только лимит размера тела 2 MiB ([apirouter.go:327](../../../cmd/dcrdata/internal/api/apirouter.go)). Следствие, которое надо держать в голове: существующий HTML-контроль обходится простой сменой URL на `/api/verify-message`, поэтому это решение пересматриваемо — если API начнёт использоваться в публичном сценарии с угрозой DoS, лимитер добавится тем же `mw.Tollbooth` способом |
 | Возвращать ли классифицированную причину ошибки в `/verify-message` | **Да.** `result: "error"` + человекочитаемое `error` (§3.3). Потребитель отличает «подпись не та» от «подпись испорчена». Контракт ответа опирается только на фиксированный словарь `verifymessage`, а не на тексты ошибок нижележащих пакетов (§3.3) |
@@ -58,7 +58,7 @@ HTTP API обозревателя (`/api/...`, роутер [apirouter.go](../..
 | Роутер API, монтирование `/api` | `cmd/dcrdata/internal/api/apirouter.go` (`NewAPIRouter`), подключён в `main.go:708`; только на нём `cors.Default()` |
 | Интерфейс источника данных | `cmd/dcrdata/internal/api/apiroutes.go` — `DataSource` (`GetBestBlockSummary`, `GetHeightByTimestamp`, `ActiveMiners` — все три уже реализованы на `*dcrpg.ChainDB`) |
 | Расчёт счётчика на главной | `cmd/dcrdata/internal/explorer/explorer.go:531` — `lookback := tipTime.Add(-7 * 24h)` → `GetHeightByTimestamp` → `ActiveMiners` |
-| Дублирующийся расчёт в pubsub | `cmd/dcrdata/internal/pubsub/pubsubhub.go:698-711` — тот же `-7*24h` → `GetHeightByTimestamp` → `ActiveMiners`, результат в `GeneralInfo.ActiveMiners` (`json:"active_miners"`) |
+| Дублирующийся расчёт в pubsub | [pubsubhub.go:695-711](../../../pubsub/pubsubhub.go) — тот же `-7*24h` от времени нового блока → `GetHeightByTimestamp` → `ActiveMiners`, результат в `GeneralInfo.ActiveMiners` (`json:"active_miners"`) |
 | SQL счётчика | `db/dcrpg/internal/minerstmts.go:20` — `SELECT COUNT(*) FROM miners WHERE last_used > $1` |
 | Реализация на `ChainDB` | `db/dcrpg/pgblockchain.go` — `GetHeightByTimestamp` (≈1330), `ActiveMiners` (≈5317) |
 | Проверка подписи | `monetarium-node/dcrutil` — `VerifyMessage(address, signature, message, params)`; обёртка-классификатор `cmd/dcrdata/internal/verifymessage/` |
@@ -134,7 +134,7 @@ HTTP API обозревателя (`/api/...`, роутер [apirouter.go](../..
 
 - **`/verify-message` всегда `200`, если сам запрос дошёл и распарсился.** Исход проверки — поле `result`, а не HTTP-статус. Исключение: `422`/`400` для запроса, который нельзя интерпретировать вообще (реализация не использует такие пути для этой ручки — все случаи покрываются `result: "error"`).
 - **`/miners/active`**: `422` при отсутствии лучшего блока, ошибке `GetHeightByTimestamp` или ошибке `ActiveMiners`. `since_height: 0` — это легитимное «окно достигло генезиса», а не индикатор ошибки (§3.1).
-- **Классификация подписи** живёт в `verifymessage.Verify` ([verifymessage.go](../../../cmd/dcrdata/internal/verifymessage/verifymessage.go)): адрес и подпись валидируются явно до восстановления ключа, несоответствие адресу распознаётся по фиксированному тексту `message not signed by address` ([dcrutil/util.go:93](../../../monetarium-node/dcrutil/util.go), стабилен). Все прочие исходы — из фиксированного словаря (§3.2).
+- **Классификация подписи** живёт в `verifymessage.Verify` ([verifymessage.go](../../../cmd/dcrdata/internal/verifymessage/verifymessage.go)): адрес и подпись валидируются явно до восстановления ключа, несоответствие адресу распознаётся по фиксированному тексту `message not signed by address` (стабилен в `dcrutil/util.go:93`). Все прочие исходы — из фиксированного словаря (§3.2).
 - **Проверка подписи не зависит от типа монеты** и не требует доступа к БД — только к параметрам сети.
 
 ---
@@ -145,7 +145,7 @@ HTTP API обозревателя (`/api/...`, роутер [apirouter.go](../..
 | --- | --- |
 | Главная страница | Нет. Расчёт счётчика не трогается, дублирующийся код не выносится (ручки тонкие) |
 | Публичная страница `/verify-message` | **Использует тот же классификатор.** HTML-обработчик переведён на `verifymessage.Verify` — поведение не меняется (тот же результат, но фиксированный словарь ошибок вместо сырых текстов), код выигрывает от единого источника истины |
-| `DataSource` (интерфейс) | Методы `GetHeightByTimestamp` и `ActiveMiners` **не добавляются этим PR** — они уже в интерфейсе, т.к. используются главной страницей и pubsub. Добавляются только моки в тестах (`noopDS` и наследники) |
+| `DataSource` (интерфейс) | Методы `GetHeightByTimestamp` и `ActiveMiners` **добавляются этим PR** в `api.DataSource` (раньше они были только в интерфейсах главной страницы и pubsub, поэтому `api` их не имел). Реализации на `*dcrpg.ChainDB` уже существовали; моки (`noopDS` и наследники) дополнены |
 | `pubsub` | Не меняется. Расчёт счётчика в pubsub остаётся как есть (дубликат, см. §0) |
 | Именование и legacy-слои | Новых затронутых legacy-имён нет; существующие не переименовываются |
 
@@ -177,6 +177,7 @@ HTTP API обозревателя (`/api/...`, роутер [apirouter.go](../..
    - не-base64 подпись → `error` / `invalid signature encoding`;
    - усечённая подпись (`AAAA`, валидное base64 не длины 65) → `error` / `invalid signature encoding`;
    - невалидный адрес (`not an address`) → `error` / `invalid address`;
+   - не-p2pkh адрес (testnet P2SH `TccWLgcquqvwrfBocq5mcK5kBiyw8MvyvCi`) с испорченной подписью → `error` / `invalid address` (проверка типа адреса предшествует проверке подписи);
    - регрессия спуфинга: адрес, равный фразе `message not signed by address` → `error` / `invalid address` (а не `mismatch`);
    - пустые поля → `error` / `form values cannot be empty`.
 
@@ -188,3 +189,4 @@ HTTP API обозревателя (`/api/...`, роутер [apirouter.go](../..
 | --- | --- | --- |
 | 0.1 | 2026-08-13 | Черновик: оба эндпоинта, фиксированное окно 7 дней, классификация ошибок |
 | 0.2 | 2026-08-13 | Ревью: классификатор вынесен в `verifymessage` (устранён спуфинг через текст ошибки адреса); ошибка `GetHeightByTimestamp` → `422`, `since_height: 0` = «окно достигло генезиса»; `Cache-Control: max-age=20`; HTML-страница переведена на общий классификатор; уточнены §0 (pubsub-дубликат), §0.1 (CORS/rate-limit/пустое message), §1 (крит. 6), §2, §4, §5 |
+| 0.3 | 2026-08-13 | Повторное ревью: тип p2pkh проверяется до подписи (не-p2pkh адрес + испорченная подпись → `invalid address`); §4 исправлено — методы `DataSource` добавлены этим PR; ссылки на pubsub выправлены на корневой пакет `../../../pubsub/`, CORS — на `apirouter.go:323` (+ legacy `explorer.go:973`) |

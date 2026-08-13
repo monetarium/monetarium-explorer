@@ -239,6 +239,13 @@ func TestVerifyMessage_API(t *testing.T) {
 		wantResult: "error",
 		wantError:  "invalid address",
 	}, {
+		name:       "non-p2pkh address with malformed signature",
+		address:    "TccWLgcquqvwrfBocq5mcK5kBiyw8MvyvCi",
+		signature:  "!!!not base64!!!",
+		message:    msg,
+		wantResult: "error",
+		wantError:  "invalid address",
+	}, {
 		// Regression: the address text must not be able to steer the
 		// classification, since stdaddr.DecodeAddress embeds it in its error.
 		name:       "spoofed mismatch phrase in address",

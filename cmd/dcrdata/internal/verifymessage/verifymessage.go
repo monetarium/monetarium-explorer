@@ -33,7 +33,16 @@ type Result struct {
 func Verify(address, signature, message string, params dcrutil.AddressParams) Result {
 	// Decode the address first: it is the only input whose error text
 	// includes caller content, so a fixed message is used.
-	if _, err := stdaddr.DecodeAddress(address, params); err != nil {
+	addr, err := stdaddr.DecodeAddress(address, params)
+	if err != nil {
+		return Result{ErrMsg: "invalid address"}
+	}
+
+	// Only P2PKH addresses can sign messages. Hoisting the type assertion
+	// here (dcrutil.VerifyMessage performs it between the address and
+	// signature checks) keeps an address fault reported as such even when
+	// the signature is malformed too.
+	if _, ok := addr.(*stdaddr.AddressPubKeyHashEcdsaSecp256k1V0); !ok {
 		return Result{ErrMsg: "invalid address"}
 	}
 
@@ -47,14 +56,10 @@ func Verify(address, signature, message string, params dcrutil.AddressParams) Re
 
 	err = dcrutil.VerifyMessage(address, signature, message, params)
 	if err != nil {
-		switch {
-		case strings.Contains(err.Error(), "message not signed by address"):
+		if strings.Contains(err.Error(), "message not signed by address") {
 			return Result{Mismatch: true}
-		case strings.Contains(err.Error(), "address is not a pay-to-pubkey-hash address"):
-			return Result{ErrMsg: "invalid address"}
-		default:
-			return Result{ErrMsg: "invalid signature"}
 		}
+		return Result{ErrMsg: "invalid signature"}
 	}
 	return Result{Match: true}
 }
