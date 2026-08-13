@@ -111,6 +111,12 @@ type DataSource interface {
 	GetMempoolPriceCountTime() *apitypes.PriceCountTime
 	LoadSKASupplyForCoin(ctx context.Context, charts *cache.ChartData, coinType uint8) error
 	LoadSKAFeesForCoin(ctx context.Context, charts *cache.ChartData, coinType uint8) error
+	// GetHeightByTimestamp queries the DB for the height of the mainchain block
+	// at or immediately before the given timestamp.
+	GetHeightByTimestamp(ctx context.Context, timestamp time.Time) (int64, error)
+	// ActiveMiners returns the number of unique miner addresses with last_used
+	// greater than minHeight.
+	ActiveMiners(ctx context.Context, minHeight int64) (int64, error)
 }
 
 // dcrdata application context used by all route handlers
@@ -351,6 +357,99 @@ func (c *appContext) coinSupplyCirculating(w http.ResponseWriter, r *http.Reques
 	}
 
 	writeJSONBytes(w, []byte(strconv.FormatInt(supply.Mined, 10)))
+}
+
+// activeMinersResponse is the JSON body for GET /miners/active.
+type activeMinersResponse struct {
+	ActiveMiners int64 `json:"active_miners"`
+	WindowDays   int64 `json:"window_days"`
+	SinceHeight  int64 `json:"since_height"`
+}
+
+// getActiveMiners handles "GET /miners/active". It reports the number of unique
+// miner reward addresses active within a fixed 7-day window ending at the chain
+// tip, mirroring the home page's active-miner computation (explorer.Store):
+// tip time - 7 days → block height via GetHeightByTimestamp → count of miner
+// addresses whose last_used height exceeds that threshold.
+func (c *appContext) getActiveMiners(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	best := c.DataSource.GetBestBlockSummary(ctx)
+	if best == nil {
+		apiLog.Error("getActiveMiners: no best block summary.")
+		http.Error(w, http.StatusText(422), 422)
+		return
+	}
+
+	const windowDays = 7
+	sinceHeight, err := c.DataSource.GetHeightByTimestamp(ctx, best.Time.S.T.Add(-windowDays*24*time.Hour))
+	if err != nil {
+		// Fall back to the whole chain, as the home page does when the
+		// lookback height query fails.
+		apiLog.Warnf("getActiveMiners: failed to query lookback height: %v", err)
+		sinceHeight = 0
+	}
+
+	count, err := c.DataSource.ActiveMiners(ctx, sinceHeight)
+	if err != nil {
+		apiLog.Errorf("getActiveMiners: ActiveMiners failed: %v", err)
+		http.Error(w, http.StatusText(422), 422)
+		return
+	}
+
+	writeJSON(w, activeMinersResponse{
+		ActiveMiners: count,
+		WindowDays:   windowDays,
+		SinceHeight:  sinceHeight,
+	}, m.GetIndentCtx(r))
+}
+
+// verifyMessageResult is the JSON body for POST /verify-message.
+type verifyMessageResult struct {
+	Result string `json:"result"`
+	Error  string `json:"error,omitempty"`
+}
+
+// verifyMessage handles "POST /verify-message". It is the machine-readable
+// counterpart of the HTML /verify-message form: it verifies an address+message+
+// signature triple via dcrutil.VerifyMessage and reports the outcome as
+// "match" (valid signature), "mismatch" (signature valid but signed by a
+// different address), or "error" with a human-readable reason. It always
+// answers 200; the result is carried in the body.
+func (c *appContext) verifyMessage(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Address   string `json:"address"`
+		Message   string `json:"message"`
+		Signature string `json:"signature"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		apiLog.Debugf("verifyMessage: decode failed: %v", err)
+		writeJSON(w, verifyMessageResult{Result: "error", Error: "malformed JSON request"},
+			m.GetIndentCtx(r))
+		return
+	}
+
+	if req.Address == "" || req.Message == "" || req.Signature == "" {
+		writeJSON(w, verifyMessageResult{Result: "error", Error: "form values cannot be empty"},
+			m.GetIndentCtx(r))
+		return
+	}
+
+	if err := dcrutil.VerifyMessage(req.Address, req.Signature, req.Message, c.Params); err != nil {
+		switch {
+		case strings.Contains(err.Error(), "message not signed by address"):
+			writeJSON(w, verifyMessageResult{Result: "mismatch"}, m.GetIndentCtx(r))
+		case strings.Contains(err.Error(), "malformed base64 encoding"):
+			writeJSON(w, verifyMessageResult{Result: "error", Error: "invalid signature encoding"},
+				m.GetIndentCtx(r))
+		default:
+			writeJSON(w, verifyMessageResult{Result: "error", Error: err.Error()},
+				m.GetIndentCtx(r))
+		}
+		return
+	}
+
+	writeJSON(w, verifyMessageResult{Result: "match"}, m.GetIndentCtx(r))
 }
 
 func (c *appContext) currentHeight(w http.ResponseWriter, _ *http.Request) {

@@ -40,6 +40,10 @@ func NewAPIRouter(app *appContext, JSONIndent string, useRealIP, compressLarge b
 	mux.Get("/status/happy", app.statusHappy)
 	mux.Get("/supply", app.coinSupply)
 	mux.Get("/supply/circulating", app.coinSupplyCirculating)
+	mux.Route("/miners", func(r chi.Router) {
+		r.Get("/active", app.getActiveMiners)
+	})
+	mux.Post("/verify-message", app.verifyMessage)
 
 	compMiddleware := m.Next
 	if compressLarge {

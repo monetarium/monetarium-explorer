@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/monetarium/monetarium-explorer/api/rewardtypes"
 	apitypes "github.com/monetarium/monetarium-explorer/api/types"
@@ -68,6 +70,133 @@ func TestProposalRoute_Returns410(t *testing.T) {
 	mux.ServeHTTP(w, req)
 	if w.Code != http.StatusGone {
 		t.Errorf("want 410, got %d", w.Code)
+	}
+}
+
+// activeMinersDS overrides the 7-day-window miner count query used by
+// GET /miners/active.
+type activeMinersDS struct {
+	noopDS
+	bestTime   time.Time
+	lookbackHt int64
+	minerCount int64
+}
+
+func (m activeMinersDS) GetBestBlockSummary(_ context.Context) *apitypes.BlockDataBasic {
+	return &apitypes.BlockDataBasic{
+		Height: 42,
+		Time:   apitypes.TimeAPI{S: dbtypes.TimeDef{T: m.bestTime}},
+	}
+}
+
+func (m activeMinersDS) GetHeightByTimestamp(_ context.Context, _ time.Time) (int64, error) {
+	return m.lookbackHt, nil
+}
+
+func (m activeMinersDS) ActiveMiners(_ context.Context, _ int64) (int64, error) {
+	return m.minerCount, nil
+}
+
+func TestMinersActive_Response(t *testing.T) {
+	app := &appContext{DataSource: activeMinersDS{
+		bestTime:   time.Date(2026, 8, 13, 12, 0, 0, 0, time.UTC),
+		lookbackHt: 18687,
+		minerCount: 7,
+	}}
+	mux := NewAPIRouter(app, "", false, false)
+
+	req := httptest.NewRequest(http.MethodGet, "/miners/active", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var result activeMinersResponse
+	if err := json.NewDecoder(w.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if result.ActiveMiners != 7 {
+		t.Errorf("active_miners: want 7, got %d", result.ActiveMiners)
+	}
+	if result.WindowDays != 7 {
+		t.Errorf("window_days: want 7, got %d", result.WindowDays)
+	}
+	if result.SinceHeight != 18687 {
+		t.Errorf("since_height: want 18687, got %d", result.SinceHeight)
+	}
+}
+
+func TestVerifyMessage_API(t *testing.T) {
+	app := &appContext{DataSource: noopDS{}, Params: chaincfg.TestNet3Params()}
+	mux := NewAPIRouter(app, "", false, false)
+
+	const msg = "verifymessage test"
+	const validSig = "IGSi87UVYcVLgXTEel3W93+ygvWweHR5rXzSZan1OVegZuHEg9DI+k9AlttbrelA3D5DaHYLwg9cTOcxrPv2AhI="
+
+	tests := []struct {
+		name       string
+		address    string
+		signature  string
+		message    string
+		wantResult string
+		wantError  string
+	}{{
+		name:       "valid signature matches",
+		address:    "TsmfmUitQApgnNxQypdGd2x36djCCpDpERU",
+		signature:  validSig,
+		message:    msg,
+		wantResult: "match",
+	}, {
+		name:       "signature not signed by address",
+		address:    "TsWeG3TJzucZgYyMfZFC2GhBvbeNfA48LTo",
+		signature:  validSig,
+		message:    msg,
+		wantResult: "mismatch",
+	}, {
+		name:       "malformed base64 signature",
+		address:    "TsmfmUitQApgnNxQypdGd2x36djCCpDpERU",
+		signature:  "!!!not base64!!!",
+		message:    msg,
+		wantResult: "error",
+		wantError:  "invalid signature encoding",
+	}, {
+		name:       "empty fields",
+		address:    "",
+		signature:  "",
+		message:    "",
+		wantResult: "error",
+		wantError:  "form values cannot be empty",
+	}}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			body, err := json.Marshal(map[string]string{
+				"address":   test.address,
+				"message":   test.message,
+				"signature": test.signature,
+			})
+			if err != nil {
+				t.Fatalf("marshal: %v", err)
+			}
+			req := httptest.NewRequest(http.MethodPost, "/verify-message", bytes.NewReader(body))
+			w := httptest.NewRecorder()
+			mux.ServeHTTP(w, req)
+
+			if w.Code != http.StatusOK {
+				t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+			}
+			var result verifyMessageResult
+			if err := json.NewDecoder(w.Body).Decode(&result); err != nil {
+				t.Fatalf("decode: %v", err)
+			}
+			if result.Result != test.wantResult {
+				t.Errorf("result: want %q, got %q", test.wantResult, result.Result)
+			}
+			if result.Error != test.wantError {
+				t.Errorf("error: want %q, got %q", test.wantError, result.Error)
+			}
+		})
 	}
 }
 
