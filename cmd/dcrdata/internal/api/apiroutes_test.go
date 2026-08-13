@@ -97,6 +97,47 @@ func (m activeMinersDS) ActiveMiners(_ context.Context, _ int64) (int64, error) 
 	return m.minerCount, nil
 }
 
+// nilBestDS returns no best block summary, exercising the 422 path of
+// GET /miners/active.
+type nilBestDS struct {
+	noopDS
+}
+
+func (nilBestDS) GetBestBlockSummary(_ context.Context) *apitypes.BlockDataBasic {
+	return nil
+}
+
+// minersErrorDS fails the ActiveMiners query, exercising the other 422 path.
+type minersErrorDS struct {
+	activeMinersDS
+}
+
+func (minersErrorDS) ActiveMiners(_ context.Context, _ int64) (int64, error) {
+	return 0, fmt.Errorf("boom")
+}
+
+func TestMinersActive_NilBestBlock(t *testing.T) {
+	mux := NewAPIRouter(&appContext{DataSource: nilBestDS{}}, "", false, false)
+	req := httptest.NewRequest(http.MethodGet, "/miners/active", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestMinersActive_ActiveMinersError(t *testing.T) {
+	mux := NewAPIRouter(&appContext{DataSource: minersErrorDS{}}, "", false, false)
+	req := httptest.NewRequest(http.MethodGet, "/miners/active", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
 func TestMinersActive_Response(t *testing.T) {
 	app := &appContext{DataSource: activeMinersDS{
 		bestTime:   time.Date(2026, 8, 13, 12, 0, 0, 0, time.UTC),
@@ -197,6 +238,30 @@ func TestVerifyMessage_API(t *testing.T) {
 				t.Errorf("error: want %q, got %q", test.wantError, result.Error)
 			}
 		})
+	}
+}
+
+func TestVerifyMessage_API_MalformedJSON(t *testing.T) {
+	app := &appContext{DataSource: noopDS{}, Params: chaincfg.TestNet3Params()}
+	mux := NewAPIRouter(app, "", false, false)
+
+	req := httptest.NewRequest(http.MethodPost, "/verify-message",
+		strings.NewReader(`{"address": "not a json string`))
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var result verifyMessageResult
+	if err := json.NewDecoder(w.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if result.Result != "error" {
+		t.Errorf("result: want %q, got %q", "error", result.Result)
+	}
+	if result.Error != "malformed JSON request" {
+		t.Errorf("error: want %q, got %q", "malformed JSON request", result.Error)
 	}
 }
 
