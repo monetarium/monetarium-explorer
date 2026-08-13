@@ -74,26 +74,30 @@ func TestProposalRoute_Returns410(t *testing.T) {
 }
 
 // activeMinersDS overrides the 7-day-window miner count query used by
-// GET /miners/active.
+// GET /miners/active. It records the lookback timestamp it receives so the
+// test can assert the window is exactly 7 days before the tip.
 type activeMinersDS struct {
 	noopDS
-	bestTime   time.Time
-	lookbackHt int64
-	minerCount int64
+	bestTime    time.Time
+	lookbackHt  int64
+	minerCount  int64
+	gotLookback time.Time
+	lookbackErr error
 }
 
-func (m activeMinersDS) GetBestBlockSummary(_ context.Context) *apitypes.BlockDataBasic {
+func (m *activeMinersDS) GetBestBlockSummary(_ context.Context) *apitypes.BlockDataBasic {
 	return &apitypes.BlockDataBasic{
 		Height: 42,
 		Time:   apitypes.TimeAPI{S: dbtypes.TimeDef{T: m.bestTime}},
 	}
 }
 
-func (m activeMinersDS) GetHeightByTimestamp(_ context.Context, _ time.Time) (int64, error) {
-	return m.lookbackHt, nil
+func (m *activeMinersDS) GetHeightByTimestamp(_ context.Context, ts time.Time) (int64, error) {
+	m.gotLookback = ts
+	return m.lookbackHt, m.lookbackErr
 }
 
-func (m activeMinersDS) ActiveMiners(_ context.Context, _ int64) (int64, error) {
+func (m *activeMinersDS) ActiveMiners(_ context.Context, _ int64) (int64, error) {
 	return m.minerCount, nil
 }
 
@@ -109,7 +113,7 @@ func (nilBestDS) GetBestBlockSummary(_ context.Context) *apitypes.BlockDataBasic
 
 // minersErrorDS fails the ActiveMiners query, exercising the other 422 path.
 type minersErrorDS struct {
-	activeMinersDS
+	*activeMinersDS
 }
 
 func (minersErrorDS) ActiveMiners(_ context.Context, _ int64) (int64, error) {
@@ -128,7 +132,20 @@ func TestMinersActive_NilBestBlock(t *testing.T) {
 }
 
 func TestMinersActive_ActiveMinersError(t *testing.T) {
-	mux := NewAPIRouter(&appContext{DataSource: minersErrorDS{}}, "", false, false)
+	mux := NewAPIRouter(&appContext{DataSource: minersErrorDS{activeMinersDS: &activeMinersDS{}}}, "", false, false)
+	req := httptest.NewRequest(http.MethodGet, "/miners/active", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestMinersActive_LookbackQueryError(t *testing.T) {
+	ds := &activeMinersDS{bestTime: time.Date(2026, 8, 13, 12, 0, 0, 0, time.UTC), lookbackErr: fmt.Errorf("db timeout")}
+	mux := NewAPIRouter(&appContext{DataSource: ds}, "", false, false)
+
 	req := httptest.NewRequest(http.MethodGet, "/miners/active", nil)
 	w := httptest.NewRecorder()
 	mux.ServeHTTP(w, req)
@@ -139,11 +156,13 @@ func TestMinersActive_ActiveMinersError(t *testing.T) {
 }
 
 func TestMinersActive_Response(t *testing.T) {
-	app := &appContext{DataSource: activeMinersDS{
-		bestTime:   time.Date(2026, 8, 13, 12, 0, 0, 0, time.UTC),
+	bestTime := time.Date(2026, 8, 13, 12, 0, 0, 0, time.UTC)
+	ds := &activeMinersDS{
+		bestTime:   bestTime,
 		lookbackHt: 18687,
 		minerCount: 7,
-	}}
+	}
+	app := &appContext{DataSource: ds}
 	mux := NewAPIRouter(app, "", false, false)
 
 	req := httptest.NewRequest(http.MethodGet, "/miners/active", nil)
@@ -165,6 +184,10 @@ func TestMinersActive_Response(t *testing.T) {
 	}
 	if result.SinceHeight != 18687 {
 		t.Errorf("since_height: want 18687, got %d", result.SinceHeight)
+	}
+	wantLookback := bestTime.Add(-7 * 24 * time.Hour)
+	if !ds.gotLookback.Equal(wantLookback) {
+		t.Errorf("lookback timestamp: want %v, got %v", wantLookback, ds.gotLookback)
 	}
 }
 
@@ -201,6 +224,29 @@ func TestVerifyMessage_API(t *testing.T) {
 		message:    msg,
 		wantResult: "error",
 		wantError:  "invalid signature encoding",
+	}, {
+		name:       "truncated signature",
+		address:    "TsmfmUitQApgnNxQypdGd2x36djCCpDpERU",
+		signature:  "AAAA",
+		message:    msg,
+		wantResult: "error",
+		wantError:  "invalid signature encoding",
+	}, {
+		name:       "invalid address",
+		address:    "not an address",
+		signature:  validSig,
+		message:    msg,
+		wantResult: "error",
+		wantError:  "invalid address",
+	}, {
+		// Regression: the address text must not be able to steer the
+		// classification, since stdaddr.DecodeAddress embeds it in its error.
+		name:       "spoofed mismatch phrase in address",
+		address:    "message not signed by address",
+		signature:  validSig,
+		message:    msg,
+		wantResult: "error",
+		wantError:  "invalid address",
 	}, {
 		name:       "empty fields",
 		address:    "",
