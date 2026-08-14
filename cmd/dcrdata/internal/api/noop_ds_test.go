@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"time"
 
 	apitypes "github.com/monetarium/monetarium-explorer/api/types"
 	"github.com/monetarium/monetarium-explorer/db/cache"
@@ -130,3 +131,5 @@ func (noopDS) LoadSKASupplyForCoin(_ context.Context, _ *cache.ChartData, _ uint
 func (noopDS) LoadSKAFeesForCoin(_ context.Context, _ *cache.ChartData, _ uint8) error {
 	return nil
 }
+func (noopDS) GetHeightByTimestamp(_ context.Context, _ time.Time) (int64, error) { return 0, nil }
+func (noopDS) ActiveMiners(_ context.Context, _ int64) (int64, error)             { return 0, nil }

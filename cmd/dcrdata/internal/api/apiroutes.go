@@ -25,6 +25,7 @@ import (
 
 	apitypes "github.com/monetarium/monetarium-explorer/api/types"
 	m "github.com/monetarium/monetarium-explorer/cmd/dcrdata/internal/middleware"
+	"github.com/monetarium/monetarium-explorer/cmd/dcrdata/internal/verifymessage"
 	"github.com/monetarium/monetarium-explorer/db/cache"
 	"github.com/monetarium/monetarium-explorer/db/dbtypes"
 	"github.com/monetarium/monetarium-explorer/gov/agendas"
@@ -111,6 +112,12 @@ type DataSource interface {
 	GetMempoolPriceCountTime() *apitypes.PriceCountTime
 	LoadSKASupplyForCoin(ctx context.Context, charts *cache.ChartData, coinType uint8) error
 	LoadSKAFeesForCoin(ctx context.Context, charts *cache.ChartData, coinType uint8) error
+	// GetHeightByTimestamp queries the DB for the height of the mainchain block
+	// at or immediately before the given timestamp.
+	GetHeightByTimestamp(ctx context.Context, timestamp time.Time) (int64, error)
+	// ActiveMiners returns the number of unique miner addresses with last_used
+	// greater than minHeight.
+	ActiveMiners(ctx context.Context, minHeight int64) (int64, error)
 }
 
 // dcrdata application context used by all route handlers
@@ -351,6 +358,104 @@ func (c *appContext) coinSupplyCirculating(w http.ResponseWriter, r *http.Reques
 	}
 
 	writeJSONBytes(w, []byte(strconv.FormatInt(supply.Mined, 10)))
+}
+
+// activeMinersResponse is the JSON body for GET /miners/active.
+type activeMinersResponse struct {
+	ActiveMiners int64 `json:"active_miners"`
+	WindowDays   int64 `json:"window_days"`
+	SinceHeight  int64 `json:"since_height"`
+}
+
+// getActiveMiners handles "GET /miners/active". It reports the number of unique
+// miner reward addresses active within a fixed 7-day window ending at the chain
+// tip, mirroring the home page's active-miner computation (explorer.Store):
+// tip time - 7 days → block height via GetHeightByTimestamp → count of miner
+// addresses whose last_used height exceeds that threshold. The same window
+// constant and computation also live in the home page (explorer.go) and pubsub
+// (pubsubhub.go); change all three together.
+//
+// A since_height of 0 means the lookback predates genesis and the window covers
+// all mined history (the DB reports it as a real height-0 value, since
+// GetHeightByTimestamp returns (0, nil) for a lookback older than the chain).
+// A query failure, by contrast, is an error and surfaces as 422 rather than
+// silently widening the window, since a consumer labels the figure with the
+// window from the response.
+func (c *appContext) getActiveMiners(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	best := c.DataSource.GetBestBlockSummary(ctx)
+	if best == nil {
+		apiLog.Error("getActiveMiners: no best block summary.")
+		http.Error(w, http.StatusText(422), 422)
+		return
+	}
+
+	const windowDays = 7
+	sinceHeight, err := c.DataSource.GetHeightByTimestamp(ctx, best.Time.S.T.Add(-windowDays*24*time.Hour))
+	if err != nil {
+		apiLog.Errorf("getActiveMiners: failed to query lookback height: %v", err)
+		http.Error(w, http.StatusText(422), 422)
+		return
+	}
+
+	count, err := c.DataSource.ActiveMiners(ctx, sinceHeight)
+	if err != nil {
+		apiLog.Errorf("getActiveMiners: ActiveMiners failed: %v", err)
+		http.Error(w, http.StatusText(422), 422)
+		return
+	}
+
+	writeJSON(w, activeMinersResponse{
+		ActiveMiners: count,
+		WindowDays:   windowDays,
+		SinceHeight:  sinceHeight,
+	}, m.GetIndentCtx(r))
+}
+
+// verifyMessageResult is the JSON body for POST /verify-message.
+type verifyMessageResult struct {
+	Result string `json:"result"`
+	Error  string `json:"error,omitempty"`
+}
+
+// verifyMessage handles "POST /verify-message". It is the machine-readable
+// counterpart of the HTML /verify-message form: it verifies an address+message+
+// signature triple and reports the outcome as "match" (valid signature),
+// "mismatch" (signature valid but signed by a different address), or "error"
+// with a fixed-vocabulary reason. It always answers 200; the result is carried
+// in the body. Verification goes through the shared verifymessage classifier,
+// which validates the address, signature encoding and compact length up front
+// so each failure mode is known by construction rather than by matching
+// upstream error prose.
+func (c *appContext) verifyMessage(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Address   string `json:"address"`
+		Message   string `json:"message"`
+		Signature string `json:"signature"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		apiLog.Debugf("verifyMessage: decode failed: %v", err)
+		writeJSON(w, verifyMessageResult{Result: "error", Error: "malformed JSON request"},
+			m.GetIndentCtx(r))
+		return
+	}
+
+	if req.Address == "" || req.Message == "" || req.Signature == "" {
+		writeJSON(w, verifyMessageResult{Result: "error", Error: "form values cannot be empty"},
+			m.GetIndentCtx(r))
+		return
+	}
+
+	res := verifymessage.Verify(req.Address, req.Signature, req.Message, c.Params)
+	switch {
+	case res.Match:
+		writeJSON(w, verifyMessageResult{Result: "match"}, m.GetIndentCtx(r))
+	case res.Mismatch:
+		writeJSON(w, verifyMessageResult{Result: "mismatch"}, m.GetIndentCtx(r))
+	default:
+		writeJSON(w, verifyMessageResult{Result: "error", Error: res.ErrMsg}, m.GetIndentCtx(r))
+	}
 }
 
 func (c *appContext) currentHeight(w http.ResponseWriter, _ *http.Request) {
