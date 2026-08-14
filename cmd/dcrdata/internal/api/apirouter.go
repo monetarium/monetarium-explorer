@@ -40,6 +40,9 @@ func NewAPIRouter(app *appContext, JSONIndent string, useRealIP, compressLarge b
 	mux.Get("/status/happy", app.statusHappy)
 	mux.Get("/supply", app.coinSupply)
 	mux.Get("/supply/circulating", app.coinSupplyCirculating)
+	// Active miner count moves on a scale of days, so let clients cache it.
+	mux.With(m.CacheControl(20)).Get("/miners/active", app.getActiveMiners)
+	mux.Post("/verify-message", app.verifyMessage)
 
 	compMiddleware := m.Next
 	if compressLarge {
