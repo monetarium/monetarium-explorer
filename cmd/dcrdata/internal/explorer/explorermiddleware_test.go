@@ -93,18 +93,20 @@ func TestThemeFromQueryParser(t *testing.T) {
 		name           string
 		query          string
 		existingCookie *http.Cookie
-		wantSetCookie  bool
-		wantDark       bool
+		wantValue      string // expected cookie value; "" = no cookie expected
+		wantDark       bool   // what the current request's cookie says
 	}{
 		{
-			name:          "dark from landing with no cookie",
-			query:         "?theme=dark",
-			wantSetCookie: true,
-			wantDark:      true,
+			name:      "dark from landing with no cookie",
+			query:     "?theme=dark",
+			wantValue: "1",
+			wantDark:  true,
 		},
 		{
-			name:  "light from landing with no cookie",
-			query: "?theme=light",
+			name:      "light from landing with no cookie",
+			query:     "?theme=light",
+			wantValue: "0",
+			wantDark:  false,
 		},
 		{
 			name:  "no theme param",
@@ -115,16 +117,22 @@ func TestThemeFromQueryParser(t *testing.T) {
 			query: "?theme=neon",
 		},
 		{
-			name:           "landing dark ignored when dark cookie exists",
+			name:           "landing light ignored when dark cookie exists",
 			query:          "?theme=light",
 			existingCookie: &http.Cookie{Name: darkModeCoookie, Value: "1"},
 			wantDark:       true,
 		},
 		{
-			name:           "landing light ignored when dark cookie exists",
+			name:           "landing dark ignored when dark cookie exists",
 			query:          "?theme=dark",
 			existingCookie: &http.Cookie{Name: darkModeCoookie, Value: "1"},
 			wantDark:       true,
+		},
+		{
+			name:           "landing dark ignored when light cookie exists",
+			query:          "?theme=dark",
+			existingCookie: &http.Cookie{Name: darkModeCoookie, Value: "0"},
+			wantDark:       false,
 		},
 	}
 
@@ -141,7 +149,7 @@ func TestThemeFromQueryParser(t *testing.T) {
 				t.Errorf("ThemeFromQueryParser failed to call the wrapped handler.")
 			}
 
-			if test.wantSetCookie {
+			if test.wantValue != "" {
 				resp := w.Result()
 				cookies := resp.Cookies()
 				var got *http.Cookie
@@ -154,8 +162,8 @@ func TestThemeFromQueryParser(t *testing.T) {
 				if got == nil {
 					t.Fatalf("expected a %s cookie to be set, got %v", darkModeCoookie, cookies)
 				}
-				if got.Value != "1" {
-					t.Errorf("cookie value: want 1, got %s", got.Value)
+				if got.Value != test.wantValue {
+					t.Errorf("cookie value: want %s, got %s", test.wantValue, got.Value)
 				}
 			} else {
 				resp := w.Result()
@@ -168,10 +176,10 @@ func TestThemeFromQueryParser(t *testing.T) {
 
 			// The cookie must be visible to the current request (commonData
 			// reads it to render the first paint).
-			_, err := r.Cookie(darkModeCoookie)
-			gotDark := err == nil
+			rc, err := r.Cookie(darkModeCoookie)
+			gotDark := err == nil && rc.Value == "1"
 			if gotDark != test.wantDark {
-				t.Errorf("request cookie presence: want %v, got %v", test.wantDark, gotDark)
+				t.Errorf("request cookie dark value: want %v, got %v", test.wantDark, gotDark)
 			}
 		})
 	}

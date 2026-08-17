@@ -298,15 +298,17 @@ func MenuFormParser(next http.Handler) http.Handler {
 			if err != nil && err != http.ErrNoCookie {
 				log.Errorf("Cookie monetariumDarkBG retrieval error: %v", err)
 			} else {
-				if err == http.ErrNoCookie {
-					cookie = &http.Cookie{
-						Name:   darkModeCoookie,
-						Value:  "1",
-						MaxAge: 0,
-					}
-				} else {
-					cookie.Value = "0"
-					cookie.MaxAge = -1
+				// Toggle the theme. The choice is stored as a value in every
+				// write path (1 = dark, 0 = light) so an explicit light choice
+				// is distinguishable from no choice at all.
+				value := "1"
+				if err == nil && cookie.Value == "1" {
+					value = "0"
+				}
+				cookie = &http.Cookie{
+					Name:   darkModeCoookie,
+					Value:  value,
+					MaxAge: 525600 * 60,
 				}
 
 				// Redirect to the specified relative path.
@@ -356,9 +358,17 @@ func ThemeFromQueryParser(next http.Handler) http.Handler {
 			http.SetCookie(w, cookie)
 			r.AddCookie(cookie)
 		case "light":
-			// Absence of the cookie is light (theme_service.darkEnabled checks
-			// for presence); setting an empty cookie would read as dark, so
-			// nothing to persist.
+			// Persist the light choice as a value too, so an explicit light
+			// choice is distinguishable from no choice at all and is not
+			// overwritten by a later ?theme=dark link.
+			cookie := &http.Cookie{
+				Name:   darkModeCoookie,
+				Value:  "0",
+				MaxAge: 525600 * 60,
+				Path:   "/",
+			}
+			http.SetCookie(w, cookie)
+			r.AddCookie(cookie)
 		}
 		next.ServeHTTP(w, r)
 	})
