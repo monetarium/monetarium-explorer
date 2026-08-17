@@ -724,7 +724,9 @@ func _main(ctx context.Context) error {
 		r.Mount("/download", fileMux.Mux)
 	})
 
-	webMux.With(explore.SyncStatusPageIntercept).Group(func(r chi.Router) {
+	// ?theme=dark|light from an external landing page becomes a cookie when the
+	// visitor has no theme preference yet; an existing choice is never replaced.
+	webMux.With(explore.SyncStatusPageIntercept, explorer.ThemeFromQueryParser).Group(func(r chi.Router) {
 		r.NotFound(explore.NotFound)
 
 		r.Mount("/explorer", explore.Mux) // legacy

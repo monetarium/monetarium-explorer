@@ -81,3 +81,98 @@ func TestMenuFormParser(t *testing.T) {
 		t.Errorf("Location should not have a host, but it was %s", loc.Host)
 	}
 }
+
+func TestThemeFromQueryParser(t *testing.T) {
+	blah := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		io.WriteString(w, "blah")
+	})
+	handler := ThemeFromQueryParser(blah)
+
+	tests := []struct {
+		name           string
+		query          string
+		existingCookie *http.Cookie
+		wantSetCookie  bool
+		wantDark       bool
+	}{
+		{
+			name:          "dark from landing with no cookie",
+			query:         "?theme=dark",
+			wantSetCookie: true,
+			wantDark:      true,
+		},
+		{
+			name:  "light from landing with no cookie",
+			query: "?theme=light",
+		},
+		{
+			name:  "no theme param",
+			query: "",
+		},
+		{
+			name:  "unknown theme value",
+			query: "?theme=neon",
+		},
+		{
+			name:           "landing dark ignored when dark cookie exists",
+			query:          "?theme=light",
+			existingCookie: &http.Cookie{Name: darkModeCoookie, Value: "1"},
+			wantDark:       true,
+		},
+		{
+			name:           "landing light ignored when dark cookie exists",
+			query:          "?theme=dark",
+			existingCookie: &http.Cookie{Name: darkModeCoookie, Value: "1"},
+			wantDark:       true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			r := httptest.NewRequest("GET", "/"+test.query, nil)
+			if test.existingCookie != nil {
+				r.AddCookie(test.existingCookie)
+			}
+			w := httptest.NewRecorder()
+			handler.ServeHTTP(w, r)
+
+			if w.Body.String() != "blah" {
+				t.Errorf("ThemeFromQueryParser failed to call the wrapped handler.")
+			}
+
+			if test.wantSetCookie {
+				resp := w.Result()
+				cookies := resp.Cookies()
+				var got *http.Cookie
+				for _, c := range cookies {
+					if c.Name == darkModeCoookie {
+						got = c
+						break
+					}
+				}
+				if got == nil {
+					t.Fatalf("expected a %s cookie to be set, got %v", darkModeCoookie, cookies)
+				}
+				if got.Value != "1" {
+					t.Errorf("cookie value: want 1, got %s", got.Value)
+				}
+			} else {
+				resp := w.Result()
+				for _, c := range resp.Cookies() {
+					if c.Name == darkModeCoookie {
+						t.Errorf("did not expect a %s cookie, got %v", darkModeCoookie, c)
+					}
+				}
+			}
+
+			// The cookie must be visible to the current request (commonData
+			// reads it to render the first paint).
+			_, err := r.Cookie(darkModeCoookie)
+			gotDark := err == nil
+			if gotDark != test.wantDark {
+				t.Errorf("request cookie presence: want %v, got %v", test.wantDark, gotDark)
+			}
+		})
+	}
+}
