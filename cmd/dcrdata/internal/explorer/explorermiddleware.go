@@ -309,6 +309,7 @@ func MenuFormParser(next http.Handler) http.Handler {
 					Name:   darkModeCoookie,
 					Value:  value,
 					MaxAge: 525600 * 60,
+					Path:   "/",
 				}
 
 				// Redirect to the specified relative path.

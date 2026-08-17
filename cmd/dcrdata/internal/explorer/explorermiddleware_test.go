@@ -143,6 +143,12 @@ func TestMenuFormParserCookieToggle(t *testing.T) {
 			if got.Value != test.wantValue {
 				t.Errorf("cookie value: want %s, got %s", test.wantValue, got.Value)
 			}
+			if got.MaxAge != 525600*60 {
+				t.Errorf("cookie MaxAge: want %d, got %d", 525600*60, got.MaxAge)
+			}
+			if got.Path != "/" {
+				t.Errorf("cookie Path: want /, got %q", got.Path)
+			}
 		})
 	}
 }
@@ -229,6 +235,12 @@ func TestThemeFromQueryParser(t *testing.T) {
 				}
 				if got.Value != test.wantValue {
 					t.Errorf("cookie value: want %s, got %s", test.wantValue, got.Value)
+				}
+				if got.MaxAge != 525600*60 {
+					t.Errorf("cookie MaxAge: want %d, got %d", 525600*60, got.MaxAge)
+				}
+				if got.Path != "/" {
+					t.Errorf("cookie Path: want /, got %q", got.Path)
 				}
 			} else {
 				resp := w.Result()
