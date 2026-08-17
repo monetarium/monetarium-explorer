@@ -82,6 +82,71 @@ func TestMenuFormParser(t *testing.T) {
 	}
 }
 
+func TestMenuFormParserCookieToggle(t *testing.T) {
+	blah := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		io.WriteString(w, "blah")
+	})
+	handler := MenuFormParser(blah)
+
+	tests := []struct {
+		name           string
+		existingCookie *http.Cookie
+		wantValue      string // expected cookie value; "" = no cookie expected
+	}{
+		{
+			name:      "no cookie sets dark",
+			wantValue: "1",
+		},
+		{
+			name:           "dark cookie toggles to light",
+			existingCookie: &http.Cookie{Name: darkModeCoookie, Value: "1"},
+			wantValue:      "0",
+		},
+		{
+			name:           "light cookie toggles to dark",
+			existingCookie: &http.Cookie{Name: darkModeCoookie, Value: "0"},
+			wantValue:      "1",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			form := url.Values{}
+			form.Add(darkModeFormKey, "1")
+			form.Add(requestURIFormKey, "/")
+
+			r := httptest.NewRequest("POST", "/set", strings.NewReader(form.Encode()))
+			r.Header.Add("Content-Type", "application/x-www-form-urlencoded")
+			if test.existingCookie != nil {
+				r.AddCookie(test.existingCookie)
+			}
+
+			w := httptest.NewRecorder()
+			handler.ServeHTTP(w, r)
+			resp := w.Result()
+
+			if resp.StatusCode != http.StatusFound {
+				t.Fatalf("expected 302 FOUND, got %v", resp.StatusCode)
+			}
+
+			var got *http.Cookie
+			for _, c := range resp.Cookies() {
+				if c.Name == darkModeCoookie {
+					got = c
+					break
+				}
+			}
+			if got == nil {
+				t.Fatalf("expected a %s cookie to be set, got %v", darkModeCoookie, resp.Cookies())
+			}
+			if got.Value != test.wantValue {
+				t.Errorf("cookie value: want %s, got %s", test.wantValue, got.Value)
+			}
+		})
+	}
+}
+
 func TestThemeFromQueryParser(t *testing.T) {
 	blah := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
