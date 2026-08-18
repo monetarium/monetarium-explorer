@@ -32,6 +32,7 @@ _Requirements and guidelines for specific features and pages._
 - hashrate-shares-block-range: specs/hashrate-shares-block-range/spec.md — `/hashrate-shares` second period mode: explicit block-height range (`?from=&to=`, inclusive) alongside the interval pills, plus two per-address VAR columns read from the DB rather than derived — `Miner Reward` (coinbase `ValueIn`: the miner's vote-scaled share, fees excluded) and `Fees` (coinbase outputs minus that) — lifting the top-25 table cap so any miner can find their own row
 - market-removal: specs/market-removal/spec.md — `/market` page Monetarium removal: page made unavailable (like `/treasury`, `/proposals`), drop "Market" menu item and Home "Exchange Rate" card, remove USD equivalents on Home / `/tx` / `/address` / `/block`, turn off background exchange polling and the related service endpoints
 - api-miners-verify-message: specs/api-miners-verify-message/spec.md — HTTP API endpoints `GET /api/miners/active` (7-day active miner count with `window_days`/`since_height`) and `POST /api/verify-message` (machine-readable message signature verification: `match` / `mismatch` / `error`)
+- api-landing-theme: specs/api-landing-theme/spec.md — landing-page theme handoff: `?theme=dark|light` link contract adopted via `ThemeFromQueryParser` middleware into a value-based `monetariumDarkBG` cookie (`1` dark / `0` light), in-explorer choice always wins
 
 ## 🤖 Code Traces
 

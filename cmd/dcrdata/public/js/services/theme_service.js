@@ -5,7 +5,14 @@ const sunIcon = document.getElementById('sun-icon')
 const darkBGCookieName = 'monetariumDarkBG'
 
 export function darkEnabled() {
-  return document.cookie.includes(darkBGCookieName)
+  const cookies = document.cookie.split('; ')
+  for (const c of cookies) {
+    const [name, value] = c.split('=')
+    if (name === darkBGCookieName) {
+      return value === '1'
+    }
+  }
+  return false
 }
 
 function menuToggle() {
@@ -42,7 +49,7 @@ function toggleToLightClasses(body) {
 }
 export function toggleSun() {
   if (darkEnabled()) {
-    setCookie(darkBGCookieName, '', 0)
+    setCookie(darkBGCookieName, 0, 525600)
     toggleToLightClasses(document.body)
     globalEventBus.publish('NIGHT_MODE', { nightMode: false })
   } else {

@@ -298,15 +298,18 @@ func MenuFormParser(next http.Handler) http.Handler {
 			if err != nil && err != http.ErrNoCookie {
 				log.Errorf("Cookie monetariumDarkBG retrieval error: %v", err)
 			} else {
-				if err == http.ErrNoCookie {
-					cookie = &http.Cookie{
-						Name:   darkModeCoookie,
-						Value:  "1",
-						MaxAge: 0,
-					}
-				} else {
-					cookie.Value = "0"
-					cookie.MaxAge = -1
+				// Toggle the theme. The choice is stored as a value in every
+				// write path (1 = dark, 0 = light) so an explicit light choice
+				// is distinguishable from no choice at all.
+				value := "1"
+				if err == nil && cookie.Value == "1" {
+					value = "0"
+				}
+				cookie = &http.Cookie{
+					Name:   darkModeCoookie,
+					Value:  value,
+					MaxAge: 525600 * 60,
+					Path:   "/",
 				}
 
 				// Redirect to the specified relative path.
@@ -323,6 +326,50 @@ func MenuFormParser(next http.Handler) http.Handler {
 				http.Redirect(w, r, URL.EscapedPath(), http.StatusFound)
 				return
 			}
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// ThemeFromQueryParser carries a theme choice made on an external landing page
+// into the explorer. The landing page appends ?theme=dark or ?theme=light to
+// the explorer URL; when the visitor has no monetariumDarkBG cookie (i.e. has
+// not chosen a theme here), the choice is adopted and persisted as a cookie so
+// it survives navigation within the explorer. An existing cookie is always
+// respected and never overwritten: the visitor's in-explorer choice wins over
+// whatever the landing page last advertised.
+func ThemeFromQueryParser(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if _, err := r.Cookie(darkModeCoookie); err == nil {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		switch strings.ToLower(r.URL.Query().Get("theme")) {
+		case "dark":
+			// Match the sun-toggle's one-year persistence. Inject the cookie
+			// into the request too so commonData renders the theme on the very
+			// first paint instead of letting JS flip it after load.
+			cookie := &http.Cookie{
+				Name:   darkModeCoookie,
+				Value:  "1",
+				MaxAge: 525600 * 60,
+				Path:   "/",
+			}
+			http.SetCookie(w, cookie)
+			r.AddCookie(cookie)
+		case "light":
+			// Persist the light choice as a value too, so an explicit light
+			// choice is distinguishable from no choice at all and is not
+			// overwritten by a later ?theme=dark link.
+			cookie := &http.Cookie{
+				Name:   darkModeCoookie,
+				Value:  "0",
+				MaxAge: 525600 * 60,
+				Path:   "/",
+			}
+			http.SetCookie(w, cookie)
+			r.AddCookie(cookie)
 		}
 		next.ServeHTTP(w, r)
 	})
