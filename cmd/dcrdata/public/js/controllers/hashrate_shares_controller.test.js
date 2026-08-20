@@ -511,3 +511,75 @@ describe('controller applyBlockRange and showEmpty', () => {
     expect(evt.preventDefault).toHaveBeenCalledTimes(1)
   })
 })
+
+// ---------------------------------------------------------------------------
+// Controller behavior: address filter clear button
+// ---------------------------------------------------------------------------
+describe('controller address filter clear button', () => {
+  function buildClearCtrl() {
+    const ctrl = new HashrateSharesController(document.body)
+    ctrl.addressInputTarget = document.createElement('input')
+    ctrl.addressInputTarget.value = ''
+    ctrl.clearAddressTarget = document.createElement('button')
+    ctrl.clearAddressTarget.classList.add('d-none')
+    ctrl.miners = []
+    ctrl.truncated = false
+    ctrl.addressFilter = ''
+    ctrl.emptyState = null
+    ctrl.blockRange = null
+    ctrl.interval = 'week'
+    ctrl._reqSeq = 0
+    ctrl.settings = { interval: null, from: null, to: null, address: null }
+    // Mock syncUrl to avoid TurboQuery side effects
+    ctrl.syncUrl = vi.fn()
+    // Mock renderTable to avoid DOM mutations
+    ctrl.renderTable = vi.fn()
+    // Mock focus
+    ctrl.addressInputTarget.focus = vi.fn()
+    return ctrl
+  }
+
+  it('toggleClearButton hides the button when filter is empty', () => {
+    const ctrl = buildClearCtrl()
+    ctrl.addressFilter = ''
+    ctrl.addressInputTarget.value = ''
+    ctrl.toggleClearButton()
+    expect(ctrl.clearAddressTarget.classList.contains('d-none')).toBe(true)
+  })
+
+  it('toggleClearButton shows the button when filter has a value', () => {
+    const ctrl = buildClearCtrl()
+    ctrl.addressFilter = 'VsAbc'
+    ctrl.addressInputTarget.value = 'VsAbc'
+    ctrl.toggleClearButton()
+    expect(ctrl.clearAddressTarget.classList.contains('d-none')).toBe(false)
+  })
+
+  it('clearAddress clears the filter, syncs URL, re-renders, and focuses input', () => {
+    const ctrl = buildClearCtrl()
+    ctrl.addressFilter = 'VsAbc'
+    ctrl.addressInputTarget.value = 'VsAbc'
+    ctrl.toggleClearButton() // show button first
+    expect(ctrl.clearAddressTarget.classList.contains('d-none')).toBe(false)
+
+    ctrl.clearAddress()
+
+    expect(ctrl.addressInputTarget.value).toBe('')
+    expect(ctrl.addressFilter).toBe('')
+    expect(ctrl.clearAddressTarget.classList.contains('d-none')).toBe(true)
+    expect(ctrl.syncUrl).toHaveBeenCalledTimes(1)
+    expect(ctrl.renderTable).toHaveBeenCalledTimes(1)
+    expect(ctrl.addressInputTarget.focus).toHaveBeenCalledTimes(1)
+  })
+
+  it('filterByAddress calls toggleClearButton', () => {
+    const ctrl = buildClearCtrl()
+    ctrl.toggleClearButton = vi.fn()
+    ctrl.addressInputTarget.value = 'VsAbc'
+    ctrl.filterByAddress()
+    expect(ctrl.toggleClearButton).toHaveBeenCalledTimes(1)
+    expect(ctrl.addressFilter).toBe('VsAbc')
+    expect(ctrl.syncUrl).toHaveBeenCalledTimes(1)
+    expect(ctrl.renderTable).toHaveBeenCalledTimes(1)
+  })
+})

@@ -243,7 +243,6 @@ body.darkBG .hashrate-shares-highlight {
 
 // Show clear button when input has a value — the controller toggles d-none on the button
 // and adds padding-right on the input to keep text from overlapping the button.
-.hashrate-shares-clear:not(.d-none) + .form-control,
 .position-relative:has(.hashrate-shares-clear:not(.d-none)) .form-control {
   padding-right: 2.5rem;
 }
