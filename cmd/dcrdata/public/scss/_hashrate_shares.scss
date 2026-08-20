@@ -204,3 +204,53 @@ body.darkBG .hashrate-shares-highlight {
   background: #2970ff33;
   box-shadow: inset 3px 0 0 #6fa1ff;
 }
+
+// Clear button for the address filter input
+.hashrate-shares-clear {
+  position: absolute;
+  right: 0.5rem;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 1.25rem;
+  height: 1.25rem;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--bs-secondary-color, #6c757d);
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.6;
+  transition: opacity 0.15s ease, color 0.15s ease;
+}
+
+.hashrate-shares-clear:hover,
+.hashrate-shares-clear:focus {
+  opacity: 1;
+  color: var(--bs-body-color, #212529);
+  outline: none;
+}
+
+.hashrate-shares-clear:focus-visible {
+  box-shadow: 0 0 0 0.15rem rgba(var(--bs-primary-rgb, 13, 110, 253), 0.25);
+  border-radius: 0.25rem;
+}
+
+// Show clear button when input has a value — the controller toggles d-none on the button
+// and adds padding-right on the input to keep text from overlapping the button.
+.hashrate-shares-clear:not(.d-none) + .form-control,
+.position-relative:has(.hashrate-shares-clear:not(.d-none)) .form-control {
+  padding-right: 2.5rem;
+}
+
+body.darkBG .hashrate-shares-clear {
+  color: var(--bs-secondary-color, #adb5bd);
+}
+
+body.darkBG .hashrate-shares-clear:hover,
+body.darkBG .hashrate-shares-clear:focus {
+  color: var(--bs-body-color, #f8f9fa);
+}
