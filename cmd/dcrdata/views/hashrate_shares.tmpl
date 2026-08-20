@@ -95,11 +95,17 @@
             <div class="hashrate-shares-table-wrap">
                 <div class="d-flex align-items-center gap-2 mb-2">
                     <span class="text-secondary fs12">Filter by address</span>
-                    <input type="text" class="form-control form-control-sm"
-                           style="max-width: 16em;"
-                           data-hashrate-shares-target="addressInput"
-                           data-action="input->hashrate-shares#filterByAddress"
-                           placeholder="Search reward address…" autocomplete="off">
+                    <div class="position-relative" style="width: 16em;">
+                        <input type="text" class="form-control form-control-sm"
+                               data-hashrate-shares-target="addressInput"
+                               data-action="input->hashrate-shares#filterByAddress"
+                               placeholder="Search reward address…" autocomplete="off">
+                        <button type="button"
+                                class="hashrate-shares-clear d-none"
+                                data-hashrate-shares-target="clearAddress"
+                                data-action="click->hashrate-shares#clearAddress"
+                                aria-label="Clear address filter">×</button>
+                    </div>
                 </div>
                 <div class="hashrate-shares-scroll">
                     <table class="table table-sm hashrate-shares-table">
