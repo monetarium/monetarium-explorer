@@ -257,6 +257,7 @@ export default class extends Controller {
     'toInput',
     'applyButton',
     'addressInput',
+    'clearAddress',
     'truncatedNote'
   ]
 
@@ -305,6 +306,7 @@ export default class extends Controller {
       this._pendingAddressScroll = settings.address
     }
 
+    this.toggleClearButton()
     this.syncControlsUI()
     this.syncUrl()
     this.fetchAndRender(this.nextSeq())
@@ -394,8 +396,25 @@ export default class extends Controller {
   // are computed over the whole period (spec §3.2).
   filterByAddress() {
     this.addressFilter = this.addressInputTarget.value.trim()
+    this.toggleClearButton()
     this.syncUrl()
     this.renderTable()
+  }
+
+  // toggleClearButton shows/hides the clear button based on whether the address
+  // filter has a value.
+  toggleClearButton() {
+    this.clearAddressTarget.classList.toggle('d-none', !this.addressFilter)
+  }
+
+  // clearAddress clears the address filter input and re-renders the table.
+  clearAddress() {
+    this.addressInputTarget.value = ''
+    this.addressFilter = ''
+    this.toggleClearButton()
+    this.syncUrl()
+    this.renderTable()
+    this.addressInputTarget.focus()
   }
 
   // downloadCsv exports the full ranked miner list (every miner, not the pie's
