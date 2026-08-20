@@ -246,12 +246,3 @@ body.darkBG .hashrate-shares-highlight {
 .position-relative:has(.hashrate-shares-clear:not(.d-none)) .form-control {
   padding-right: 2.5rem;
 }
-
-body.darkBG .hashrate-shares-clear {
-  color: var(--bs-secondary-color, #adb5bd);
-}
-
-body.darkBG .hashrate-shares-clear:hover,
-body.darkBG .hashrate-shares-clear:focus {
-  color: var(--bs-body-color, #f8f9fa);
-}
