@@ -75,7 +75,12 @@
   pointer-events: none;
   opacity: 0;
   transition: opacity 0.15s ease;
-  background: linear-gradient(rgb(255 255 255 / 0%), #fff 85%);
+
+  // Stops at 75% alpha rather than reaching the background colour: an opaque
+  // fade blanks the half-drawn row underneath it, turning the clipped row that
+  // signals "more below" back into what looks like empty space. Dimming it
+  // instead keeps the row legible and fading, which is the cue itself.
+  background: linear-gradient(rgb(255 255 255 / 0%), rgb(255 255 255 / 75%));
 }
 
 .hashrate-shares-scroll-more::after {
@@ -234,7 +239,7 @@ body.darkBG .hashrate-shares-table thead th {
 // The fade has to end in the backdrop it sits on, so it tracks the sticky
 // header's dark value rather than staying white and smearing over the rows.
 body.darkBG .hashrate-shares-scroll::after {
-  background: linear-gradient(rgb(45 45 45 / 0%), #2d2d2d 85%);
+  background: linear-gradient(rgb(45 45 45 / 0%), rgb(45 45 45 / 75%));
 }
 
 body.darkBG .hashrate-shares-highlight {
