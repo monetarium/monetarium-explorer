@@ -93,7 +93,7 @@
                 <svg data-hashrate-shares-target="pie" viewBox="0 0 360 360" class="hashrate-shares-pie"></svg>
             </div>
             <div class="hashrate-shares-table-wrap">
-                <div class="d-flex align-items-center gap-2 mb-2">
+                <div class="d-flex align-items-center gap-2 mb-2 flex-wrap">
                     <span class="text-secondary fs12">Filter by address</span>
                     <div class="position-relative" style="width: 16em;">
                         <input type="text" class="form-control form-control-sm"
@@ -106,6 +106,10 @@
                                 data-action="click->hashrate-shares#clearAddress"
                                 aria-label="Clear address filter">×</button>
                     </div>
+                    {{/* Reward addresses in the period, filled in by the
+                         controller from the data endpoint's totals. It counts
+                         the whole period, never the filtered view (spec §3.2). */}}
+                    <span class="hashrate-shares-count" data-hashrate-shares-target="addressCount"></span>
                 </div>
                 <div class="hashrate-shares-scroll" data-hashrate-shares-target="scrollWrap">
                     <table class="table table-sm hashrate-shares-table">

@@ -691,3 +691,84 @@ describe('controller scroll shadow', () => {
     expect(el.removeEventListener.mock.calls[0][1]).toBe(ctrl._onScroll)
   })
 })
+
+describe('controller address count', () => {
+  function buildCountCtrl() {
+    const ctrl = new HashrateSharesController(document.body)
+    ctrl.addressCountTarget = document.createElement('span')
+    ctrl.hasAddressCountTarget = true
+    ctrl.totals = null
+    return ctrl
+  }
+
+  it('states the number of reward addresses in the period', () => {
+    const ctrl = buildCountCtrl()
+    ctrl.totals = { addresses: 30, blocks: 28699 }
+    ctrl.renderAddressCount()
+    expect(ctrl.addressCountTarget.textContent).toBe('30 reward addresses')
+  })
+
+  it('drops the plural for a single address', () => {
+    const ctrl = buildCountCtrl()
+    ctrl.totals = { addresses: 1, blocks: 4 }
+    ctrl.renderAddressCount()
+    expect(ctrl.addressCountTarget.textContent).toBe('1 reward address')
+  })
+
+  it('renders nothing rather than "0 reward addresses" for an empty period', () => {
+    const ctrl = buildCountCtrl()
+    ctrl.totals = { addresses: 0, blocks: 0 }
+    ctrl.renderAddressCount()
+    expect(ctrl.addressCountTarget.textContent).toBe('')
+  })
+
+  it('clears the count when the totals are gone (fetch failure)', () => {
+    const ctrl = buildCountCtrl()
+    ctrl.totals = { addresses: 30 }
+    ctrl.renderAddressCount()
+    ctrl.totals = null
+    ctrl.renderAddressCount()
+    expect(ctrl.addressCountTarget.textContent).toBe('')
+  })
+
+  it('is a no-op without the target', () => {
+    const ctrl = new HashrateSharesController(document.body)
+    ctrl.totals = { addresses: 30 }
+    expect(() => ctrl.renderAddressCount()).not.toThrow()
+  })
+
+  it('showEmpty drops the totals and clears the count', () => {
+    const ctrl = buildCountCtrl()
+    ctrl.emptyTarget = document.createElement('div')
+    ctrl.tableBodyTarget = document.createElement('tbody')
+    ctrl.pieWrapTarget = document.createElement('div')
+    ctrl.truncatedNoteTarget = document.createElement('div')
+    ctrl.totals = { addresses: 30 }
+    ctrl.renderAddressCount()
+    ctrl.showEmpty(ERROR_MESSAGE)
+    expect(ctrl.totals).toBeNull()
+    expect(ctrl.addressCountTarget.textContent).toBe('')
+  })
+
+  it('counts the period, not the filtered view (spec 3.2)', () => {
+    // Filtering narrows the rows on screen; the period's address count must
+    // not follow it, or the page would report a total it never computed.
+    const ctrl = buildCountCtrl()
+    ctrl.addressInputTarget = document.createElement('input')
+    ctrl.clearAddressTarget = document.createElement('button')
+    ctrl.miners = [
+      { rank: 1, address: 'VsAbc', count: 9 },
+      { rank: 2, address: 'VsXyz', count: 1 }
+    ]
+    ctrl.totals = { addresses: 30 }
+    ctrl.renderAddressCount()
+    ctrl.syncUrl = vi.fn()
+    ctrl.renderTable = vi.fn()
+
+    ctrl.addressInputTarget.value = 'VsAbc'
+    ctrl.filterByAddress()
+
+    expect(ctrl.addressFilter).toBe('VsAbc')
+    expect(ctrl.addressCountTarget.textContent).toBe('30 reward addresses')
+  })
+})
