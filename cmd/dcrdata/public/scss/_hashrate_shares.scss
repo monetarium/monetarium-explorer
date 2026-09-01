@@ -56,22 +56,26 @@
   overscroll-behavior: contain;
 }
 
-// A fade pinned to the bottom of the scroll viewport while rows remain below,
-// so a clipped list doesn't read as a finished one. position: sticky is the
-// same trick as the sticky thead below, mirrored to bottom: 0; the negative
-// bottom margin cancels the element's own height so the fade adds no scroll
-// distance of its own. The z-index sits between .elidedhash (20, present in
-// every row) and the sticky header (30), so the fade covers the rows but never
-// the column labels. The controller toggles the -more class from the scroll
-// position (see updateScrollShadow).
-.hashrate-shares-scroll::after {
+// A fade over the bottom of the list while rows remain below it, so a clipped
+// list doesn't read as a finished one. It hangs off this wrapper rather than
+// off the scrolling element: as a child of the scroller it counts as content,
+// leaving scrollHeight permanently one fade taller than the rows, so the list
+// never measures as fully scrolled and even a short list keeps a fade it has
+// no business showing. As an overlay on the wrapper it doesn't touch the
+// scroll geometry at all. The z-index clears .elidedhash (20, present in every
+// row); the fade sits at the bottom edge, so it never meets the sticky header.
+.hashrate-shares-scroll-wrap {
+  position: relative;
+}
+
+.hashrate-shares-scroll-wrap::after {
   content: "";
-  display: block;
-  position: sticky;
+  position: absolute;
+  right: 0;
   bottom: 0;
+  left: 0;
   z-index: 25;
   height: 32px;
-  margin-bottom: -32px;
   pointer-events: none;
   opacity: 0;
   transition: opacity 0.15s ease;
@@ -83,7 +87,10 @@
   background: linear-gradient(rgb(255 255 255 / 0%), rgb(255 255 255 / 75%));
 }
 
-.hashrate-shares-scroll-more::after {
+// The controller toggles the class on the scrolling element (see
+// updateScrollShadow); :has lifts it to the wrapper that paints the fade, as
+// the address filter's clear button already does for its input's padding.
+.hashrate-shares-scroll-wrap:has(.hashrate-shares-scroll-more)::after {
   opacity: 1;
 }
 
@@ -249,7 +256,7 @@ body.darkBG .hashrate-shares-table thead th {
 
 // The fade has to end in the backdrop it sits on, so it tracks the sticky
 // header's dark value rather than staying white and smearing over the rows.
-body.darkBG .hashrate-shares-scroll::after {
+body.darkBG .hashrate-shares-scroll-wrap::after {
   background: linear-gradient(rgb(45 45 45 / 0%), rgb(45 45 45 / 75%));
 }
 
