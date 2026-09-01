@@ -34,7 +34,11 @@ describe('hashrate.toColumns', () => {
 
 describe('hashrate axis unit', () => {
   it('labels the y axis in base H/s so the ticks carry the magnitude', () => {
-    expect(hashrate.axes[0].label).toBe('Network Hashrate (H/s)')
+    const label = hashrate.axes[0].label
+    expect(label).toBe('Network Hashrate (H/s)')
+    // The rule, not the literal: any SI prefix here scales a second time on top of the
+    // tick formatter's own suffix ("10.5B" under "(GH/s)" read as 10.5e9 GH/s).
+    expect(label).not.toMatch(/\([kMGTPEZY]H/)
   })
 })
 
