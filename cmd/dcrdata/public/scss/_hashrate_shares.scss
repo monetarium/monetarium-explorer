@@ -45,8 +45,13 @@
 // container (spec §5.3): the pie keeps its top-25 + "Others" cut, the table
 // draws every miner. The header sticks to the container top so the column
 // labels stay visible while scrolling a long list.
+// The height lands the bottom edge halfway through a row rather than just past
+// one: 27px header + 14 rows of 32px + half of the 15th. At the previous 480px
+// the 15th row showed a 5px sliver, which reads as padding, so the list looked
+// like it ended at 14 — the exact misreading this height prevents. Measured on
+// mainnet at desktop width; nothing in JS depends on the value.
 .hashrate-shares-scroll {
-  max-height: 480px;
+  max-height: 491px;
   overflow-y: auto;
   overscroll-behavior: contain;
 }
