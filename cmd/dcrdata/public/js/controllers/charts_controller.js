@@ -304,15 +304,9 @@ export default class extends Controller {
     return this._memoDef
   }
 
-  // chainwork/hashrate set a dynamic axis label; hashrate may drop its y2 series.
+  // hashrate may drop its y2 series when the payload carries no active-miner counts.
   resolveRenderDef(def) {
     let d = def
-    if (typeof def.axisLabel === 'function' && this.payload) {
-      d = {
-        ...d,
-        axes: d.axes.map((a, i) => (i === 0 ? { ...a, label: def.axisLabel(this.payload) } : a))
-      }
-    }
     if (
       def.name === 'hashrate' &&
       !(this.payload && this.payload.active_miners && this.payload.active_miners.length)

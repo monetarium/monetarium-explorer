@@ -1,5 +1,5 @@
 import { register } from '../registry'
-import { xColumn, unitPrefix, withBigUnits, CHAINWORK_UNITS } from '../format'
+import { xColumn, withBigUnits, CHAINWORK_UNITS } from '../format'
 
 const baseControls = {
   bin: true,
@@ -32,16 +32,11 @@ export const chainwork = {
   name: 'chainwork',
   label: 'Total Work',
   controls: { ...baseControls },
+  // Base unit only -- see the hashrate axes note: ticks carry the magnitude suffix.
   axes: [{ label: 'Cumulative Chainwork (H)', scale: 'y' }],
   series: [{ label: 'Cumulative Chainwork', scale: 'y', kind: 'area', colorIndex: 0 }],
   toColumns: (raw) => {
     return [xColumn(raw, raw.work.length), raw.work.slice()]
-  },
-  // Axis label scales to the data's max magnitude (matches legacy unitPrefix).
-  axisLabel: (raw) => {
-    const max = raw.work.length ? raw.work.reduce((a, b) => Math.max(a, b), 0) : 0
-    const p = unitPrefix(max)
-    return p ? `Cumulative Chainwork (${p}H)` : 'Cumulative Chainwork (H)'
   },
   formatValue: (seriesIdx, datum) => {
     if (datum.value == null || !isFinite(datum.value)) return 'n/a'

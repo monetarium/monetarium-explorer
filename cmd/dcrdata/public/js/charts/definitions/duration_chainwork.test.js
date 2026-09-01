@@ -28,8 +28,10 @@ describe('chainwork', () => {
       [1500, 3_000_000]
     ])
   })
-  it('axisLabel scales the unit to the max magnitude', () => {
-    expect(chainwork.axisLabel(raw)).toBe('Cumulative Chainwork (MH)')
+  it('labels the y axis in base H and exposes no dynamic prefixed label', () => {
+    // Ticks carry the magnitude themselves -- see the hashrate axis-unit test.
+    expect(chainwork.axes[0].label).toBe('Cumulative Chainwork (H)')
+    expect(chainwork.axisLabel).toBeUndefined()
   })
   it('legend uses big units', () => {
     expect(chainwork.formatValue(0, { value: 1500 }, {})).toBe('1.500 kH')
