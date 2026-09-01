@@ -45,10 +45,12 @@
 // container (spec §5.3): the pie keeps its top-25 + "Others" cut, the table
 // draws every miner. The header sticks to the container top so the column
 // labels stay visible while scrolling a long list.
-// max-height is the height budget for the list, and the controller's
+// max-height is the target height for the list, and the controller's
 // fitScrollHeight reads it from here (it is the single definition of the
-// number) and trims it to the nearest whole-rows-plus-a-half, so the bottom
-// edge always cuts a row in two rather than landing just past one. It cannot
+// number) and rounds it to whole-rows-plus-a-half, so the bottom edge always
+// cuts a row in two rather than landing just past one. Rounding goes either
+// way, so the list can end up to half a row taller than this: it is a target,
+// not a ceiling, and clamping down instead would cost a whole visible row. It cannot
 // be a fixed value: the header is 27px wide-screen but 40px once the money
 // column labels wrap, which is every width below ~1400px, and a value tuned
 // for one leaves the other showing a 3-5px sliver that reads as padding —
@@ -84,11 +86,15 @@
   opacity: 0;
   transition: opacity 0.15s ease;
 
-  // Stops at 75% alpha rather than reaching the background colour: an opaque
-  // fade blanks the half-drawn row underneath it, turning the clipped row that
-  // signals "more below" back into what looks like empty space. Dimming it
-  // instead keeps the row legible and fading, which is the cue itself.
-  background: linear-gradient(rgb(255 255 255 / 0%), rgb(255 255 255 / 75%));
+  // Fades toward the colour the rows actually sit on. Bootstrap leaves table
+  // cells transparent and this page paints no row background, so that colour is
+  // the page's, not the sticky header's — ending at the header's white would lay
+  // a pale band over the rows instead of dissolving them into their backdrop.
+  // It stops at 75% rather than reaching that colour: a fade that arrives at
+  // full opacity blanks the half-drawn row beneath it, turning the clipped row
+  // that signals "more below" back into what looks like empty space. Dimming it
+  // keeps the row legible and fading, which is the cue itself.
+  background: linear-gradient(rgba($body-bg, 0), rgba($body-bg, 0.75));
 }
 
 // The controller toggles the class on the scrolling element (see
@@ -256,10 +262,11 @@ body.darkBG .hashrate-shares-table thead th {
   background: #2d2d2d;
 }
 
-// The fade has to end in the backdrop it sits on, so it tracks the sticky
-// header's dark value rather than staying white and smearing over the rows.
+// Same reasoning in the dark theme, tracking body.darkBG's own background
+// (themes.scss) — the rows are transparent there too, so that is what shows
+// through them. It has no variable to borrow, unlike the light $body-bg above.
 body.darkBG .hashrate-shares-scroll-wrap::after {
-  background: linear-gradient(rgb(45 45 45 / 0%), rgb(45 45 45 / 75%));
+  background: linear-gradient(rgb(59 63 69 / 0%), rgb(59 63 69 / 75%));
 }
 
 body.darkBG .hashrate-shares-highlight {

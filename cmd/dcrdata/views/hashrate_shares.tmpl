@@ -108,8 +108,12 @@
                     </div>
                     {{/* Reward addresses in the period, filled in by the
                          controller from the data endpoint's totals. It counts
-                         the whole period, never the filtered view (spec §3.2). */}}
-                    <span class="hashrate-shares-count" data-hashrate-shares-target="addressCount"></span>
+                         the whole period, never the filtered view (spec §3.2).
+                         aria-live: it is the only statement of how large the
+                         period is, and changing the interval rewrites it with
+                         nothing else announcing that the table changed. */}}
+                    <span class="hashrate-shares-count" aria-live="polite"
+                          data-hashrate-shares-target="addressCount"></span>
                 </div>
                 {{/* Wrapper paints the bottom fade; it has to sit outside the
                      scroller (why: _hashrate_shares.scss). */}}

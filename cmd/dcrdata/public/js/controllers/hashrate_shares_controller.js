@@ -252,8 +252,13 @@ export function rafThrottle(fn) {
     if (queued) return
     queued = true
     requestAnimationFrame(() => {
-      fn()
-      queued = false
+      // finally, not a trailing assignment: a throw inside fn would otherwise
+      // leave the flag raised and silently drop every later event for good.
+      try {
+        fn()
+      } finally {
+        queued = false
+      }
     })
   }
 }
@@ -353,14 +358,18 @@ export default class extends Controller {
     if (this._onResize) window.removeEventListener('resize', this._onResize)
   }
 
-  // fitScrollHeight trims the list's height so the bottom edge cuts a row in
+  // fitScrollHeight rounds the list's height so the bottom edge cuts a row in
   // half instead of landing just past one — a row sliced down the middle reads
   // as "this continues", a 3px sliver reads as padding. It has to be measured
   // rather than written into the stylesheet because the header is 27px tall
   // wide-screen and 40px once the money-column labels wrap (every width below
   // ~1400px), so no single height halves a row in both cases.
   //
-  // The budget stays in the stylesheet and is read back from it, so the number
+  // The rounding goes to whichever half-row is nearest, so the result can sit
+  // up to half a row above the stylesheet's height: that value is a target, not
+  // a ceiling, and rounding down instead would drop a whole visible row.
+  //
+  // The target stays in the stylesheet and is read back from it, so the number
   // has one definition; clearing the inline value first is what makes the
   // computed style report the CSS one again rather than our own last answer.
   fitScrollHeight() {

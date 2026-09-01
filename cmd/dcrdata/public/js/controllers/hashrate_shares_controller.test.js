@@ -712,6 +712,26 @@ describe('rafThrottle', () => {
 
     vi.unstubAllGlobals()
   })
+
+  it('keeps working after the callback throws', () => {
+    const frames = []
+    vi.stubGlobal('requestAnimationFrame', (fn) => frames.push(fn))
+    const fn = vi.fn(() => {
+      throw new Error('boom')
+    })
+    const throttled = rafThrottle(fn)
+
+    throttled()
+    expect(() => frames.shift()()).toThrow('boom')
+
+    // without the flag being restored, the fade would freeze for good
+    throttled()
+    expect(frames).toHaveLength(1)
+    expect(() => frames.shift()()).toThrow('boom')
+    expect(fn).toHaveBeenCalledTimes(2)
+
+    vi.unstubAllGlobals()
+  })
 })
 
 describe('controller fitScrollHeight', () => {
