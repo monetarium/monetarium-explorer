@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import { colorForIndex, OTHERS_COLOR } from '../helpers/chart_theme'
 // Stub the @hotwired/stimulus import so the controller module loads in jsdom
 // and can be constructed directly — Stimulus registration is not involved in
@@ -27,6 +27,7 @@ import {
   blockRangeFromParams,
   dataUrl,
   syncUrlQuery,
+  rafThrottle,
   EMPTY_MESSAGE,
   ERROR_MESSAGE,
   INVALID_MESSAGE,
@@ -581,5 +582,311 @@ describe('controller address filter clear button', () => {
     expect(ctrl.addressFilter).toBe('VsAbc')
     expect(ctrl.syncUrl).toHaveBeenCalledTimes(1)
     expect(ctrl.renderTable).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('controller scroll shadow', () => {
+  // jsdom computes no layout, so the scroll geometry the method reads is
+  // stubbed onto the element; scrollTop is writable already.
+  function buildScrollCtrl({ scrollHeight, clientHeight, scrollTop = 0 }) {
+    const ctrl = new HashrateSharesController(document.body)
+    const el = document.createElement('div')
+    Object.defineProperty(el, 'scrollHeight', { value: scrollHeight, configurable: true })
+    Object.defineProperty(el, 'clientHeight', { value: clientHeight, configurable: true })
+    el.scrollTop = scrollTop
+    ctrl.scrollWrapTarget = el
+    ctrl.hasScrollWrapTarget = true
+    return ctrl
+  }
+
+  it('marks the container while rows remain below the fold', () => {
+    const ctrl = buildScrollCtrl({ scrollHeight: 900, clientHeight: 480 })
+    ctrl.updateScrollShadow()
+    expect(ctrl.scrollWrapTarget.classList.contains('hashrate-shares-scroll-more')).toBe(true)
+  })
+
+  it('unmarks it at the end of the list', () => {
+    const ctrl = buildScrollCtrl({ scrollHeight: 900, clientHeight: 480, scrollTop: 420 })
+    ctrl.scrollWrapTarget.classList.add('hashrate-shares-scroll-more')
+    ctrl.updateScrollShadow()
+    expect(ctrl.scrollWrapTarget.classList.contains('hashrate-shares-scroll-more')).toBe(false)
+  })
+
+  it('treats a sub-pixel remainder as the end (rounding tolerance)', () => {
+    // Fractional row heights leave a fraction of a pixel unscrolled at the
+    // bottom; a fade that never quite switches off there would be worse than
+    // none, so 1px or less counts as arrived.
+    const ctrl = buildScrollCtrl({ scrollHeight: 900, clientHeight: 480, scrollTop: 419 })
+    ctrl.updateScrollShadow()
+    expect(ctrl.scrollWrapTarget.classList.contains('hashrate-shares-scroll-more')).toBe(false)
+  })
+
+  it('stays unmarked when the whole list fits', () => {
+    const ctrl = buildScrollCtrl({ scrollHeight: 480, clientHeight: 480 })
+    ctrl.updateScrollShadow()
+    expect(ctrl.scrollWrapTarget.classList.contains('hashrate-shares-scroll-more')).toBe(false)
+  })
+
+  it('recomputes after showEmpty drops the rows', () => {
+    const ctrl = new HashrateSharesController(document.body)
+    ctrl.emptyTarget = document.createElement('div')
+    ctrl.tableBodyTarget = document.createElement('tbody')
+    ctrl.pieWrapTarget = document.createElement('div')
+    ctrl.truncatedNoteTarget = document.createElement('div')
+    ctrl.updateScrollShadow = vi.fn()
+    ctrl.showEmpty(EMPTY_MESSAGE)
+    expect(ctrl.updateScrollShadow).toHaveBeenCalledTimes(1)
+  })
+
+  it('recomputes after renderTable rewrites the rows', () => {
+    const ctrl = new HashrateSharesController(document.body)
+    ctrl.emptyTarget = document.createElement('div')
+    ctrl.tableBodyTarget = document.createElement('tbody')
+    ctrl.pieWrapTarget = document.createElement('div')
+    ctrl.truncatedNoteTarget = document.createElement('div')
+    // Mirrors the <template> the controller clones, as in the buildRows tests.
+    ctrl.rowTemplateTarget = document.createElement('template')
+    ctrl.rowTemplateTarget.innerHTML =
+      '<tr>' +
+      '<td data-type="rank"></td>' +
+      '<td><span data-type="swatch"></span></td>' +
+      '<td data-type="percent"></td>' +
+      '<td data-type="blocks"></td>' +
+      '<td data-type="minerReward"></td>' +
+      '<td data-type="fees"></td>' +
+      '<td data-type="addr"></td>' +
+      '</tr>'
+    ctrl.miners = [
+      {
+        rank: 1,
+        address: 'VsAbc',
+        count: 3,
+        percent: '100.0',
+        miner_reward: '9000000000',
+        fees: '0'
+      }
+    ]
+    ctrl.addressFilter = ''
+    ctrl.truncated = false
+    ctrl.emptyState = null
+    ctrl.updateScrollShadow = vi.fn()
+    ctrl.renderTable()
+    expect(ctrl.updateScrollShadow).toHaveBeenCalledTimes(1)
+  })
+
+  it('detaches the scroll listener on disconnect', () => {
+    const ctrl = new HashrateSharesController(document.body)
+    const el = document.createElement('div')
+    el.removeEventListener = vi.fn()
+    ctrl.scrollWrapTarget = el
+    ctrl.hasScrollWrapTarget = true
+    ctrl._onScroll = () => {}
+    ctrl.disconnect()
+    expect(el.removeEventListener).toHaveBeenCalledTimes(1)
+    expect(el.removeEventListener.mock.calls[0][0]).toBe('scroll')
+    expect(el.removeEventListener.mock.calls[0][1]).toBe(ctrl._onScroll)
+  })
+})
+
+describe('rafThrottle', () => {
+  it('runs once per frame however many events arrive, and again the next frame', () => {
+    const frames = []
+    vi.stubGlobal('requestAnimationFrame', (fn) => frames.push(fn))
+    const fn = vi.fn()
+    const throttled = rafThrottle(fn)
+
+    throttled()
+    throttled()
+    throttled()
+    expect(frames).toHaveLength(1)
+    expect(fn).not.toHaveBeenCalled() // deferred to the frame, not run inline
+
+    frames.shift()()
+    expect(fn).toHaveBeenCalledTimes(1)
+
+    // the flag has to clear, or every later event is dropped for good
+    throttled()
+    expect(frames).toHaveLength(1)
+    frames.shift()()
+    expect(fn).toHaveBeenCalledTimes(2)
+
+    vi.unstubAllGlobals()
+  })
+
+  it('keeps working after the callback throws', () => {
+    const frames = []
+    vi.stubGlobal('requestAnimationFrame', (fn) => frames.push(fn))
+    const fn = vi.fn(() => {
+      throw new Error('boom')
+    })
+    const throttled = rafThrottle(fn)
+
+    throttled()
+    expect(() => frames.shift()()).toThrow('boom')
+
+    // without the flag being restored, the fade would freeze for good
+    throttled()
+    expect(frames).toHaveLength(1)
+    expect(() => frames.shift()()).toThrow('boom')
+    expect(fn).toHaveBeenCalledTimes(2)
+
+    vi.unstubAllGlobals()
+  })
+})
+
+describe('controller fitScrollHeight', () => {
+  // Builds a scroll container whose header and rows report fixed heights, and
+  // whose CSS budget is `budget` — jsdom computes no layout, so both have to be
+  // stubbed. The header height is the interesting variable: it is 27px when the
+  // money-column labels fit on one line and 40px once they wrap, which is what
+  // made a hard-coded max-height clip a half row on desktop and a 3px sliver
+  // everywhere else.
+  function buildFitCtrl({ headHeight, rowHeight, budget = '480px' }) {
+    const ctrl = new HashrateSharesController(document.body)
+    const el = document.createElement('div')
+    const table = document.createElement('table')
+    const thead = document.createElement('thead')
+    const tbody = document.createElement('tbody')
+    const tr = document.createElement('tr')
+    tbody.appendChild(tr)
+    table.appendChild(thead)
+    table.appendChild(tbody)
+    el.appendChild(table)
+    thead.getBoundingClientRect = () => ({ height: headHeight })
+    tr.getBoundingClientRect = () => ({ height: rowHeight })
+    vi.spyOn(window, 'getComputedStyle').mockImplementation((node) =>
+      node === el ? { maxHeight: budget } : { maxHeight: '' }
+    )
+    ctrl.scrollWrapTarget = el
+    ctrl.hasScrollWrapTarget = true
+    return ctrl
+  }
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('cuts a row in half with a one-line header', () => {
+    // 27 + floor((480-27)/32)=14 whole rows + half of the next
+    const ctrl = buildFitCtrl({ headHeight: 27, rowHeight: 32 })
+    ctrl.fitScrollHeight()
+    expect(ctrl.scrollWrapTarget.style.maxHeight).toBe('491px')
+  })
+
+  it('cuts a row in half with a wrapped two-line header', () => {
+    // The regression: at a fixed 491px this width showed a 3px sliver.
+    // 40 + floor((480-40)/32)=13 whole rows + half of the next
+    const ctrl = buildFitCtrl({ headHeight: 40, rowHeight: 32 })
+    ctrl.fitScrollHeight()
+    expect(ctrl.scrollWrapTarget.style.maxHeight).toBe('472px')
+  })
+
+  it('keeps at least one row when a row is taller than the budget', () => {
+    const ctrl = buildFitCtrl({ headHeight: 40, rowHeight: 600 })
+    ctrl.fitScrollHeight()
+    expect(ctrl.scrollWrapTarget.style.maxHeight).toBe('940px')
+  })
+
+  it('leaves the stylesheet height alone when there are no rows yet', () => {
+    const ctrl = buildFitCtrl({ headHeight: 27, rowHeight: 32 })
+    ctrl.scrollWrapTarget.querySelector('tbody tr').remove()
+    ctrl.fitScrollHeight()
+    expect(ctrl.scrollWrapTarget.style.maxHeight).toBe('')
+  })
+
+  it('refits before measuring the fade, since the height sets clientHeight', () => {
+    const ctrl = new HashrateSharesController(document.body)
+    ctrl.emptyTarget = document.createElement('div')
+    ctrl.tableBodyTarget = document.createElement('tbody')
+    ctrl.pieWrapTarget = document.createElement('div')
+    ctrl.truncatedNoteTarget = document.createElement('div')
+    ctrl.rowTemplateTarget = document.createElement('template')
+    ctrl.rowTemplateTarget.innerHTML =
+      '<tr>' +
+      '<td data-type="rank"></td>' +
+      '<td><span data-type="swatch"></span></td>' +
+      '<td data-type="percent"></td>' +
+      '<td data-type="blocks"></td>' +
+      '<td data-type="minerReward"></td>' +
+      '<td data-type="fees"></td>' +
+      '<td data-type="addr"></td>' +
+      '</tr>'
+    ctrl.miners = [
+      {
+        rank: 1,
+        address: 'VsAbc',
+        count: 3,
+        percent: '100.0',
+        miner_reward: '9000000000',
+        fees: '0'
+      }
+    ]
+    ctrl.addressFilter = ''
+    ctrl.truncated = false
+    ctrl.emptyState = null
+    const order = []
+    ctrl.fitScrollHeight = vi.fn(() => order.push('fit'))
+    ctrl.updateScrollShadow = vi.fn(() => order.push('shadow'))
+    ctrl.renderTable()
+    expect(order).toEqual(['fit', 'shadow'])
+  })
+})
+
+describe('controller address count', () => {
+  function buildCountCtrl() {
+    const ctrl = new HashrateSharesController(document.body)
+    ctrl.addressCountTarget = document.createElement('span')
+    ctrl.hasAddressCountTarget = true
+    return ctrl
+  }
+
+  it('states the number of reward addresses in the period', () => {
+    const ctrl = buildCountCtrl()
+    ctrl.renderAddressCount(30)
+    expect(ctrl.addressCountTarget.textContent).toBe('30 reward addresses')
+  })
+
+  it('drops the plural for a single address', () => {
+    const ctrl = buildCountCtrl()
+    ctrl.renderAddressCount(1)
+    expect(ctrl.addressCountTarget.textContent).toBe('1 reward address')
+  })
+
+  it('renders nothing rather than "0 reward addresses" for an empty period', () => {
+    const ctrl = buildCountCtrl()
+    ctrl.renderAddressCount(0)
+    expect(ctrl.addressCountTarget.textContent).toBe('')
+  })
+
+  it('showEmpty clears the count', () => {
+    const ctrl = buildCountCtrl()
+    ctrl.emptyTarget = document.createElement('div')
+    ctrl.tableBodyTarget = document.createElement('tbody')
+    ctrl.pieWrapTarget = document.createElement('div')
+    ctrl.truncatedNoteTarget = document.createElement('div')
+    ctrl.renderAddressCount(30)
+    ctrl.showEmpty(ERROR_MESSAGE)
+    expect(ctrl.addressCountTarget.textContent).toBe('')
+  })
+
+  it('counts the period, not the filtered view (spec 3.2)', () => {
+    // Filtering narrows the rows on screen; the period's address count must
+    // not follow it, or the page would report a total it never computed.
+    const ctrl = buildCountCtrl()
+    ctrl.addressInputTarget = document.createElement('input')
+    ctrl.clearAddressTarget = document.createElement('button')
+    ctrl.miners = [
+      { rank: 1, address: 'VsAbc', count: 9 },
+      { rank: 2, address: 'VsXyz', count: 1 }
+    ]
+    ctrl.renderAddressCount(30)
+    ctrl.syncUrl = vi.fn()
+    ctrl.renderTable = vi.fn()
+
+    ctrl.addressInputTarget.value = 'VsAbc'
+    ctrl.filterByAddress()
+
+    expect(ctrl.addressFilter).toBe('VsAbc')
+    expect(ctrl.addressCountTarget.textContent).toBe('30 reward addresses')
   })
 })

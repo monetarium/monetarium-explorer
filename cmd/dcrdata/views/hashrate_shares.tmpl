@@ -93,7 +93,7 @@
                 <svg data-hashrate-shares-target="pie" viewBox="0 0 360 360" class="hashrate-shares-pie"></svg>
             </div>
             <div class="hashrate-shares-table-wrap">
-                <div class="d-flex align-items-center gap-2 mb-2">
+                <div class="d-flex align-items-center gap-2 mb-2 flex-wrap">
                     <span class="text-secondary fs12">Filter by address</span>
                     <div class="position-relative" style="width: 16em;">
                         <input type="text" class="form-control form-control-sm"
@@ -106,22 +106,34 @@
                                 data-action="click->hashrate-shares#clearAddress"
                                 aria-label="Clear address filter">×</button>
                     </div>
+                    {{/* Reward addresses in the period, filled in by the
+                         controller from the data endpoint's totals. It counts
+                         the whole period, never the filtered view (spec §3.2).
+                         aria-live: it is the only statement of how large the
+                         period is, and changing the interval rewrites it with
+                         nothing else announcing that the table changed. */}}
+                    <span class="hashrate-shares-count" aria-live="polite"
+                          data-hashrate-shares-target="addressCount"></span>
                 </div>
-                <div class="hashrate-shares-scroll">
-                    <table class="table table-sm hashrate-shares-table">
-                        <thead>
-                            <tr>
-                                <th class="text-end">#</th>
-                                <th></th>
-                                <th class="text-end">%</th>
-                                <th class="text-end">Blocks</th>
-                                <th class="text-end">Miner Coinbase Reward</th>
-                                <th class="text-end">Miner Fee Reward</th>
-                                <th>Reward Address</th>
-                            </tr>
-                        </thead>
-                        <tbody data-hashrate-shares-target="tableBody"></tbody>
-                    </table>
+                {{/* Wrapper paints the bottom fade; it has to sit outside the
+                     scroller (why: _hashrate_shares.scss). */}}
+                <div class="hashrate-shares-scroll-wrap">
+                    <div class="hashrate-shares-scroll" data-hashrate-shares-target="scrollWrap">
+                        <table class="table table-sm hashrate-shares-table">
+                            <thead>
+                                <tr>
+                                    <th class="text-end">#</th>
+                                    <th></th>
+                                    <th class="text-end">%</th>
+                                    <th class="text-end">Blocks</th>
+                                    <th class="text-end">Miner Coinbase Reward</th>
+                                    <th class="text-end">Miner Fee Reward</th>
+                                    <th>Reward Address</th>
+                                </tr>
+                            </thead>
+                            <tbody data-hashrate-shares-target="tableBody"></tbody>
+                        </table>
+                    </div>
                 </div>
                 <div class="d-hide text-secondary p-3" data-hashrate-shares-target="empty">
                     No PoW Reward transactions in the selected period.

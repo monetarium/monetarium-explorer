@@ -45,10 +45,72 @@
 // container (spec §5.3): the pie keeps its top-25 + "Others" cut, the table
 // draws every miner. The header sticks to the container top so the column
 // labels stay visible while scrolling a long list.
+// max-height is the target height for the list, and the controller's
+// fitScrollHeight reads it from here (it is the single definition of the
+// number) and rounds it to whole-rows-plus-a-half, so the bottom edge always
+// cuts a row in two rather than landing just past one. Rounding goes either
+// way, so the list can end up to half a row taller than this: it is a target,
+// not a ceiling, and clamping down instead would cost a whole visible row. It cannot
+// be a fixed value: the header is 27px wide-screen but 40px once the money
+// column labels wrap, which is every width below ~1400px, and a value tuned
+// for one leaves the other showing a 3-5px sliver that reads as padding —
+// precisely the "the list ends here" misreading being fixed. Without JS this
+// value still applies on its own, unrounded.
 .hashrate-shares-scroll {
   max-height: 480px;
   overflow-y: auto;
   overscroll-behavior: contain;
+}
+
+// A fade over the bottom of the list while rows remain below it, so a clipped
+// list doesn't read as a finished one. It hangs off this wrapper rather than
+// off the scrolling element: as a child of the scroller it counts as content,
+// leaving scrollHeight permanently one fade taller than the rows, so the list
+// never measures as fully scrolled and even a short list keeps a fade it has
+// no business showing. As an overlay on the wrapper it doesn't touch the
+// scroll geometry at all. The z-index clears .elidedhash (20, present in every
+// row); the fade sits at the bottom edge, so it never meets the sticky header.
+.hashrate-shares-scroll-wrap {
+  position: relative;
+}
+
+.hashrate-shares-scroll-wrap::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 25;
+  height: 32px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+
+  // Fades toward the colour the rows actually sit on. Bootstrap leaves table
+  // cells transparent and this page paints no row background, so that colour is
+  // the page's, not the sticky header's — ending at the header's white would lay
+  // a pale band over the rows instead of dissolving them into their backdrop.
+  // It stops at 75% rather than reaching that colour: a fade that arrives at
+  // full opacity blanks the half-drawn row beneath it, turning the clipped row
+  // that signals "more below" back into what looks like empty space. Dimming it
+  // keeps the row legible and fading, which is the cue itself.
+  background: linear-gradient(rgba($body-bg, 0), rgba($body-bg, 0.75));
+}
+
+// The controller toggles the class on the scrolling element (see
+// updateScrollShadow); :has lifts it to the wrapper that paints the fade, as
+// the address filter's clear button already does for its input's padding.
+.hashrate-shares-scroll-wrap:has(.hashrate-shares-scroll-more)::after {
+  opacity: 1;
+}
+
+// Reads as a figure beside the filter, not another caption. Sets no color on
+// purpose: it inherits the theme-correct body color, while .text-* utilities
+// read --bs-* vars that body.darkBG never reassigns on this page.
+.hashrate-shares-count {
+  font-size: 1rem;
+  font-weight: 700;
+  white-space: nowrap;
 }
 
 .hashrate-shares-swatch {
@@ -198,6 +260,13 @@
 
 body.darkBG .hashrate-shares-table thead th {
   background: #2d2d2d;
+}
+
+// Same reasoning in the dark theme, tracking body.darkBG's own background
+// (themes.scss) — the rows are transparent there too, so that is what shows
+// through them. It has no variable to borrow, unlike the light $body-bg above.
+body.darkBG .hashrate-shares-scroll-wrap::after {
+  background: linear-gradient(rgb(59 63 69 / 0%), rgb(59 63 69 / 75%));
 }
 
 body.darkBG .hashrate-shares-highlight {
