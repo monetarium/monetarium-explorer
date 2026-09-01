@@ -98,11 +98,9 @@
   opacity: 1;
 }
 
-// The period's address count, sized up so it reads as a figure beside the
-// filter rather than as another caption. No color is set on purpose: the
-// inherited body color is theme-correct (body.darkBG sets #fdfdfd in
-// themes.scss), while Bootstrap's .text-* utilities read --bs-* properties
-// that this page's body.darkBG dark mode never reassigns.
+// Reads as a figure beside the filter, not another caption. Sets no color on
+// purpose: it inherits the theme-correct body color, while .text-* utilities
+// read --bs-* vars that body.darkBG never reassigns on this page.
 .hashrate-shares-count {
   font-size: 1rem;
   font-weight: 700;

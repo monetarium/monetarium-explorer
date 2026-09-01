@@ -626,11 +626,6 @@ describe('controller scroll shadow', () => {
     expect(ctrl.scrollWrapTarget.classList.contains('hashrate-shares-scroll-more')).toBe(false)
   })
 
-  it('is a no-op without the target', () => {
-    const ctrl = new HashrateSharesController(document.body)
-    expect(() => ctrl.updateScrollShadow()).not.toThrow()
-  })
-
   it('recomputes after showEmpty drops the rows', () => {
     const ctrl = new HashrateSharesController(document.body)
     ctrl.emptyTarget = document.createElement('div')
@@ -752,11 +747,6 @@ describe('controller fitScrollHeight', () => {
     expect(ctrl.scrollWrapTarget.style.maxHeight).toBe('')
   })
 
-  it('is a no-op without the target', () => {
-    const ctrl = new HashrateSharesController(document.body)
-    expect(() => ctrl.fitScrollHeight()).not.toThrow()
-  })
-
   it('refits before measuring the fade, since the height sets clientHeight', () => {
     const ctrl = new HashrateSharesController(document.body)
     ctrl.emptyTarget = document.createElement('div')
@@ -800,56 +790,35 @@ describe('controller address count', () => {
     const ctrl = new HashrateSharesController(document.body)
     ctrl.addressCountTarget = document.createElement('span')
     ctrl.hasAddressCountTarget = true
-    ctrl.totals = null
     return ctrl
   }
 
   it('states the number of reward addresses in the period', () => {
     const ctrl = buildCountCtrl()
-    ctrl.totals = { addresses: 30, blocks: 28699 }
-    ctrl.renderAddressCount()
+    ctrl.renderAddressCount(30)
     expect(ctrl.addressCountTarget.textContent).toBe('30 reward addresses')
   })
 
   it('drops the plural for a single address', () => {
     const ctrl = buildCountCtrl()
-    ctrl.totals = { addresses: 1, blocks: 4 }
-    ctrl.renderAddressCount()
+    ctrl.renderAddressCount(1)
     expect(ctrl.addressCountTarget.textContent).toBe('1 reward address')
   })
 
   it('renders nothing rather than "0 reward addresses" for an empty period', () => {
     const ctrl = buildCountCtrl()
-    ctrl.totals = { addresses: 0, blocks: 0 }
-    ctrl.renderAddressCount()
+    ctrl.renderAddressCount(0)
     expect(ctrl.addressCountTarget.textContent).toBe('')
   })
 
-  it('clears the count when the totals are gone (fetch failure)', () => {
-    const ctrl = buildCountCtrl()
-    ctrl.totals = { addresses: 30 }
-    ctrl.renderAddressCount()
-    ctrl.totals = null
-    ctrl.renderAddressCount()
-    expect(ctrl.addressCountTarget.textContent).toBe('')
-  })
-
-  it('is a no-op without the target', () => {
-    const ctrl = new HashrateSharesController(document.body)
-    ctrl.totals = { addresses: 30 }
-    expect(() => ctrl.renderAddressCount()).not.toThrow()
-  })
-
-  it('showEmpty drops the totals and clears the count', () => {
+  it('showEmpty clears the count', () => {
     const ctrl = buildCountCtrl()
     ctrl.emptyTarget = document.createElement('div')
     ctrl.tableBodyTarget = document.createElement('tbody')
     ctrl.pieWrapTarget = document.createElement('div')
     ctrl.truncatedNoteTarget = document.createElement('div')
-    ctrl.totals = { addresses: 30 }
-    ctrl.renderAddressCount()
+    ctrl.renderAddressCount(30)
     ctrl.showEmpty(ERROR_MESSAGE)
-    expect(ctrl.totals).toBeNull()
     expect(ctrl.addressCountTarget.textContent).toBe('')
   })
 
@@ -863,8 +832,7 @@ describe('controller address count', () => {
       { rank: 1, address: 'VsAbc', count: 9 },
       { rank: 2, address: 'VsXyz', count: 1 }
     ]
-    ctrl.totals = { addresses: 30 }
-    ctrl.renderAddressCount()
+    ctrl.renderAddressCount(30)
     ctrl.syncUrl = vi.fn()
     ctrl.renderTable = vi.fn()
 

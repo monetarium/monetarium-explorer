@@ -265,7 +265,6 @@ export default class extends Controller {
 
   connect() {
     this.miners = []
-    this.totals = null
     this.truncated = false
     // emptyState is why the empty slot is showing: null (no active message —
     // renderTable may write the generic empty message), 'invalid' (bad range
@@ -548,10 +547,9 @@ export default class extends Controller {
     // the message now reflects a real server result.
     this.emptyState = null
     this.miners = (data && data.miners) || []
-    this.totals = (data && data.totals) || null
     this.truncated = !!(data && data.truncated)
     this.renderTable()
-    this.renderAddressCount()
+    this.renderAddressCount((data && data.totals && data.totals.addresses) || 0)
     this.renderPie(pieSlices(this.miners))
     if (this._pendingAddressScroll) this.scrollToAddress(this._pendingAddressScroll)
     this._pendingAddressScroll = null
@@ -567,7 +565,6 @@ export default class extends Controller {
   // it (see renderTable).
   showEmpty(message) {
     this.miners = []
-    this.totals = null
     this.truncated = false
     this.emptyTarget.textContent = message
     this.emptyTarget.classList.remove('d-hide')
@@ -576,20 +573,21 @@ export default class extends Controller {
     if (this.hasDownloadWrapTarget) this.downloadWrapTarget.classList.add('d-hide')
     this.truncatedNoteTarget.classList.add('d-hide')
     this.updateScrollShadow()
-    this.renderAddressCount()
+    this.renderAddressCount(0)
   }
 
   // renderAddressCount states how many reward addresses the period holds, so a
-  // list that is taller than its container isn't mistaken for its visible part.
-  // It is fed by totals.addresses — the whole period — and deliberately is NOT
-  // refreshed by filterByAddress: spec §3.2 keeps period totals independent of
-  // the filtered view, so this must never turn into a count of matching rows.
-  // An empty period renders nothing rather than "0": renderTable routes that
-  // case to showEmpty, whose message already says there were no PoW rewards.
-  renderAddressCount() {
+  // list taller than its container isn't mistaken for its visible part. The
+  // count is passed in from the fetched totals — the whole period — and is
+  // deliberately never recomputed by filterByAddress: spec §3.2 keeps period
+  // totals independent of the filtered view, so this must not turn into a count
+  // of matching rows. Zero renders nothing rather than "0": renderTable routes
+  // an empty period to showEmpty, whose message already says there were none.
+  renderAddressCount(count) {
     if (!this.hasAddressCountTarget) return
-    const n = this.totals ? this.totals.addresses : 0
-    this.addressCountTarget.textContent = n ? `${n} reward address${n === 1 ? '' : 'es'}` : ''
+    this.addressCountTarget.textContent = count
+      ? `${count} reward address${count === 1 ? '' : 'es'}`
+      : ''
   }
 
   renderTable() {

@@ -111,9 +111,8 @@
                          the whole period, never the filtered view (spec §3.2). */}}
                     <span class="hashrate-shares-count" data-hashrate-shares-target="addressCount"></span>
                 </div>
-                {{/* The wrapper carries the bottom fade as an overlay. It has to
-                     sit outside the scrolling element: inside it, the fade counts
-                     as content and the list never reads as fully scrolled. */}}
+                {{/* Wrapper paints the bottom fade; it has to sit outside the
+                     scroller (why: _hashrate_shares.scss). */}}
                 <div class="hashrate-shares-scroll-wrap">
                     <div class="hashrate-shares-scroll" data-hashrate-shares-target="scrollWrap">
                         <table class="table table-sm hashrate-shares-table">
