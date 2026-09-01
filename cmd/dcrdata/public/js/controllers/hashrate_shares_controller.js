@@ -243,6 +243,21 @@ export function arcPath(start, end) {
 
 const SVGNS = 'http://www.w3.org/2000/svg'
 
+// rafThrottle collapses a burst of events into one call per frame: scroll and
+// resize both fire far faster than the layout measurements behind them are
+// worth repeating (the pattern sticky_col_controller uses inline).
+export function rafThrottle(fn) {
+  let queued = false
+  return () => {
+    if (queued) return
+    queued = true
+    requestAnimationFrame(() => {
+      fn()
+      queued = false
+    })
+  }
+}
+
 export default class extends Controller {
   static targets = [
     'pie',
@@ -313,27 +328,13 @@ export default class extends Controller {
     // one existing scroll-affordance in the app. The target is guarded because
     // the controller tests wire targets by hand, the same reason
     // hasDownloadWrapTarget is guarded below.
-    this.ticking = false
-    this._onScroll = () => {
-      if (this.ticking) return
-      this.ticking = true
-      requestAnimationFrame(() => {
-        this.updateScrollShadow()
-        this.ticking = false
-      })
-    }
+    this._onScroll = rafThrottle(() => this.updateScrollShadow())
     // A resize can rewrap the header between one and two lines, which moves
     // where the bottom edge falls, so the height has to be refitted with it.
-    this.resizeTicking = false
-    this._onResize = () => {
-      if (this.resizeTicking) return
-      this.resizeTicking = true
-      requestAnimationFrame(() => {
-        this.fitScrollHeight()
-        this.updateScrollShadow()
-        this.resizeTicking = false
-      })
-    }
+    this._onResize = rafThrottle(() => {
+      this.fitScrollHeight()
+      this.updateScrollShadow()
+    })
     if (this.hasScrollWrapTarget) {
       this.scrollWrapTarget.addEventListener('scroll', this._onScroll, { passive: true })
       window.addEventListener('resize', this._onResize, { passive: true })

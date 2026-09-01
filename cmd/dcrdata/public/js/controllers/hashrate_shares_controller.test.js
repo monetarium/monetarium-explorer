@@ -27,6 +27,7 @@ import {
   blockRangeFromParams,
   dataUrl,
   syncUrlQuery,
+  rafThrottle,
   EMPTY_MESSAGE,
   ERROR_MESSAGE,
   INVALID_MESSAGE,
@@ -684,6 +685,32 @@ describe('controller scroll shadow', () => {
     expect(el.removeEventListener).toHaveBeenCalledTimes(1)
     expect(el.removeEventListener.mock.calls[0][0]).toBe('scroll')
     expect(el.removeEventListener.mock.calls[0][1]).toBe(ctrl._onScroll)
+  })
+})
+
+describe('rafThrottle', () => {
+  it('runs once per frame however many events arrive, and again the next frame', () => {
+    const frames = []
+    vi.stubGlobal('requestAnimationFrame', (fn) => frames.push(fn))
+    const fn = vi.fn()
+    const throttled = rafThrottle(fn)
+
+    throttled()
+    throttled()
+    throttled()
+    expect(frames).toHaveLength(1)
+    expect(fn).not.toHaveBeenCalled() // deferred to the frame, not run inline
+
+    frames.shift()()
+    expect(fn).toHaveBeenCalledTimes(1)
+
+    // the flag has to clear, or every later event is dropped for good
+    throttled()
+    expect(frames).toHaveLength(1)
+    frames.shift()()
+    expect(fn).toHaveBeenCalledTimes(2)
+
+    vi.unstubAllGlobals()
   })
 })
 
