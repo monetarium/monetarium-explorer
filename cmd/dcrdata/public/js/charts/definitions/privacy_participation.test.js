@@ -23,8 +23,8 @@ describe('privacyParticipation.limits', () => {
 })
 
 describe('privacyParticipation.formatValue', () => {
-  it('shows commas when positive', () => {
-    expect(privacyParticipation.formatValue(0, { value: 1234 }, {})).toBe('1,234')
+  it('shows commas and the unit when positive', () => {
+    expect(privacyParticipation.formatValue(0, { value: 1234 }, {})).toBe('1,234 VAR')
   })
   it('shows 0 VAR when zero', () => {
     expect(privacyParticipation.formatValue(0, { value: 0 }, {})).toBe('0 VAR')
