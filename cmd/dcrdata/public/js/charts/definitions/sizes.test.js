@@ -34,8 +34,11 @@ describe('sizes series kinds', () => {
 })
 
 describe('sizes formatValue', () => {
-  it('formats with thousands separators', () => {
-    expect(blockSize.formatValue(0, { value: 12345 }, {})).toBe('12,345')
+  it('formats sizes with humanize.bytes and counts with separators', () => {
+    // Same formatter the /blocks list uses for block.size, so a chart tooltip and the
+    // table beside it agree.
+    expect(blockSize.formatValue(0, { value: 12345 }, {})).toBe('12 kB')
+    expect(blockchainSize.formatValue(0, { value: 166291227 }, {})).toBe('166 MB')
     expect(txCount.formatValue(0, { value: 9 }, {})).toBe('9')
   })
 })

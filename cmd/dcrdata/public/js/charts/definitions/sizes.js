@@ -1,5 +1,6 @@
 import { register } from '../registry'
 import { xColumn } from '../format'
+import humanize from '../../helpers/humanize_helper'
 
 const baseControls = {
   bin: true,
@@ -20,13 +21,13 @@ export const blockSize = {
   name: 'block-size',
   label: 'Block Size',
   controls: { ...baseControls },
-  axes: [{ label: 'Block Size', scale: 'y' }],
+  axes: [{ label: 'Block Size (bytes)', scale: 'y' }],
   series: [{ label: 'Block Size', scale: 'y', kind: 'line', colorIndex: 0 }],
   toColumns: (raw) => {
     return [xColumn(raw, raw.size.length), raw.size.slice()]
   },
   formatValue: (seriesIdx, datum) => {
-    return plain(datum.value)
+    return humanize.bytes(datum.value)
   }
 }
 
@@ -34,13 +35,13 @@ export const blockchainSize = {
   name: 'blockchain-size',
   label: 'Blockchain Size',
   controls: { ...baseControls },
-  axes: [{ label: 'Blockchain Size', scale: 'y' }],
+  axes: [{ label: 'Blockchain Size (bytes)', scale: 'y' }],
   series: [{ label: 'Blockchain Size', scale: 'y', kind: 'area', colorIndex: 0 }],
   toColumns: (raw) => {
     return [xColumn(raw, raw.size.length), raw.size.slice()]
   },
   formatValue: (seriesIdx, datum) => {
-    return plain(datum.value)
+    return humanize.bytes(datum.value)
   }
 }
 
