@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import { colorForIndex, OTHERS_COLOR } from '../helpers/chart_theme'
 // Stub the @hotwired/stimulus import so the controller module loads in jsdom
 // and can be constructed directly — Stimulus registration is not involved in
@@ -689,6 +689,109 @@ describe('controller scroll shadow', () => {
     expect(el.removeEventListener).toHaveBeenCalledTimes(1)
     expect(el.removeEventListener.mock.calls[0][0]).toBe('scroll')
     expect(el.removeEventListener.mock.calls[0][1]).toBe(ctrl._onScroll)
+  })
+})
+
+describe('controller fitScrollHeight', () => {
+  // Builds a scroll container whose header and rows report fixed heights, and
+  // whose CSS budget is `budget` — jsdom computes no layout, so both have to be
+  // stubbed. The header height is the interesting variable: it is 27px when the
+  // money-column labels fit on one line and 40px once they wrap, which is what
+  // made a hard-coded max-height clip a half row on desktop and a 3px sliver
+  // everywhere else.
+  function buildFitCtrl({ headHeight, rowHeight, budget = '480px' }) {
+    const ctrl = new HashrateSharesController(document.body)
+    const el = document.createElement('div')
+    const table = document.createElement('table')
+    const thead = document.createElement('thead')
+    const tbody = document.createElement('tbody')
+    const tr = document.createElement('tr')
+    tbody.appendChild(tr)
+    table.appendChild(thead)
+    table.appendChild(tbody)
+    el.appendChild(table)
+    thead.getBoundingClientRect = () => ({ height: headHeight })
+    tr.getBoundingClientRect = () => ({ height: rowHeight })
+    vi.spyOn(window, 'getComputedStyle').mockImplementation((node) =>
+      node === el ? { maxHeight: budget } : { maxHeight: '' }
+    )
+    ctrl.scrollWrapTarget = el
+    ctrl.hasScrollWrapTarget = true
+    return ctrl
+  }
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('cuts a row in half with a one-line header', () => {
+    // 27 + floor((480-27)/32)=14 whole rows + half of the next
+    const ctrl = buildFitCtrl({ headHeight: 27, rowHeight: 32 })
+    ctrl.fitScrollHeight()
+    expect(ctrl.scrollWrapTarget.style.maxHeight).toBe('491px')
+  })
+
+  it('cuts a row in half with a wrapped two-line header', () => {
+    // The regression: at a fixed 491px this width showed a 3px sliver.
+    // 40 + floor((480-40)/32)=13 whole rows + half of the next
+    const ctrl = buildFitCtrl({ headHeight: 40, rowHeight: 32 })
+    ctrl.fitScrollHeight()
+    expect(ctrl.scrollWrapTarget.style.maxHeight).toBe('472px')
+  })
+
+  it('keeps at least one row when a row is taller than the budget', () => {
+    const ctrl = buildFitCtrl({ headHeight: 40, rowHeight: 600 })
+    ctrl.fitScrollHeight()
+    expect(ctrl.scrollWrapTarget.style.maxHeight).toBe('940px')
+  })
+
+  it('leaves the stylesheet height alone when there are no rows yet', () => {
+    const ctrl = buildFitCtrl({ headHeight: 27, rowHeight: 32 })
+    ctrl.scrollWrapTarget.querySelector('tbody tr').remove()
+    ctrl.fitScrollHeight()
+    expect(ctrl.scrollWrapTarget.style.maxHeight).toBe('')
+  })
+
+  it('is a no-op without the target', () => {
+    const ctrl = new HashrateSharesController(document.body)
+    expect(() => ctrl.fitScrollHeight()).not.toThrow()
+  })
+
+  it('refits before measuring the fade, since the height sets clientHeight', () => {
+    const ctrl = new HashrateSharesController(document.body)
+    ctrl.emptyTarget = document.createElement('div')
+    ctrl.tableBodyTarget = document.createElement('tbody')
+    ctrl.pieWrapTarget = document.createElement('div')
+    ctrl.truncatedNoteTarget = document.createElement('div')
+    ctrl.rowTemplateTarget = document.createElement('template')
+    ctrl.rowTemplateTarget.innerHTML =
+      '<tr>' +
+      '<td data-type="rank"></td>' +
+      '<td><span data-type="swatch"></span></td>' +
+      '<td data-type="percent"></td>' +
+      '<td data-type="blocks"></td>' +
+      '<td data-type="minerReward"></td>' +
+      '<td data-type="fees"></td>' +
+      '<td data-type="addr"></td>' +
+      '</tr>'
+    ctrl.miners = [
+      {
+        rank: 1,
+        address: 'VsAbc',
+        count: 3,
+        percent: '100.0',
+        miner_reward: '9000000000',
+        fees: '0'
+      }
+    ]
+    ctrl.addressFilter = ''
+    ctrl.truncated = false
+    ctrl.emptyState = null
+    const order = []
+    ctrl.fitScrollHeight = vi.fn(() => order.push('fit'))
+    ctrl.updateScrollShadow = vi.fn(() => order.push('shadow'))
+    ctrl.renderTable()
+    expect(order).toEqual(['fit', 'shadow'])
   })
 })
 

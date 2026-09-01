@@ -1,4 +1,4 @@
-/* global Turbo, requestAnimationFrame */
+/* global Turbo, requestAnimationFrame, getComputedStyle */
 import '@hotwired/turbo'
 import { Controller } from '@hotwired/stimulus'
 import { requestJSON } from '../helpers/http'
@@ -323,8 +323,21 @@ export default class extends Controller {
         this.ticking = false
       })
     }
+    // A resize can rewrap the header between one and two lines, which moves
+    // where the bottom edge falls, so the height has to be refitted with it.
+    this.resizeTicking = false
+    this._onResize = () => {
+      if (this.resizeTicking) return
+      this.resizeTicking = true
+      requestAnimationFrame(() => {
+        this.fitScrollHeight()
+        this.updateScrollShadow()
+        this.resizeTicking = false
+      })
+    }
     if (this.hasScrollWrapTarget) {
       this.scrollWrapTarget.addEventListener('scroll', this._onScroll, { passive: true })
+      window.addEventListener('resize', this._onResize, { passive: true })
     }
 
     this.toggleClearButton()
@@ -337,6 +350,34 @@ export default class extends Controller {
     if (this.hasScrollWrapTarget && this._onScroll) {
       this.scrollWrapTarget.removeEventListener('scroll', this._onScroll)
     }
+    if (this._onResize) window.removeEventListener('resize', this._onResize)
+  }
+
+  // fitScrollHeight trims the list's height so the bottom edge cuts a row in
+  // half instead of landing just past one — a row sliced down the middle reads
+  // as "this continues", a 3px sliver reads as padding. It has to be measured
+  // rather than written into the stylesheet because the header is 27px tall
+  // wide-screen and 40px once the money-column labels wrap (every width below
+  // ~1400px), so no single height halves a row in both cases.
+  //
+  // The budget stays in the stylesheet and is read back from it, so the number
+  // has one definition; clearing the inline value first is what makes the
+  // computed style report the CSS one again rather than our own last answer.
+  fitScrollHeight() {
+    if (!this.hasScrollWrapTarget) return
+    const el = this.scrollWrapTarget
+    const head = el.querySelector('thead')
+    const row = el.querySelector('tbody tr')
+    if (!head || !row) return
+
+    el.style.maxHeight = ''
+    const budget = parseFloat(getComputedStyle(el).maxHeight)
+    const headHeight = head.getBoundingClientRect().height
+    const rowHeight = row.getBoundingClientRect().height
+    if (!budget || rowHeight < 1) return
+
+    const whole = Math.max(1, Math.floor((budget - headHeight) / rowHeight))
+    el.style.maxHeight = `${Math.round(headHeight + (whole + 0.5) * rowHeight)}px`
   }
 
   // updateScrollShadow shows the bottom fade only while rows remain below the
@@ -579,6 +620,8 @@ export default class extends Controller {
       this.emptyTarget.textContent = `No reward addresses match “${this.addressFilter}”.`
     }
     this.truncatedNoteTarget.classList.toggle('d-hide', !this.truncated)
+    // Height first: it decides clientHeight, which the fade is measured against.
+    this.fitScrollHeight()
     this.updateScrollShadow()
   }
 
