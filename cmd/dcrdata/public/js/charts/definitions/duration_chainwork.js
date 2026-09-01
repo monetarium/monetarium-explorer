@@ -32,7 +32,7 @@ export const chainwork = {
   name: 'chainwork',
   label: 'Total Work',
   controls: { ...baseControls },
-  // Base unit only -- see the hashrate axes note: ticks carry the magnitude suffix.
+  // Base unit only: the ticks carry the magnitude suffix themselves.
   axes: [{ label: 'Cumulative Chainwork (H)', scale: 'y' }],
   series: [{ label: 'Cumulative Chainwork', scale: 'y', kind: 'area', colorIndex: 0 }],
   toColumns: (raw) => {

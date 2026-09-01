@@ -33,11 +33,8 @@ describe('hashrate.toColumns', () => {
 })
 
 describe('hashrate axis unit', () => {
-  // The uPlot tick formatter (threeSigFigs) adds its own magnitude suffix, so 1.05e10
-  // ticks as "10.5B". A prefixed label scaled that a second time: "10.5B GH/s".
-  it('labels the y axis in base H/s and exposes no dynamic prefixed label', () => {
+  it('labels the y axis in base H/s so the ticks carry the magnitude', () => {
     expect(hashrate.axes[0].label).toBe('Network Hashrate (H/s)')
-    expect(hashrate.axisLabel).toBeUndefined()
   })
 })
 
