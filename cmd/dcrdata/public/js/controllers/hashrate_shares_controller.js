@@ -1,4 +1,4 @@
-/* global Turbo */
+/* global Turbo, requestAnimationFrame */
 import '@hotwired/turbo'
 import { Controller } from '@hotwired/stimulus'
 import { requestJSON } from '../helpers/http'
@@ -258,7 +258,8 @@ export default class extends Controller {
     'applyButton',
     'addressInput',
     'clearAddress',
-    'truncatedNote'
+    'truncatedNote',
+    'scrollWrap'
   ]
 
   connect() {
@@ -306,10 +307,45 @@ export default class extends Controller {
       this._pendingAddressScroll = settings.address
     }
 
+    // Keep the "more below" fade in step with the scroll position. Throttled
+    // through rAF and registered passive, as in sticky_col_controller — the
+    // one existing scroll-affordance in the app. The target is guarded because
+    // the controller tests wire targets by hand, the same reason
+    // hasDownloadWrapTarget is guarded below.
+    this.ticking = false
+    this._onScroll = () => {
+      if (this.ticking) return
+      this.ticking = true
+      requestAnimationFrame(() => {
+        this.updateScrollShadow()
+        this.ticking = false
+      })
+    }
+    if (this.hasScrollWrapTarget) {
+      this.scrollWrapTarget.addEventListener('scroll', this._onScroll, { passive: true })
+    }
+
     this.toggleClearButton()
     this.syncControlsUI()
     this.syncUrl()
     this.fetchAndRender(this.nextSeq())
+  }
+
+  disconnect() {
+    if (this.hasScrollWrapTarget && this._onScroll) {
+      this.scrollWrapTarget.removeEventListener('scroll', this._onScroll)
+    }
+  }
+
+  // updateScrollShadow shows the bottom fade only while rows remain below the
+  // fold: a list that fits and a list scrolled to its end both resolve to zero
+  // remaining distance and hide it. It runs after every path that rewrites the
+  // rows, because filtering can turn an overflowing list into a fitting one.
+  updateScrollShadow() {
+    if (!this.hasScrollWrapTarget) return
+    const el = this.scrollWrapTarget
+    const remaining = el.scrollHeight - el.scrollTop - el.clientHeight
+    el.classList.toggle('hashrate-shares-scroll-more', remaining > 1)
   }
 
   nextSeq() {
@@ -493,6 +529,7 @@ export default class extends Controller {
     this.pieWrapTarget.classList.add('d-hide')
     if (this.hasDownloadWrapTarget) this.downloadWrapTarget.classList.add('d-hide')
     this.truncatedNoteTarget.classList.add('d-hide')
+    this.updateScrollShadow()
   }
 
   renderTable() {
@@ -523,6 +560,7 @@ export default class extends Controller {
       this.emptyTarget.textContent = `No reward addresses match “${this.addressFilter}”.`
     }
     this.truncatedNoteTarget.classList.toggle('d-hide', !this.truncated)
+    this.updateScrollShadow()
   }
 
   // scrollToAddress brings the row for the address carried by ?address= into

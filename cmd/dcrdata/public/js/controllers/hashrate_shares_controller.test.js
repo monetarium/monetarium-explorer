@@ -583,3 +583,111 @@ describe('controller address filter clear button', () => {
     expect(ctrl.renderTable).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('controller scroll shadow', () => {
+  // jsdom computes no layout, so the scroll geometry the method reads is
+  // stubbed onto the element; scrollTop is writable already.
+  function buildScrollCtrl({ scrollHeight, clientHeight, scrollTop = 0 }) {
+    const ctrl = new HashrateSharesController(document.body)
+    const el = document.createElement('div')
+    Object.defineProperty(el, 'scrollHeight', { value: scrollHeight, configurable: true })
+    Object.defineProperty(el, 'clientHeight', { value: clientHeight, configurable: true })
+    el.scrollTop = scrollTop
+    ctrl.scrollWrapTarget = el
+    ctrl.hasScrollWrapTarget = true
+    return ctrl
+  }
+
+  it('marks the container while rows remain below the fold', () => {
+    const ctrl = buildScrollCtrl({ scrollHeight: 900, clientHeight: 480 })
+    ctrl.updateScrollShadow()
+    expect(ctrl.scrollWrapTarget.classList.contains('hashrate-shares-scroll-more')).toBe(true)
+  })
+
+  it('unmarks it at the end of the list', () => {
+    const ctrl = buildScrollCtrl({ scrollHeight: 900, clientHeight: 480, scrollTop: 420 })
+    ctrl.scrollWrapTarget.classList.add('hashrate-shares-scroll-more')
+    ctrl.updateScrollShadow()
+    expect(ctrl.scrollWrapTarget.classList.contains('hashrate-shares-scroll-more')).toBe(false)
+  })
+
+  it('treats a sub-pixel remainder as the end (rounding tolerance)', () => {
+    // Fractional row heights leave a fraction of a pixel unscrolled at the
+    // bottom; a fade that never quite switches off there would be worse than
+    // none, so 1px or less counts as arrived.
+    const ctrl = buildScrollCtrl({ scrollHeight: 900, clientHeight: 480, scrollTop: 419 })
+    ctrl.updateScrollShadow()
+    expect(ctrl.scrollWrapTarget.classList.contains('hashrate-shares-scroll-more')).toBe(false)
+  })
+
+  it('stays unmarked when the whole list fits', () => {
+    const ctrl = buildScrollCtrl({ scrollHeight: 480, clientHeight: 480 })
+    ctrl.updateScrollShadow()
+    expect(ctrl.scrollWrapTarget.classList.contains('hashrate-shares-scroll-more')).toBe(false)
+  })
+
+  it('is a no-op without the target', () => {
+    const ctrl = new HashrateSharesController(document.body)
+    expect(() => ctrl.updateScrollShadow()).not.toThrow()
+  })
+
+  it('recomputes after showEmpty drops the rows', () => {
+    const ctrl = new HashrateSharesController(document.body)
+    ctrl.emptyTarget = document.createElement('div')
+    ctrl.tableBodyTarget = document.createElement('tbody')
+    ctrl.pieWrapTarget = document.createElement('div')
+    ctrl.truncatedNoteTarget = document.createElement('div')
+    ctrl.updateScrollShadow = vi.fn()
+    ctrl.showEmpty(EMPTY_MESSAGE)
+    expect(ctrl.updateScrollShadow).toHaveBeenCalledTimes(1)
+  })
+
+  it('recomputes after renderTable rewrites the rows', () => {
+    const ctrl = new HashrateSharesController(document.body)
+    ctrl.emptyTarget = document.createElement('div')
+    ctrl.tableBodyTarget = document.createElement('tbody')
+    ctrl.pieWrapTarget = document.createElement('div')
+    ctrl.truncatedNoteTarget = document.createElement('div')
+    // Mirrors the <template> the controller clones, as in the buildRows tests.
+    ctrl.rowTemplateTarget = document.createElement('template')
+    ctrl.rowTemplateTarget.innerHTML =
+      '<tr>' +
+      '<td data-type="rank"></td>' +
+      '<td><span data-type="swatch"></span></td>' +
+      '<td data-type="percent"></td>' +
+      '<td data-type="blocks"></td>' +
+      '<td data-type="minerReward"></td>' +
+      '<td data-type="fees"></td>' +
+      '<td data-type="addr"></td>' +
+      '</tr>'
+    ctrl.miners = [
+      {
+        rank: 1,
+        address: 'VsAbc',
+        count: 3,
+        percent: '100.0',
+        miner_reward: '9000000000',
+        fees: '0'
+      }
+    ]
+    ctrl.addressFilter = ''
+    ctrl.truncated = false
+    ctrl.emptyState = null
+    ctrl.updateScrollShadow = vi.fn()
+    ctrl.renderTable()
+    expect(ctrl.updateScrollShadow).toHaveBeenCalledTimes(1)
+  })
+
+  it('detaches the scroll listener on disconnect', () => {
+    const ctrl = new HashrateSharesController(document.body)
+    const el = document.createElement('div')
+    el.removeEventListener = vi.fn()
+    ctrl.scrollWrapTarget = el
+    ctrl.hasScrollWrapTarget = true
+    ctrl._onScroll = () => {}
+    ctrl.disconnect()
+    expect(el.removeEventListener).toHaveBeenCalledTimes(1)
+    expect(el.removeEventListener.mock.calls[0][0]).toBe('scroll')
+    expect(el.removeEventListener.mock.calls[0][1]).toBe(ctrl._onScroll)
+  })
+})

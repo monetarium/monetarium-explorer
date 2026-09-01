@@ -51,6 +51,32 @@
   overscroll-behavior: contain;
 }
 
+// A fade pinned to the bottom of the scroll viewport while rows remain below,
+// so a clipped list doesn't read as a finished one. position: sticky is the
+// same trick as the sticky thead below, mirrored to bottom: 0; the negative
+// bottom margin cancels the element's own height so the fade adds no scroll
+// distance of its own. The z-index sits between .elidedhash (20, present in
+// every row) and the sticky header (30), so the fade covers the rows but never
+// the column labels. The controller toggles the -more class from the scroll
+// position (see updateScrollShadow).
+.hashrate-shares-scroll::after {
+  content: "";
+  display: block;
+  position: sticky;
+  bottom: 0;
+  z-index: 25;
+  height: 32px;
+  margin-bottom: -32px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  background: linear-gradient(rgb(255 255 255 / 0%), #fff 85%);
+}
+
+.hashrate-shares-scroll-more::after {
+  opacity: 1;
+}
+
 .hashrate-shares-swatch {
   display: inline-block;
   width: 14px;
@@ -198,6 +224,12 @@
 
 body.darkBG .hashrate-shares-table thead th {
   background: #2d2d2d;
+}
+
+// The fade has to end in the backdrop it sits on, so it tracks the sticky
+// header's dark value rather than staying white and smearing over the rows.
+body.darkBG .hashrate-shares-scroll::after {
+  background: linear-gradient(rgb(45 45 45 / 0%), #2d2d2d 85%);
 }
 
 body.darkBG .hashrate-shares-highlight {
