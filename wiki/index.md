@@ -117,7 +117,7 @@ _The `/attack-cost` majority-attack calculator: a no-compute Go handler reads a 
 
 - flow (compact): code-analysis/attack-cost/flow.compact.md — high-level summary of the no-compute handler, VAR-only snapshot, BLOCK_RECEIVED live hashrate, untyped Go→JS contract, and client-side math
 - flow (full): code-analysis/attack-cost/flow.full.md — detailed trace: node→Store→HomeInfo→handler→template→Stimulus, BLOCK_RECEIVED subscription, hashrate parseFloat/8dp, noComma exchange-rate pattern, snapshot staleness, SKA precision boundary
-- patterns: code-analysis/attack-cost/patterns.md — no-compute handler, VAR-only legacy snapshot, manual-only inputs (no max on exchange rate, noComma setter rule), untyped `data-*`↔Stimulus contract, vendored-Dygraphs private override
+- patterns: code-analysis/attack-cost/patterns.md — no-compute handler, VAR-only legacy snapshot, manual-only inputs (no max on exchange rate, noComma setter rule), untyped `data-*`↔Stimulus contract, uPlot via the shared `uplot_adapter`, instance-scoped controller state under Turbo
 - impact: code-analysis/attack-cost/impact.md — SKA-through-VAR-pipeline corruption, shared `HomeInfo` blast radius, stale snapshot, Go→JS drift; locale-comma/noComma and parseInt/parseFloat hazards documented as resolved
 
 ### Parameters

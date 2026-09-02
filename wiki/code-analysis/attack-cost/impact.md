@@ -24,7 +24,7 @@ corrupted magnitudes. Requires a BigInt path, not this one.
 
 **Failure mode:** silent (math), with cross-page blast radius.
 
-**Description:** `explorertypes.go:911,1480` structs are JSON-tagged
+**Description:** `explorertypes.go:855,1414` structs are JSON-tagged
 (`json:"coin_supply"`) and consumed by the HTTP API and home page in addition to
 the `AttackCost` handler in `explorerroutes.go` and the `parseInt`/`÷1e8` reads in
 `attackcost_controller.js`. A units change breaks the JS `/1e8` divisor and
@@ -50,15 +50,34 @@ the `AttackCost` handler in `explorerroutes.go` and the `parseInt`/`÷1e8` reads
 output. A renamed/removed *target* throws in `connect()` (`attackcost_controller.js`),
 killing the controller so the page shows static `0`s.
 
-## Risk: Dygraphs upgrade breaks private override
+## Risk: uPlot / adapter change breaks the chart's private surface
 
-**Trigger:** Bumping the vendored Dygraphs build.
+**Trigger:** Bumping uPlot, or changing `helpers/uplot_adapter` (`loadUPlot`/`buildOpts`).
 
-**Failure mode:** loud (JS exception) or silent (Y-zoom re-enabled).
+**Failure mode:** loud (JS exception) or silent (dead click-to-pick, lost zoom range).
 
-**Description:** `attackcost_controller.js` overrides private
-`Dygraph.prototype.doZoomY_`; a renamed/removed private member silently restores Y-zoom or
-throws on assignment.
+**Description:** `attackcost_controller.js` reaches past the adapter into
+`this._uplot.over` (click listener host), `.scales.x` (range preserved across `_setDark`
+rebuilds), `.cursor.idx`, `.valToPos()`, `.setCursor()`. A renamed member throws; a
+changed shape degrades quietly — the chart still draws but click-picking or zoom
+persistence stops working. This replaced the old
+`Dygraph.prototype.doZoomY_` monkey-patch, which no longer exists.
+
+## Risk: Turbo navigation leaks controller state or a detached chart
+
+**Trigger:** Moving mutable state back to module-level `let`s; adding an `await` in
+`connect()`/`_buildChart()` without re-checking `this._destroyed`; attaching a listener to
+`_uplot.over` without removing it in `_destroyChart()`.
+
+**Failure mode:** silent.
+
+**Description:** Under `@hotwired/turbo` the JS module graph is evaluated once per session
+and survives navigation, while the Stimulus controller is torn down and rebuilt per visit.
+Module-level mutable state therefore carries stale values from the previously visited page.
+Separately, `_buildChart()` is `async` (`loadUPlot()` is a dynamic import): a fast
+navigate-away runs `disconnect()` before the loader resolves, so without the
+`this._destroyed` guard the chart is built into a detached element and `_setDark()` can
+dereference a null `this._uplot`. Both were live bugs fixed during the migration.
 
 ## Resolved: hashrate parseInt scientific-notation truncation (historical)
 

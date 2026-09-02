@@ -28,28 +28,29 @@ monetarium-node RPC ──► blockdata collector ──► explorer.Store() ─
                                                                          │
                              attackcost_controller.connect(): parseInt / parseFloat
                                                                          │
-                             all PoW/PoS attack math in the browser (Dygraphs + 50/50 hybrid formula)
+                             all PoW/PoS attack math in the browser (uPlot + 50/50 hybrid formula)
 ```
 
 ## Section 3 — Per-Layer Breakdown
 
 ### Layer A — Chain → in-memory snapshot
 
-- **Location:** `blockdata/blockdata.go:208` (`GetCoinSupply`); `cmd/dcrdata/internal/explorer/explorer.go:508-931` (`(*explorerUI).Store`).
+- **Location:** `blockdata/blockdata.go:208` (`GetCoinSupply` call); `cmd/dcrdata/internal/explorer/explorer.go:498-940` (`(*explorerUI).Store`).
 - **Data structures:** `blockData.ExtraInfo.CoinSupply`, `blockData.CurrentStakeDiff`,
-  `blockData.PoolInfo` → copied into `explorer/types/explorertypes.go:911` `HomeInfo`
-  (`CoinSupply int64`, `StakeDiff float64`, `HashRate float64`) and `:1480` `TicketPoolInfo`
-  (`Size uint32`, `Value float64`). Note: `HomeInfo` also carries `CBlockSubsidy BlockSubsidy`
-  (`:922`) and `ActiveMiners int64` (`:939`), added since the original trace — neither is read
+  `blockData.PoolInfo` → copied into `explorer/types/explorertypes.go:855-885` `HomeInfo`
+  (`CoinSupply int64` `:856`, `StakeDiff float64` `:857`, `HashRate float64`) and `:1414`
+  `TicketPoolInfo` (`Size uint32`, `Value float64`), reached through `HomeInfo.PoolInfo`
+  (`:873`). Note: `HomeInfo` also carries `CBlockSubsidy BlockSubsidy`
+  (`:867`) and `ActiveMiners int64` (`:884`) — neither is read
   by the `AttackCost` handler.
-- **Transformations:** `explorer.go:533-535` computes `stakePerc` using VAR `CoinSupply` via
+- **Transformations:** `explorer.go:523-525` computes `stakePerc` using VAR `CoinSupply` via
   `dcrutil.Amount(...).ToCoin()` (8-decimal float). `HomeInfo` is written under `p.Lock()`;
   attack-cost reads under `RLock` — a snapshot, not request- or block-scoped.
 
 ### Layer B — HTTP handler
 
-- **Location:** `cmd/dcrdata/internal/explorer/explorerroutes.go` `(*explorerUI).AttackCost`;
-  route registered `cmd/dcrdata/main.go:786`.
+- **Location:** `cmd/dcrdata/internal/explorer/explorerroutes.go:2635-2679`
+  `(*explorerUI).AttackCost`; route registered `cmd/dcrdata/main.go:786`.
 - **Data structures:** anonymous struct embedding `*CommonPageData` with
   `HashRate float64`, `Height int64`, `TicketPrice float64`, `TicketPoolSize int64`,
   `TicketPoolValue float64`, `CoinSupply int64`. No `DCRPrice`/USD field — the rate is
@@ -63,8 +64,9 @@ monetarium-node RPC ──► blockdata collector ──► explorer.Store() ─
 ### Layer C — Template (Go number → HTML string)
 
 - **Location:** `cmd/dcrdata/views/attackcost.tmpl` (the `data-attackcost-*` attribute
-  block at the top of the controller container); template registered in the set at
-  `explorer.go:394`.
+  block at the top of the controller container — that container is now the page's
+  `<main>` landmark, not a `<div>`, since the accessible-names pass); template registered
+  in the set at `explorer.go:388`.
 - **Data structures:** `data-attackcost-height`, `-hashrate`, `-ticket-price`,
   `-ticket-pool-value`, `-ticket-pool-size`, `-coin-supply`. `CoinSupply int64` is emitted
   as a raw VAR-atom integer string. No `-dcrprice` attribute — the rate is user-entered.
@@ -75,10 +77,13 @@ monetarium-node RPC ──► blockdata collector ──► explorer.Store() ─
 ### Layer D — Stimulus controller (string → Number → all math)
 
 - **Location:** `cmd/dcrdata/public/js/controllers/attackcost_controller.js`.
-- **Data structures / globals:** `height, varPrice, hashrate, tpSize, tpValue, tpPrice,
-  graphData, currentPoint, coinSupply`, plus `deviceHashrate, devicePower, devicePrice`
-  (all module-level). Neutral defaults `defaultExchangeRate=1`, `defaultDeviceHashrate=50`,
-  `defaultDevicePower=1500`, `defaultDevicePrice=1500`.
+- **Data structures / state:** `this._height, this._varPrice, this._hashrate, this._tpSize,
+  this._tpValue, this._tpPrice, this._graphData, this._coinSupply`, plus
+  `this._deviceHashrate, this._devicePower, this._devicePrice` and `this.ratioTable`
+  (a `Map`). These are **per-instance fields, not module-level `let`s** — the Turbo
+  migration made module scope survive navigation, so page state had to move onto the
+  controller instance. Neutral defaults `defaultExchangeRate=1`, `defaultDeviceHashrate=50`,
+  `defaultDevicePower=1500`, `defaultDevicePrice=1500` remain module constants.
 - **Transformations:**
   - `connect()`: `parseInt(this.data.get('height'))`,
     `parseFloat(this.data.get('hashrate'))` (**`parseFloat`, not `parseInt`** — hashrates
@@ -89,11 +94,13 @@ monetarium-node RPC ──► blockdata collector ──► explorer.Store() ─
     manual input — never from a server attribute. Device specs are seeded from the
     `default*` constants and overwritten by URL params
     `device_hashrate`/`device_power`/`device_price` or the manual inputs.
-  - **Live hashrate via `BLOCK_RECEIVED`:** `connect()` subscribes to
-    `globalEventBus.on('BLOCK_RECEIVED', this._onBlock)`. The handler is minimal:
-    `hashrate = blockData.extra.hash_rate; this.calculate()`. No intermediate
-    `setAllValues` call — `calculate()` at line 548 already writes `actualHashRateTargets`
-    with the same value.
+  - **Live hashrate via `BLOCK_RECEIVED`:** `connect()` subscribes at `:224` to
+    `globalEventBus.on('BLOCK_RECEIVED', this._onBlock)`; the closure is built at
+    `:220-223`. The handler is minimal:
+    `this._hashrate = blockData.extra.hash_rate; this.calculate()`. No intermediate
+    `setAllValues` call — `calculate()` at `:570` already writes `actualHashRateTargets`
+    with the same value. `disconnect()` (`:227-232`) unsubscribes both this and
+    `NIGHT_MODE`, and calls `_destroyChart()`.
   - `rateCalculation(y)`: hybrid PoW/PoS deterrence formula
     `(6x⁵−15x⁴+10x³)/(6y⁵−15y⁴+10y³)`, bit-exact across the Monetarium rework.
   - `calculate()`: device count = `ceil(targetHashRate * 1000 / deviceHashrate)`,
@@ -104,6 +111,16 @@ monetarium-node RPC ──► blockdata collector ──► explorer.Store() ─
     field is refreshed as `digitformat(varPrice, 2, true)` — the third arg `noComma=true`
     suppresses locale thousands-separators; `"1,234.00"` written to a
     `<input type="number">` silently fails (the setter rejects non-numeric strings).
+  - **Chart (uPlot, async):** `_buildChart()` (`:234`) awaits `loadUPlot()` from
+    `../helpers/uplot_adapter`, then `buildOpts(UPlot, def, …)`, and instantiates
+    `this._uplot = new UPlot(opts, [xs, ys], this.graphTarget)`. Because the loader is
+    `await`ed, `connect()`/`disconnect()` can interleave under Turbo navigation — a
+    `this._destroyed` flag (set in `connect()`, flipped in `disconnect()`) is checked
+    after every `await` and bails out. `_destroyChart()` (`:293-299`) removes the stored
+    `this._clickCb` click listener from `this._uplot.over` before `destroy()`, then nulls
+    both — the listener is registered on the uPlot overlay, which uPlot does not own.
+    `_setDark()` (`:302`) rebuilds the whole chart on theme change, preserving the x-scale
+    range read off `this._uplot.scales.x` first.
   - `showPosCostWarning()`: `coinSupply / 100000000` — hardcoded 1e8 divisor
     (8-decimal VAR assumption); if `varNeed > totalVarInCirculation` it flags
     "Attack not possible".
@@ -114,7 +131,7 @@ monetarium-node RPC ──► blockdata collector ──► explorer.Store() ─
 
 - **Handler ↔ shared `HomeInfo`:** the handler does not own its data; it reads whatever
   `Store()` last wrote. `HomeInfo`/`TicketPoolInfo` are **shared structs** (JSON-tagged,
-  `explorertypes.go:878`) also serialized by the HTTP API and consumed by the home page —
+  `explorertypes.go:855`) also serialized by the HTTP API and consumed by the home page —
   a field type/units change ripples far beyond this page.
 - **Template ↔ controller (brittle):** the `data-attackcost-*` attribute keys
   (`this.data.get(...)`) and the `static targets` array form an exact, untyped string
@@ -123,8 +140,17 @@ monetarium-node RPC ──► blockdata collector ──► explorer.Store() ─
 - **No exchange-bot coupling:** the handler does not call `exp.xcBot`; USD/VAR comes
   from the manual input only. Past versions of this handler did seed the rate from
   `xcBot.Conversion` — do not reintroduce that coupling.
-- **Dygraphs:** `attackcost_controller.js` monkey-patches the private
-  `Dygraph.prototype.doZoomY_` — version-fragile coupling to the vendored Dygraphs build.
+- **uPlot (via the shared adapter):** the chart is built through
+  `../helpers/uplot_adapter` (`loadUPlot` / `buildOpts`), the same seam every migrated
+  chart uses — an adapter change is cross-page. The previous coupling here was a
+  monkey-patch of the private `Dygraph.prototype.doZoomY_`; that is **gone**, since uPlot
+  has no implicit y-zoom to suppress. What remains fragile is uPlot's own surface:
+  `this._uplot.over` (the overlay DOM node the click listener attaches to),
+  `.scales.x`, `.cursor.idx`, `.valToPos()` and `.setCursor()` are all touched directly.
+- **Async chart build ↔ Turbo lifecycle:** `_buildChart` is `async`, so a fast
+  navigate-away can run `disconnect()` before the loader resolves. The `this._destroyed`
+  guard is the only thing preventing a chart from being built into a detached element
+  (and `_setDark` from dereferencing a null `this._uplot`).
 
 ## Section 5 — Critical Constraints
 
@@ -150,15 +176,21 @@ When modifying this page, check:
   `attackcost.tmpl`; the `parseInt`/`parseFloat` reads in `attackcost_controller.js`
   `connect()`.
 - **Indirect dependencies:** `HomeInfo`/`TicketPoolInfo` shared with HTTP API + home
-  page; `explorer.go:504-904` `Store()` population.
+  page; `explorer.go:498-940` `Store()` population.
 - **Serialization boundary:** Go numeric → `data-*` string → JS `parseInt/parseFloat`
   (and the JSON-tagged shared struct used elsewhere).
-- **Rendering layers:** Dygraphs (`doZoomY_` patch), ~90 `data-attackcost-target` hooks.
+- **Rendering layers:** uPlot via `helpers/uplot_adapter` (`loadUPlot`/`buildOpts`),
+  ~90 `data-attackcost-target` hooks.
 
 **Silent failures (no error, wrong output):**
 - `pageData` not yet populated (startup) → `tpSize = 0` → `NaN`/`Infinity` outputs.
 - Routing SKA atoms through this path → `parseInt` precision loss, wrong `/1e8` divisor.
 - Mistyped/renamed `data-*` key → `NaN` propagation through every output.
+- Controller state moved back to module scope → values leak across Turbo navigations
+  (the module is evaluated once per session, not once per page).
+- `_buildChart` resolving after `disconnect()` without the `this._destroyed` check →
+  a uPlot instance built into a detached node; invisible, but it holds the click
+  listener and the element alive.
 
 **Hard failures (visible):**
 - Template execution error → `StatusPage(..., ExpStatusError)` in the `AttackCost`
@@ -183,20 +215,30 @@ When modifying this page, check:
    feed the API JSON and the home page.
 7. Renaming template attributes for cleanliness — the `data.get()` keys and `targets`
    array are an exact, untyped contract; mismatches fail silently or kill the controller.
-8. Upgrading Dygraphs without re-checking the private `doZoomY_` override.
+8. Upgrading uPlot (or changing `helpers/uplot_adapter`) without re-checking the
+   private-ish surface this controller reaches into: `_uplot.over`, `.scales.x`,
+   `.cursor.idx`, `.valToPos`, `.setCursor`.
 9. Calling `digitformat(v, n)` (without `noComma=true`) for a value that is written back
    into a `<input type="number">` — locale-formatting (e.g. `"1,234.00"`) causes the
    browser's setter to silently reject the value, leaving the input stale. Use
    `digitformat(v, n, true)` for any `input.value =` assignment.
+10. Moving controller state back to module-level `let`s. Under Turbo the module is
+   evaluated once and survives navigation, so module globals leak between page visits;
+   all mutable page state must live on the controller instance (`this._*`).
+11. Adding an `await` in `connect()`/`_buildChart` without re-checking `this._destroyed`
+   afterwards, or attaching a listener to `_uplot.over` without removing it in
+   `_destroyChart()` — both leak across Turbo navigations.
 
 ## Section 8 — Evidence
 
 - `cmd/dcrdata/main.go:786` — route registration.
 - `cmd/dcrdata/internal/explorer/explorerroutes.go` `AttackCost` — handler; reads under
   `RLock`, renders, no math.
-- `cmd/dcrdata/internal/explorer/explorer.go:529-531, 504-904` — `Store()` → `HomeInfo`.
-- `explorer/types/explorertypes.go:911-940` (`HomeInfo`), `:1480-1487` (`TicketPoolInfo`).
-- `blockdata/blockdata.go:208` — `GetCoinSupply`.
+- `cmd/dcrdata/internal/explorer/explorer.go:523-525, 498-940` — `Store()` → `HomeInfo`.
+- `explorer/types/explorertypes.go:855-885` (`HomeInfo`), `:1414-1421` (`TicketPoolInfo`).
+- `blockdata/blockdata.go:208` — `GetCoinSupply` RPC call (the deprecated
+  `BlockSKAPoWRewards*` / `ExtractSKARewardsFromCoinbase` helpers were deleted from this
+  file; they were never on the attack-cost path).
 - `cmd/dcrdata/views/attackcost.tmpl` — `data-*` contract at the top of the controller
   container; manual `Exchange Rate` input (`step="0.01"`, `min="0.01"`, **no `max`**),
   `Device Hashrate`, `Device Power`, `Device Price` inputs in the "Adjustable Parameters" /
@@ -205,14 +247,16 @@ When modifying this page, check:
   (`varPrice`, `deviceHashrate`, `devicePower`, `devicePrice`, `coinSupply`, …),
   neutral `default*` constants, `rateCalculation` (formula), `static targets` (Stimulus
   contract), `connect()` (data parse + URL state + `BLOCK_RECEIVED` subscription),
-  `_onBlock` handler (line 266–270: live hashrate update + `calculate()`),
-  `Dygraph.prototype.doZoomY_` override, `calculate()` (PoW + PoS totals, hashrate at
-  8dp, exchange-rate noComma), `showPosCostWarning()` (supply gate).
+  `_onBlock` handler (`:220-224`: live hashrate update + `calculate()`),
+  `_buildChart`/`_destroyChart`/`_setDark` (`:234`, `:293`, `:302` — uPlot lifecycle,
+  `_destroyed` guard, click-listener removal), `calculate()` (`:528`; PoW + PoS totals,
+  hashrate at 8dp `:570`, exchange-rate noComma), `showPosCostWarning()` (supply gate).
 
 See also:
 - /wiki/code-analysis/attack-cost/patterns.md (shares-pattern-with: VAR-only legacy snapshot, untyped `data-*`↔Stimulus contract, client-side-only math, manual-only scenario inputs)
 - /wiki/code-analysis/attack-cost/impact.md (depends-on: shared `HomeInfo` struct, snapshot staleness)
 - /wiki/code-analysis/address/impact.md (shares-pattern-with: legacy flat-field shim — attack-cost still reads its `HomeInfo` flat fields; address keeps the analogous back-compat VAR fields, now template-unread)
-- /wiki/code-analysis/visualblocks/patterns.md (shares-pattern-with: untyped Go→JS contract, vendored Dygraphs coupling)
+- /wiki/code-analysis/visualblocks/patterns.md (shares-pattern-with: untyped Go→JS contract)
+- /wiki/code-analysis/charts/patterns.md (shares-pattern-with: uPlot via helpers/uplot_adapter)
 - /wiki/core/constraints.md (depends-on: C1 numeric precision — float64 VAR vs big.Int SKA)
 - /wiki/core/pages.md (depends-on: `/attack-cost` route registry entry)
