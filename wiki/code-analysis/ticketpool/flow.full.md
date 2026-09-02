@@ -62,7 +62,7 @@ Three statements, all filtering `pool_status = 0 AND tickets.is_mainchain = TRUE
 - `selectTicketsByPurchaseDate` (templated via `MakeSelectTicketsByPurchaseDate` → `formatGroupingQuery(... "transactions.block_time")`) — same shape, grouping is a Postgres `date_trunc` expression substituted via `%s`. The grouping string comes from `dbtypes.TimeBasedGrouping.String()` (`"all"|"year"|"month"|"week"|"day"`). `formatGroupingQuery` is the same family used by [/wiki/code-analysis/time-based-blocks/patterns.md](../time-based-blocks/patterns.md).
 - `SelectTicketsByType` — `SELECT DISTINCT num_vout, COUNT(*) ... GROUP BY num_vout`. Maps directly to the donut "Distribution of Tickets by Reward Outputs".
 
-Maturity boundary is computed in Go, not SQL: `bestBlock - chainParams.TicketMaturity` ([db/dcrpg/pgblockchain.go:1785-1790](../../../db/dcrpg/pgblockchain.go#L1785-L1790)). Postgres only knows the parameter `$1`.
+Maturity boundary is computed in Go, not SQL: `bestBlock - chainParams.TicketMaturity` ([db/dcrpg/pgblockchain.go:1809-1812](../../../db/dcrpg/pgblockchain.go#L1809-L1812)). Postgres only knows the parameter `$1`.
 
 ### 3.2 Scan / shaping into `dbtypes.PoolTicketsData`
 
@@ -78,34 +78,34 @@ Maturity boundary is computed in Go, not SQL: `bestBlock - chainParams.TicketMat
 
 Critical detail: `retrieveTicketsByDate` does `uint64(price*1e8) / (live+immature)` — the `*1e8` round-trip via `float64` is a VAR-only path; safe per C1. **Do not extend this routine to SKA atoms** without rewriting to `*big.Int`.
 
-`toCoin(amt) = float64(amt)/1e8` ([db/dcrpg/queries.go:4400-4402](../../../db/dcrpg/queries.go#L4400-L4402)) — generic over `int64|uint64`, VAR-only.
+`toCoin(amt) = float64(amt)/1e8` ([db/dcrpg/queries.go:4422-4424](../../../db/dcrpg/queries.go#L4422-L4424)) — generic over `int64|uint64`, VAR-only.
 
 Note: `db/dcrpg/queries.go` also contains `retrieveMissedVotes` / `appendMissedVotesPerWindow` (lines 3605+) which were updated for reorg cursor handling — those functions are **not part of the ticketpool flow** and do not affect this trace.
 
 ### 3.3 Cache layer
 
-**Location:** [db/dcrpg/pgblockchain.go:74-132](../../../db/dcrpg/pgblockchain.go#L74-L132), [db/dcrpg/pgblockchain.go:1830-1943](../../../db/dcrpg/pgblockchain.go#L1830-L1943).
+**Location:** [db/dcrpg/pgblockchain.go:74-132](../../../db/dcrpg/pgblockchain.go#L74-L132), [db/dcrpg/pgblockchain.go:1872-1978](../../../db/dcrpg/pgblockchain.go#L1872-L1978).
 
 - `ticketPoolGraphsCache` is a **package-level `var`** — process-global, not per-`ChainDB`. Single-instance binary today; flag for future.
 - Per-interval maps: `Height[interval]`, `TimeGraphCache[interval]`, `PriceGraphCache[interval]`, `DonutGraphCache[interval]`.
 - Freshness: `isStale = (cache.Height[interval] != pgb.Height())`. No proactive invalidation; cache is refreshed lazily on first request after the block tip changes.
 - Concurrency: a `RWMutex` guards the cache maps; **`pgb.tpUpdatePermission[interval]` (`trylock.Mutex`)** gates which goroutine becomes the updater. A caller that finds stale data and *cannot* `TryLock` returns the stale copy immediately (does not block); a caller that finds *no* data blocks on the same lock until the in-flight updater finishes.
-- After refresh, the inner `ticketPoolVisualization` ([db/dcrpg/pgblockchain.go:1899-1943](../../../db/dcrpg/pgblockchain.go#L1899-L1943)) re-checks `pgb.Height()` after the three SQL queries and **retries from scratch if the height changed mid-query** to keep `(timeChart, priceChart, donutChart)` mutually consistent at a single height.
+- After refresh, the inner `ticketPoolVisualization` ([db/dcrpg/pgblockchain.go:1939-1978](../../../db/dcrpg/pgblockchain.go#L1939-L1978)) re-checks `pgb.Height()` after the three SQL queries and **retries from scratch if the height changed mid-query** to keep `(timeChart, priceChart, donutChart)` mutually consistent at a single height.
 
 ### 3.4 HTTP API (REST)
 
-**Location:** [cmd/dcrdata/internal/api/apirouter.go:245-249](../../../cmd/dcrdata/internal/api/apirouter.go#L245-L249), [cmd/dcrdata/internal/api/apiroutes.go:1257-1325](../../../cmd/dcrdata/internal/api/apiroutes.go#L1257-L1325).
+**Location:** [cmd/dcrdata/internal/api/apirouter.go:245-249](../../../cmd/dcrdata/internal/api/apirouter.go#L245-L249), [cmd/dcrdata/internal/api/apiroutes.go:1343-1409](../../../cmd/dcrdata/internal/api/apiroutes.go#L1343-L1409).
 
 Routes:
 
 - `GET /api/ticketpool/charts` → `getTicketPoolCharts` → `TicketPoolVisualization(ctx, AllGrouping)` **always**. Wraps in `apitypes.TicketPoolChartsData` and tacks on `Mempool: GetMempoolPriceCountTime()`.
-- `GET /api/ticketpool/bydate/{tp}` → `TicketPoolCtx` middleware ([cmd/dcrdata/internal/middleware/apimiddleware.go:691-699](../../../cmd/dcrdata/internal/middleware/apimiddleware.go#L691-L699)) stuffs `{tp}` into the request context → `getTicketPoolByDate` reads it via `m.GetTpCtx(r)`, defaults to `"day"` when empty, runs `TimeGroupingFromStr`, returns **only `TimeChart` + `height`** (price/donut discarded). `UnknownGrouping` → 422.
+- `GET /api/ticketpool/bydate/{tp}` → `TicketPoolCtx` middleware ([cmd/dcrdata/internal/middleware/apimiddleware.go:705-711](../../../cmd/dcrdata/internal/middleware/apimiddleware.go#L705-L711)) stuffs `{tp}` into the request context → `getTicketPoolByDate` reads it via `m.GetTpCtx(r)`, defaults to `"day"` when empty, runs `TimeGroupingFromStr`, returns **only `TimeChart` + `height`** (price/donut discarded). `UnknownGrouping` → 422.
 - `GET /api/ticketpool/` → routed to `getTicketPoolByDate` with no `{tp}` → defaults to `"day"`.
 
 The wire shape for the full payload is `apitypes.TicketPoolChartsData`:
 
 ```go
-// api/types/apitypes.go:933-939
+// api/types/apitypes.go:936-942
 type TicketPoolChartsData struct {
     ChartHeight  uint64                   `json:"height"`
     TimeChart    *dbtypes.PoolTicketsData `json:"time_chart"`
@@ -115,13 +115,13 @@ type TicketPoolChartsData struct {
 }
 ```
 
-The `/bydate/{tp}` response uses an anonymous struct `{ Height int64; TimeChart *PoolTicketsData }` ([cmd/dcrdata/internal/api/apiroutes.go:1316-1322](../../../cmd/dcrdata/internal/api/apiroutes.go#L1316-L1322)). The `bydate` response carries **no** `mempool` field. The JS `onBarsChange` guards with `if ('mempool' in response)` before updating `this.mempool`, so the cached mempool from the last full-payload response is used for overlay rendering.
+The `/bydate/{tp}` response uses an anonymous struct `{ Height int64; TimeChart *PoolTicketsData }` ([cmd/dcrdata/internal/api/apiroutes.go:1371-1409](../../../cmd/dcrdata/internal/api/apiroutes.go#L1371-L1409)). The `bydate` response carries **no** `mempool` field. The JS `onBarsChange` guards with `if ('mempool' in response)` before updating `this.mempool`, so the cached mempool from the last full-payload response is used for overlay rendering.
 
 ### 3.5 Mempool overlay (single source, both transports)
 
 Both REST and WS read the mempool overlay from the same DataSource helper, so the same `*apitypes.PriceCountTime` is emitted on either transport for a given chain/mempool state.
 
-REST `getTicketPoolCharts` ([cmd/dcrdata/internal/api/apiroutes.go:1274](../../../cmd/dcrdata/internal/api/apiroutes.go#L1274)):
+REST `getTicketPoolCharts` ([cmd/dcrdata/internal/api/apiroutes.go:1343-1369](../../../cmd/dcrdata/internal/api/apiroutes.go#L1343-L1369)):
 
 ```go
 mp := c.DataSource.GetMempoolPriceCountTime()
@@ -133,7 +133,7 @@ WS `getticketpooldata` ([cmd/dcrdata/internal/explorer/websockethandlers.go](../
 Mempool: exp.dataSource.GetMempoolPriceCountTime(),
 ```
 
-Both calls dispatch to `*ChainDB.GetMempoolPriceCountTime` ([db/dcrpg/pgblockchain.go:6414](../../../db/dcrpg/pgblockchain.go#L6414)) → `DataCache.GetTicketPriceCountTime` ([mempool/mempoolcache.go:197-218](../../../mempool/mempoolcache.go#L197-L218)):
+Both calls dispatch to `*ChainDB.GetMempoolPriceCountTime` ([db/dcrpg/pgblockchain.go:6349](../../../db/dcrpg/pgblockchain.go#L6349)) → `DataCache.GetTicketPriceCountTime` ([mempool/mempoolcache.go:197-218](../../../mempool/mempoolcache.go#L197-L218)):
 
 ```go
 return &apitypes.PriceCountTime{
@@ -151,15 +151,15 @@ return &apitypes.PriceCountTime{
 
 ### 3.6 WebSocket request/response path
 
-**Location:** [cmd/dcrdata/internal/explorer/websockethandlers.go:169-221](../../../cmd/dcrdata/internal/explorer/websockethandlers.go#L169-L221).
+**Location:** [cmd/dcrdata/internal/explorer/websockethandlers.go:219-262](../../../cmd/dcrdata/internal/explorer/websockethandlers.go#L219-L262).
 
 The explorer `/ws` handler is a request/response RPC-over-WebSocket switch (same shape as `decodetx` / `getmempooltxs` — see [/wiki/code-analysis/decodetx/patterns.md](../decodetx/patterns.md) P1). The client sends `WebSocketMessage{EventId: "getticketpooldata", Message: "<interval-string>"}`; the server replies with `EventId: "getticketpooldataResp"` (suffix appended at the bottom of the `select`: `webData.EventId = msg.EventId + "Resp"`). The case body delegates the payload assembly to `(*explorerUI).buildTicketPoolChartsData`, which mirrors the REST `getTicketPoolCharts` handler so both transports emit the same `TicketPoolChartsData` (including `Mempool`) for a given chain/mempool state.
 
-The `newblock` push on the *server* (`sigNewBlock`) does **not** deliver ticketpool data — it delivers a `WebsocketBlock{Block, Extra}` ([cmd/dcrdata/internal/explorer/websockethandlers.go:271-282](../../../cmd/dcrdata/internal/explorer/websockethandlers.go#L271-L282)). The *client* JS listens for the `newblock` event and reactively re-requests ticketpool data via `ws.send('getticketpooldata', this.bars)`. So `newblock` is a refresh **trigger**, not a payload carrier — and the server has zero knowledge of which `bars` setting each client holds.
+The `newblock` push on the *server* (`sigNewBlock`) does **not** deliver ticketpool data — it delivers a `WebsocketBlock{Block, Extra}` ([cmd/dcrdata/internal/explorer/websockethandlers.go:331-342](../../../cmd/dcrdata/internal/explorer/websockethandlers.go#L331-L342)). The *client* JS listens for the `newblock` event and reactively re-requests ticketpool data via `ws.send('getticketpooldata', this.bars)`. So `newblock` is a refresh **trigger**, not a payload carrier — and the server has zero knowledge of which `bars` setting each client holds.
 
 ### 3.7 Server-side page handler
 
-**Location:** [cmd/dcrdata/internal/explorer/explorerroutes.go:811-824](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L811-L824).
+**Location:** [cmd/dcrdata/internal/explorer/explorerroutes.go:860-872](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L860-L872).
 
 ```go
 func (exp *explorerUI) Ticketpool(w http.ResponseWriter, r *http.Request) {
@@ -172,7 +172,7 @@ A no-compute handler — same "form-shell" shape as `/decodetx` ([/wiki/code-ana
 
 ### 3.8 Template
 
-**Location:** [cmd/dcrdata/views/ticketpool.tmpl](../../../cmd/dcrdata/views/ticketpool.tmpl).
+**Location:** [cmd/dcrdata/views/ticketpool.tmpl](../../../cmd/dcrdata/views/ticketpool.tmpl). The page container is now the `<main>` landmark rather than `<div class="container main">` (accessible-names pass); `data-controller="ticketpool"` unchanged.
 
 A static shell with `data-controller="ticketpool"`. Key structural changes from the Dygraphs version:
 
@@ -191,7 +191,8 @@ Imports (current):
 - `humanize` from `../helpers/humanize_helper` — for x-axis date formatting
 - `{ ticketpoolPurchases }` from `../charts/definitions/ticketpool_purchases` — bar-mode-aware factory
 - `{ ticketpoolPrice }` from `../charts/definitions/ticketpool_price` — static price chart def
-- `{ timesToEpoch, computeZoomWindow, alignViewportToData }` from `../helpers/ticketpool_zoom` — pure zoom math
+- `{ timesToEpoch, computeZoomWindow }` from `../helpers/ticketpool_zoom` — pure zoom math.
+  (`alignViewportToData` was removed; see the range-preservation note below.)
 
 **Static targets:** `['zoom', 'bars', 'age', 'wrapper', 'outputs', 'purchasesRanger', 'priceRanger']`.
 
@@ -202,8 +203,15 @@ Imports (current):
 - `fetchAll()` → `requestJSON('/api/ticketpool/charts')` → `processData(chartsResponse)`.
 - `processData(data)` — branches on present keys. Mempool overlay is merged into the time chart only when `this.tipHeight === data.height && this.bars === 'all'` (line 101). Delegates to `renderOrUpdatePurchases` and `renderOrUpdatePrice` rather than calling Dygraphs directly.
 - `purchasesDefFor(barMode)` — **memoizes** the def per bar mode. Stable ref → ChartPanel does a cheap `setData` call; new bar mode → new def ref → ChartPanel rebuilds with correct `granularBarPaths` geometry. This is a deliberate contract with ChartPanel.
-- `renderOrUpdatePurchases(timeData, mempool)` — computes an expand-only x-range (data extent unioned with current viewport via `alignViewportToData`; right edge padded by 1% or 1h to avoid clipping the mempool point). Calls `this.purchasesPanel.render(def, timeData, { mempool }, { range })`.
-- `renderOrUpdatePrice(priceData, mempool)` — same range-preservation logic for the price (x-axis) viewport.
+- `renderOrUpdatePurchases(timeData, mempool)` — computes an expand-only x-range inline:
+  `restoreMin = max(prevMin, dataMin)`, `restoreMax = max(prevMax, dataMax + pad)` where
+  `pad = max(dataSpan * 1%, 3600s)`. **The padding is added to `dataMax` before the
+  comparison, not to the result** — padding afterwards let a saved `prevMax` win over the
+  padded edge and clip the newest (mempool) point. This replaced the
+  `alignViewportToData(prevMin, prevMax, dataMin, dataMax)` helper, which returned
+  `[max(prevMin,dataMin), max(prevMax,dataMax)]` and could not express the ordering.
+- `renderOrUpdatePrice(priceData, mempool)` — same range-preservation shape on the price
+  (x-axis) viewport, with `pad = max(dataSpan * 1%, 0.001)`.
 - `onZoom(e) async` — reads `target.dataset.option`. **Auto-coarsening:** if the zoom preset is finer than current bar aggregation (e.g. zooming to `day` with `bars=mo`), it automatically coarsens bars, refetches `/bydate/{newBars}`, anchors the zoom window at the ranger's far-right edge, and calls `purchasesPanel.render`. Otherwise (no refetch needed), derives window via `computeZoomWindow(zoom, xs)` from the ranger data and calls `purchasesPanel.setXRange(lo, hi)`.
 - `onBarsChange(e) async` — reads `target.dataset.option`. Fetches `/bydate/{bars}`. Guards `if ('mempool' in response)` before updating `this.mempool` (bydate response has no `mempool` key; this guard is forward-safe). Computes an expand-only range, then calls `purchasesPanel.render(purchasesDefFor(this.bars), response.time_chart, mempoolSettings, opts)`. A new `bars` value produces a new def from the cache → ChartPanel rebuild.
 - `disconnect()` — unsubscribes WS handlers, destroys both panels.
@@ -228,6 +236,9 @@ Both definitions follow the standard ChartPanel def schema: `{ name, label, axes
 ### 3.11 Zoom helpers (widened)
 
 **Location:** [cmd/dcrdata/public/js/helpers/ticketpool_zoom.js](../../../cmd/dcrdata/public/js/helpers/ticketpool_zoom.js).
+The module now exports only `timesToEpoch` and `computeZoomWindow`; `alignViewportToData`
+was deleted and its callers inlined the arithmetic so the 1% / 1h pad could be folded into
+`dataMax` before the `max()` against the saved viewport.
 
 Pure math functions, no DOM or uPlot dependency — designed for unit-testability in isolation:
 
@@ -244,7 +255,7 @@ Pure math functions, no DOM or uPlot dependency — designed for unit-testabilit
 | `dbtypes.PoolTicketsData` field order | three different SQL `rows.Scan` calls | Positional, not named — `Scan(&timestamp, &price, &immature, &live)` vs `Scan(&price, &immature, &live)` vs `Scan(&output, &count)`. | Reordering the columns in a `SELECT` silently swaps fields. Same class of risk as time-based-blocks ([/wiki/code-analysis/time-based-blocks/impact.md](../time-based-blocks/impact.md)). |
 | JS `processData` | `apitypes.TicketPoolChartsData` JSON tags | `data.time_chart`, `data.price_chart`, `data.outputs_chart`, `data.mempool`, `data.height` — read by name from the parsed JSON. | Renaming a JSON tag on the Go side without updating the JS reader silently drops a series. No type check. |
 | `toColumns(data, settings)` in chart defs | `PoolTicketsData` field names | `data.time`, `data.immature`, `data.live`, `data.price` are accessed by name in both def files. | Renaming `PoolTicketsData` JSON field names breaks the def's `toColumns` silently. |
-| WS `getticketpooldata` `EventId` literal | `webData.EventId = msg.EventId + "Resp"` ([websockethandlers.go:231](../../../cmd/dcrdata/internal/explorer/websockethandlers.go#L231)) | JS hard-codes `'getticketpooldata'` and `'getticketpooldataResp'`. | Renaming the event on either side silently breaks live refresh — JS continues to render only the initial HTTP fetch. (Same R1-class drift as [/wiki/code-analysis/decodetx/impact.md](../decodetx/impact.md).) |
+| WS `getticketpooldata` `EventId` literal | `webData.EventId = msg.EventId + "Resp"` ([websockethandlers.go:265](../../../cmd/dcrdata/internal/explorer/websockethandlers.go#L265)) | JS hard-codes `'getticketpooldata'` and `'getticketpooldataResp'`. | Renaming the event on either side silently breaks live refresh — JS continues to render only the initial HTTP fetch. (Same R1-class drift as [/wiki/code-analysis/decodetx/impact.md](../decodetx/impact.md).) |
 | `ticketpoolPurchases(barMode)` def-cache | `purchasesPanel.render()` | Stable def ref → ChartPanel setData; new def ref → full rebuild. The `purchasesDefFor` memoization exploits object-identity. | Bypassing the cache (returning a new object on every call) causes ChartPanel to rebuild on every data update, discarding the zoom viewport. Not a silent correctness bug, but a visible UX regression. |
 | `purchasesRanger` / `priceRanger` targets | `createChartPanel(..., { rangerEl })` | Template must declare both targets for the ranger strips to mount. | Removing a `data-ticketpool-target` attribute from the template silently leaves the ranger strip container empty (no error). |
 | `ticketPoolGraphsCache` (package `var`) | `ChainDB` instance | Process-global, not per-instance. | A second `ChainDB` in the same binary (testing, multi-network) would silently share cache and serve cross-instance data. Single-instance today. |
@@ -284,26 +295,26 @@ When modifying `/ticketpool`, check:
 - **Adding a new zoom or bars option without updating `barsOrder`/`zoomOrder` in `onZoom`.** The auto-coarsening logic compares numeric order of the current zoom and bars values against these maps. A missing entry evaluates as `undefined`, which coerces to `NaN` in numeric comparisons — the coarsening guard silently always evaluates to false.
 - **Reintroducing a separate mempool overlay producer for WS.** The WS path must keep delegating to `DataSource.GetMempoolPriceCountTime` via `buildTicketPoolChartsData` — historically a hand-rolled `inv.Tickets[0].TotalOut` block at `websockethandlers.go` produced a different `mempool.{price,count,time}` than REST ([#290](https://github.com/monetarium/monetarium-explorer/issues/290)).
 - **Expecting stakeDiff to reset to zero on a bad node value.** `StoreMPData` uses fail-soft semantics: an invalid `StakeDiff` from the node logs a warning and leaves `c.stakeDiff` unchanged. Tests asserting a zero-Price after a bad StakeDiff call will fail; this is correct behavior.
-- **Cache + height-changed-mid-query.** `ticketPoolVisualization` retries the three SQL queries if `pgb.Height()` advanced between first and last query; do not remove this retry loop ([db/dcrpg/pgblockchain.go:1909-1940](../../../db/dcrpg/pgblockchain.go#L1909-L1940)) — without it the three charts could disagree by one block on rapid reorgs / fast tip advance.
+- **Cache + height-changed-mid-query.** `ticketPoolVisualization` retries the three SQL queries if `pgb.Height()` advanced between first and last query; do not remove this retry loop ([db/dcrpg/pgblockchain.go:1944-1975](../../../db/dcrpg/pgblockchain.go#L1944-L1975)) — without it the three charts could disagree by one block on rapid reorgs / fast tip advance.
 - **Confusing the `extendToPeriodEnd` ordering invariant.** In `ticketpool_purchases.js`, `extendToPeriodEnd(cols, barMode)` must be called *before* appending the mempool point. The mempool timestamp (next-block estimate) must not be used as the period-end anchor — it would compute the wrong boundary. The comment in `toColumns` documents this explicitly.
 
 ## Section 8 — Evidence
 
-- Handler: [cmd/dcrdata/internal/explorer/explorerroutes.go:811-824](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L811-L824)
+- Handler: [cmd/dcrdata/internal/explorer/explorerroutes.go:860-872](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L860-L872)
 - Template: [cmd/dcrdata/views/ticketpool.tmpl](../../../cmd/dcrdata/views/ticketpool.tmpl)
 - JS controller: [cmd/dcrdata/public/js/controllers/ticketpool_controller.js](../../../cmd/dcrdata/public/js/controllers/ticketpool_controller.js)
 - Chart def (purchases): [cmd/dcrdata/public/js/charts/definitions/ticketpool_purchases.js](../../../cmd/dcrdata/public/js/charts/definitions/ticketpool_purchases.js)
 - Chart def (price): [cmd/dcrdata/public/js/charts/definitions/ticketpool_price.js](../../../cmd/dcrdata/public/js/charts/definitions/ticketpool_price.js)
 - Zoom helpers: [cmd/dcrdata/public/js/helpers/ticketpool_zoom.js](../../../cmd/dcrdata/public/js/helpers/ticketpool_zoom.js)
 - API routes: [cmd/dcrdata/internal/api/apirouter.go:245-249](../../../cmd/dcrdata/internal/api/apirouter.go#L245-L249)
-- API handlers: [cmd/dcrdata/internal/api/apiroutes.go:1257-1325](../../../cmd/dcrdata/internal/api/apiroutes.go#L1257-L1325)
-- Middleware: [cmd/dcrdata/internal/middleware/apimiddleware.go:691-699](../../../cmd/dcrdata/internal/middleware/apimiddleware.go#L691-L699)
-- WS handler: [cmd/dcrdata/internal/explorer/websockethandlers.go:169-231](../../../cmd/dcrdata/internal/explorer/websockethandlers.go#L169-L231)
-- DB cache: [db/dcrpg/pgblockchain.go:74-132](../../../db/dcrpg/pgblockchain.go#L74-L132), [db/dcrpg/pgblockchain.go:1830-1943](../../../db/dcrpg/pgblockchain.go#L1830-L1943)
-- DB queries (ticketpool section): [db/dcrpg/queries.go:1106-1200](../../../db/dcrpg/queries.go#L1106-L1200), [db/dcrpg/queries.go:4400-4402](../../../db/dcrpg/queries.go#L4400-L4402)
+- API handlers: [cmd/dcrdata/internal/api/apiroutes.go:1343-1409](../../../cmd/dcrdata/internal/api/apiroutes.go#L1343-L1409)
+- Middleware: [cmd/dcrdata/internal/middleware/apimiddleware.go:705-711](../../../cmd/dcrdata/internal/middleware/apimiddleware.go#L705-L711)
+- WS handler: [cmd/dcrdata/internal/explorer/websockethandlers.go:219-265](../../../cmd/dcrdata/internal/explorer/websockethandlers.go#L219-L265)
+- DB cache: [db/dcrpg/pgblockchain.go:74-132](../../../db/dcrpg/pgblockchain.go#L74-L132), [db/dcrpg/pgblockchain.go:1872-1978](../../../db/dcrpg/pgblockchain.go#L1872-L1978)
+- DB queries (ticketpool section): [db/dcrpg/queries.go:1106-1200](../../../db/dcrpg/queries.go#L1106-L1200), [db/dcrpg/queries.go:4422-4424](../../../db/dcrpg/queries.go#L4422-L4424)
 - DB SQL: [db/dcrpg/internal/stakestmts.go:106-122](../../../db/dcrpg/internal/stakestmts.go#L106-L122), [db/dcrpg/internal/stakestmts.go:509-512](../../../db/dcrpg/internal/stakestmts.go#L509-L512), [db/dcrpg/internal/txstmts.go:165-170](../../../db/dcrpg/internal/txstmts.go#L165-L170)
-- Mempool overlay: [mempool/mempoolcache.go:46-76](../../../mempool/mempoolcache.go#L46-L76) (`StoreMPData`, fail-soft stakeDiff), [mempool/mempoolcache.go:197-218](../../../mempool/mempoolcache.go#L197-L218) (`GetTicketPriceCountTime`), [db/dcrpg/pgblockchain.go:6414](../../../db/dcrpg/pgblockchain.go#L6414) (`GetMempoolPriceCountTime`)
-- Types: [api/types/apitypes.go:931-960](../../../api/types/apitypes.go#L931-L960), [db/dbtypes/types.go:2118-2128](../../../db/dbtypes/types.go#L2118-L2128), [db/dbtypes/types.go:827-857](../../../db/dbtypes/types.go#L827-L857)
+- Mempool overlay: [mempool/mempoolcache.go:46-76](../../../mempool/mempoolcache.go#L46-L76) (`StoreMPData`, fail-soft stakeDiff), [mempool/mempoolcache.go:197-218](../../../mempool/mempoolcache.go#L197-L218) (`GetTicketPriceCountTime`), [db/dcrpg/pgblockchain.go:6349](../../../db/dcrpg/pgblockchain.go#L6349) (`GetMempoolPriceCountTime`)
+- Types: [api/types/apitypes.go:936-963](../../../api/types/apitypes.go#L936-L963), [db/dbtypes/types.go:2089-2097](../../../db/dbtypes/types.go#L2089-L2097), [db/dbtypes/types.go:827-857](../../../db/dbtypes/types.go#L827-L857)
 
 See also:
 - /wiki/core/constraints.md (depends-on: C1 numeric precision — VAR-only float64 pipeline; C2 dual collection paths; C3 REST/WS payload parity; C6 template-cloning exception in `populateOutputs`)
