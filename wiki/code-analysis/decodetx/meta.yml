@@ -1,10 +1,14 @@
 domain: decodetx
-anchor: 45fa8e5c
+anchor: d12ec80f
 files:
+  - cmd/dcrdata/internal/api/insight/apirouter.go
   - cmd/dcrdata/internal/api/insight/apiroutes.go
   - cmd/dcrdata/internal/explorer/explorer.go
+  - cmd/dcrdata/internal/explorer/explorer_test.go
   - cmd/dcrdata/internal/explorer/explorerroutes.go
   - cmd/dcrdata/internal/explorer/websockethandlers.go
+  - cmd/dcrdata/main.go
+  - cmd/dcrdata/public/index.js
   - cmd/dcrdata/public/js/controllers/rawtx_controller.js
   - cmd/dcrdata/public/js/services/messagesocket_service.js
   - cmd/dcrdata/views/rawtx.tmpl
