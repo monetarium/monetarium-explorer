@@ -43,7 +43,7 @@ Tests in [mempool/monitor_test.go](../../../mempool/monitor_test.go) cover only 
 ## Risk: `CoinFills` not recomputed when new SKA coin issued
 
 **Trigger:**
-Adding a new SKA coin type via on-chain issuance and skipping/breaking the recompute branch in `(*explorerUI).Store` ([cmd/dcrdata/internal/explorer/explorer.go:596-615](../../../cmd/dcrdata/internal/explorer/explorer.go)).
+Adding a new SKA coin type via on-chain issuance and skipping/breaking the recompute branch in `(*explorerUI).Store` ([cmd/dcrdata/internal/explorer/explorer.go:596-620](../../../cmd/dcrdata/internal/explorer/explorer.go)).
 
 **Affected flows:**
 - [/wiki/code-analysis/mempool/flow.full.md](flow.full.md)
@@ -74,7 +74,7 @@ A new `MempoolDataSaver` implementation reads `stakeData.Anything` without nil-c
 ## Risk: `MempoolShort` field added without updating `DeepCopy` / `Trim`
 
 **Trigger:**
-Adding a new field on `MempoolShort` (or `MempoolInfo`) and forgetting to update `MempoolShort.DeepCopy` ([explorer/types/explorertypes.go:1262-1340](../../../explorer/types/explorertypes.go)) and/or `MempoolInfo.Trim` ([:1007-1032](../../../explorer/types/explorertypes.go)).
+Adding a new field on `MempoolShort` (or `MempoolInfo`) and forgetting to update `MempoolShort.DeepCopy` ([explorer/types/explorertypes.go:1213-1287](../../../explorer/types/explorertypes.go)) and/or `MempoolInfo.Trim` ([:958-996](../../../explorer/types/explorertypes.go)).
 
 **Affected flows:**
 - [/wiki/code-analysis/mempool/flow.full.md](flow.full.md)
