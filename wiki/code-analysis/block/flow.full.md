@@ -25,6 +25,16 @@ Client WS sends `{event_id:"getlatestblocks", message:"<span>"}` → `websocketh
 - **Location:** `cmd/dcrdata/internal/notification/notifier.go`, `blockdata/chainmonitor.go`
 - **Data Structures:** `wire.BlockHash`, `wire.MsgBlock`
 - **Transformations:** Bare block hashes are queued. `ChainMonitor` fetches the full `wire.MsgBlock` structure from the node via RPC.
+- **Handler deadline is advisory, not fatal.** `processBlock` (`notifier.go:283`) waits
+  on its registered handlers up to `SyncHandlerDeadline` (`:37-40`, five minutes — a
+  `var`, not a `const`, so tests can shorten it). On timeout it logs a warning and
+  **still calls `SetPreviousBlock`** (`:344`). Skipping that call was a real failure
+  mode: the next block then failed the `PrevBlock` check, was silently dropped, and the
+  explorer stayed desynced from the chain until restart. The deliberate trade-off is
+  spelled out in the code — timed-out handler goroutines are **not cancelled**, so block
+  N+1 handlers may run concurrently with stuck N handlers, and a transient data race on
+  shared state (DB, stakedb) is preferred over a permanent desync. `signalReorg`
+  (`:444`) advances the same way.
 
 **Layer 2: Collection (API/UI Path)**
 
@@ -115,13 +125,13 @@ Client WS sends `{event_id:"getlatestblocks", message:"<span>"}` → `websocketh
 - Both `explorerUI.Store()` and `PubSubHub.Store()` must be updated together (C3).
 
 **When modifying `HomeInfo.WindowRemaining` or `HomeInfo.RewardRemaining`:**
-- Both `explorerUI.Store()` (explorer.go:568,570) and `PubSubHub.Store()` (pubsubhub.go:734,736) compute these via `RemainingWindowText()`. A change to the function signature or behavior simultaneously affects: server-rendered template, WS live update on `voting_controller.js` (`window_remaining`), WS live update on `mining_controller.js` (`reward_remaining`).
+- Both `explorerUI.Store()` (explorer.go:557,559) and `PubSubHub.Store()` (pubsubhub.go:738,740) compute these via `RemainingWindowText()`. A change to the function signature or behavior simultaneously affects: server-rendered template, WS live update on `voting_controller.js` (`window_remaining`), WS live update on `mining_controller.js` (`reward_remaining`).
 - Changing `RemainingWindowText` parameters (`idx`, `max`, `blockTime`) here requires checking both Store() call-sites — different params for `WindowRemaining` (uses `WindowSize`) vs `RewardRemaining` (uses `RewardWindowSize`).
 
 **When modifying the chart tip push (`explorerUI.Store()` → `cache.ChartData.SetTip`):**
 - Affects cached chart series for `TicketPrice`, `Difficulty`, `PoolValue`, `CoinSupply` — the last chart data point will no longer align with the home page's current value.
 - `SetTip` is only in `explorerUI.Store()`, not `PubSubHub.Store()` — intentional; chart alignment is not a WS concern.
-- Changing `cache.ChartTip` fields requires updating the push in `explorer.go:652-665`.
+- Changing `cache.ChartTip` fields requires updating the push in `explorer.go:641-654`.
 
 **When modifying `homeBlocksSpan`, `latestBlocksEnd()`, or `latestExplorerBlocks()`:**
 - `Home()` server-rendered block list and WS `getlatestblocks` response diverge.
@@ -145,34 +155,40 @@ Client WS sends `{event_id:"getlatestblocks", message:"<span>"}` → `websocketh
 - **Assuming Database Integration:** Developers might update `BlockData.ExtraInfo.CoinAmounts` expecting the PostgreSQL records to inherit the change, unaware that `pgblockchain.go` completely ignores it and runs its own `msgBlock` parsing.
 - **Formatting Backend Side:** Developers might add formatting behavior to the strings in `explorer.go` to "help" the templates, fundamentally breaking the WebSocket array parsing logic which requires unformatted, raw integer strings.
 - **Updating the WebSocket Only:** Developers might modify `PubSubHub.Store()` array extraction to fix a UI bug, forgetting to update `explorerUI.Store()` — resulting in page loads flashing incorrect data before WebSockets overwrite them (C3 violation).
-- **Forgetting the chart tip push:** Developers modifying how the home page computes `TicketPrice`, `Difficulty`, `PoolValue`, or `CoinSupply` fields may update `HomeInfo` but forget to update the `SetTip` call at `explorer.go:652-665`. The chart's last data point would then silently show a stale value instead of the current RPC value.
+- **Forgetting the chart tip push:** Developers modifying how the home page computes `TicketPrice`, `Difficulty`, `PoolValue`, or `CoinSupply` fields may update `HomeInfo` but forget to update the `SetTip` call at `explorer.go:641-654`. The chart's last data point would then silently show a stale value instead of the current RPC value.
 - **Treating `RemainingWindowText` as template-only:** It was originally a template helper. It now also populates live WS fields (`WindowRemaining`, `RewardRemaining`). Changes to formatting, precision, or edge cases affect both the server-rendered page and live countdown updates.
 - **Confusing CBlockSubsidy with NBlockSubsidy:** `CBlockSubsidy` is the actual vote-scaled subsidy for the block just stored (used for `LBlockTotal` display). `NBlockSubsidy` is the estimate for the next block. Using the wrong one silently wrong-values blocks with fewer than 5 votes.
 - **Breaking latestBlocksEnd parity:** `Home()` uses `latestBlocksEnd(height, homeBlocksSpan)` and the WS handler uses the same. If these diverge (e.g., someone adds a different clamp to `Home()`), the home table and reconnect-rebuild show different rows — a hard-to-notice split screen bug.
 
 ### 8. Evidence
 
-- **RPC Ingestion:** `cmd/dcrdata/internal/notification/notifier.go` lines 200+
+- **RPC Ingestion:** `cmd/dcrdata/internal/notification/notifier.go` — `processBlock` `:283-345`, `SetPreviousBlock` `:266-281`, `SyncHandlerDeadline` `:37-40`
 - **Hydration / Maps via `big.Int`:** `blockdata/blockdata.go` lines 400-692 (`CollectBlockInfo`, `blockCoinAmounts`, `computeMinerVARFeeAtoms`)
-- **Conservation MiningFee:** `blockdata/blockdata.go:668-691` (`computeMinerVARFeeAtoms` — Σ(VAR outputs) − Σ(inputs), zero-clamped)
+- **Conservation MiningFee:** `blockdata/blockdata.go:568-591` (`computeMinerVARFeeAtoms` — Σ(VAR outputs) − Σ(inputs), zero-clamped)
 - **CBlockSubsidy fetch (actual Voters):** `blockdata/blockdata.go:201-203` (`GetBlockSubsidy(ctx, height, header.Voters)`)
+- **Template:** `cmd/dcrdata/views/block.tmpl` — the page container is now the `<main>`
+  landmark rather than `<div class="container main">`; the coinbase reward heading reads
+  **"Miner Reward"**, not "PoW Reward" (both `TxTypeBlockRewardPoW` at index 0 and
+  `TxTypeBlockRewardPoS` above it go to the miner in Monetarium — there is no PoS block
+  reward split); and the `api` links now carry `data-turbo="false"`, not
+  `data-turbolinks="false"`.
 - **BlockDataSaver Fan-Out:** `cmd/dcrdata/main.go` registers `pgb`, `explore`, and `psHub` as savers
 - **Database Divergence:** `db/dbtypes/conversion.go` line 18 (`blockCoinAmounts` manually parses `msgBlock`)
 - **Postgres JSONB Integration:** `db/dcrpg/pgblockchain.go` `StoreBlock` calls `MsgBlockToDBBlock` and ignores `BlockData`
-- **CBlockSubsidy in explorerUI:** `cmd/dcrdata/internal/explorer/explorer.go:577-586`
-- **CBlockSubsidy in PubSubHub:** `pubsub/pubsubhub.go:743-751`
-- **ActiveMiners hoisted above lock:** `pubsub/pubsubhub.go:703` (queries before `p.mtx.Lock()` at line 718)
-- **WindowRemaining + RewardRemaining in explorerUI:** `cmd/dcrdata/internal/explorer/explorer.go:568,570`
-- **WindowRemaining + RewardRemaining in PubSubHub:** `pubsub/pubsubhub.go:734,736`
+- **CBlockSubsidy in explorerUI:** `cmd/dcrdata/internal/explorer/explorer.go:565-573`
+- **CBlockSubsidy in PubSubHub:** `pubsub/pubsubhub.go:747-755`
+- **ActiveMiners hoisted above lock:** `pubsub/pubsubhub.go:700-710` (queries before `p.mtx.Lock()` at line 722)
+- **WindowRemaining + RewardRemaining in explorerUI:** `cmd/dcrdata/internal/explorer/explorer.go:557,559`
+- **WindowRemaining + RewardRemaining in PubSubHub:** `pubsub/pubsubhub.go:738,740`
 - **RemainingWindowText (single source of truth):** `explorer/types/remaining.go:17`
-- **Chart tip push from explorerUI:** `cmd/dcrdata/internal/explorer/explorer.go:652-665` (`cd.SetTip(cache.ChartTip{...})`)
-- **ChartTip struct:** `db/cache/charts.go:487-497`
-- **SetTip + cache invalidation:** `db/cache/charts.go:905-921`
+- **Chart tip push from explorerUI:** `cmd/dcrdata/internal/explorer/explorer.go:641-654` (`cd.SetTip(cache.ChartTip{...})`)
+- **ChartTip struct:** `db/cache/charts.go:490-497`
+- **SetTip + cache invalidation:** `db/cache/charts.go:908-913`
 - **mining_controller.js reward_remaining read:** `cmd/dcrdata/public/js/controllers/mining_controller.js:48`
 - **voting_controller.js window_remaining read:** `cmd/dcrdata/public/js/controllers/voting_controller.js:35`
 - **Presentation State Duplication:** `cmd/dcrdata/internal/explorer/explorer.go:~592` and `pubsub/pubsubhub.go:~757` both run identical loops transforming `map[uint8]string` → sorted `[]PoWSKAReward`
 - **getlatestblocks WS handler:** `cmd/dcrdata/internal/explorer/websockethandlers.go:233-255`
-- **latestBlocksEnd / homeBlocksSpan single source:** `cmd/dcrdata/internal/explorer/explorerroutes.go:155-186`
+- **latestBlocksEnd / homeBlocksSpan single source:** `cmd/dcrdata/internal/explorer/explorerroutes.go:157-200`
 - **mining_controller.js CBlockSubsidy read:** `cmd/dcrdata/public/js/controllers/mining_controller.js:34` (`(ex.cblock_subsidy || ex.subsidy).pow / 1e8`)
 - **blocks_controller.js reconnect+gap refresh:** `cmd/dcrdata/public/js/controllers/blocks_controller.js:28-51`
 
