@@ -22,9 +22,9 @@ Go-side loop re-aggregates these.
 - The SQL denominator `$1` and the value passed by
   `retrieveWindowBlocks(ctx, db, pgb.chainParams.StakeDiffWindowSize, ...)`
   (`db/dcrpg/queries.go:856`, called from `ChainDB.PosIntervals`
-  `db/dcrpg/pgblockchain.go:1815`) must both be the *same* consensus window
+  `db/dcrpg/pgblockchain.go:1824-1828`) must both be the *same* consensus window
   size. There is no DB-level check that `$1` equals the chain's actual window
-  size — they are wired by convention only. (`pgblockchain.go:1819`.)
+  size — they are wired by convention only. (`pgblockchain.go:1830-1831`.)
 - Window boundaries are constrained twice: the `GROUP BY` truncation forms the
   bucket, and `retrieveWindowBlocks` separately computes
   `startHeight = startWindow*windowSize` /
@@ -66,14 +66,14 @@ template surfaces this as `({{.BlocksCount}}/{{$.WindowSize}})`
 
 **Description:**
 The handler does no transformation between DB and template. `StakeDiffWindows`
-(`cmd/dcrdata/internal/explorer/explorerroutes.go:424`) calls
+(`cmd/dcrdata/internal/explorer/explorerroutes.go:425`) calls
 `exp.dataSource.PosIntervals` and passes the returned
 `[]*dbtypes.BlocksGroupedInfo` straight into
 `exp.templates.exec("windows", struct{ ... Data []*dbtypes.BlocksGroupedInfo
 ... })`. `windows.tmpl` ranges over `.Data` and reads struct fields directly
 (`.IndexVal`, `.EndBlock`, `.Transactions`, `.Voters`, `.FreshStake`,
 `.Revocations`, `.TxCount`, `.BlocksCount`, `.Difficulty`, `.TicketPrice`).
-`dbtypes.BlocksGroupedInfo` (`db/dbtypes/types.go:816`) is the **same struct**
+`dbtypes.BlocksGroupedInfo` (`db/dbtypes/types.go:808-827`) is the **same struct**
 used by the time-based-blocks listing (`retrieveTimeBasedBlockListing`,
 `db/dcrpg/queries.go:925`, via `ChainDB.TimeBasedIntervals`). The two flows
 populate disjoint subsets of its fields from different SQL: the windows path
@@ -101,7 +101,7 @@ also emits `JSONB_AGG(coin_tx_stats) AS coin_tx_stats`
 (`db/dcrpg/internal/blockstmts.go:141`). `retrieveWindowBlocks` scans this raw
 JSON and passes it through `parseCoinTxStats(coinTxStats, txs)`
 (`db/dcrpg/queries.go:881`): it unmarshals `[]map[string]dbtypes.CoinTxStats`
-(`db/dbtypes/types.go:2222`), sums every per-coin `TxCount`, and **overrides**
+(`db/dbtypes/types.go:2184-2187`), sums every per-coin `TxCount`, and **overrides**
 the `SUM(num_rtx)` value when the per-coin total is larger. The displayed
 `Transactions` / `TxCount` therefore folds in per-coin-type activity rather
 than a single flat count — the multi-coin analogue of the legacy single-value

@@ -16,10 +16,10 @@ monetarium-node JSON-RPC (block ingest, separate flow)
     → PostgreSQL  blocks  table          (num_rtx, voters, fresh_stake, revocations, size, sbits, difficulty, coin_tx_stats, is_mainchain)
         → SelectWindowsByLimit            (db/dcrpg/internal/blockstmts.go:134)
         → retrieveWindowBlocks            (db/dcrpg/queries.go:856) — Scan → parseCoinTxStats → BlocksGroupedInfo build
-            → (*ChainDB).PosIntervals     (db/dcrpg/pgblockchain.go:1846) — adds queryTimeout + replaceCancelError
-                → dataSource interface    (cmd/dcrdata/internal/explorer/explorer.go:97)
-                    → (*explorerUI).StakeDiffWindows handler (cmd/dcrdata/internal/explorer/explorerroutes.go:423)
-                        → exp.templates.exec("windows", ...) (explorerroutes.go:467)
+            → (*ChainDB).PosIntervals     (db/dcrpg/pgblockchain.go:1829-1835) — adds queryTimeout + replaceCancelError
+                → dataSource interface    (cmd/dcrdata/internal/explorer/explorer.go:96)
+                    → (*explorerUI).StakeDiffWindows handler (cmd/dcrdata/internal/explorer/explorerroutes.go:425-497)
+                        → exp.templates.exec("windows", ...) (explorerroutes.go:468)
                             → views/windows.tmpl rendering   → HTTP HTML response
 ```
 
@@ -52,9 +52,9 @@ only client-side behavior is the `data-controller="pagenavigation"` pager and a
 
 - **Location:** `db/dcrpg/queries.go:856` (`retrieveWindowBlocks`),
   `db/dcrpg/queries.go:828` (`parseCoinTxStats`),
-  `db/dcrpg/pgblockchain.go:1846` (`(*ChainDB).PosIntervals`).
-- **Data structures:** `dbtypes.BlocksGroupedInfo` (`db/dbtypes/types.go:816`),
-  `dbtypes.CoinTxStats` (`db/dbtypes/types.go:2222`).
+  `db/dcrpg/pgblockchain.go:1829-1835` (`(*ChainDB).PosIntervals`).
+- **Data structures:** `dbtypes.BlocksGroupedInfo` (`db/dbtypes/types.go:808-827`),
+  `dbtypes.CoinTxStats` (`db/dbtypes/types.go:2184-2187`).
 - **Transformations:**
   - `retrieveWindowBlocks` first derives the height range from `(limit, offset)`:
     `endWindow = currentHeight/windowSize − offset`,
@@ -87,19 +87,22 @@ only client-side behavior is the `data-controller="pagenavigation"` pager and a
 
 **3.3 Explorer handler (HTTP boundary)**
 
-- **Location:** `cmd/dcrdata/internal/explorer/explorerroutes.go:423`
+- **Location:** `cmd/dcrdata/internal/explorer/explorerroutes.go:425-497`
   (`(*explorerUI).StakeDiffWindows`), interface at
-  `cmd/dcrdata/internal/explorer/explorer.go:97`
+  `cmd/dcrdata/internal/explorer/explorer.go:96`
   (`dataSource.PosIntervals`), mock at
-  `cmd/dcrdata/internal/explorer/explorer_test.go:109`.
+  `cmd/dcrdata/internal/explorer/explorer_test.go:112`.
 - **Route:** `r.Get("/ticketpricewindows", explore.StakeDiffWindows)`
-  (`cmd/dcrdata/main.go:734`).
+  (`cmd/dcrdata/main.go:738`). Not under `withCache`.
+- **Template container:** `windows.tmpl`'s page container is now the `<main>` landmark
+  rather than `<div class="container main">` (accessible-names pass); it still carries
+  `data-controller="pagenavigation"`.
 - **Transformations:**
   - Parses `?offset=<uint>&rows=<uint>`, returns `400` on parse error.
-  - Computes `bestWindow = Height() / StakeDiffWindowSize` (`explorerroutes.go:447`); clamps
+  - Computes `bestWindow = Height() / StakeDiffWindowSize` (`explorerroutes.go:448`); clamps
     `offsetWindow ≤ bestWindow`; clamps `rows` to
     `[minExplorerRows, maxExplorerRows]` (default `minExplorerRows`).
-  - Calls `exp.dataSource.PosIntervals(ctx, rows, offsetWindow)` (`explorerroutes.go:453`) on the
+  - Calls `exp.dataSource.PosIntervals(ctx, rows, offsetWindow)` (`explorerroutes.go:454`) on the
     `dataSource` interface (production: `*dcrpg.ChainDB`). Timeout errors are
     handled separately from "not found" via `exp.timeoutErrorPage`; any other
     error renders `ExpStatusNotFound` (the message literally references "ticket
@@ -109,7 +112,7 @@ only client-side behavior is the `data-controller="pagenavigation"` pager and a
     `Pages: calcPages(int(bestWindow), int(rows), int(offsetWindow),
     linkTemplate)` where
     `linkTemplate = "/ticketpricewindows?offset=%d&rows=" + rows`.
-  - Calls `exp.templates.exec("windows", ...)` (`explorerroutes.go:467`) and writes the rendered HTML.
+  - Calls `exp.templates.exec("windows", ...)` (`explorerroutes.go:468`) and writes the rendered HTML.
 
 **3.4 Template (presentation)**
 
@@ -125,11 +128,11 @@ only client-side behavior is the `data-controller="pagenavigation"` pager and a
   - Difficulty:
     `{{template "decimalParts" (float64AsDecimalParts .Difficulty 0 true)}}`
     (line 126). `float64AsDecimalParts` is registered in
-    `cmd/dcrdata/internal/explorer/templates.go:771`.
+    `cmd/dcrdata/internal/explorer/templates.go:792`.
   - Ticket price:
     `{{printf "%.2f" (toFloat64Amount .TicketPrice)}}` (line 127).
     `toFloat64Amount(int64) float64` is `dcrutil.Amount(intAmount).ToCoin()`
-    (`templates.go:776`) — the **legacy VAR-only** atom→coin conversion.
+    (`templates.go:797-799`) — the **legacy VAR-only** atom→coin conversion.
   - `.StartTime.UNIX` for the JS time controller (line 128),
     `.StartTime.DatetimeWithoutTZ` for the fallback static cell (line 129).
   - Pager rendered from `.Pages` plus prev/next anchors driven by
@@ -149,7 +152,7 @@ only client-side behavior is the `data-controller="pagenavigation"` pager and a
   `exp.ChainParams.StakeDiffWindowSize`** must all be the same value. There is
   no DB-level check; they're wired by convention. Three callsites:
   `SelectWindowsByLimit` (`blockstmts.go:134`), `PosIntervals`
-  (`pgblockchain.go:1849`), and handler (`explorerroutes.go:447` /
+  (`pgblockchain.go:1834`), and handler (`explorerroutes.go:448` /
   `:479`).
 - **Positional `rows.Scan` ↔ SQL SELECT list ordering.** 11 columns; reorder
   on either side silently swaps values into the wrong destination — see
@@ -162,12 +165,12 @@ only client-side behavior is the `data-controller="pagenavigation"` pager and a
   path does not). A field rename for one flow breaks the other's template.
 - **`coin_tx_stats` JSON contract.** The column type is JSONB; the Go shape is
   `map[uint8]dbtypes.CoinTxStats` with the `tx_count` tag
-  (`db/dbtypes/types.go:2222`). `parseCoinTxStats` unmarshals the
+  (`db/dbtypes/types.go:2184-2187`). `parseCoinTxStats` unmarshals the
   aggregate as `[]map[string]CoinTxStats` (the `[]` from `JSONB_AGG`, the
   string key because JSON object keys are strings).
 - **Interface boundary at `dataSource.PosIntervals`** —
-  `cmd/dcrdata/internal/explorer/explorer.go:97` and mock at
-  `explorer_test.go:109` must move in lockstep with the prod
+  `cmd/dcrdata/internal/explorer/explorer.go:96` and mock at
+  `explorer_test.go:112` must move in lockstep with the prod
   `*ChainDB.PosIntervals` signature.
 
 ### Section 5 — Critical Constraints
@@ -275,33 +278,33 @@ Summary of what to check before editing this flow:
 ### Section 8 — Evidence
 
 Routing / handler:
-- `cmd/dcrdata/main.go:734` — `r.Get("/ticketpricewindows", explore.StakeDiffWindows)`.
-- `cmd/dcrdata/internal/explorer/explorerroutes.go:423` — `StakeDiffWindows`.
-- `cmd/dcrdata/internal/explorer/explorerroutes.go:447` — `bestWindow := uint64(exp.Height() / exp.ChainParams.StakeDiffWindowSize)`.
-- `cmd/dcrdata/internal/explorer/explorerroutes.go:453` — `exp.dataSource.PosIntervals(ctx, rows, offsetWindow)`.
-- `cmd/dcrdata/internal/explorer/explorerroutes.go:467` — `exp.templates.exec("windows", ...)`.
+- `cmd/dcrdata/main.go:738` — `r.Get("/ticketpricewindows", explore.StakeDiffWindows)`.
+- `cmd/dcrdata/internal/explorer/explorerroutes.go:425-497` — `StakeDiffWindows`.
+- `cmd/dcrdata/internal/explorer/explorerroutes.go:448` — `bestWindow := uint64(exp.Height() / exp.ChainParams.StakeDiffWindowSize)`.
+- `cmd/dcrdata/internal/explorer/explorerroutes.go:454` — `exp.dataSource.PosIntervals(ctx, rows, offsetWindow)`.
+- `cmd/dcrdata/internal/explorer/explorerroutes.go:468` — `exp.templates.exec("windows", ...)`.
 
 Interface / mock:
-- `cmd/dcrdata/internal/explorer/explorer.go:97` — `dataSource.PosIntervals` interface method.
-- `cmd/dcrdata/internal/explorer/explorer_test.go:109` — `mockDataSource.PosIntervals`.
+- `cmd/dcrdata/internal/explorer/explorer.go:96` — `dataSource.PosIntervals` interface method.
+- `cmd/dcrdata/internal/explorer/explorer_test.go:112` — `mockDataSource.PosIntervals`.
 
 DB / queries:
-- `db/dcrpg/pgblockchain.go:1846` — `(*ChainDB).PosIntervals` (queryTimeout + replaceCancelError).
+- `db/dcrpg/pgblockchain.go:1829-1835` — `(*ChainDB).PosIntervals` (queryTimeout + replaceCancelError).
 - `db/dcrpg/queries.go:856` — `retrieveWindowBlocks` (height-range math + 11-col Scan + builder).
 - `db/dcrpg/queries.go:828` — `parseCoinTxStats` (JSONB aggregate, lenient fallback).
 - `db/dcrpg/internal/blockstmts.go:134` — `SelectWindowsByLimit` SQL.
 
 Types / helpers:
-- `db/dbtypes/types.go:816` — `BlocksGroupedInfo` struct.
-- `db/dbtypes/types.go:2222` — `CoinTxStats` struct (`tx_count`, `size` JSON tags).
+- `db/dbtypes/types.go:808-827` — `BlocksGroupedInfo` struct.
+- `db/dbtypes/types.go:2184-2187` — `CoinTxStats` struct (`tx_count`, `size` JSON tags).
 - `db/dbtypes/conversion.go:144` — `CalculateWindowIndex`.
 
 Template / template helpers:
 - `cmd/dcrdata/views/windows.tmpl:111–130` — `{{range .Data}}` row rendering.
 - `cmd/dcrdata/views/windows.tmpl:127` — `{{printf "%.2f" (toFloat64Amount .TicketPrice)}}`.
 - `cmd/dcrdata/views/windows.tmpl:126` — `float64AsDecimalParts .Difficulty 0 true`.
-- `cmd/dcrdata/internal/explorer/templates.go:771` — `float64AsDecimalParts` registration.
-- `cmd/dcrdata/internal/explorer/templates.go:776` — `toFloat64Amount` registration (`dcrutil.Amount.ToCoin()`).
+- `cmd/dcrdata/internal/explorer/templates.go:792` — `float64AsDecimalParts` registration.
+- `cmd/dcrdata/internal/explorer/templates.go:797-799` — `toFloat64Amount` registration (`dcrutil.Amount.ToCoin()`).
 
 ---
 

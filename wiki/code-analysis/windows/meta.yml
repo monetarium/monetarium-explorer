@@ -1,9 +1,13 @@
 domain: windows
-anchor: 4a8e67ec
+anchor: d12ec80f
 files:
   - cmd/dcrdata/internal/explorer/explorer.go
+  - cmd/dcrdata/internal/explorer/explorer_test.go
   - cmd/dcrdata/internal/explorer/explorerroutes.go
+  - cmd/dcrdata/internal/explorer/templates.go
+  - cmd/dcrdata/main.go
   - cmd/dcrdata/views/windows.tmpl
+  - db/dbtypes/conversion.go
   - db/dbtypes/types.go
   - db/dcrpg/internal/blockstmts.go
   - db/dcrpg/pgblockchain.go

@@ -21,7 +21,7 @@ window size at any of the three sites that must agree.
 Three places must carry the same window size: the SQL bucket key
 `(height/$1)*$1` (`db/dcrpg/internal/blockstmts.go:131`); the value
 `pgb.chainParams.StakeDiffWindowSize` passed into `retrieveWindowBlocks`
-(`db/dcrpg/pgblockchain.go:1810`, `db/dcrpg/queries.go:905`), which *also*
+(`db/dcrpg/pgblockchain.go:1833`, `db/dcrpg/queries.go:906`), which *also*
 recomputes `startHeight/endHeight` window boundaries from it; and
 `bestWindow := uint64(exp.Height() / exp.ChainParams.StakeDiffWindowSize)`
 plus `WindowSize: exp.ChainParams.StakeDiffWindowSize` in the handler
@@ -38,7 +38,7 @@ with no error and a plausible-looking table.
 ## Risk: `BlocksGroupedInfo` Field Removal / Rename (cross-domain)
 
 **Trigger:** Removing or renaming a field on
-`dbtypes.BlocksGroupedInfo` (`db/dbtypes/types.go:806`), or reordering the
+`dbtypes.BlocksGroupedInfo` (`db/dbtypes/types.go:808-827`), or reordering the
 `rows.Scan(...)` destination list in `retrieveWindowBlocks`.
 
 **Failure mode:** loud (template) / silent (cross-flow).
