@@ -4,7 +4,7 @@
 ### Key Architectural Patterns
 - **SQL `date_trunc` UTC aggregation:** `blocks` table grouped by `DATE_TRUNC($1, time at time zone 'utc')` in both SELECT and GROUP BY; both expressions must stay identical or interval boundaries drift silently.
 - **Shared `BlocksGroupedInfo` struct:** populated by two independent producers (`retrieveTimeBasedBlockListing` + `retrieveWindowBlocks`); the windows page reads fields the time-based producer leaves zero — editing the struct is a cross-domain change.
-- **`normalizeExplorerRows` centralized page-size normalization:** generic helper (`explorer.go:50–51`, `explorerroutes.go:645–653`) default=100, cap=400; shared by time-based, windows, and blocks list handlers; prevents `uint64` overflow on URL parameters.
+- **`normalizeExplorerRows` centralized page-size normalization:** generic helper (`explorer.go:51–52`, `explorerroutes.go:645–653`) default=100, cap=400; shared by time-based, windows, and blocks list handlers; prevents `uint64` overflow on URL parameters.
 - **Controller-level YTD mutation:** `data[0].FormattedStartTime` overwritten to `"<year> YTD"` only when `val == "Years"` and top row's `EndTime.T.Year() == time.Now().Year()`; keys off the literal argument, not the grouping enum.
 - **Row-count-driven pagination:** `TimeBasedIntervalsCount` returns the exact distinct grouping count; `maxOffset = totalGroupings - 1`; feeds `calcPages` and `lastOffset` derivation; replaced an earlier genesis-anchored time formula.
 

@@ -87,7 +87,7 @@ a fixed literal string.
 5. `maxOffset = int64(totalGroupings) - 1`, clamped to 0 on empty chain (lines 571–573);
    `offset` clamped to `maxOffset` (line 574–576).
 6. **`rows = normalizeExplorerRows(rows)` (line 578)** — applies default 100 when `rows == 0`,
-   caps at 400 (see constants in `explorer.go:50–51`).
+   caps at 400 (see constants in `explorer.go:51–52`).
 7. `data, err := exp.dataSource.TimeBasedIntervals(ctx, grouping, rows, offset)` (line 580);
    `timeoutErrorPage` guard (line 581).
 8. `lastOffset` derivation (lines 592–599): `lastOffsetRows := uint64(maxOffset) % rows`;
@@ -127,7 +127,7 @@ Consumes `Data []*dbtypes.BlocksGroupedInfo`, `Offset`, `Limit`, `BestGrouping`,
 Pagination links use `?offset=…&rows={{.Limit}}`. Per-page selector offers 10/20/30/50/100;
 the currently-active size is highlighted via `{{if eq .Limit N}}selected{{end}}`.
 
-#### Shared struct — `db/dbtypes/types.go:816–835`
+#### Shared struct — `db/dbtypes/types.go:808–827`
 `BlocksGroupedInfo` is shared with the windows pipeline (`retrieveWindowBlocks`). The two
 producers populate disjoint field subsets (see patterns.md § "Two consumers of
 BlocksGroupedInfo").
@@ -201,15 +201,15 @@ swap, missing `defaultExplorerRows` dropdown option.
 - SQL queries: `db/dcrpg/internal/blockstmts.go:151–172`
 - Scan + struct population: `db/dcrpg/queries.go:925–968`
 - `parseCoinTxStats`: `db/dcrpg/queries.go:826–831`
-- ChainDB wrappers: `db/dcrpg/pgblockchain.go:1857–1880`
-- Handler function: `cmd/dcrdata/internal/explorer/explorerroutes.go:520–638`
+- ChainDB wrappers: `db/dcrpg/pgblockchain.go:1840–1863`
+- Handler function: `cmd/dcrdata/internal/explorer/explorerroutes.go:521–639`
 - `normalizeExplorerRows` + constants: `cmd/dcrdata/internal/explorer/explorerroutes.go:645–653`
   + `cmd/dcrdata/internal/explorer/explorer.go:51–52`
-- Shared entry points: `explorerroutes.go:500–515`
-- Template: `cmd/dcrdata/views/timelisting.tmpl`
-- Shared struct: `db/dbtypes/types.go:816–835`
+- Shared entry points: `explorerroutes.go:500–519`
+- Template: `cmd/dcrdata/views/timelisting.tmpl` — the page container is now the `<main>` landmark rather than `<div class="container main">` (accessible-names pass); it still carries `data-controller="time pagenavigation"`.
+- Shared struct: `db/dbtypes/types.go:808–827`
 - `TimeGroupingFromStr` / `UnknownGrouping` / `NumIntervals`:
-  `db/dbtypes/types.go:764–865`
+  `db/dbtypes/types.go:765,769,844–859`
 
 See also:
 - /wiki/code-analysis/windows/flow.full.md (shares-pattern-with: `BlocksGroupedInfo` shared struct, `normalizeExplorerRows` shared normalization)
