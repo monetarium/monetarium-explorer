@@ -35,7 +35,7 @@ broadcast that multiple controllers consume simultaneously.
 ## Section 2 — End-to-End Data Flow
 
 **Route:** `webMux.Get("/ws", explore.RootWebsocket)`
-([main.go:663](../../../cmd/dcrdata/main.go#L663)).
+([main.go:661](../../../cmd/dcrdata/main.go#L661)).
 
 **Server → client (push):**
 ```
@@ -139,20 +139,26 @@ feature controller re-requests its state on `reconnect`.
      `getmempooltrimmed`, `getticketpooldata`, **`getlatestblocks`** (`:233-255`),
      `ping`, `default`.
   3. **Send loop** (`:274-401`): `select` over `updateSig` (encode by `sig.Signal`,
-     `:303-389`), `wsHub.quitWSHandler`, and `connCtx.Done()`.
+     `:303-389`), `wsHub.quitWSHandler`, and `connCtx.Done()`. The `sigNewBlock`
+     arm snapshots `BlockInfo`, `BlockchainInfo` and `HomeInfo` under
+     `pageData.RLock` and **bails out if any is nil** (`:307-313`, debug log
+     "websocket sigNewBlock skipped: page data not yet ready") — during the
+     startup window before the first `Store()` these are unset, and the arm
+     previously dereferenced them directly. Everything after the guard reads the
+     locals (`bci.MaxBlockSize`, `home.SKACoinSupply`), not `exp.pageData`.
 - **`send` closure** (`:68-81`): `wsjson.Write` under a `wsWriteTimeout` context;
   on failure returns an error that collapses the loop.
 - **`getlatestblocks` helpers** (in `explorerroutes.go`):
-  - `homeBlocksSpan = 8` (`:159`) — shared constant; `Home()` and
+  - `homeBlocksSpan = 8` (`:160`) — shared constant; `Home()` and
     `latestExplorerBlocks()` both use it so the server-rendered list and the WS
     refresh cannot diverge.
-  - `clampLatestBlocksSpan(message string) int` (`:168`) — parses the optional
+  - `clampLatestBlocksSpan(message string) int` (`:169`) — parses the optional
     page-size argument; non-positive/non-numeric → `homeBlocksSpan`; any value
     >400 → `maxExplorerRows`. Prevents uncapped DB scan.
-  - `latestBlocksEnd(height, span) int` (`:181`) — genesis guard (`end < 0 → -1`).
-  - `latestExplorerBlocks(ctx, span)` (`:195`) — `GetHeight` + `GetExplorerBlocks`
+  - `latestBlocksEnd(height, span) int` (`:182`) — genesis guard (`end < 0 → -1`).
+  - `latestExplorerBlocks(ctx, span)` (`:196`) — `GetHeight` + `GetExplorerBlocks`
     + filter zero-value placeholders (empty Hash).
-- **Helpers:** `buildTicketPoolChartsData` (`:412`) mirrors the REST handler so
+- **Helpers:** `buildTicketPoolChartsData` (`:419`) mirrors the REST handler so
   `getticketpooldata` and `/api/ticketpool/charts` emit the same struct.
 
 ### Layer C — Wire envelope
@@ -360,7 +366,7 @@ stalling `run()`.
 
 ## Section 8 — Evidence
 
-- Route: [main.go:663](../../../cmd/dcrdata/main.go#L663).
+- Route: [main.go:661](../../../cmd/dcrdata/main.go#L661).
 - Handler: [websockethandlers.go](../../../cmd/dcrdata/internal/explorer/websockethandlers.go)
   — accept/read-limit `:39-50`, `connCtx` `:54`, `send` `:68-81`, ping goroutine
   `:85-105`, reader+switch `:109-271` (oversize `:127-131`, `getlatestblocks`
