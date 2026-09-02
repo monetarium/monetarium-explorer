@@ -1,4 +1,4 @@
-/* global Turbo */
+/* global Turbo, requestAnimationFrame, getComputedStyle */
 import '@hotwired/turbo'
 import { Controller } from '@hotwired/stimulus'
 import { requestJSON } from '../helpers/http'
@@ -243,6 +243,26 @@ export function arcPath(start, end) {
 
 const SVGNS = 'http://www.w3.org/2000/svg'
 
+// rafThrottle collapses a burst of events into one call per frame: scroll and
+// resize both fire far faster than the layout measurements behind them are
+// worth repeating (the pattern sticky_col_controller uses inline).
+export function rafThrottle(fn) {
+  let queued = false
+  return () => {
+    if (queued) return
+    queued = true
+    requestAnimationFrame(() => {
+      // finally, not a trailing assignment: a throw inside fn would otherwise
+      // leave the flag raised and silently drop every later event for good.
+      try {
+        fn()
+      } finally {
+        queued = false
+      }
+    })
+  }
+}
+
 export default class extends Controller {
   static targets = [
     'pie',
@@ -258,7 +278,9 @@ export default class extends Controller {
     'applyButton',
     'addressInput',
     'clearAddress',
-    'truncatedNote'
+    'truncatedNote',
+    'scrollWrap',
+    'addressCount'
   ]
 
   connect() {
@@ -306,10 +328,76 @@ export default class extends Controller {
       this._pendingAddressScroll = settings.address
     }
 
+    // Keep the "more below" fade in step with the scroll position. Throttled
+    // through rAF and registered passive, as in sticky_col_controller — the
+    // one existing scroll-affordance in the app. The target is guarded because
+    // the controller tests wire targets by hand, the same reason
+    // hasDownloadWrapTarget is guarded below.
+    this._onScroll = rafThrottle(() => this.updateScrollShadow())
+    // A resize can rewrap the header between one and two lines, which moves
+    // where the bottom edge falls, so the height has to be refitted with it.
+    this._onResize = rafThrottle(() => {
+      this.fitScrollHeight()
+      this.updateScrollShadow()
+    })
+    if (this.hasScrollWrapTarget) {
+      this.scrollWrapTarget.addEventListener('scroll', this._onScroll, { passive: true })
+      window.addEventListener('resize', this._onResize, { passive: true })
+    }
+
     this.toggleClearButton()
     this.syncControlsUI()
     this.syncUrl()
     this.fetchAndRender(this.nextSeq())
+  }
+
+  disconnect() {
+    if (this.hasScrollWrapTarget && this._onScroll) {
+      this.scrollWrapTarget.removeEventListener('scroll', this._onScroll)
+    }
+    if (this._onResize) window.removeEventListener('resize', this._onResize)
+  }
+
+  // fitScrollHeight rounds the list's height so the bottom edge cuts a row in
+  // half instead of landing just past one — a row sliced down the middle reads
+  // as "this continues", a 3px sliver reads as padding. It has to be measured
+  // rather than written into the stylesheet because the header is 27px tall
+  // wide-screen and 40px once the money-column labels wrap (every width below
+  // ~1400px), so no single height halves a row in both cases.
+  //
+  // The rounding goes to whichever half-row is nearest, so the result can sit
+  // up to half a row above the stylesheet's height: that value is a target, not
+  // a ceiling, and rounding down instead would drop a whole visible row.
+  //
+  // The target stays in the stylesheet and is read back from it, so the number
+  // has one definition; clearing the inline value first is what makes the
+  // computed style report the CSS one again rather than our own last answer.
+  fitScrollHeight() {
+    if (!this.hasScrollWrapTarget) return
+    const el = this.scrollWrapTarget
+    const head = el.querySelector('thead')
+    const row = el.querySelector('tbody tr')
+    if (!head || !row) return
+
+    el.style.maxHeight = ''
+    const budget = parseFloat(getComputedStyle(el).maxHeight)
+    const headHeight = head.getBoundingClientRect().height
+    const rowHeight = row.getBoundingClientRect().height
+    if (!budget || rowHeight < 1) return
+
+    const whole = Math.max(1, Math.floor((budget - headHeight) / rowHeight))
+    el.style.maxHeight = `${Math.round(headHeight + (whole + 0.5) * rowHeight)}px`
+  }
+
+  // updateScrollShadow shows the bottom fade only while rows remain below the
+  // fold: a list that fits and a list scrolled to its end both resolve to zero
+  // remaining distance and hide it. It runs after every path that rewrites the
+  // rows, because filtering can turn an overflowing list into a fitting one.
+  updateScrollShadow() {
+    if (!this.hasScrollWrapTarget) return
+    const el = this.scrollWrapTarget
+    const remaining = el.scrollHeight - el.scrollTop - el.clientHeight
+    el.classList.toggle('hashrate-shares-scroll-more', remaining > 1)
   }
 
   nextSeq() {
@@ -471,6 +559,7 @@ export default class extends Controller {
     this.miners = (data && data.miners) || []
     this.truncated = !!(data && data.truncated)
     this.renderTable()
+    this.renderAddressCount((data && data.totals && data.totals.addresses) || 0)
     this.renderPie(pieSlices(this.miners))
     if (this._pendingAddressScroll) this.scrollToAddress(this._pendingAddressScroll)
     this._pendingAddressScroll = null
@@ -493,6 +582,22 @@ export default class extends Controller {
     this.pieWrapTarget.classList.add('d-hide')
     if (this.hasDownloadWrapTarget) this.downloadWrapTarget.classList.add('d-hide')
     this.truncatedNoteTarget.classList.add('d-hide')
+    this.updateScrollShadow()
+    this.renderAddressCount(0)
+  }
+
+  // renderAddressCount states how many reward addresses the period holds, so a
+  // list taller than its container isn't mistaken for its visible part. The
+  // count is passed in from the fetched totals — the whole period — and is
+  // deliberately never recomputed by filterByAddress: spec §3.2 keeps period
+  // totals independent of the filtered view, so this must not turn into a count
+  // of matching rows. Zero renders nothing rather than "0": renderTable routes
+  // an empty period to showEmpty, whose message already says there were none.
+  renderAddressCount(count) {
+    if (!this.hasAddressCountTarget) return
+    this.addressCountTarget.textContent = count
+      ? `${count} reward address${count === 1 ? '' : 'es'}`
+      : ''
   }
 
   renderTable() {
@@ -523,6 +628,9 @@ export default class extends Controller {
       this.emptyTarget.textContent = `No reward addresses match “${this.addressFilter}”.`
     }
     this.truncatedNoteTarget.classList.toggle('d-hide', !this.truncated)
+    // Height first: it decides clientHeight, which the fade is measured against.
+    this.fitScrollHeight()
+    this.updateScrollShadow()
   }
 
   // scrollToAddress brings the row for the address carried by ?address= into

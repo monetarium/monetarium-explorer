@@ -40,7 +40,7 @@ export const privacyParticipation = {
     return [start, end]
   },
   formatValue: (seriesIdx, datum) => {
-    return datum.value > 0 ? intComma(datum.value) : '0 VAR'
+    return `${intComma(datum.value)} VAR`
   }
 }
 

@@ -1,5 +1,5 @@
 import { register } from '../registry'
-import { xColumn, unitPrefix, withBigUnits, HASHRATE_UNITS } from '../format'
+import { xColumn, withBigUnits, HASHRATE_UNITS } from '../format'
 
 export const hashrate = {
   name: 'hashrate',
@@ -15,6 +15,8 @@ export const hashrate = {
     hybrid: false
   },
   axes: [
+    // Base unit only. The ticks already carry the magnitude (threeSigFigs -> "10.5B"),
+    // so a prefixed label would scale twice and read "10.5B GH/s".
     { label: 'Network Hashrate (H/s)', scale: 'y' },
     { label: 'Active Miners', scale: 'y2', intTicks: true }
   ],
@@ -30,11 +32,6 @@ export const hashrate = {
       cols.push(raw.active_miners.slice())
     }
     return cols
-  },
-  axisLabel: (raw) => {
-    const max = raw.rate.length ? raw.rate.reduce((a, b) => Math.max(a, b), 0) : 0
-    const p = unitPrefix(max)
-    return p ? `Network Hashrate (${p}H/s)` : 'Network Hashrate (H/s)'
   },
   formatValue: (seriesIdx, datum) => {
     if (seriesIdx === 1) return Math.round(datum.value).toString()

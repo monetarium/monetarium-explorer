@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
   intComma,
-  unitPrefix,
   withBigUnits,
   formatSkaAtomsExact,
   xColumn,
@@ -22,17 +21,6 @@ describe('intComma', () => {
     expect(intComma(null)).toBe('')
     expect(intComma(undefined)).toBe('')
     expect(intComma(NaN)).toBe('')
-  })
-})
-
-describe('unitPrefix', () => {
-  it('picks the SI prefix for the magnitude', () => {
-    expect(unitPrefix(1)).toBe('')
-    expect(unitPrefix(1500)).toBe('k')
-    expect(unitPrefix(2_000_000)).toBe('M')
-  })
-  it('returns empty for non-positive', () => {
-    expect(unitPrefix(0)).toBe('')
   })
 })
 
