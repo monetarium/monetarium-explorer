@@ -20,8 +20,8 @@ projected ticket price) runs in `attackcost_controller.js`.
 ## VAR-Only Legacy Snapshot
 
 **Description:** Reads the legacy flat `HomeInfo.CoinSupply int64` / `TicketPoolInfo`
-(`explorertypes.go:911,1480`) and never the multi-coin `VARCoinSupply`/`SKACoinSupply`.
-`HomeInfo` also carries `CBlockSubsidy` (`:922`) and `ActiveMiners` (`:939`) but neither
+(`explorertypes.go:856,1414`) and never the multi-coin `VARCoinSupply`/`SKACoinSupply`.
+`HomeInfo` also carries `CBlockSubsidy` (`:867`) and `ActiveMiners` (`:884`) but neither
 is read by the `AttackCost` handler.
 All coin-amount labels on the page are `VAR`. Shared with `address/patterns.md`
 ("Legacy flat-field shim (residual)") — the address page retains the same
@@ -66,16 +66,41 @@ Same pattern as `visualblocks/patterns.md` (untyped Go→JS contract).
 - Renaming/removing a *target* → exception in `connect()`, controller dead (loud).
 - Keep template attribute names and the `targets` array in lockstep.
 
-## Vendored-Dygraphs Private Override
+## uPlot Through the Shared Adapter
 
-**Description:** `attackcost_controller.js` monkey-patches the private
-`Dygraph.prototype.doZoomY_` to disable Y-axis zoom. Shares the vendored-Dygraphs coupling
-seen in the charts/visualblocks flows.
+**Description:** The chart is created with `loadUPlot()` / `buildOpts()` from
+`cmd/dcrdata/public/js/helpers/uplot_adapter.js` — the same seam every migrated chart in
+the codebase uses. The controller then reaches past the adapter into uPlot's own surface:
+`this._uplot.over` (overlay node, for the click listener), `.scales.x` (range preserved
+across theme rebuilds), `.cursor.idx`, `.valToPos()`, `.setCursor()`.
 
-**Constraints:** any Dygraphs upgrade must re-verify the private method name still exists.
+**Supersedes:** the previous `Dygraph.prototype.doZoomY_` monkey-patch, removed with the
+Dygraph→uPlot migration. uPlot has no implicit y-zoom, so nothing replaced it.
+
+**Constraints:**
+- A `uplot_adapter` change is cross-page, not local to attack-cost.
+- A uPlot upgrade must re-verify `over`, `scales`, `cursor`, `valToPos`, `setCursor`.
+- Theme changes rebuild the chart wholesale (`_setDark` → `_buildChart`); the x-range must
+  be read off the old instance first or the user's zoom is lost.
+
+## Instance-Scoped Controller State (Turbo)
+
+**Description:** All mutable page state is held on the controller instance
+(`this._height`, `this._hashrate`, `this._coinSupply`, `this._uplot`, `this.ratioTable`, …),
+never in module-level `let`s. Under `@hotwired/turbo` the JS module graph is evaluated once
+per session and survives navigation, so module-level mutable state leaks from one page
+visit to the next; the Stimulus controller instance is the only per-visit scope.
+
+**Constraints:**
+- Module scope is for constants only (`defaultExchangeRate`, `defaultDevice*`, helper fns).
+- Any `async` work started in `connect()` must re-check `this._destroyed` after each
+  `await` — `disconnect()` can run first under Turbo navigation.
+- Any listener attached to a node the framework does not own (here `_uplot.over`) must be
+  stored and removed in `disconnect()`/`_destroyChart()`.
 
 See also:
 - /wiki/code-analysis/attack-cost/flow.full.md (shares-pattern-with)
-- /wiki/code-analysis/visualblocks/patterns.md (shares-pattern-with: untyped Go→JS contract, vendored Dygraphs)
+- /wiki/code-analysis/visualblocks/patterns.md (shares-pattern-with: untyped Go→JS contract)
+- /wiki/code-analysis/charts/patterns.md (shares-pattern-with: uPlot via helpers/uplot_adapter)
 - /wiki/code-analysis/address/patterns.md (shares-pattern-with: legacy flat-field shim — address keeps the back-compat VAR fields, now template-unread)
 - /wiki/core/constraints.md (depends-on: C1 numeric precision)

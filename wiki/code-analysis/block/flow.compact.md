@@ -31,7 +31,7 @@ Mutation Checklist:
 - update `dbtypes.MsgBlockToDBBlock` (or DB/UI diverge)
 - check `explorerUI.Store` AND `PubSubHub.Store` together (both need CBlockSubsidy + ActiveMiners + WindowRemaining + RewardRemaining)
 - if changing `RemainingWindowText`: verify both Store() call-sites + template `remaining` func; check `voting_controller.js` (window_remaining) and `mining_controller.js` (reward_remaining)
-- if changing chart fields (TicketPrice, Difficulty, PoolValue, CoinSupply): update `SetTip` call at `explorer.go:652-665`
+- if changing chart fields (TicketPrice, Difficulty, PoolValue, CoinSupply): update `SetTip` call at `explorer.go:641-654`
 - verify REST vs WebSocket schemas
 - verify template vs WebSocket consistency
 - verify JS parsing (`amount` must remain raw string → otherwise NaN)

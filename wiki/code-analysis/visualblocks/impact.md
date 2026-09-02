@@ -12,7 +12,7 @@ You MUST verify all of the following layers, because the page has **two transpor
 
 ### HTTP handler
 
-- File: [cmd/dcrdata/internal/explorer/explorerroutes.go:320-381](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L320-L381) (`VisualBlocks`).
+- File: [cmd/dcrdata/internal/explorer/explorerroutes.go:357-422](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L357-L422) (`VisualBlocks`).
 - Reads: `dataSource.GetHeight`, `GetExplorerFullBlocks`, `pageData.BlockchainInfo.MaxBlockSize`, `pageData.HomeInfo.SKACoinSupply`, `MempoolInventory().Trim(maxBlockSize)`, `pageData.HomeInfo.NBlockSubsidy`.
 - Risk: compile-time break if `(*BlockInfo).Trim` / `(*MempoolInfo).Trim` signatures change.
 
@@ -26,7 +26,7 @@ You MUST verify all of the following layers, because the page has **two transpor
 
 ### Template helpers (registered in `templates.go`)
 
-- File: [cmd/dcrdata/internal/explorer/templates.go:1019-1075](../../../cmd/dcrdata/internal/explorer/templates.go#L1019-L1075).
+- File: [cmd/dcrdata/internal/explorer/templates.go:1073-1085](../../../cmd/dcrdata/internal/explorer/templates.go#L1073-L1085).
 - New helpers introduced by `38636d52`:
   - `formatBytes(size int32) string` — wraps `humanize.Bytes` with a negative guard.
   - `regularCountForSymbol(counts []types.CoinCount, symbol string) int`.
@@ -95,12 +95,12 @@ If you rename a field on `BlockInfo` (Go struct tag), every one of these must be
 
 ### WebSocket — new block
 
-- Format: `json.Encode(types.WebsocketBlock{Block:&blockCopy, Extra:*HomeInfo})` at [websockethandlers.go:272-300](../../../cmd/dcrdata/internal/explorer/websockethandlers.go#L272-L300).
+- Format: `json.Encode(types.WebsocketBlock{Block:&blockCopy, Extra:*HomeInfo})` at [websockethandlers.go:303-330](../../../cmd/dcrdata/internal/explorer/websockethandlers.go#L272-L300).
 - **`blockCopy` is a shallow copy of `pageData.BlockInfo`** with five fields patched on (`CoinFills`, `ActiveSKACount`, `MaxBlockSize`, `RegularCoinCounts`, `TotalFillRatio`).
 
 ### WebSocket — mempool
 
-- Format: `json.Encode(*TrimmedMempoolInfo)` at [websockethandlers.go:189-209](../../../cmd/dcrdata/internal/explorer/websockethandlers.go#L189-L209). Populated by `Trim(maxBlockSize)` + `Subsidy` patched from `HomeInfo.NBlockSubsidy` (the Subsidy patch is now dead code on this page but kept for shape stability).
+- Format: `json.Encode(*TrimmedMempoolInfo)` at [websockethandlers.go:187-217](../../../cmd/dcrdata/internal/explorer/websockethandlers.go#L189-L209). Populated by `Trim(maxBlockSize)` + `Subsidy` patched from `HomeInfo.NBlockSubsidy` (the Subsidy patch is now dead code on this page but kept for shape stability).
 
 ### Pubsub `/ps` — new block
 
@@ -119,14 +119,14 @@ Risk: breaking one boundary without the other → page renders correctly until t
 
 ### `Store` (BlockDataSaver)
 
-- File: [cmd/dcrdata/internal/explorer/explorer.go:514-934](../../../cmd/dcrdata/internal/explorer/explorer.go#L514-L934).
+- File: [cmd/dcrdata/internal/explorer/explorer.go:498-940](../../../cmd/dcrdata/internal/explorer/explorer.go#L498-L940).
 - Mutates `pageData.BlockInfo`, `pageData.HomeInfo`, `exp.invs.CoinFills`.
 - Calls `types.ComputeCoinFills` (unchanged from PR #284).
 - Fires `sigNewBlock` + `sigMempoolUpdate`.
 
 ### `StoreMPData` (MempoolDataSaver)
 
-- File: [cmd/dcrdata/internal/explorer/explorer.go:480-512](../../../cmd/dcrdata/internal/explorer/explorer.go#L480-L512).
+- File: [cmd/dcrdata/internal/explorer/explorer.go:466-495](../../../cmd/dcrdata/internal/explorer/explorer.go#L466-L495).
 - Mutates `exp.invs`; computes `CoinFills` against `HomeInfo.SKACoinSupply` via `types.ComputeCoinFills`.
 
 ### Duplicate calc in PubSub
@@ -140,14 +140,14 @@ Risk: breaking one boundary without the other → page renders correctly until t
 
 ### `GetExplorerFullBlocks` + `GetExplorerBlock`
 
-- Files: [db/dcrpg/pgblockchain.go:7172-7188](../../../db/dcrpg/pgblockchain.go#L7172-L7188), [:6366-6633](../../../db/dcrpg/pgblockchain.go#L6366-L6633).
+- Files: [db/dcrpg/pgblockchain.go:7311-7325](../../../db/dcrpg/pgblockchain.go#L7311-L7325), [:6562-6839](../../../db/dcrpg/pgblockchain.go#L6562-L6839).
 - `lastExplorerBlock` memo at `:6371-6376` returns a **shared pointer** to multiple page consumers.
 
 Risk: mutating the returned `*BlockInfo` in any handler corrupts all downstream consumers (see [patterns.md#6](patterns.md)). The `sigNewBlock` shallow-copy is the canonical safe-augmentation pattern.
 
 ### `trimmedTxInfoFromMsgTx`
 
-- File: [db/dcrpg/pgblockchain.go:6558-6562](../../../db/dcrpg/pgblockchain.go#L6558-L6562).
+- File: [db/dcrpg/pgblockchain.go:6489-6541](../../../db/dcrpg/pgblockchain.go#L6489-L6541).
 - PR #284 added `Voted: txBasic.VoteInfo != nil` to every `TrimmedTxInfo` it builds. `38636d52` made this field load-bearing: the template and the JS controller both render the three vote states from `(Voted, VoteValid)`. If `trimmedTxInfoFromMsgTx` ever fails to set `Voted` correctly, every vote on the page silently becomes `vote-skip` (grey) regardless of whether it was cast.
 
 ---
@@ -157,9 +157,9 @@ Risk: mutating the returned `*BlockInfo` in any handler corrupts all downstream 
 | Change                                                          | Effect                                                                        |
 | --------------------------------------------------------------- | ----------------------------------------------------------------------------- |
 | Remove `block.Tx` from `BlockInfo`                              | Go: `(*BlockInfo).Trim` scans `bi.Tx` for coinbase → nil-deref. JS: no longer affects this page (controller doesn't read `block.Tx` post-rewrite). |
-| Remove `HomeInfo.NBlockSubsidy`                                 | Compile failure at `explorerroutes.go:357`, `websockethandlers.go:196`, `pubsub/pubsubhub.go:323` (Subsidy patch is now dead on this page but the assignments still exist). |
-| Remove `(*MempoolInfo).Trim`                                    | Compile failure at `explorerroutes.go:354`, `websockethandlers.go:199`, `pubsub/pubsubhub.go:329`. |
-| Remove `(*BlockInfo).Trim`                                      | Compile failure at `explorerroutes.go:348` and `websockethandlers.go:285`.    |
+| Remove `HomeInfo.NBlockSubsidy`                                 | Compile failure at `explorerroutes.go:398`, `websockethandlers.go:204`, `pubsub/pubsubhub.go:326` (Subsidy patch is now dead on this page but the assignments still exist). |
+| Remove `(*MempoolInfo).Trim`                                    | Compile failure at `explorerroutes.go:395`, `websockethandlers.go:207`, `pubsub/pubsubhub.go:329`. |
+| Remove `(*BlockInfo).Trim`                                      | Compile failure at `explorerroutes.go:389` and `websockethandlers.go:324`.    |
 | Change `(*BlockInfo).Trim` or `(*MempoolInfo).Trim` signature   | Compile failure across all callers + `home_viewmodel_test.go`, `templates_test.go`, `dev_indicators.go`, `visualblocks_contract_test.go`. **Safe-by-default property.** |
 | Remove or rename `types.ComputeCoinFills` / `StatsFromCoinRows` | Compile failure across `explorer.go` (Store/StoreMPData), `(*BlockInfo).Trim`, `dev_indicators.go`, `templates_test.go`. |
 | Remove or rename any of `formatBytes`, `regularCountForSymbol`, `mempoolRegularCountForSymbol`, `sumRegularCoinCounts`, `sumMempoolRegularCounts` | Template parse error at first `/visualblocks` request (runtime). |

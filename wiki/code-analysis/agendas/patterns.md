@@ -11,8 +11,8 @@ compiled and functional.
 - **Re-enable cost:** revert the route line(s) back to the real handler and re-add the navbar link.
   No backend work. **Agendas was the worked example** — re-enabled in **PR #395** (`6622b4ae`) by
   restoring `explore.AgendasPage` / `explorer.AgendaPathCtx`+`explore.AgendaPage` at
-  [main.go:780-781](../../../cmd/dcrdata/main.go#L780-L781) and the navbar link at
-  [extras.tmpl:84](../../../cmd/dcrdata/views/extras.tmpl#L84). One latent bug surfaced on
+  [main.go:784-785](../../../cmd/dcrdata/main.go#L784-L785) and the navbar link at
+  [extras.tmpl:93](../../../cmd/dcrdata/views/extras.tmpl#L93). One latent bug surfaced on
   re-enable — a nil DB summary for a not-yet-started agenda; see
   [impact.md](impact.md#risk-not-yet-started-agenda-nil-summary-panic).
 - **Caveat — distinguish dormant from removed.** Treasury/market are *genuine* Monetarium
@@ -36,7 +36,7 @@ Agenda pages compose two independent origins for the same logical entity:
   vote tx; milestones rebuilt from `GetBlockChainInfo.Deployments`
   ([pgblockchain.go:3118-3157](../../../db/dcrpg/pgblockchain.go#L3118-L3157)).
 - **Join key:** string agenda `ID` + lower-cased choice ID (`"yes"`/`"no"`/`"abstain"`) at
-  [explorerroutes.go:2079-2087](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L2079-L2087).
+  [explorerroutes.go:2137-2148](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L2137-L2148).
 - **Constraint:** the live source determines *which agendas exist*; the Postgres source supplies
   *how votes were cast over time*. The two can disagree (a deployment dropped from
   `GetBlockChainInfo` orphans its still-present `agenda_votes` rows). Historical data is only as
@@ -69,9 +69,9 @@ source and needed their own filter.
   agendas with `q.Gte("VoteVersion", MinVoteVersion)` (constant `MinVoteVersion = 11`,
   [deployments.go:57](../../../gov/agendas/deployments.go#L57)). The one accessor feeds the
   `/agendas` table (`AgendasPage`,
-  [explorerroutes.go:2149](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L2149)) **and**
+  [explorerroutes.go:2154](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L2154)) **and**
   the `/api/agendas` JSON (`getAgendasData`,
-  [apiroutes.go:2070](../../../cmd/dcrdata/internal/api/apiroutes.go#L2070)). Introduced for
+  [apiroutes.go:2173-2203](../../../cmd/dcrdata/internal/api/apiroutes.go#L2173-L2203)). Introduced for
   issue #400.
 - **Single-row lookups stay unfiltered.** The companion accessor `AgendaInfo(id)`
   ([deployments.go:270](../../../gov/agendas/deployments.go#L270)) is *not* filtered: the list gate
@@ -79,11 +79,11 @@ source and needed their own filter.
   reachable by URL.
 - **Sibling surface from a different source needs its own filter (the drift caveat).** The
   `/agendas` page also renders live progress *cards* from `voteTracker.Summary().Agendas`
-  ([agendas.tmpl:26-219](../../../cmd/dcrdata/views/agendas.tmpl#L26-L219)) — these do **not** come
+  ([agendas.tmpl:26-221](../../../cmd/dcrdata/views/agendas.tmpl#L26-L221)) — these do **not** come
   from `AllAgendas()`. Filtering only the accessor left those cards still showing Decred-era
   agendas, so `AgendasPage` cross-filters them against the `AllAgendas()` ID set via the pure helper
   `filterAgendaSummaries`
-  ([explorerroutes.go:2200-2208](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L2200-L2208),
+  ([explorerroutes.go:2259-2267](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L2259-L2267),
   tested by `TestFilterAgendaSummaries`; PR #401). Match by **ID** — `AgendaSummary` has no
   `VoteVersion` — on a **defensive copy** of the shared, mutex-guarded `tracker.summary` (must not
   mutate tracker state). Extracting the filter as a pure function is what makes it unit-testable; the

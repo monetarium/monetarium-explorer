@@ -42,7 +42,7 @@ preserve the `SKAValue` pass-through. The callers are `pgblockchain.go:4707`
 **Failure mode:** loud (compile failure) — *if* every site is found. The hazard is the mock sites: missing one fails the build of that test package only, easy to overlook across 10 modules.
 
 **Affected sites:**
-- Production: `db/dcrpg/pgblockchain.go`; the two Go interfaces — `cmd/dcrdata/internal/explorer/explorer.go` (~:80) and `cmd/dcrdata/internal/api/apiroutes.go` (~:58); `explorerUI.AddressListData` ([explorerroutes.go:1642-1656](cmd/dcrdata/internal/explorer/explorerroutes.go#L1642-L1656)).
+- Production: `db/dcrpg/pgblockchain.go`; the two Go interfaces — `cmd/dcrdata/internal/explorer/explorer.go` (~:80) and `cmd/dcrdata/internal/api/apiroutes.go` (~:58); `explorerUI.AddressListData` ([explorerroutes.go:1771-1785](cmd/dcrdata/internal/explorer/explorerroutes.go#L1771-L1785)).
 - Four mock files (must stay in lockstep): [explorer_test.go:52](cmd/dcrdata/internal/explorer/explorer_test.go#L52), [api/noop_ds_test.go:29](cmd/dcrdata/internal/api/noop_ds_test.go#L29), [api/address_api_test.go:15](cmd/dcrdata/internal/api/address_api_test.go#L15), [api/apiroutes_test.go:339](cmd/dcrdata/internal/api/apiroutes_test.go#L339).
 
 **Constraint:** when adding a per-coin field on `AddressInfo`/`CoinBalance`, populate it in **all three** aggregators (see patterns.md "Coin-aware aggregation in three pipelines") plus the `ActiveCoins`/`NumUnconfirmedByCoin` branches; a field set in only one is silently wrong for the other code paths / page positions.
@@ -81,7 +81,7 @@ preserve the `SKAValue` pass-through. The callers are `pgblockchain.go:4707`
 
 **Failure mode:** silent — the chart replays another coin's cached series.
 
-**Description:** the chart cache `ctrl.retrievedData` is keyed by `` `${chart}-${bin}-${coin}` `` ([address_controller.js:623](cmd/dcrdata/public/js/controllers/address_controller.js#L623)); `changeCoin` invalidates via a `__force_refetch__` sentinel (~:456-467). Server cache `AddressCacheItem.history` is keyed `(address, HistoryChart, grouping, coinType)`. **Cache invalidation (`FreshenAddressCaches`) is per-address, not per-(address, coin)** — a reorg invalidates all coins together (intentional; don't "optimize" to per-coin without re-checking reorg correctness).
+**Description:** the chart cache `ctrl.retrievedData` is keyed by `` `${chart}-${bin}-${coin}` `` ([address_controller.js:521](cmd/dcrdata/public/js/controllers/address_controller.js#L521)); `changeCoin` invalidates via a `__force_refetch__` sentinel (`:313`). Server cache `AddressCacheItem.history` is keyed `(address, HistoryChart, grouping, coinType)`. **Cache invalidation (`FreshenAddressCaches`) is per-address, not per-(address, coin)** — a reorg invalidates all coins together (intentional; don't "optimize" to per-coin without re-checking reorg correctness).
 
 ---
 
@@ -91,7 +91,7 @@ preserve the `SKAValue` pass-through. The callers are `pgblockchain.go:4707`
 
 **Failure mode:** silent UX — the table/chart shows a different coin than the URL/selector implies; the filter is dropped on XHR refresh.
 
-**Description:** the backend respects `?coin=` on both the HTML and XHR/CSV/chart paths. The frontend keeps parity via: `coin` in `TurboQuery.nullTemplate` ([address_controller.js:290](cmd/dcrdata/public/js/controllers/address_controller.js#L290)); `coinUrlSegment()` appended in `makeTableUrl`, the chart fetch, and `setTablePaginationLinks`; the Go `linkTemplate` appending `&coin=` when `coinType != CoinTypeAll`. Undeclared keys are silently stripped by `query.replace`. Any new persisted key or URL builder must touch all of these together (see patterns.md "TurboQuery URL ownership").
+**Description:** the backend respects `?coin=` on both the HTML and XHR/CSV/chart paths. The frontend keeps parity via: `coin` in `TurboQuery.nullTemplate` ([address_controller.js:134](cmd/dcrdata/public/js/controllers/address_controller.js#L134)); `coinUrlSegment()` appended in `makeTableUrl`, the chart fetch, and `setTablePaginationLinks`; the Go `linkTemplate` appending `&coin=` when `coinType != CoinTypeAll`. Undeclared keys are silently stripped by `query.replace`. Any new persisted key or URL builder must touch all of these together (see patterns.md "TurboQuery URL ownership").
 
 ---
 
@@ -115,7 +115,47 @@ preserve the `SKAValue` pass-through. The callers are `pgblockchain.go:4707`
 
 ---
 
+## Risk: live-refresh path diverges from the first-paint render
+
+**Trigger:** Changing `AddressData`'s output shape, the `addressSummary` partial, or the
+`/addresstable` response fields, without updating the other side.
+
+**Failure mode:** silent.
+
+**Description:** The address page now has two render paths for the same data: the full
+page render and the per-block refresh (`_refreshOnBlock` → `fetchTable` +
+`refreshSummary` + `invalidateChartCache`). The summary refresh re-renders the *same*
+`{{define "addressSummary"}}` block through `execPartial`, so template changes propagate
+to both — but the surrounding wiring does not. Specifically: `applyBlockStats` reads
+`resp.tx_count` and `resp.unconfirmed_by_coin` from the `/addresstable` JSON by name, and
+`refreshSummary` finds the node to replace by the `[data-address-summary]` attribute
+selector. Renaming either JSON field or dropping that attribute leaves the first paint
+correct and the live update silently dead — the page just stops advancing at the block it
+was loaded on.
+
+Chart refresh has its own trap: `invalidateChartCache()` must write the
+`'__force_refetch__'` sentinel into `state.chart`. Deleting the `retrievedData` entry
+alone is not enough, because `drawGraph()` short-circuits when requested state equals
+current state.
+
 ## Resolved (no longer a risk) — recorded so it isn't re-flagged
+
+**`NumUnspent` overcount in `ReduceAddressHistory` (fixed `6c88ae53`).** The cache path
+incremented `CoinBalance.NumUnspent` for *every* funding row, including rows already spent
+(non-nil `MatchingTxHash`), while `retrieveAddressBalance` gated on
+`matching_tx_hash IS NULL`. The two paths therefore disagreed on the same address, and
+`TotalOutputs` (`NumSpent + NumUnspent`) double-counted spent UTXOs. The increment is now
+gated on `MatchingTxHash == nil`. Value totals were never affected — they come from the
+received/sent accumulators, not the counts. Regression:
+`TestReduceAddressHistory_NumUnspent_SpentUTXOs`.
+
+**Asymmetric `nulldata` filter in the address-balance query (fixed `ba94fa11`,
+`20add0dd`).** `SelectAddressSpentUnspentCountAndValue` excluded `nulldata` funding rows
+but not the corresponding spending rows, so an address funded by an OP_RETURN-bearing tx
+reported an inconsistent balance. The filter was removed outright. Separately the
+`spending_txs` CTE became `SELECT DISTINCT tx_hash`: without it, a spending tx with
+multiple vins joined once per vin and multiplied its own row. Regression test covers
+nulldata funding plus multi-vin spending.
 
 - **sstxcommitment SKA false-positive — FIXED.** `extras.tmpl` now guards the heuristic with `if and (eq .CoinType 0) (eq .SentTotal 0.0)` (VAR-only), so SKA debit rows are no longer misclassified as "sstxcommitment". Residual minor fragility: it is still a float-compare-to-magic-value for VAR; replacing it with an explicit `AddressTx` flag remains a nice-to-have, not a bug.
 - **Per-row coin fields unread by template — FIXED.** `AddressTx.{CoinType,SKAValue,ReceivedTotalSKA,SentTotalSKA}` ([types.go:2302-2310](db/dbtypes/types.go#L2302-L2310)) are read by `extras.tmpl` (Coin column at ~:214/:246; per-coin amount branches).

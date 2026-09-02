@@ -1,13 +1,15 @@
 domain: address
-anchor: fcad89dd
+anchor: d12ec80f
 files:
   - cmd/dcrdata/internal/api/apiroutes.go
   - cmd/dcrdata/internal/explorer/explorer.go
   - cmd/dcrdata/internal/explorer/explorerroutes.go
+  - cmd/dcrdata/internal/explorer/templates.go
+  - cmd/dcrdata/internal/middleware/apimiddleware.go
+  - cmd/dcrdata/main.go
   - cmd/dcrdata/public/js/charts/definitions/address.js
   - cmd/dcrdata/public/js/controllers/address_controller.js
   - cmd/dcrdata/public/js/helpers/chart_panel.js
-  - cmd/dcrdata/public/js/helpers/ska_helper.js
   - cmd/dcrdata/views/address.tmpl
   - cmd/dcrdata/views/extras.tmpl
   - db/cache/addresscache.go

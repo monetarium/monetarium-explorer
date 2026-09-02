@@ -17,7 +17,7 @@ shared risk this domain *grounds* concretely.
 **Trigger:**
 `exp.dataSource.GetTip(ctx)` fails inside `exp.commonData(r)` (DB down,
 migration, tip query error). `commonData` logs and returns `nil`
-([explorerroutes.go:2417-2420](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L2417-L2420)).
+([explorerroutes.go:2476-2480](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L2476-L2480)).
 
 **Failure mode:** loud (HTTP error page).
 
@@ -28,13 +28,13 @@ migration, tip query error). `commonData` logs and returns `nil`
 **Description:**
 The `nil *CommonPageData` is still embedded in the
 `struct{ *CommonPageData; ExtendedParams }` payload
-([explorerroutes.go:2023-2034](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L2023-L2034)).
+([explorerroutes.go:2055-2073](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L2055-L2073)).
 `parameters.tmpl` dereferences `.ChainParams.*` on ~40 rows (first at
 [parameters.tmpl:9](../../../cmd/dcrdata/views/parameters.tmpl) —
 `{{.ChainParams.Name}}`), so template execution fails immediately → the
 handler falls to
 `StatusPage(defaultErrorCode, defaultErrorMessage, "", ExpStatusError)`
-([explorerroutes.go:2036-2039](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L2036-L2039)).
+([explorerroutes.go:2039](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L2039)).
 This is the parameters-grounded instance of the cross-domain *commonData Nil
 Render Crash*: a single DB tip failure takes down every server-rendered page,
 not just `/parameters`. See
@@ -123,7 +123,7 @@ or when `GetBlockChainInfo` RPC warned-and-continued
 
 **Description:**
 The handler falls back to `int64(params.MaximumBlockSizes[0])`
-([explorerroutes.go:1988](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L1988)),
+([explorerroutes.go:2084](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L2084)),
 the launch-time consensus default, which can differ from the node's current
 `MaxBlockSize`. The page shows the fallback with no indication it is not live.
 This is **intended** behavior (the page is block-scoped via `withCache`; only
@@ -146,7 +146,7 @@ the fallback to "force fresh data" instead crashes every non-tip render.
 
 **Description:**
 `params.MaximumBlockSizes[0]`
-([explorerroutes.go:1988](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L1988))
+([explorerroutes.go:2084](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L2084))
 has **no bounds check**. `[INFERRED]` — relies on `monetarium-node` always
 populating this slice for known networks; true for mainnet/testnet/simnet but
 not guaranteed for a custom params build. A custom `chaincfg.Params` with an
@@ -171,7 +171,7 @@ holding `pageData.RLock()`.
 **Description:**
 The handler correctly brackets its read in
 `exp.pageData.RLock()` … `exp.pageData.RUnlock()`
-([explorerroutes.go:1983-1990](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L1983-L1990)),
+([explorerroutes.go:2075-2080](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L2075-L2080)),
 while the background writer `(*explorerUI).Store` reassigns
 `p.BlockchainInfo = blockData.BlockchainInfo` under `p.Lock()`
 ([explorer.go:555](../../../cmd/dcrdata/internal/explorer/explorer.go#L555)).

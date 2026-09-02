@@ -11,8 +11,8 @@ pushed via `BLOCK_RECEIVED` WS event.
   shared snapshot (height, hashrate, ticket price, ticket pool size/value, coin supply);
   no DB/RPC/XHR. Math lives entirely in JS.
 - **VAR-only legacy snapshot:** consumes flat `HomeInfo.CoinSupply int64` /
-  `TicketPoolInfo` (`explorertypes.go:911,1480`); never `VARCoinSupply`/`SKACoinSupply`.
-  `HomeInfo` also carries `CBlockSubsidy` (`:922`) and `ActiveMiners` (`:939`) but the
+  `TicketPoolInfo` (`explorertypes.go:856,1414`); never `VARCoinSupply`/`SKACoinSupply`.
+  `HomeInfo` also carries `CBlockSubsidy` (`:867`) and `ActiveMiners` (`:884`) but the
   `AttackCost` handler reads neither.
   All labels on the page are `VAR`.
 - **Manual-only exchange rate:** USD/VAR comes from the user-edited `Exchange Rate`
@@ -27,8 +27,14 @@ pushed via `BLOCK_RECEIVED` WS event.
 - **Live hashrate via BLOCK_RECEIVED:** `connect()` subscribes to the WS event bus;
   `_onBlock` sets `hashrate = blockData.extra.hash_rate` and calls `calculate()` — no
   intermediate `setAllValues` (already done inside `calculate()`).
-- **Vendored-Dygraphs coupling:** monkey-patches private `doZoomY_` in
-  `attackcost_controller.js`.
+- **uPlot via shared adapter:** chart built with `loadUPlot`/`buildOpts` from
+  `helpers/uplot_adapter`; reaches into `_uplot.over`, `.scales.x`, `.cursor.idx`,
+  `.valToPos`, `.setCursor`. The old `Dygraph.prototype.doZoomY_` monkey-patch is gone.
+- **Instance-scoped state (Turbo):** all mutable page state lives on `this._*`, not
+  module-level `let`s — the module survives Turbo navigation, the controller does not.
+- **`_destroyed` async guard:** `_buildChart` is `async`; every post-`await` step
+  re-checks `this._destroyed`, and `_destroyChart()` removes the `_uplot.over` click
+  listener before `destroy()`.
 
 **Critical constraints:**
 - Precision: `parseInt`/`÷1e8` safe for 8-decimal VAR only; **breaks for 18-decimal SKA**
@@ -49,6 +55,9 @@ pushed via `BLOCK_RECEIVED` WS event.
 - Rename a `data-attackcost-*` **key** → silent `parseInt(null)=NaN` cascade.
 - Rename/remove a `data-attackcost-target` → JS throws in `connect()`, controller dead.
 - Add SKA → precision-corrupts via `parseInt`/`÷1e8`; needs BigInt path, not this one.
-- Upgrade Dygraphs → re-verify `doZoomY_` private override.
+- Upgrade uPlot / change `helpers/uplot_adapter` → re-verify `_uplot.over`,
+  `.scales.x`, `.cursor.idx`, `.valToPos`, `.setCursor`.
+- Move state to module scope, or add an `await` without a `_destroyed` re-check →
+  leaks across Turbo navigations.
 - Write locale-formatted number to `input.value` without `noComma=true` → silent stale input.
 - Loud failure only on template-exec error (`StatusPage`); JS-side failures are silent.

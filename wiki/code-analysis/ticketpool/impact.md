@@ -6,7 +6,7 @@
 **Affected flows:**
 - /wiki/code-analysis/ticketpool/flow.full.md §3.1, §3.2
 **Failure mode:** silent
-**Description:** [db/dcrpg/queries.go:1138-1236](../../../db/dcrpg/queries.go#L1138-L1236) uses positional `rows.Scan(&timestamp, &price, &immature, &live)` / `Scan(&price, &immature, &live)` / `Scan(&output, &count)`. Reordering swaps fields without error. The same struct (`dbtypes.PoolTicketsData`) is populated by all three; partial mismatches surface only as wrong values on the chart, not as runtime errors. Same class as [/wiki/code-analysis/time-based-blocks/impact.md](../time-based-blocks/impact.md) and [/wiki/code-analysis/windows/impact.md](../windows/impact.md).
+**Description:** [db/dcrpg/queries.go:1106-1200](../../../db/dcrpg/queries.go#L1106-L1200) uses positional `rows.Scan(&timestamp, &price, &immature, &live)` / `Scan(&price, &immature, &live)` / `Scan(&output, &count)`. Reordering swaps fields without error. The same struct (`dbtypes.PoolTicketsData`) is populated by all three; partial mismatches surface only as wrong values on the chart, not as runtime errors. Same class as [/wiki/code-analysis/time-based-blocks/impact.md](../time-based-blocks/impact.md) and [/wiki/code-analysis/windows/impact.md](../windows/impact.md).
 
 ## Risk: REST/WS payload drift
 
@@ -33,7 +33,7 @@
 - /wiki/code-analysis/ticketpool/flow.full.md §3.6
 - /wiki/code-analysis/decodetx/impact.md R1
 **Failure mode:** silent
-**Description:** JS hardcodes the three strings in [ticketpool_controller.js:150-160](../../../cmd/dcrdata/public/js/controllers/ticketpool_controller.js#L150-L160); the server side spells `"getticketpooldata"` in the switch case ([websockethandlers.go:169](../../../cmd/dcrdata/internal/explorer/websockethandlers.go#L169)) and appends `+ "Resp"` at line 231. The `disconnect()` deregister calls also depend on the same literals. Rename safety = grep across both `.js` and `.go`, plus the suffix-appending line. Same R1-class risk as [/wiki/code-analysis/decodetx/impact.md](../decodetx/impact.md).
+**Description:** JS hardcodes the three strings in [ticketpool_controller.js:74-81,170](../../../cmd/dcrdata/public/js/controllers/ticketpool_controller.js#L74-L81); the server side spells `"getticketpooldata"` in the switch case ([websockethandlers.go:219](../../../cmd/dcrdata/internal/explorer/websockethandlers.go#L219)) and appends `+ "Resp"` at line 265. The `disconnect()` deregister calls also depend on the same literals. Rename safety = grep across both `.js` and `.go`, plus the suffix-appending line. Same R1-class risk as [/wiki/code-analysis/decodetx/impact.md](../decodetx/impact.md).
 
 ## Risk: TimeGrouping enum drift
 
@@ -54,7 +54,7 @@
 
 ## Risk: Cache-loop removal
 
-**Trigger:** simplifying `ticketPoolVisualization` ([db/dcrpg/pgblockchain.go:1899-1943](../../../db/dcrpg/pgblockchain.go#L1899-L1943)) by removing the `for { ... heightEnd != height ... }` retry.
+**Trigger:** simplifying `ticketPoolVisualization` ([db/dcrpg/pgblockchain.go:1939-1978](../../../db/dcrpg/pgblockchain.go#L1939-L1978)) by removing the `for { ... heightEnd != height ... }` retry.
 **Affected flows:**
 - /wiki/code-analysis/ticketpool/flow.full.md §3.3
 **Failure mode:** silent

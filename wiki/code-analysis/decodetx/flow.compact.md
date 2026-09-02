@@ -23,4 +23,4 @@
 3. Touch `*chainjson.TxRawResult.Vout`? Confirm `Value omitempty` + `SKAValue` + `CoinType` invariant still holds end-to-end; do NOT introduce float conversion on the SKA path.
 4. Adjust size limits? Three independent values (`1<<20` in explorer, `psh.wsHub.requestLimit` in pubsub, `iapi.params.MaxTxSize` in Insight). No shared constant.
 5. Add structured data to the response? You'll be the first to depend on the response *shape* (currently it's just text). Either keep `<pre>.textContent` (no XSS surface) or adopt C6 cloning + parsed payload — don't mix.
-6. Delete or rename the route? Also update the legacy `/explorer/decodetx → /decodetx` redirect in `explorer.go:958`.
+6. Delete or rename the route? Also update the legacy `/explorer/decodetx → /decodetx` redirect in `explorer.go:994`.

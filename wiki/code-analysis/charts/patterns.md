@@ -69,7 +69,7 @@ Without this guard, rapidly switching the chart `<select>` could: (a) have a slo
 Key behavioral invariants:
 - **Render serialization.** Every `render()` call increments `panel.epoch`. `_ensureChart` and `_ensureRanger` check the epoch after each `await` and abort if a newer render superseded them, preventing an orphaned uPlot instance from a slower competing render.
 - **Theme epoch.** Theme changes use a separate `_themeEpoch` so a dark/light toggle cannot abort an in-flight `render()`.
-- **def-reference identity.** `render()` reuses the live uPlot instance when `def === this.currentDef` (same object reference); a different reference triggers a fresh `createChart`. Controllers memoize the def by structural signature (`name|xTime|seriesCount|axisLabel`) to avoid spurious rebuilds.
+- **def-reference identity.** `render()` reuses the live uPlot instance when `def === this.currentDef` (same object reference); a different reference triggers a fresh `createChart`. Controllers memoize the def by structural signature (`name|xTime|seriesCount`) to avoid spurious rebuilds.
 - **Zoom seed race-free.** Pass `opts.range = {min, max}` to `render()` to seed both chart and ranger in the same call, sidestepping the race between a post-render programmatic `setXRange` and the ranger's async microtask layout settle.
 - **`rangerSeedOnce`.** When `true`, the strip data is seeded on first build and kept frozen across subsequent `render()` calls; only the selection rectangle tracks the chart. Use when the chart shows re-bucketed/aggregated data but the ranger must show the full fine-grained history.
 - **Mandatory `destroy()`.** Removes the `NIGHT_MODE` globalEventBus listener and the debounced `window.resize` listener. Must be called in Stimulus `disconnect()`.
@@ -253,10 +253,10 @@ The charts controller no longer uses `Zoom.project(...)` (which was a Dygraphs-e
 - [/wiki/code-analysis/charts/flow.full.md](flow.full.md)
 
 **Description:**
-`hashrate-shares` is a `<select>` option in `charts.tmpl:41` that does not correspond to an `/api/chart/…` endpoint. In `selectChart()` ([charts_controller.js:238](../../../cmd/dcrdata/public/js/controllers/charts_controller.js)), the controller tests `selection === 'hashrate-shares'`, calls `Turbolinks.visit('/hashrate-shares')`, and returns immediately — no `getDefinition`, no data fetch, no uPlot update. The navigation uses `Turbolinks.visit` so the controller's `disconnect()` lifecycle hook fires cleanly and tears down the uPlot instance before the body swap.
+`hashrate-shares` is a `<select>` option in `charts.tmpl:41` that does not correspond to an `/api/chart/…` endpoint. In `selectChart()` ([charts_controller.js:210](../../../cmd/dcrdata/public/js/controllers/charts_controller.js)), the controller tests `selection === 'hashrate-shares'`, calls `Turbo.visit('/hashrate-shares')`, and returns immediately — no `getDefinition`, no data fetch, no uPlot update. The navigation uses `Turbo.visit` so the controller's `disconnect()` lifecycle hook fires cleanly and tears down the uPlot instance before the body swap.
 
 **Constraints:**
-- Any new cross-page option must: (1) add the early-return guard first in `selectChart()`; (2) use `Turbolinks.visit` (not `window.location.assign`) to let the lifecycle fire cleanly.
+- Any new cross-page option must: (1) add the early-return guard first in `selectChart()`; (2) use `Turbo.visit` (not `window.location.assign`) to let the lifecycle fire cleanly.
 - If the target page URL changes, the string in `selectChart()` and the `<option value>` in `charts.tmpl` must be updated together — they are a duplicated pair with no shared constant.
 
 ---
@@ -267,7 +267,7 @@ The charts controller no longer uses `Zoom.project(...)` (which was a Dygraphs-e
 - [/wiki/code-analysis/charts/flow.full.md](flow.full.md)
 
 **Description:**
-The Active Miners y2-axis label on the hashrate chart needs to match the `#c60` (orange) series line color in light mode. `applyControlVisibility(def, selection)` ([charts_controller.js:648-652](../../../cmd/dcrdata/public/js/controllers/charts_controller.js)) adds `chart-hashrate` to `chartsViewTarget` when `hashrate` is selected and removes it for every other selection. The SCSS rule `.chartview.chart-hashrate .dygraph-y2label { color: #c60 }` ([charts.scss:260](../../../cmd/dcrdata/public/scss/charts.scss)) scopes the override. (Note: the CSS selector still targets `.dygraph-y2label` because the uPlot migration left the existing Dygraphs-named class in the SCSS; it applies equally to any `.dygraph-y2label`-classed element rendered by uPlot's axis label injection, if the adapter adopts the same class.)
+The Active Miners y2-axis label on the hashrate chart needs to match the `#c60` (orange) series line color in light mode. `applyControlVisibility(def, selection)` ([charts_controller.js:334-352](../../../cmd/dcrdata/public/js/controllers/charts_controller.js)) adds `chart-hashrate` to `chartsViewTarget` when `hashrate` is selected and removes it for every other selection. The SCSS rule `.chartview.chart-hashrate .dygraph-y2label { color: #c60 }` ([charts.scss:261](../../../cmd/dcrdata/public/scss/charts.scss)) scopes the override. (Note: the CSS selector still targets `.dygraph-y2label` because the uPlot migration left the existing Dygraphs-named class in the SCSS; it applies equally to any `.dygraph-y2label`-classed element rendered by uPlot's axis label injection, if the adapter adopts the same class.)
 
 **Constraints:**
 - The CSS class name in `applyControlVisibility()` and in `charts.scss` must stay in sync.

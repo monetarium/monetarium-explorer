@@ -27,7 +27,7 @@ messagesocket_service.send ─JSON over WS──▶ RootWebsocket recv goroutine
                             ┌───────────────────────────────┐
                             │ "decodetx" → dataSource       │
                             │   .DecodeRawTransaction       │── ChainDB.DecodeRawTransaction
-                            │ "sendtx"   → dataSource       │   (db/dcrpg/pgblockchain.go:7345)
+                            │ "sendtx"   → dataSource       │   (db/dcrpg/db/dcrpg/insightapi.go:49)
                             │   .SendRawTransaction         │── ChainDB.SendRawTransaction
                             └───────────────────────────────┘   (db/dcrpg/insightapi.go:49)
                                                 │                       │
@@ -59,10 +59,10 @@ The second transport (`/ps`) follows the same RPC path but wraps the response in
 
 **Location:**
 
-- Route: [cmd/dcrdata/main.go:750](../../../cmd/dcrdata/main.go#L750) — `r.Get("/decodetx", explore.DecodeTxPage)`.
-- Legacy redirect: [cmd/dcrdata/internal/explorer/explorer.go:1005](../../../cmd/dcrdata/internal/explorer/explorer.go#L1005) — `exp.Mux.Get("/decodetx", redirect("decodetx"))` (handles `/explorer/decodetx → /decodetx`).
-- Handler: [cmd/dcrdata/internal/explorer/explorerroutes.go:1728](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L1728) — `DecodeTxPage`.
-- Template: [cmd/dcrdata/views/rawtx.tmpl](../../../cmd/dcrdata/views/rawtx.tmpl).
+- Route: [cmd/dcrdata/main.go:755](../../../cmd/dcrdata/main.go#L755) — `r.Get("/decodetx", explore.DecodeTxPage)`.
+- Legacy redirect: [cmd/dcrdata/internal/explorer/explorer.go:994](../../../cmd/dcrdata/internal/explorer/explorer.go#L994) — `exp.Mux.Get("/decodetx", redirect("decodetx"))` (handles `/explorer/decodetx → /decodetx`).
+- Handler: [cmd/dcrdata/internal/explorer/explorerroutes.go:1789](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L1789) — `DecodeTxPage`.
+- Template: [cmd/dcrdata/views/rawtx.tmpl](../../../cmd/dcrdata/views/rawtx.tmpl). The page container is now the `<main>` landmark rather than `<div class="container main">` (accessible-names pass); `data-controller="rawtx"` and the three `data-event-id` attributes are unchanged.
 
 **Data structures:** none. The handler renders with only `*CommonPageData` (navbar/footer chrome, `Tip`, `NetName`, `Links`, etc.):
 
@@ -138,7 +138,7 @@ str, err := exp.templates.exec("rawtx", struct {
 
 - Interface (explorer-side): [cmd/dcrdata/internal/explorer/explorer.go:110-111](../../../cmd/dcrdata/internal/explorer/explorer.go#L110-L111).
 - Interface (pubsub-side): [pubsub/pubsubhub.go:53-54](../../../pubsub/pubsubhub.go#L53-L54).
-- Decode impl: [db/dcrpg/pgblockchain.go:7468-7482](../../../db/dcrpg/pgblockchain.go#L7468-L7482) — `ChainDB.DecodeRawTransaction`.
+- Decode impl: [db/dcrpg/pgblockchain.go:7277-7289](../../../db/dcrpg/pgblockchain.go#L7277-L7289) — `ChainDB.DecodeRawTransaction`.
 - Send impl: [db/dcrpg/insightapi.go:49-63](../../../db/dcrpg/insightapi.go#L49-L63) — `ChainDB.SendRawTransaction`.
 
 **Transformations:**
@@ -165,7 +165,7 @@ Because the explorer passes this through verbatim as a JSON blob (it never reads
 
 `DecodeRawTransaction` / `SendRawTransaction` have one mock pair:
 
-- [cmd/dcrdata/internal/explorer/explorer_test.go:151-154](../../../cmd/dcrdata/internal/explorer/explorer_test.go#L151-L154) — `mockDataSource`.
+- [cmd/dcrdata/internal/explorer/explorer_test.go:154-159](../../../cmd/dcrdata/internal/explorer/explorer_test.go#L154-L159) — `mockDataSource`.
 
 Pubsub has no separate mock for these two methods (its test suite does not exercise the decodetx/sendtx branch).
 
@@ -201,7 +201,7 @@ Pubsub has no separate mock for these two methods (its test suite does not exerc
 **When modifying anything related to `/decodetx`, check:**
 
 1. **Event-ID strings.** Renaming `"decodetx"` / `"sendtx"` requires changes in **all five** places: rawtx.tmpl `data-event-id` (3 occurrences: textarea, Decode button, Broadcast button — note Enter on textarea also fires `decodetx`), explorer `case` (websockethandlers.go), pubsub `case` (pubsubhub.go), `pstypes.eventIDs` map (`SigDecodeTx`/`SigSendTx`), and rawtx_controller.js `registerEvtHandler` calls (`decodetxResp`/`sendtxResp`). The response suffix `"Resp"` lives only on the server (`msg.EventId + "Resp"`); changing it requires a matching JS rename.
-2. **Interface signature.** `DecodeRawTransaction(ctx, txhex string) (*chainjson.TxRawResult, error)` is declared on **both** the explorer's `dataSource` interface (explorer.go:109) and the pubsub `sourceBase` interface (pubsubhub.go:53) — keep them in sync. The implementation is in `ChainDB` (db/dcrpg/pgblockchain.go:7468). Mocks live in explorer_test.go.
+2. **Interface signature.** `DecodeRawTransaction(ctx, txhex string) (*chainjson.TxRawResult, error)` is declared on **both** the explorer's `dataSource` interface (explorer.go:109) and the pubsub `sourceBase` interface (pubsubhub.go:53) — keep them in sync. The implementation is in `ChainDB` (db/dcrpg/pgblockchain.go:7277). Mocks live in explorer_test.go.
 3. **Response shape.** `*chainjson.TxRawResult` is the on-the-wire contract (as JSON text). Adding fields server-side is safe — the frontend just dumps the string. Removing or renaming fields breaks any external consumer that *does* parse, including future pages that might decode the same blob.
 4. **SKA precision.** The current code path is precision-safe by accident (pass-through string). The moment any intermediate code does `for _, vout := range tx.Vout { ... vout.Value ... }` and treats it as the canonical amount for SKA outputs, it silently corrupts atoms (`Value` is zero/omitted for SKA; `SKAValue` is the real atoms-as-string).
 5. **Size limit.** `requestLimit := 1 << 20` is local to `RootWebsocket`. The pubsub side uses `psh.wsHub.requestLimit` (separate value). The Insight REST side uses `iapi.params.MaxTxSize`. A consolidation effort that changes one limit should consider the other two.
@@ -226,29 +226,29 @@ Pubsub has no separate mock for these two methods (its test suite does not exerc
 ## Section 7 — Common Pitfalls
 
 1. **Assuming `decodetxResp` only fires on success.** The server uses the same event ID for both branches. A controller that styles or auto-parses the response on `decodetxResp` must inspect the message body for the `"Error: "` prefix. The current controller side-steps this by treating the body as opaque text and always showing the "Decoded tx" header — which is misleading on the error path but harmless.
-2. **Editing only the explorer's `case "decodetx"`.** The pubsub copy at [pubsub/pubsubhub.go:290](../../../pubsub/pubsubhub.go#L290) is structurally identical and has to track. There is no shared function between them; refactoring into a shared helper would reduce drift risk.
+2. **Editing only the explorer's `case "decodetx"`.** The pubsub copy at [pubsub/pubsubhub.go:292-309](../../../pubsub/pubsubhub.go#L292-L309) is structurally identical and has to track. There is no shared function between them; refactoring into a shared helper would reduce drift risk.
 3. **Treating the page like other explorer pages.** There is no `pageData`/`HomeInfo`/`commonData.X` to populate. Adding pre-decoded data to the server-rendered HTML would create the first template→WS parity dependency the page currently lacks (C3 trap).
 4. **Using `innerHTML` for the response (violating C6).** The current `<pre>.textContent = evt` is the right call — the response is intentionally raw text and contains potentially user-controlled hex/script content. Replacing it with `innerHTML` would open an XSS surface from a node-decoded `asm` or `addresses` string.
 5. **Coupling decode and send signatures.** They look alike but have different return types (`*TxRawResult` vs `string txid`) and different external surfaces (decode is internal-only, send is also exposed on `/insight/api/tx/send`). Don't refactor them behind a shared interface without updating the Insight REST caller.
-6. **Forgetting the legacy `/explorer/decodetx` route** ([explorer.go:1005](../../../cmd/dcrdata/internal/explorer/explorer.go#L1005)). It 308-redirects to `/decodetx`; if the canonical route is renamed, the redirect target must update too.
+6. **Forgetting the legacy `/explorer/decodetx` route** ([explorer.go:994](../../../cmd/dcrdata/internal/explorer/explorer.go#L994)). It 308-redirects to `/decodetx`; if the canonical route is renamed, the redirect target must update too.
 7. **Cross-tx-coin assumption.** Per CLAUDE.md, a tx is always single-coin. If the decoded blob contains mixed `CoinType` Vouts, treat it as a node-side bug, not a feature; this page surfaces whatever the node returns without normalization.
 
 ## Section 8 — Evidence
 
-- Route registration: [cmd/dcrdata/main.go:750](../../../cmd/dcrdata/main.go#L750); legacy redirect [cmd/dcrdata/internal/explorer/explorer.go:1005](../../../cmd/dcrdata/internal/explorer/explorer.go#L1005); WS routes [cmd/dcrdata/main.go:663-664](../../../cmd/dcrdata/main.go#L663-L664).
-- HTTP handler: [cmd/dcrdata/internal/explorer/explorerroutes.go:1728-1744](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L1728-L1744).
+- Route registration: [cmd/dcrdata/main.go:755](../../../cmd/dcrdata/main.go#L755); legacy redirect [cmd/dcrdata/internal/explorer/explorer.go:994](../../../cmd/dcrdata/internal/explorer/explorer.go#L994); WS routes [cmd/dcrdata/main.go:661-662](../../../cmd/dcrdata/main.go#L661-L662).
+- HTTP handler: [cmd/dcrdata/internal/explorer/explorerroutes.go:1789-1803](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L1789-L1803).
 - Template: [cmd/dcrdata/views/rawtx.tmpl](../../../cmd/dcrdata/views/rawtx.tmpl) (43 lines, no data bindings).
 - Explorer WS receive loop & cases: [cmd/dcrdata/internal/explorer/websockethandlers.go:109-271](../../../cmd/dcrdata/internal/explorer/websockethandlers.go#L109-L271), cases at lines 134 (`decodetx`) and 150 (`sendtx`).
 - Pubsub WS twin: [pubsub/pubsubhub.go:292-319](../../../pubsub/pubsubhub.go#L292-L319); signal constants [pubsub/types/pubsub_types.go:134-136](../../../pubsub/types/pubsub_types.go#L134-L136).
 - Data source interface: [cmd/dcrdata/internal/explorer/explorer.go:109-110](../../../cmd/dcrdata/internal/explorer/explorer.go#L109-L110); [pubsub/pubsubhub.go:53-54](../../../pubsub/pubsubhub.go#L53-L54).
-- Decode impl: [db/dcrpg/pgblockchain.go:7468-7482](../../../db/dcrpg/pgblockchain.go#L7468-L7482).
+- Decode impl: [db/dcrpg/pgblockchain.go:7277-7289](../../../db/dcrpg/pgblockchain.go#L7277-L7289).
 - Send impl: [db/dcrpg/insightapi.go:49-63](../../../db/dcrpg/insightapi.go#L49-L63).
 - Insight REST send: [cmd/dcrdata/internal/api/insight/apiroutes.go:329-364](../../../cmd/dcrdata/internal/api/insight/apiroutes.go#L329-L364); route [cmd/dcrdata/internal/api/insight/apirouter.go:73](../../../cmd/dcrdata/internal/api/insight/apirouter.go#L73).
 - Node Vout/TxRawResult shape: [monetarium-node/rpc/jsonrpc/types/chainsvrresults.go:410-424](../../../../monetarium-node/rpc/jsonrpc/types/chainsvrresults.go#L410-L424) (TxRawResult) and lines 832-841 (Vout multi-coin fields).
 - Frontend controller: [cmd/dcrdata/public/js/controllers/rawtx_controller.js](../../../cmd/dcrdata/public/js/controllers/rawtx_controller.js).
 - WS client service: [cmd/dcrdata/public/js/services/messagesocket_service.js](../../../cmd/dcrdata/public/js/services/messagesocket_service.js).
 - WS bootstrap: [cmd/dcrdata/public/index.js:37-61](../../../cmd/dcrdata/public/index.js#L37-L61).
-- Mock data source: [cmd/dcrdata/internal/explorer/explorer_test.go:151-154](../../../cmd/dcrdata/internal/explorer/explorer_test.go#L151-L154).
+- Mock data source: [cmd/dcrdata/internal/explorer/explorer_test.go:154-159](../../../cmd/dcrdata/internal/explorer/explorer_test.go#L154-L159).
 
 See also:
 - /wiki/code-analysis/transaction/flow.full.md (shares-pattern-with: `*chainjson.TxRawResult`/`Vout` shape consumed by the read-only `/tx` page; same multi-coin Vout contract)

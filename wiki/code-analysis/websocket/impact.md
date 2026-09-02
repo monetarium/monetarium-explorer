@@ -38,11 +38,32 @@ string), so it offers no protection — the discipline must live in the builder.
 *Depends-on:* C1.
 
 ## R5 — Hub fan-out backpressure change (loud or silent)
-**Trigger:** make the spoke send blocking, or resize `make(hubSpoke, 3)` /
-`clientSignalSize`. **Failure:** blocking send → one slow client stalls `run()` for
-**all** clients (loud, global). Larger buffers → slow clients linger instead of
-being unregistered, hiding the problem. See
-[websocket.go:263-267](../../../cmd/dcrdata/internal/explorer/websocket.go#L263-L267).
+**Trigger:** make the spoke send blocking, or resize `make(hubSpoke, 3)` (`/ws`) /
+`make(hubSpoke, 64)` (`/ps`) / `clientSignalSize`. **Failure:** blocking send → one
+slow client stalls `run()` for **all** clients. Larger buffers → slow clients linger
+instead of being unregistered, hiding the problem. See
+[websocket.go:262-267](../../../cmd/dcrdata/internal/explorer/websocket.go#L262-L267)
+and [pubsub/websocket.go:394-404](../../../pubsub/websocket.go#L394-L404).
+
+**This is not hypothetical — it happened.** The `/ps` hub used a timer-based blocking
+send; a slow `/ps` client blocked the hub, the stall propagated into `processBlock`,
+and the explorer desynced from chain progress permanently until restart (`ce113bd0`).
+Anything that reintroduces blocking on either hub reintroduces that failure. Also do
+not add a `killed`-channel wait to pubsub's `unregisterClient`: draining a full
+64-message buffer can take minutes, and waiting inside the single-goroutine `Run()`
+loop is the same deadlock in a different place. Regression:
+`pubsub/websocket_test.go` `TestWebsocketHubEvictsSlowClient`.
+
+## R13 — `sigNewBlock` broadcast with unpopulated page data (hard)
+**Trigger:** removing the nil guard at
+[websockethandlers.go:307-313](../../../cmd/dcrdata/internal/explorer/websockethandlers.go#L307-L313),
+or adding a new `exp.pageData.*` read to the `sigNewBlock` arm without extending it.
+**Failure:** hard — nil-pointer dereference in the broadcast goroutine during the
+startup window, before the first `Store()` has populated `BlockInfo`,
+`BlockchainInfo` and `HomeInfo`. The arm now snapshots all three under `RLock`,
+bails out with a debug log if any is nil, and reads through the locals
+(`bci.MaxBlockSize`, `home.SKACoinSupply`) rather than re-dereferencing
+`exp.pageData` after the check.
 
 ## R6 — Broken connCtx teardown (hard, resource leak)
 **Trigger:** remove/short-circuit a `defer cancel()` / `defer closeWS()`, or stop

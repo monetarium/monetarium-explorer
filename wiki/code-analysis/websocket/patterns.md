@@ -29,18 +29,43 @@ load-bearing; dropping one leaks a goroutine and a socket.
 
 ## P3 — Hub fan-out with unregister-on-backpressure
 `run()` delivers a signal to every client with a **non-blocking** channel send;
-if the client's buffered spoke (`make(hubSpoke, 3)`) is full, the `default` arm
-unregisters that client rather than blocking the hub
-([websocket.go:263-267](../../../cmd/dcrdata/internal/explorer/websocket.go#L263-L267)).
+if the client's buffered spoke (`make(hubSpoke, 3)`,
+[websockethandlers.go:30](../../../cmd/dcrdata/internal/explorer/websockethandlers.go#L30))
+is full, the `default` arm unregisters that client rather than blocking the hub
+([websocket.go:262-267](../../../cmd/dcrdata/internal/explorer/websocket.go#L262-L267),
+and again for the buffered `sigNewTxs` flush at
+[:310-317](../../../cmd/dcrdata/internal/explorer/websocket.go#L310-L317)).
 This keeps one slow consumer from stalling broadcast to all others.
-**Constraint:** the send must stay non-blocking; converting it to a blocking send
-couples every client's liveness to the slowest one.
+
+**The `/ps` pubsub hub now follows the same pattern.** It previously used a
+timer-based *blocking* send, so a single slow `/ps` client could block the hub
+indefinitely; that stall propagated into `processBlock`, which then missed its
+deadline and desynced from chain progress permanently until restart. The fix
+(`ce113bd0`) replaced it with the same `select`/`default` + immediate
+`unregisterClient` shape ([pubsub/websocket.go:394-404](../../../pubsub/websocket.go#L394-L404))
+and raised the client spoke buffer from 16 to 64
+([pubsub/websocket.go:237](../../../pubsub/websocket.go#L237)).
+`PubSubHub.WebSocketHandler` also calls `UnregisterClient` on disconnect
+([pubsub/pubsubhub.go:628](../../../pubsub/pubsubhub.go#L628)), so a dead client is
+evicted at hang-up rather than lingering until the next hub message finds it.
+
+One asymmetry is deliberate and documented in the code: the pubsub
+`unregisterClient` does **not** wait on the client's `killed` channel, because a
+full 64-message buffer can take minutes to drain (64 × 5s per write) and waiting
+inside the single-goroutine `Run()` loop would reintroduce the very deadlock the
+fix targets. The `killed` wait is collected and performed once, at shutdown, in
+`unregisterAllClients`.
+
+**Constraint:** the send must stay non-blocking on **both** hubs; converting either
+to a blocking send couples every client's liveness — and, via `processBlock`, the
+whole block pipeline — to the slowest consumer. Regression coverage:
+`pubsub/websocket_test.go` `TestWebsocketHubEvictsSlowClient`.
 
 ## P4 — RPC-over-WebSocket via `<event>Resp`
 Client requests (`getmempooltxs`, `getmempooltrimmed`, `getticketpooldata`,
 `decodetx`, `sendtx`) are answered on the same socket with `EventId =
 msg.EventId + "Resp"`
-([websockethandlers.go:241](../../../cmd/dcrdata/internal/explorer/websockethandlers.go#L241)).
+([websockethandlers.go:265](../../../cmd/dcrdata/internal/explorer/websockethandlers.go#L265)).
 Both success and error ride the same `Resp` event; the body is a free string the
 controller interprets. `getmempooltxs` also carries a client-supplied inventory id
 so the server can short-circuit when the client is already current
