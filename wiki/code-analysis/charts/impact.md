@@ -47,7 +47,7 @@ Adding a new SKA chart format (or modifying `skaSupplyChart` / `aggregateSKASupp
 ## Risk: `LoadSKASupplyForCoin` invoked with `coinType == 0`
 
 **Trigger:**
-Removing or weakening the `coinType > 0` guard in `ChartTypeData` ([cmd/dcrdata/internal/api/apiroutes.go:1901 approx](../../../cmd/dcrdata/internal/api/apiroutes.go)), or calling `LoadSKASupplyForCoin(ctx, charts, 0)` from any new caller.
+Removing or weakening the `coinType > 0` guard in `ChartTypeData` ([cmd/dcrdata/internal/api/apiroutes.go:1995-2062 (guards at :2007, :2028)](../../../cmd/dcrdata/internal/api/apiroutes.go)), or calling `LoadSKASupplyForCoin(ctx, charts, 0)` from any new caller.
 
 **Affected flows:**
 - [/wiki/code-analysis/charts/flow.full.md](flow.full.md)
@@ -109,7 +109,7 @@ The interface is implemented by the real `(*ChainDB).LoadSKASupplyForCoin` ([db/
 ## Risk: `ActiveSKATypes` projection drift hides coins from the dropdown
 
 **Trigger:**
-Changing how `HomeInfo.SKACoinSupply` is tracked, or the `ActiveSKATypes` projection in `(*explorerUI).Charts` ([cmd/dcrdata/internal/explorer/explorerroutes.go:1692-1697 approx](../../../cmd/dcrdata/internal/explorer/explorerroutes.go)).
+Changing how `HomeInfo.SKACoinSupply` is tracked, or the `ActiveSKATypes` projection in `(*explorerUI).Charts` ([cmd/dcrdata/internal/explorer/explorerroutes.go:1806-1837 (ActiveSKATypes at :1821, :1826)](../../../cmd/dcrdata/internal/explorer/explorerroutes.go)).
 
 **Affected flows:**
 - [/wiki/code-analysis/charts/flow.full.md](flow.full.md)

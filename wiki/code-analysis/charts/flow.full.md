@@ -61,8 +61,8 @@ PostgreSQL `vins.value_in` deltas → `pgb.coinSupply` fetcher populates `ChartD
 - **Location:** `cmd/dcrdata/internal/explorer/explorer.go:648-665` (`Store` → `SetTip`)
   - Calls `cd.SetTip(cache.ChartTip{...})` on every new block, sourcing values from `blockData.Header`, `blockData.CurrentStakeDiff`, and `blockData.PoolInfo`. `PoolValue` is converted from float VAR to atoms (`uint64(poolValAtoms)`).
 
-- **Location:** `cmd/dcrdata/views/charts.tmpl:33-41`
-  - `<option value="coin-supply/0">` (VAR), `range .ActiveSKATypes` loop for SKA coins, `range .ActiveSKATypes` loop for `fees/N`, `<option value="hashrate-shares">` (cross-page navigation, no data load). Line 41: hashrate-shares → the only option triggering `Turbolinks.visit`.
+- **Location:** `cmd/dcrdata/views/charts.tmpl:33-41`. Page structure note: the `<main>` landmark wraps only the **controls** block and closes before the chart wrapper (`charts.tmpl:12` … `:210`); `data-charts-target="chartWrapper"` sits outside it. This was deliberate — the landmark was first added around the whole page and then moved to close at the controls.
+  - `<option value="coin-supply/0">` (VAR), `range .ActiveSKATypes` loop for SKA coins, `range .ActiveSKATypes` loop for `fees/N`, `<option value="hashrate-shares">` (cross-page navigation, no data load). Line 41: hashrate-shares → the only option triggering `Turbo.visit`.
 
 - **Location:** `cmd/dcrdata/public/js/charts/registry.js`
   - `register(def)` stores static definitions by `def.name`.
@@ -73,7 +73,8 @@ PostgreSQL `vins.value_in` deltas → `pgb.coinSupply` fetcher populates `ChartD
 - **Location:** `cmd/dcrdata/public/js/charts/format.js`
   - `xColumn(raw, n, offset=1)` — canonical x-column builder: block-bin height → 0-based index (`Array.from({length:n}, (_,i) => i)`; genesis = height 0); other height-bin → `offset + raw.h[i]`; time → `raw.t.slice(0, n)`.
   - `formatSkaAtomsExact(atomStr)` → `splitSkaAtomsNoTrailing` for exact 18-decimal display.
-  - `ATOMS_TO_VAR = 1e-8`, `intComma`, `withBigUnits`, `unitPrefix`.
+  - `ATOMS_TO_VAR = 1e-8`, `intComma`, `withBigUnits`. (`unitPrefix` was deleted — see
+    the axis-unit note under `memoizedDef` below.)
 
 - **Location:** `cmd/dcrdata/public/js/charts/definitions/coin_supply.js`
   - `coinSupplyDef(coinType)` factory: `isSKA = coinType > 0`. `toColumns(raw)` → `xColumn(raw, ys.length)` + supply converted to float (SKA: `Number(s)*1e-18`; VAR: `s * ATOMS_TO_VAR`). `formatValue(seriesIdx, datum)` → for SKA reads `datum.payload.supply[datum.idx]` (exact atom string); for VAR uses `intComma(datum.value)`. SKA series carries `logFloor: 1` to prevent log-axis collapse during zero-supply prefix.
@@ -100,8 +101,34 @@ PostgreSQL `vins.value_in` deltas → `pgb.coinSupply` fetcher populates `ChartD
 - **Location:** `cmd/dcrdata/public/js/controllers/charts_controller.js`
   - `this.fetchGeneration` — monotonic counter bumped by `selectChart()` on every chart selection. After each fetch `await`, if the counter has advanced, the stale result is discarded. Prevents a slow fetch from clobbering `this.payload`. (Chart-creation overlap guard is now owned by `panel.epoch` in `chart_panel.js`.)
   - `this.panel` — a `ChartPanel` instance created in `connect()`. Owns the handle + ranger + tooltip + resize + theme. `panel.handle` exposes the underlying `ChartHandle`; `panel.setXRange(min, max)` drives both chart and ranger in lockstep.
-  - `selectChart()` — `hashrate-shares` early-return via `Turbolinks.visit`; all others: `getDefinition(name)` → fetch (if needed) → `renderChart(def)`.
-  - `memoizedDef(def)` — returns the same object reference when the structural signature `name|xTime|seriesCount|axisLabel` is unchanged; a new reference forces `panel._ensureChart` to rebuild the uPlot instance. Axis type is included in the signature so an axis toggle triggers a rebuild.
+  - `selectChart()` — `hashrate-shares` early-return via `Turbo.visit`; all others: `getDefinition(name)` → fetch (if needed) → `renderChart(def)`.
+  - `memoizedDef(def)` (`:295`) — returns the same object reference when the structural
+    signature `name|xTime|seriesCount` is unchanged; a new reference forces
+    `panel._ensureChart` to rebuild the uPlot instance. `xTime` is in the signature so an
+    axis toggle triggers a rebuild, and the memo now stores a **spread copy**
+    (`this._memoDef = { ...renderDef }`) so a signature change always yields a genuinely
+    new reference rather than handing back the caller's object.
+
+    Two things left this function since the last trace:
+    - **`axisLabel` is gone from the signature**, because the dynamic-axis-label mechanism
+      was removed. `chainwork`/`hashrate` used to supply a `def.axisLabel(payload)`
+      function that stamped an SI unit prefix onto the y-axis label; combined with the
+      tick formatter this **double-scaled the ticks** (the prefix scaled the label while
+      the values were already scaled). The prefix was dropped, `format.js`'s `unitPrefix`
+      helper was deleted with it, and the axis label is now static per definition.
+    - **`resolveRenderDef` is gone**, inlined into `renderChart` (`:269`). The only
+      surviving transformation is hashrate's: when the payload carries no
+      `active_miners`, the rendered def is `{ ...def, axes: [def.axes[0]], series:
+      [def.series[0]] }` — which is why the def actually rendered is a new object every
+      call and the memo is what keeps the panel from rebuilding.
+  - `_clearChartContainers(source)` (`:140`) — empties `chartsViewTarget` and
+    `rangerViewTarget` (and destroys the panel when not called from `connect`). Called
+    twice: from `connect()` (`:58`) as **recovery**, and from a `turbo:before-cache`
+    listener registered at `:121-122` as **prevention**. Turbo snapshots the DOM *before*
+    Stimulus `disconnect()` fires, so without the `before-cache` wipe a cached snapshot
+    keeps its uPlot canvases, restores them into the live DOM, and `selectChart()` then
+    appends a fresh chart alongside — accumulating duplicates on every back-navigation.
+    `disconnect()` (`:127`) removes the listener.
   - `renderChart(def)` — calls `memoizedDef(def)` → `settingsForDef()` → `toColumns(payload, settings)` → `computeZoomTarget(cols[0])` → `panel.render(renderDef, payload, settings, {range})`.
   - `computeZoomTarget(xs)` — pure; returns `{min, max}` or `null`. Replaces `applyZoom()` which imperatively called `setMainXRange`; the target is now passed to `panel.render()` as `opts.range` so the initial zoom is seeded atomically, avoiding the deferred-ranger-seed race (spec A1).
   - `persistRange(min, max, snap)` — persists visible x-range to URL + ZOOM control; called from the `onRangeChange` panel callback. `snap=true` (source='chart') → preset snapping; `snap=false` (source='ranger') → custom base-36 range. Reads `panel.handle.uplot.data[0]` for xs.
