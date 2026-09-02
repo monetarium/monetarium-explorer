@@ -182,6 +182,7 @@ When modifying chart data structures or pipelines, check ALL of:
 - Building a `toColumns` that returns a different column count than `def.series.length` — silent rendering corruption (uPlot maps column N to series N-1; extras are ignored, missing cause `undefined`).
 - Using `datum.value` (the float) rather than `datum.payload.supply[datum.idx]` (the atom string) for SKA legend formatting in `formatValue` — precision loss past ~15 significant digits.
 - Adding a new VAR-supply variant on the legacy `coin-supply` chart ID instead of `coin-supply/0` — the bare ID is on the deprecation path.
+- Prefixing a physical-unit axis label ("GH/s", "MB") — the label carries the base unit and the ticks carry the magnitude, so a prefix scales twice ("10.5G GH/s"). Physical-unit axes (H/s, H, bytes) set `siTicks: true` so the ticks speak the same SI alphabet as the label and the tooltip; counts and money keep the short scale (k/M/B) of `threeSigFigs`.
 - Building a Y-axis label with a hardcoded "DCR" or "VAR" — use `renderCoinType(coinType)` from `ska_helper.js`.
 
 ### 8. Evidence

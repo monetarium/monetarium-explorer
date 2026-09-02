@@ -21,7 +21,9 @@ export const blockSize = {
   name: 'block-size',
   label: 'Block Size',
   controls: { ...baseControls },
-  axes: [{ label: 'Block Size (bytes)', scale: 'y' }],
+  // SI ticks: the tooltip is humanize.bytes (kB/MB/GB, base 1000), so a short-scale
+  // tick would draw "5B" — read as 5 bytes — next to a tooltip saying "5.0 GB".
+  axes: [{ label: 'Block Size (bytes)', scale: 'y', siTicks: true }],
   series: [{ label: 'Block Size', scale: 'y', kind: 'line', colorIndex: 0 }],
   toColumns: (raw) => {
     return [xColumn(raw, raw.size.length), raw.size.slice()]
@@ -35,7 +37,7 @@ export const blockchainSize = {
   name: 'blockchain-size',
   label: 'Blockchain Size',
   controls: { ...baseControls },
-  axes: [{ label: 'Blockchain Size (bytes)', scale: 'y' }],
+  axes: [{ label: 'Blockchain Size (bytes)', scale: 'y', siTicks: true }],
   series: [{ label: 'Blockchain Size', scale: 'y', kind: 'area', colorIndex: 0 }],
   toColumns: (raw) => {
     return [xColumn(raw, raw.size.length), raw.size.slice()]

@@ -15,9 +15,9 @@ export const hashrate = {
     hybrid: false
   },
   axes: [
-    // Base unit only. The ticks already carry the magnitude (threeSigFigs -> "10.5B"),
-    // so a prefixed label would scale twice and read "10.5B GH/s".
-    { label: 'Network Hashrate (H/s)', scale: 'y' },
+    // Base unit only: the siTicks ticks carry the magnitude, so a prefixed label
+    // would scale twice and read "10.5G GH/s".
+    { label: 'Network Hashrate (H/s)', scale: 'y', siTicks: true },
     { label: 'Active Miners', scale: 'y2', intTicks: true }
   ],
   series: [

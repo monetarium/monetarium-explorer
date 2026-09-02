@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest'
+import uPlot from 'uplot'
+import { buildOpts } from '../../helpers/uplot_adapter'
 import { hashrate } from './hashrate'
 
 describe('hashrate.toColumns', () => {
@@ -39,6 +41,10 @@ describe('hashrate axis unit', () => {
     // The rule, not the literal: any SI prefix here scales a second time on top of the
     // tick formatter's own suffix ("10.5B" under "(GH/s)" read as 10.5e9 GH/s).
     expect(label).not.toMatch(/\([kMGTPEZY]H/)
+  })
+  it('renders the ticks in SI, so 1.8e10 H/s reads 18G and not 18B', () => {
+    const y = buildOpts(uPlot, hashrate, {}).axes[1]
+    expect(y.values(null, [6e9, 1.8e10])).toEqual(['6G', '18G'])
   })
 })
 

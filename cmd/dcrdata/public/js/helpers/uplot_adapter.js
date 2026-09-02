@@ -70,6 +70,7 @@ const TIME_AXIS_VALUES = (() => {
  * @property {string} label
  * @property {('y'|'y2')} [scale]  // defaults to 'y'
  * @property {boolean} [intTicks]  // restrict ticks to integers (count axes)
+ * @property {boolean} [siTicks]   // SI-prefixed ticks (physical units: H/s, H, bytes)
  *
  * @typedef {Object} SeriesSpec
  * @property {string} label
@@ -207,11 +208,32 @@ function sigFigTick(v) {
   return v == null ? '' : trimTrailingZeros(humanize.threeSigFigs(v))
 }
 
+// SI alphabet, not threeSigFigs' short scale — 1e9 H/s is 1 GH/s, so the tick under a
+// "(H/s)" label reads "18G", not "18B". Three significant figures; '' for a null split.
+// Runs to Y to cover CHAINWORK_UNITS (charts/format.js), whose vocabulary ends at YH.
+const SI_PREFIXES = ['', 'k', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y']
+
+function siPrefixed(v) {
+  if (!Number.isFinite(v)) return ''
+  const a = Math.abs(v)
+  if (a === 0) return '0'
+  let i = Math.max(0, Math.min(Math.floor(Math.log10(a) / 3), SI_PREFIXES.length - 1))
+  let m = +(a / Math.pow(1000, i)).toPrecision(3)
+  // toPrecision carries a mantissa in [999.5, 1000) up to 1000, which belongs to the
+  // next prefix: 999.5e9 is "1T", not "1000G". At the top of the list there is no next
+  // prefix, so 1e27 keeps reading "1000Y".
+  if (m >= 1000 && i < SI_PREFIXES.length - 1) {
+    m /= 1000
+    i++
+  }
+  return `${v < 0 ? '-' : ''}${m}${SI_PREFIXES[i]}`
+}
+
 // uPlot axis `values` for a log y-scale. Prefer compact k/M/B labels (threeSigFigs),
 // but if that rounds adjacent ticks to the same string (very tight ranges, e.g.
 // 5,118 vs 5,119 → "5.12k"), fall back to grouped full numbers at the step's precision.
-function adaptiveLogValues(u, splits) {
-  const sig = splits.map(sigFigTick)
+function adaptiveLogValues(u, splits, tick) {
+  const sig = splits.map(tick)
   let collide = false
   for (let i = 1; i < sig.length; i++) {
     if (sig[i] && sig[i] === sig[i - 1]) {
@@ -299,17 +321,20 @@ export function buildOpts(UPlot, def, opts = {}) {
         axis.labelSize = AXIS_LABEL_SIZE
         axis.labelGap = AXIS_LABEL_GAP
       }
+      // siTicks axes keep their SI alphabet on both scales; the log branch formats
+      // through the same function, so a scale toggle cannot switch "18G" back to "18B".
+      const tick = a.siTicks ? siPrefixed : sigFigTick
       if (isLog && scale === 'y') {
         // Adaptive ticks for the (tight) log y-scale — see logSplits / adaptiveLogValues.
         axis.splits = logSplits
-        axis.values = adaptiveLogValues
+        axis.values = (u, splits) => adaptiveLogValues(u, splits, tick)
       } else if (a.intTicks) {
         // Count axes (e.g. Active Miners) tick on integers only.
         axis.incrs = INT_INCRS
         axis.values = (u, splits) =>
           splits.map((v) => (v == null ? '' : Math.round(v).toLocaleString('en-US')))
       } else {
-        axis.values = (u, splits) => splits.map(sigFigTick)
+        axis.values = (u, splits) => splits.map(tick)
       }
       return axis
     })

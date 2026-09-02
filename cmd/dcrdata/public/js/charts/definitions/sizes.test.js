@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest'
+import uPlot from 'uplot'
+import { buildOpts } from '../../helpers/uplot_adapter'
 import { blockSize, blockchainSize, txCount } from './sizes'
 
 describe('sizes toColumns', () => {
@@ -20,6 +22,19 @@ describe('sizes toColumns', () => {
       [1000, 2000],
       [3, 9]
     ])
+  })
+})
+
+describe('sizes axis ticks', () => {
+  it('ticks the byte axes in SI, so 5e9 bytes reads 5G and not 5B', () => {
+    for (const def of [blockSize, blockchainSize]) {
+      const y = buildOpts(uPlot, def, {}).axes[1]
+      expect(y.values(null, [5e8, 5e9])).toEqual(['500M', '5G'])
+    }
+  })
+  it('leaves the transaction count on the short scale (it counts things)', () => {
+    const y = buildOpts(uPlot, txCount, {}).axes[1]
+    expect(y.values(null, [1.5e9])).toEqual(['1.5B'])
   })
 })
 
