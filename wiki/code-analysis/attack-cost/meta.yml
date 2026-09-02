@@ -1,8 +1,9 @@
 domain: attack-cost
-anchor: 1a389057
+anchor: d12ec80f
 files:
   - blockdata/blockdata.go
   - cmd/dcrdata/internal/explorer/explorerroutes.go
   - cmd/dcrdata/public/js/controllers/attackcost_controller.js
+  - cmd/dcrdata/public/js/helpers/uplot_adapter.js
   - cmd/dcrdata/views/attackcost.tmpl
   - explorer/types/explorertypes.go

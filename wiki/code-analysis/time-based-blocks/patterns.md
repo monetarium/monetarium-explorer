@@ -9,7 +9,7 @@
 The `/days`, `/weeks`, `/months`, `/years` listings are produced entirely in Postgres, not in Go. `SelectBlocksTimeListingByLimit` ([db/dcrpg/internal/blockstmts.go:148-162](../../../db/dcrpg/internal/blockstmts.go)) groups the `blocks` table by `DATE_TRUNC($1, time at time zone 'utc')` where `$1` is the bind-parameterised interval string (`"day"`/`"week"`/`"month"`/`"year"`, supplied by `timeGrouping.String()` in [db/dcrpg/pgblockchain.go:1833](../../../db/dcrpg/pgblockchain.go)). Aggregates (`SUM(num_rtx)`, `SUM(fresh_stake)`, `SUM(voters)`, `SUM(revocations)`, `SUM(size)`, `COUNT(*)`, `MIN(time)`/`MAX(time)`, `JSONB_AGG(coin_tx_stats)`) are computed in the same pass; the regular-tx total is then post-corrected from the aggregated `coin_tx_stats` JSON via `parseCoinTxStats` ([db/dcrpg/queries.go:947](../../../db/dcrpg/queries.go)). The `time at time zone 'utc'` cast appears in **both** the `SELECT` projection and the `GROUP BY` and must stay identical between them or the projected `index_value` will not match the grouping key.
 
 **Constraints:**
-- The interval string is bind-parameterised (`$1`), but it is a SQL-keyword-bearing argument to `DATE_TRUNC`; only the five strings from `TimeBasedGroupings` ([db/dbtypes/types.go:838-844](../../../db/dbtypes/types.go)) are valid. Do not let arbitrary user input reach `timeInterval` — the route handler always derives it from `TimeGroupingFromStr` on a fixed literal (`"Days"`/`"Weeks"`/...), never from the URL.
+- The interval string is bind-parameterised (`$1`), but it is a SQL-keyword-bearing argument to `DATE_TRUNC`; only the five strings from `TimeBasedGroupings` ([db/dbtypes/types.go:829-836](../../../db/dbtypes/types.go)) are valid. Do not let arbitrary user input reach `timeInterval` — the route handler always derives it from `TimeGroupingFromStr` on a fixed literal (`"Days"`/`"Weeks"`/...), never from the URL.
 - Any new aggregate column added to the `SELECT` list MUST be added in the same order to the `rows.Scan` in `retrieveTimeBasedBlockListing` ([db/dcrpg/queries.go:941-942](../../../db/dcrpg/queries.go)); the scan is positional, not by name.
 - Both the `SELECT` and `GROUP BY` `DATE_TRUNC` expressions must carry the identical `time at time zone 'utc'` cast. Changing one without the other is a silent grouping-drift bug (see impact.md).
 
@@ -22,7 +22,7 @@ The `/days`, `/weeks`, `/months`, `/years` listings are produced entirely in Pos
 - [/wiki/code-analysis/windows/flow.full.md](../windows/flow.full.md)
 
 **Description:**
-`dbtypes.BlocksGroupedInfo` ([db/dbtypes/types.go:816-835](../../../db/dbtypes/types.go)) is shared by two unrelated pages: the time-based listings (this domain, via `retrieveTimeBasedBlockListing`, [db/dcrpg/queries.go:949-963](../../../db/dcrpg/queries.go)) and the ticket-price / stake-difficulty windows page (windows domain, via `retrieveWindowBlocks`, [db/dcrpg/queries.go:886-900](../../../db/dcrpg/queries.go)). The two producers populate **disjoint subsets** of the struct:
+`dbtypes.BlocksGroupedInfo` ([db/dbtypes/types.go:808-827](../../../db/dbtypes/types.go)) is shared by two unrelated pages: the time-based listings (this domain, via `retrieveTimeBasedBlockListing`, [db/dcrpg/queries.go:949-963](../../../db/dcrpg/queries.go)) and the ticket-price / stake-difficulty windows page (windows domain, via `retrieveWindowBlocks`, [db/dcrpg/queries.go:886-900](../../../db/dcrpg/queries.go)). The two producers populate **disjoint subsets** of the struct:
 
 | Field | time-based listing | windows |
 |---|---|---|
@@ -44,7 +44,7 @@ Each page's template ([cmd/dcrdata/views/timelisting.tmpl](../../../cmd/dcrdata/
 - [/wiki/code-analysis/time-based-blocks/flow.full.md](flow.full.md)
 
 **Description:**
-The DB layer formats `FormattedStartTime` uniformly as `startTime.Format("2006-01-02")` ([db/dcrpg/queries.go:960](../../../db/dcrpg/queries.go)). The route handler then **overwrites** that string in place for one specific case: when the view is `"Years"`, the result set is non-empty, and the top row's `EndTime` falls in the current calendar year, `data[0].FormattedStartTime` is replaced with `fmt.Sprintf("%s YTD", time.Now().Format("2006"))` ([cmd/dcrdata/internal/explorer/explorerroutes.go:569-571](../../../cmd/dcrdata/internal/explorer/explorerroutes.go)). This is a display-only post-processing step; no other view (`/days`/`/weeks`/`/months`) and no other row is touched.
+The DB layer formats `FormattedStartTime` uniformly as `startTime.Format("2006-01-02")` ([db/dcrpg/queries.go:960](../../../db/dcrpg/queries.go)). The route handler then **overwrites** that string in place for one specific case: when the view is `"Years"`, the result set is non-empty, and the top row's `EndTime` falls in the current calendar year, `data[0].FormattedStartTime` is replaced with `fmt.Sprintf("%s YTD", time.Now().Format("2006"))` ([cmd/dcrdata/internal/explorer/explorerroutes.go:602-606](../../../cmd/dcrdata/internal/explorer/explorerroutes.go)). This is a display-only post-processing step; no other view (`/days`/`/weeks`/`/months`) and no other row is touched.
 
 **Constraints:**
 - The YTD branch keys off the literal `val == "Years"` (the handler's own argument), not off the `grouping` enum. Routing `/years` through anything other than `YearBlocksListing` -> `timeBasedBlocksListing("Years", …)` would silently disable the YTD label.
@@ -78,12 +78,12 @@ This replaced an earlier genesis-anchored, time-driven formula (`maxOffset = (no
 - [/wiki/code-analysis/time-based-blocks/flow.full.md](flow.full.md)
 
 **Description:**
-`dbtypes.TimeGroupingFromStr` ([db/dbtypes/types.go:841-856](../../../db/dbtypes/types.go)) maps grouping strings (`"day"`/`"days"`, `"wk"`/`"week"`/`"weeks"`, etc.) to a `TimeBasedGrouping`. Its `default` case returns the explicit sentinel `UnknownGrouping` ([types.go:762,854](../../../db/dbtypes/types.go)) — it does **not** silently coerce to `YearGrouping`. The year fallback lives one layer up in the handler: `timeBasedBlocksListing` calls `TimeBasedGroupingToInterval(grouping)`; for `UnknownGrouping` that returns an error ([db/dbtypes/conversion.go:130-132](../../../db/dbtypes/conversion.go)), and the handler catches it and reassigns `grouping = dbtypes.YearGrouping`, then re-resolves the interval ([cmd/dcrdata/internal/explorer/explorerroutes.go:507-519](../../../cmd/dcrdata/internal/explorer/explorerroutes.go)). A second failure of `TimeBasedGroupingToInterval(YearGrouping)` renders an `ExpStatusError` page. `ChainDB.TimeBasedIntervals` independently rejects any `timeGrouping >= dbtypes.NumIntervals` (which `UnknownGrouping == 5` would be) with a hard error ([db/dcrpg/pgblockchain.go:1819-1821](../../../db/dcrpg/pgblockchain.go)), so the handler must complete the fallback before the DB call.
+`dbtypes.TimeGroupingFromStr` ([db/dbtypes/types.go:844-859](../../../db/dbtypes/types.go)) maps grouping strings (`"day"`/`"days"`, `"wk"`/`"week"`/`"weeks"`, etc.) to a `TimeBasedGrouping`. Its `default` case returns the explicit sentinel `UnknownGrouping` ([types.go:765,857](../../../db/dbtypes/types.go)) — it does **not** silently coerce to `YearGrouping`. The year fallback lives one layer up in the handler: `timeBasedBlocksListing` calls `TimeBasedGroupingToInterval(grouping)`; for `UnknownGrouping` that returns an error ([db/dbtypes/conversion.go:130-132](../../../db/dbtypes/conversion.go)), and the handler catches it and reassigns `grouping = dbtypes.YearGrouping`, then re-resolves the interval ([cmd/dcrdata/internal/explorer/explorerroutes.go:546-555](../../../cmd/dcrdata/internal/explorer/explorerroutes.go)). A second failure of `TimeBasedGroupingToInterval(YearGrouping)` renders an `ExpStatusError` page. `ChainDB.TimeBasedIntervals` independently rejects any `timeGrouping >= dbtypes.NumIntervals` (which `UnknownGrouping == 5` would be) with a hard error ([db/dcrpg/pgblockchain.go:1842-1844](../../../db/dcrpg/pgblockchain.go)), so the handler must complete the fallback before the DB call.
 
 > Note: `TimeGroupingFromStr` ([db/dbtypes/types.go:841](../../../db/dbtypes/types.go#L841)) returns the sentinel `UnknownGrouping` for unhandled names — it does **not** itself default to `YearGrouping`. The year fallback is implemented one layer up in the `timeBasedBlocksListing` route handler. (flow.full.md §5 / flow.compact.md were reconciled to this in the same maintenance pass.) Behavior for the four real routes is unaffected because they pass fixed literals (`"Days"`/`"Weeks"`/`"Months"`/`"Years"`) that always resolve.
 
 **Constraints:**
-- All four real entry points pass hard-coded valid strings ([explorerroutes.go:464-482](../../../cmd/dcrdata/internal/explorer/explorerroutes.go)); the `UnknownGrouping` path is only reachable if a new route or caller passes an unrecognised string. New callers must not rely on `TimeGroupingFromStr` returning a usable default — it returns `UnknownGrouping`.
+- All four real entry points pass hard-coded valid strings ([explorerroutes.go:500-519](../../../cmd/dcrdata/internal/explorer/explorerroutes.go)); the `UnknownGrouping` path is only reachable if a new route or caller passes an unrecognised string. New callers must not rely on `TimeGroupingFromStr` returning a usable default — it returns `UnknownGrouping`.
 - The handler's fallback resolves `UnknownGrouping` -> `YearGrouping` *before* calling `dataSource.TimeBasedIntervals`, which itself hard-rejects out-of-range groupings. Removing the handler-level fallback would turn a graceful year fallback into a DB-layer error page.
 
 ---
@@ -97,7 +97,7 @@ This replaced an earlier genesis-anchored, time-driven formula (`maxOffset = (no
 
 **Description:**
 The default page size and hard cap for all explorer list pages are defined once in
-`cmd/dcrdata/internal/explorer/explorer.go:50–51`:
+`cmd/dcrdata/internal/explorer/explorer.go:51–52`:
 ```go
 maxExplorerRows     = 400
 defaultExplorerRows = 100

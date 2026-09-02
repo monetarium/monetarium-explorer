@@ -16,7 +16,7 @@
 - **Cache-write asymmetry.** `chartMakers` results go through `cacheChart`; `skaSupplyChart` does not — every SKA request re-marshals JSON.
 - **Window-aware `ReorgHandler`.** Snips only windows whose start height exceeds `commonAncestorHeight`; windows at or before the ancestor are kept. Block-bin is snipped to `commonAncestorHeight + 1`; days drop the last two.
 - **`chart_theme.js` single color source.** `SERIES_COLORS` (named series like `tickets-bought`, `hashrate-miners`) and `PALETTE` (index-based) are shared by uPlot adapter and the hashrate-shares pie. Dark mode secondary (y2) series use `#4dabf7` instead of `#2970ff` for contrast.
-- **Cross-page navigation from the chart selector.** `hashrate-shares` option triggers `Turbolinks.visit('/hashrate-shares')` in `selectChart()` and returns without loading data. All other options fetch `/api/chart/{type}` and stay on the page.
+- **Cross-page navigation from the chart selector.** `hashrate-shares` option triggers `Turbo.visit('/hashrate-shares')` in `selectChart()` and returns without loading data. All other options fetch `/api/chart/{type}` and stay on the page.
 
 ### Critical Constraints
 - **Never apply `accumulate()` to `SKASupply.Values`** — already cumulative.

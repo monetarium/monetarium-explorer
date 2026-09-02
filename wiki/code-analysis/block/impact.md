@@ -91,7 +91,7 @@ Risk:
 
 ## 5. RemainingWindowText / Window Countdown Parity
 
-`RemainingWindowText(idx, max, blockTime)` in `explorer/types/remaining.go` is the single source of truth for the window countdown string (ticket-price window: `WindowRemaining`; subsidy-reduction window: `RewardRemaining`). Both fields are pre-computed in `explorerUI.Store()` (explorer.go:568,570) and `PubSubHub.Store()` (pubsubhub.go:734,736).
+`RemainingWindowText(idx, max, blockTime)` in `explorer/types/remaining.go` is the single source of truth for the window countdown string (ticket-price window: `WindowRemaining`; subsidy-reduction window: `RewardRemaining`). Both fields are pre-computed in `explorerUI.Store()` (explorer.go:557,559) and `PubSubHub.Store()` (pubsubhub.go:738,740).
 
 - Changing `RemainingWindowText` behavior/signature affects server-rendered page template AND live WS updates simultaneously.
 - `voting_controller.js:35` reads `ex.window_remaining` directly as DOM text (no parsing); `mining_controller.js:48` reads `ex.reward_remaining`. A format change is reflected automatically but must be intentional.
@@ -103,7 +103,7 @@ Risk: changing only one Store() call-site → template vs WS divergence.
 
 ## 6. Chart Tip Alignment
 
-`explorerUI.Store()` at `explorer.go:652-665` type-asserts `exp.chartSource` to `*cache.ChartData` and calls `cd.SetTip(cache.ChartTip{Height, Time, TicketPrice, Difficulty, PoolValue, CoinSupply})` on every block.
+`explorerUI.Store()` at `explorer.go:641-654` type-asserts `exp.chartSource` to `*cache.ChartData` and calls `cd.SetTip(cache.ChartTip{Height, Time, TicketPrice, Difficulty, PoolValue, CoinSupply})` on every block.
 
 - `SetTip` invalidates cached chart series that depend on the live tip (calls `invalidateTipCharts()`); the next `Chart()` request re-runs the maker with fresh values.
 - This path is NOT present in `PubSubHub.Store()` — intentional asymmetry.
@@ -134,6 +134,24 @@ Risk: updating how `HomeInfo` computes `TicketPrice`/`Difficulty`/`PoolValue`/`C
 Risk: using `NBlockSubsidy.PoW` silently wrong-values `LBlockTotal` for blocks with fewer than 5 votes.
 
 ---
+
+## 9a. Handler-deadline timeout must still advance the previous block
+
+**Trigger:** re-introducing an early `return` on the `SyncHandlerDeadline` branch of
+`processBlock` / `signalReorg` (`notifier.go:283`, `:444`), or otherwise skipping
+`SetPreviousBlock` when a handler times out.
+
+**Failure mode:** silent, and permanent.
+
+**Description:** If `SetPreviousBlock` is not called, the next block fails the
+`PrevBlock` check and is silently dropped — the explorer stops following the chain and
+only a restart recovers it. That was the observed production failure (a slow WebSocket
+consumer stalled the pubsub hub, which stalled a block handler past the deadline). The
+fix always advances and logs a warning. The cost is documented in the code and must not
+be "cleaned up": timed-out handler goroutines are **not** cancelled, so handlers for
+block N+1 can run concurrently with still-stuck handlers for N. A transient data race on
+shared state is the accepted trade against permanent desync. `SyncHandlerDeadline` is a
+`var` so tests can inject a short deadline; keep it one.
 
 ## 10. Loud Failures
 
@@ -174,7 +192,7 @@ These will break immediately:
 
 ### Chart last-data-point mismatch
 
-- updating Home page values (TicketPrice/Difficulty/PoolValue/CoinSupply) without updating `SetTip` call in `explorer.go:652-665`
+- updating Home page values (TicketPrice/Difficulty/PoolValue/CoinSupply) without updating `SetTip` call in `explorer.go:641-654`
 
 ### Window countdown mismatch
 
@@ -195,4 +213,4 @@ Before committing changes:
 - [ ] CBlockSubsidy.PoW used for LBlockTotal (not NBlockSubsidy)
 - [ ] latestBlocksEnd / homeBlocksSpan not diverged between Home() and WS handler
 - [ ] if RemainingWindowText changed: verify voting_controller.js (window_remaining) + mining_controller.js (reward_remaining)
-- [ ] if home chart values (TicketPrice/Difficulty/PoolValue/CoinSupply) changed: update SetTip at explorer.go:652-665
+- [ ] if home chart values (TicketPrice/Difficulty/PoolValue/CoinSupply) changed: update SetTip at explorer.go:641-654

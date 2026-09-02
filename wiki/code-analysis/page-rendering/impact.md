@@ -110,7 +110,7 @@ placed under `withCache`, every interval variant will cache under the same ETag.
 client requesting `?interval=day` after `?interval=week` receives a 304 Not Modified
 and sees the wrong interval's data until the next block resets the ETag. The
 `/hashrate-shares/data` route is explicitly excluded from `withCache` with a comment
-at `main.go:774` to prevent this.
+at `main.go:779-781` to prevent this.
 
 ---
 

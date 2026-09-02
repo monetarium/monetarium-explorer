@@ -9,11 +9,11 @@
 
 1. **Out-of-band shared page state.** Page handlers are pure readers of a background-written snapshot. `Store` writes, handlers read — under `pageData.RWMutex`. New per-page data goes in the handler's own struct, not in `pageData`.
 
-2. **withCache / ETag caching.** Routes under `withCache` (`/`, `/mempool`, `/hashrate-shares` shell, `/agendas`, `/parameters`, etc.) get `ETag`/`Last-Modified` headers reset on every new block/mempool tick. **Do not put a handler under `withCache` if its output varies by query params** — `/hashrate-shares/data` is excluded from `withCache` for this reason (`main.go:774`).
+2. **withCache / ETag caching.** Routes under `withCache` (`/`, `/mempool`, `/hashrate-shares` shell, `/agendas`, `/parameters`, etc.) get `ETag`/`Last-Modified` headers reset on every new block/mempool tick. **Do not put a handler under `withCache` if its output varies by query params** — `/hashrate-shares/data` is excluded from `withCache` for this reason (`main.go:779-781`).
 
 3. **`*CommonPageData` struct-embedding.** Every page payload is an anonymous struct embedding `*CommonPageData` (from `commonData(r)`). `commonData` calls `GetTip` (Postgres); returns `nil` on failure → every page fails simultaneously (no per-page isolation).
 
-4. **`normalizeExplorerRows[T]`** (`explorerroutes.go:645`). Generic over `int64|uint64`. Default 100, cap 400. Used by `Blocks`, `StakeDiffWindows`, `timeBasedBlocksListing`. Pass `0` to get the default; the function handles the `rows==0` case.
+4. **`normalizeExplorerRows[T]`** (`explorerroutes.go:646`). Generic over `int64|uint64`. Default 100, cap 400. Used by `Blocks`, `StakeDiffWindows`, `timeBasedBlocksListing`. Pass `0` to get the default; the function handles the `rows==0` case.
 
 5. **Three-lock discipline.** `pageData.RWMutex` (struct contents) / `invsMtx` (invs pointer) / `MempoolInfo.RWMutex` (inv contents). `Store` nests `pageData.Lock` → `invsMtx.Lock`. All other code must not hold `invsMtx` while waiting on `pageData.Lock` (deadlock). `StoreMPData` releases `pageData.RLock` before taking `invsMtx.Lock`.
 
@@ -34,4 +34,4 @@
 - Changing `defaultExplorerRows` → all three list pages change simultaneously; verify template dropdowns include the new value.
 - Moving `HashrateSharesData` → must stay outside `withCache`; adding query-param-varying endpoints next to it follows the same rule.
 - Removing or replacing `chartSource` implementation → verify `SetTip` still fires; chart staleness (TicketPrice, POWDifficulty, PercentStaked) is silent if type assertion stops matching.
-- Changing `RemainingWindowText` signature → update both `explorer.go:568,570` and `pubsub/pubsubhub.go:734,736` together.
+- Changing `RemainingWindowText` signature → update both `explorer.go:557,570` and `pubsub/pubsubhub.go:738,740` together.

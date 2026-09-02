@@ -1,5 +1,5 @@
 domain: transaction
-anchor: 1bc57372
+anchor: d12ec80f
 files:
   - api/types/apitypes.go
   - cmd/dcrdata/public/js/controllers/homepage_controller.js
@@ -11,4 +11,3 @@ files:
   - mempool/monitor.go
   - pubsub/pubsubhub.go
   - txhelpers/txhelpers.go
-  - txhelpers/ssfee.go

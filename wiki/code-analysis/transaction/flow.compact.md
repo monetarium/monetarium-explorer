@@ -6,7 +6,7 @@
   3. **Dual ssFeeNetReward implementations:** `pgblockchain.go:ssFeeNetReward` mirrors `txhelpers/ssfee.go:blockSSFeeTotalsInternal` — two independent implementations, must stay in sync manually.
   4. **TicketStage classification:** Mempool ticket purchases are "Ready"/"Staging" based on whether vin parents are confirmed; both `collector.go` and `monitor.go` set it via `ticketStage()`.
 - **Critical Constraints:**
-  - `FeeReward()` on `TxInfo` is VAR-only float64 (coinbase/vote). Returns 0 defensively for `CoinType != 0` (SKA guard at `explorertypes.go:497`). SSFee uses `coinDecimalParts .FeeRaw .CoinType` (VAR or SKA big.Int). Never call `FeeReward()` for SKA display — it returns 0 silently.
+  - `FeeReward()` on `TxInfo` is VAR-only float64 (coinbase/vote). Returns 0 defensively for `CoinType != 0` (SKA guard at `explorertypes.go:478-480`). SSFee uses `coinDecimalParts .FeeRaw .CoinType` (VAR or SKA big.Int). Never call `FeeReward()` for SKA display — it returns 0 silently.
   - SKA amounts must stay `*big.Int`/string end-to-end. `tx.tmpl` amount cells branch on `$.Data.CoinType 0` — VAR via `float64AsDecimalParts .Amount` (8-dec, float64-safe per C1), SKA via `skaDecimalParts .ValueRaw` (string). A new coin-dependent field must extend **both** branches.
   - `MiningFee` in block header = `Tx + Tickets` only (no votes/revocations/treasury). The SQL chart query `internal.SelectFeesPerBlockAboveHeight` must mirror this definition.
   - **`MempoolTx.Hash` removed** — `TxID` is canonical; JSON key is `"txid"`. Any consumer referencing `"hash"` receives `undefined`/empty.

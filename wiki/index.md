@@ -117,7 +117,7 @@ _The `/attack-cost` majority-attack calculator: a no-compute Go handler reads a 
 
 - flow (compact): code-analysis/attack-cost/flow.compact.md — high-level summary of the no-compute handler, VAR-only snapshot, BLOCK_RECEIVED live hashrate, untyped Go→JS contract, and client-side math
 - flow (full): code-analysis/attack-cost/flow.full.md — detailed trace: node→Store→HomeInfo→handler→template→Stimulus, BLOCK_RECEIVED subscription, hashrate parseFloat/8dp, noComma exchange-rate pattern, snapshot staleness, SKA precision boundary
-- patterns: code-analysis/attack-cost/patterns.md — no-compute handler, VAR-only legacy snapshot, manual-only inputs (no max on exchange rate, noComma setter rule), untyped `data-*`↔Stimulus contract, vendored-Dygraphs private override
+- patterns: code-analysis/attack-cost/patterns.md — no-compute handler, VAR-only legacy snapshot, manual-only inputs (no max on exchange rate, noComma setter rule), untyped `data-*`↔Stimulus contract, uPlot via the shared `uplot_adapter`, instance-scoped controller state under Turbo
 - impact: code-analysis/attack-cost/impact.md — SKA-through-VAR-pipeline corruption, shared `HomeInfo` blast radius, stale snapshot, Go→JS drift; locale-comma/noComma and parseInt/parseFloat hazards documented as resolved
 
 ### Parameters
@@ -191,5 +191,5 @@ _Full flow trace of `explorerUI` page rendering: `Store`/`StoreMPData` saver fan
 
 - flow (full): code-analysis/page-rendering/flow.full.md — end-to-end trace from `blockdata` fan-out through `Store`/`StoreMPData`, middleware, `commonData`, all page handlers, template execution
 - flow (compact): code-analysis/page-rendering/flow.compact.md — LLM-optimized 200-word summary with mutation checklist
-- patterns: code-analysis/page-rendering/patterns.md — out-of-band shared page state via saver fan-out, `pageData`/`invsMtx` lock discipline, `*CommonPageData` embedding, block-scoped ETag cache, `normalizeExplorerRows` list-page row helper, two-handler shell+data split
+- patterns: code-analysis/page-rendering/patterns.md — out-of-band shared page state via saver fan-out, `pageData`/`invsMtx` lock discipline, `*CommonPageData` embedding, block-scoped ETag cache, `normalizeExplorerRows` list-page row helper, two-handler shell+data split, theme cookie-as-value (`MenuFormParser` / `ThemeFromQueryParser`)
 - impact: code-analysis/page-rendering/impact.md — `commonData` nil render crash (all pages), saver writer/reader drift (HTML≠WS), lock-order inversion against `Store`, data endpoint misplaced under `withCache`, `CBlockSubsidy`/`NBlockSubsidy` confusion

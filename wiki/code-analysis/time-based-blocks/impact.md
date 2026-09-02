@@ -18,7 +18,7 @@ Both `DATE_TRUNC` expressions must be byte-identical for Postgres to treat the p
 ## Risk: positional `rows.Scan` desync after SQL column change
 
 **Trigger:**
-Adding, removing, or reordering a column in the `SelectBlocksTimeListingByLimit` `SELECT` list ([db/dcrpg/internal/blockstmts.go:151-161](../../../db/dcrpg/internal/blockstmts.go)) without applying the identical change to the `rows.Scan` argument list in `retrieveTimeBasedBlockListing` ([db/dcrpg/queries.go:941-942](../../../db/dcrpg/queries.go)).
+Adding, removing, or reordering a column in the `SelectBlocksTimeListingByLimit` `SELECT` list ([db/dcrpg/internal/blockstmts.go:151-165](../../../db/dcrpg/internal/blockstmts.go)) without applying the identical change to the `rows.Scan` argument list in `retrieveTimeBasedBlockListing` ([db/dcrpg/queries.go:941-942](../../../db/dcrpg/queries.go)).
 
 **Affected flows:**
 - [/wiki/code-analysis/time-based-blocks/flow.full.md](flow.full.md)
@@ -33,7 +33,7 @@ The scan is positional across 11 destinations (`indexVal, endBlock, txs, tickets
 ## Risk: `BlocksGroupedInfo` field change breaks the windows page
 
 **Trigger:**
-Renaming, removing, or retyping any field of `dbtypes.BlocksGroupedInfo` ([db/dbtypes/types.go:816-835](../../../db/dbtypes/types.go)) to satisfy a time-based-listing requirement, without checking the windows domain.
+Renaming, removing, or retyping any field of `dbtypes.BlocksGroupedInfo` ([db/dbtypes/types.go:808-827](../../../db/dbtypes/types.go)) to satisfy a time-based-listing requirement, without checking the windows domain.
 
 **Affected flows:**
 - [/wiki/code-analysis/time-based-blocks/flow.full.md](flow.full.md)
@@ -57,14 +57,14 @@ The struct has two producers — `retrieveTimeBasedBlockListing` (this domain) a
 **Failure mode:** silent (wrong or missing "YTD" label; numbers are correct, the label is misleading).
 
 **Description:**
-The handler overwrites `data[0].FormattedStartTime` with `"<year> YTD"` only when `val == "Years"`, `len(data) > 0`, and `data[0].EndTime.T.Year() == time.Now().Year()` ([cmd/dcrdata/internal/explorer/explorerroutes.go:603-604](../../../cmd/dcrdata/internal/explorer/explorerroutes.go)). It assumes `data[0]` is the newest interval (depends on `ORDER BY … DESC`). It compares `EndTime` (derived from `MAX(time)` cast to UTC by the aggregation query) against `time.Now()` (server local zone). Around 1 January, a UTC-vs-local zone offset can make the comparison true/false incorrectly for a few hours, labelling last year's row "YTD" or omitting the label on this year's row. Reordering the SQL silently moves the label onto a non-current row. Switching `/years` to a different handler argument silently disables the label entirely (it keys off `val`, not the `grouping` enum).
+The handler overwrites `data[0].FormattedStartTime` with `"<year> YTD"` only when `val == "Years"`, `len(data) > 0`, and `data[0].EndTime.T.Year() == time.Now().Year()` ([cmd/dcrdata/internal/explorer/explorerroutes.go:602-606](../../../cmd/dcrdata/internal/explorer/explorerroutes.go)). It assumes `data[0]` is the newest interval (depends on `ORDER BY … DESC`). It compares `EndTime` (derived from `MAX(time)` cast to UTC by the aggregation query) against `time.Now()` (server local zone). Around 1 January, a UTC-vs-local zone offset can make the comparison true/false incorrectly for a few hours, labelling last year's row "YTD" or omitting the label on this year's row. Reordering the SQL silently moves the label onto a non-current row. Switching `/years` to a different handler argument silently disables the label entirely (it keys off `val`, not the `grouping` enum).
 
 ---
 
 ## Risk: removing the handler-level year fallback turns graceful default into error page
 
 **Trigger:**
-Refactoring `TimeGroupingFromStr` ([db/dbtypes/types.go:852-865](../../../db/dbtypes/types.go)) or the fallback block in `timeBasedBlocksListing` ([cmd/dcrdata/internal/explorer/explorerroutes.go:545-554](../../../cmd/dcrdata/internal/explorer/explorerroutes.go)) — e.g. "simplify" the fallback assuming `TimeGroupingFromStr` returns a usable default, or remove the `grouping = dbtypes.YearGrouping` reassignment.
+Refactoring `TimeGroupingFromStr` ([db/dbtypes/types.go:844-859](../../../db/dbtypes/types.go)) or the fallback block in `timeBasedBlocksListing` ([cmd/dcrdata/internal/explorer/explorerroutes.go:546-555](../../../cmd/dcrdata/internal/explorer/explorerroutes.go)) — e.g. "simplify" the fallback assuming `TimeGroupingFromStr` returns a usable default, or remove the `grouping = dbtypes.YearGrouping` reassignment.
 
 **Affected flows:**
 - [/wiki/code-analysis/time-based-blocks/flow.full.md](flow.full.md)
@@ -72,7 +72,7 @@ Refactoring `TimeGroupingFromStr` ([db/dbtypes/types.go:852-865](../../../db/dbt
 **Failure mode:** loud for unrecognised grouping strings (error status page instead of a year listing); no effect on the four real routes.
 
 **Description:**
-`TimeGroupingFromStr`'s `default` returns `UnknownGrouping` (= 5 = `NumIntervals`), **not** `YearGrouping`. The graceful "default to year" behavior is entirely in the handler: `TimeBasedGroupingToInterval(UnknownGrouping)` errors ([db/dbtypes/conversion.go:130-132](../../../db/dbtypes/conversion.go)), the handler catches it, sets `grouping = YearGrouping`, and re-resolves. Independently, `ChainDB.TimeBasedIntervals` hard-rejects any `timeGrouping >= dbtypes.NumIntervals` ([db/dcrpg/pgblockchain.go:1859-1861](../../../db/dcrpg/pgblockchain.go)). So if the handler fallback is removed, an unrecognised grouping no longer falls back to year — it reaches the DB wrapper as `UnknownGrouping` and errors. The four production routes pass fixed literals (`"Days"`/`"Weeks"`/`"Months"`/`"Years"`, [explorerroutes.go:500-515](../../../cmd/dcrdata/internal/explorer/explorerroutes.go)) and never exercise this path; the risk is only realised by a new route or external caller.
+`TimeGroupingFromStr`'s `default` returns `UnknownGrouping` (= 5 = `NumIntervals`), **not** `YearGrouping`. The graceful "default to year" behavior is entirely in the handler: `TimeBasedGroupingToInterval(UnknownGrouping)` errors ([db/dbtypes/conversion.go:130-132](../../../db/dbtypes/conversion.go)), the handler catches it, sets `grouping = YearGrouping`, and re-resolves. Independently, `ChainDB.TimeBasedIntervals` hard-rejects any `timeGrouping >= dbtypes.NumIntervals` ([db/dcrpg/pgblockchain.go:1842-1844](../../../db/dcrpg/pgblockchain.go)). So if the handler fallback is removed, an unrecognised grouping no longer falls back to year — it reaches the DB wrapper as `UnknownGrouping` and errors. The four production routes pass fixed literals (`"Days"`/`"Weeks"`/`"Months"`/`"Years"`, [explorerroutes.go:500-519](../../../cmd/dcrdata/internal/explorer/explorerroutes.go)) and never exercise this path; the risk is only realised by a new route or external caller.
 
 > Note: `TimeGroupingFromStr` returns `UnknownGrouping` for unhandled names; the year fallback lives in the `timeBasedBlocksListing` handler, not in `TimeGroupingFromStr`. flow.full.md §5 / flow.compact.md were reconciled to this in the same maintenance pass. The user-visible outcome for valid routes is unchanged.
 
@@ -89,7 +89,7 @@ Any query slowdown on the `blocks`-table `GROUP BY DATE_TRUNC` aggregation excee
 **Failure mode:** loud (full-page replacement with `ExpStatusDBTimeout`).
 
 **Description:**
-`ChainDB.TimeBasedIntervals` wraps the query in `context.WithTimeout(ctx, pgb.queryTimeout)` ([db/dcrpg/pgblockchain.go:1862](../../../db/dcrpg/pgblockchain.go)). On timeout the handler's `exp.timeoutErrorPage(w, err, "TimeBasedIntervals")` returns `true` and renders the `ExpStatusDBTimeout` page ([cmd/dcrdata/internal/explorer/explorerroutes.go:581-583](../../../cmd/dcrdata/internal/explorer/explorerroutes.go)). There is no partial render or cache fallback for this domain — the entire `/days`/`/weeks`/`/months`/`/years` page is replaced. The aggregation has no `LIMIT`-before-`GROUP BY` (the `LIMIT $2 OFFSET $3` applies to the grouped result), so cost scales with total block count regardless of the page requested. Adding/removing aggregate columns or changing the grouping expression directly affects this timeout exposure.
+`ChainDB.TimeBasedIntervals` wraps the query in `context.WithTimeout(ctx, pgb.queryTimeout)` ([db/dcrpg/pgblockchain.go:1845-1846](../../../db/dcrpg/pgblockchain.go)). On timeout the handler's `exp.timeoutErrorPage(w, err, "TimeBasedIntervals")` returns `true` and renders the `ExpStatusDBTimeout` page ([cmd/dcrdata/internal/explorer/explorerroutes.go:581-583](../../../cmd/dcrdata/internal/explorer/explorerroutes.go)). There is no partial render or cache fallback for this domain — the entire `/days`/`/weeks`/`/months`/`/years` page is replaced. The aggregation has no `LIMIT`-before-`GROUP BY` (the `LIMIT $2 OFFSET $3` applies to the grouped result), so cost scales with total block count regardless of the page requested. Adding/removing aggregate columns or changing the grouping expression directly affects this timeout exposure.
 
 See also:
 - /wiki/code-analysis/windows/flow.full.md (shares-pattern-with: `dbtypes.BlocksGroupedInfo` shared struct — windows page panics if this struct's fields change)

@@ -65,7 +65,7 @@ single hierarchy:
 
 Writers: `Store` is the only path that *nests* two locks —
 `pageData.Lock()` then `invsMtx.Lock()`
-([explorer.go:536,597-603](../../../cmd/dcrdata/internal/explorer/explorer.go#L536-L603)).
+([explorer.go:541,616-622](../../../cmd/dcrdata/internal/explorer/explorer.go#L541-L622)).
 `StoreMPData` takes `pageData.RLock`, releases it, *then* takes `invsMtx.Lock`
 — not nested. Readers (page handlers) acquire `invsMtx.RLock` →
 `MempoolInfo.RLock` → `pageData.RLock` **sequentially**, never nested.
@@ -129,7 +129,7 @@ header tip. On `GetTip` failure it logs and **returns `nil`**.
 The three block-list page handlers (`Blocks`, `StakeDiffWindows`,
 `timeBasedBlocksListing`) share identical "rows defaulting + capping" logic. It is
 centralized in a single generic function
-([explorerroutes.go:645](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L645)):
+([explorerroutes.go:646](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L645)):
 
 ```go
 func normalizeExplorerRows[T int64 | uint64](rows T) T {
@@ -148,7 +148,7 @@ it before passing to the function.
 
 **Constraints:**
 
-- `defaultExplorerRows = 100`, `maxExplorerRows = 400` (`explorer.go:50-51`). Changing
+- `defaultExplorerRows = 100`, `maxExplorerRows = 400` (`explorer.go:48-52`). Changing
   either constant affects all three list pages simultaneously — verify the template
   page-size dropdowns include the new default value.
 - Do not add per-handler row defaults that bypass this function; doing so reverts to
@@ -175,8 +175,8 @@ Pages that load data client-side via a Stimulus controller use a two-handler spl
    response.
 
 `HashrateShares` (shell) and `HashrateSharesData` (data) at
-`hashrate_shares.go:142` and `hashrate_shares.go:95` are the canonical in-explorer
-example. The explicit comment at `main.go:774` documents the exclusion:
+`hashrate_shares.go:272` and `hashrate_shares.go:158` are the canonical in-explorer
+example. The explicit comment at `main.go:779-781` documents the exclusion:
 `// Data endpoint is NOT under withCache: it varies by ?interval=`.
 
 **Constraints:**
@@ -188,6 +188,25 @@ example. The explicit comment at `main.go:774` documents the exclusion:
   data (e.g. `SKACoinSupply` coin types).
 
 ---
+
+## Cookie-as-Value, Never Cookie-as-Presence (theme)
+
+**Description:** The `monetariumDarkBG` cookie encodes the theme as an explicit value
+(`"1"` dark, `"0"` light) on **every** write path, with `Path: "/"` and a one-year
+`MaxAge`. Both writers — `MenuFormParser` (the in-page sun toggle) and
+`ThemeFromQueryParser` (adoption of a landing-page `?theme=` choice) — follow this.
+
+**Constraints:**
+- Never express "light" as *cookie absent*: presence/absence cannot distinguish an
+  explicit light choice from no choice, and a later `?theme=dark` link would silently
+  override the visitor's decision.
+- `Path` and `MaxAge` must be pinned on every write, or a cookie set on one path
+  shadows or expires differently from one set on another.
+- A middleware that adopts a theme must `r.AddCookie` in addition to
+  `http.SetCookie`, or `commonData` renders the *old* theme for that one request and the
+  page visibly flips after load.
+- Source: `explorermiddleware.go:294-338` (`MenuFormParser`), `:341-376`
+  (`ThemeFromQueryParser`), `explorerroutes.go:2481-2484` (`commonData` read).
 
 ## Block-Scoped ETag / Last-Modified Page Cache
 

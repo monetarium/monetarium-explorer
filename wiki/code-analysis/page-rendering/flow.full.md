@@ -34,7 +34,7 @@ monetarium-node (JSON-RPC)
 blockdata.Collector.Collect()
   │ produces *BlockData, *wire.MsgBlock
   ▼
-blockdata fan-out (main.go:570,1092)
+blockdata fan-out (main.go:563,570)
   ├─► (*explorerUI).Store(blockData, msgBlock)      ← HTTP path
   │     writes pageData.{BlockInfo,BlockchainInfo,HomeInfo}
   │     resets ETag/Last-Modified
@@ -78,7 +78,7 @@ HTTP request → chi router (main.go:659–793)
 
 ### 3.1 Background Saver — `(*explorerUI).Store`
 
-**Location:** `cmd/dcrdata/internal/explorer/explorer.go:508`
+**Location:** `cmd/dcrdata/internal/explorer/explorer.go:498-940`
 
 **Data Structures written to `pageData`:**
 
@@ -103,7 +103,7 @@ HTTP request → chi router (main.go:659–793)
 
 After `p.Unlock()`, `Store` also recomputes `invs.CoinFills` under `invsMtx.Lock`
 (while holding `pageData.Lock`) so newly-issued SKA coins appear in fill bars
-before any mempool tx arrives (`explorer.go:614–631`).
+before any mempool tx arrives (`explorer.go:616–622`).
 
 **Async side effects (goroutines):**
 - Sends `sigNewBlock` and `sigMempoolUpdate` to `wsHub.HubRelay`.
@@ -121,11 +121,11 @@ for `TicketPrice` and `POWDifficulty` (WindowBin) and `PercentStaked`
 (BlockBin + DayBin) — forcing those charts to re-run their maker functions on the
 next `/api/chart/...` request rather than serving bytes whose cacheID hasn't yet
 rolled to a new window boundary. If the assertion fails, the tip push is silently
-skipped (no error, no log). (`explorer.go:652–668`, `db/cache/charts.go:908–933`)
+skipped (no error, no log). (`explorer.go:641–654`, `db/cache/charts.go:908–933`)
 
 ### 3.2 Background Saver — `(*explorerUI).StoreMPData`
 
-**Location:** `cmd/dcrdata/internal/explorer/explorer.go:476`
+**Location:** `cmd/dcrdata/internal/explorer/explorer.go:466-495`
 
 Reads `pageData.RLock` for `blockchainInfo.MaxBlockSize` and `HomeInfo.SKACoinSupply`
 (to get `issuedSKA`). Releases lock. Calls `types.ComputeCoinFills(inv.CoinStats,
@@ -147,6 +147,46 @@ maxBlockSize, issuedSKA)`. Writes `fills` into both `inv.CoinFills` and
   `(hash, height)` and injects both into request context.
 - `MenuFormParser` (line 294) — handles dark-mode cookie toggle POST at `/set`.
 
+#### Theme selection middleware
+
+Two middlewares in `explorermiddleware.go` own the `monetariumDarkBG` cookie, and both
+write it as an explicit **value** (`"1"` dark / `"0"` light) with `Path: "/"` and
+`MaxAge: 525600*60` (one year) — never as a presence/absence flag:
+
+- **`MenuFormParser`** (`:294-338`) handles the in-page sun toggle (`POST /set`,
+  registered at `main.go:766`). It flips the cookie value rather than deleting it, so an
+  explicit *light* choice is distinguishable from "no choice yet".
+- **`ThemeFromQueryParser`** (`:341-376`) adopts a theme chosen on the external landing
+  page via `?theme=dark` / `?theme=light`. It is wired across the whole page router
+  (`main.go:729`, alongside `SyncStatusPageIntercept`). It returns early when the visitor
+  already has a `monetariumDarkBG` cookie — an in-explorer choice always wins over
+  whatever the landing page last advertised. On adoption it both `http.SetCookie`s the
+  response **and** `r.AddCookie`s the request, so `commonData` (`explorerroutes.go:2481-2484`)
+  reads the new value on this very request and the first paint is already themed, instead
+  of JS flipping the class after load.
+
+`commonData` reads the cookie into `CommonPageData.Cookies.DarkMode`
+(`darkMode != nil && darkMode.Value == "1"`), which every template consumes.
+
+#### Static asset delivery
+
+`FileServer` mounts (`main.go:683-690`) serve `public/{js,css,fonts,images}` at
+`cacheControlMaxAge` and `public/dist` at `distCacheControlMaxAge` with the
+**immutable** flag — the bundles are content-hashed, so they are safe to cache
+long-term. A single shared `middleware.Compress(5)` instance (`main.go:1169`) gzips
+compressible text assets at the app layer, so delivery stays efficient with no
+compressing reverse proxy in front. Two coupling notes live in that code: ranged
+requests are answered uncompressed from raw byte offsets, and `Accept-Ranges` is
+therefore dropped from the compressed representation (`main.go:1173-1178`) so clients
+do not take byte ranges against a gzip stream.
+
+#### HTTP server limits
+
+The page server pins `ReadTimeout: 5s`, `WriteTimeout: 60s`, `IdleTimeout: 30s`
+(`main.go:1114-1117`) and a 2 MiB request-body limit (`main.go:649`). These came in with
+the unresponsiveness fix: a hung response or a slow client can no longer hold a
+connection open indefinitely.
+
 ### 3.4 Route Registration
 
 **Location:** `cmd/dcrdata/main.go:659–793`
@@ -155,17 +195,17 @@ Key groupings:
 
 | Group | Middleware applied | Routes |
 |---|---|---|
-| Group A (line 659) | `SyncStatusPageIntercept` | `/` (redirect), `/visualblocks`, `/ws` |
-| Group B (line 725) | `SyncStatusPageIntercept` | All explorer pages including `/blocks`, `/tx/{txid}`, etc. |
-| `withCache` subgroup (line 768) | `ETagAndLastModifiedIntercept` on top of B | `/`, `/disapproved`, `/mempool`, `/charts`, `/hashrate-shares`, `/parameters`, `/agendas`, `/agenda/{agendaid}`, `/attack-cost` |
+| Group A (line 657) | `SyncStatusPageIntercept` | `/` (redirect), `/visualblocks`, `/ws` |
+| Group B (line 729) | `SyncStatusPageIntercept` **+ `ThemeFromQueryParser`** | All explorer pages including `/blocks`, `/tx/{txid}`, etc. |
+| `withCache` subgroup (line 773) | `ETagAndLastModifiedIntercept` on top of B | `/`, `/disapproved`, `/mempool`, `/charts`, `/hashrate-shares`, `/parameters`, `/agendas`, `/agenda/{agendaid}`, `/attack-cost` |
 
-Note: `/hashrate-shares/data` is **NOT** under `withCache` (line 777) — the data
-endpoint varies by `?interval=` query param; caching it per-block would serve stale
-interval results. Explicit comment in `main.go:774`.
+Note: `/hashrate-shares/data` is **NOT** under `withCache` (line 782) — the data
+endpoint varies by `?interval=` (and now `?from=`/`?to=`) query params; caching it
+per-block would serve stale interval results. Explicit comment in `main.go:779-781`.
 
 ### 3.5 `commonData` — Shared Template Foundation
 
-**Location:** `cmd/dcrdata/internal/explorer/explorerroutes.go:2414`
+**Location:** `cmd/dcrdata/internal/explorer/explorerroutes.go:2473`
 
 Called by every page handler. Queries `GetTip(ctx)` (Postgres). On failure returns
 `nil` — callers embed the nil pointer without checking, so any page with a nil
@@ -177,38 +217,38 @@ Fields injected: `Tip` (from DB), `Version`, `ChainParams` (startup capture),
 
 ### 3.6 Page Handlers (selected)
 
-**`Home`** (`explorerroutes.go:216`): Reads `pageData.RLock` + `invsMtx.RLock` for
+**`Home`** (`explorerroutes.go:217`): Reads `pageData.RLock` + `invsMtx.RLock` for
 `HomeInfo` and mempool snapshot. Falls back to `CBlockSubsidy.PoW` for
 `LBlockTotalAtoms` when not yet set (early-startup guard, line 240–243).
 
-**`Blocks`** (`explorerroutes.go:656`): Parses `?height=` + `?rows=`. Applies
+**`Blocks`** (`explorerroutes.go:657`): Parses `?height=` + `?rows=`. Applies
 `normalizeExplorerRows(rows)` (default 100, cap 400). Queries `GetExplorerBlocks`.
 
-**`StakeDiffWindows`** (`explorerroutes.go:424`): Parses `?rows=` + `?offset=`.
+**`StakeDiffWindows`** (`explorerroutes.go:425`): Parses `?rows=` + `?offset=`.
 Applies `normalizeExplorerRows(rows)`. Queries `PosIntervals`.
 
-**`timeBasedBlocksListing`** (`explorerroutes.go:520`): Used by
+**`timeBasedBlocksListing`** (`explorerroutes.go:521`): Used by
 `DayBlocksListing`/`WeekBlocksListing`/`MonthBlocksListing`/`YearBlocksListing`.
 Applies `normalizeExplorerRows(rows)`. Queries `TimeBasedIntervals`.
 
-**`HashrateShares`** (`hashrate_shares.go:142`): Shell page handler, under
+**`HashrateShares`** (`hashrate_shares.go:272`): Shell page handler, under
 `withCache`. Reads `pageData.RLock` for `HomeInfo.SKACoinSupply` to extract
 `activeSKATypes`. Passes them to template for JS controller bootstrap.
 
-**`HashrateSharesData`** (`hashrate_shares.go:95`): JSON data endpoint, **not**
+**`HashrateSharesData`** (`hashrate_shares.go:158`): JSON data endpoint, **not**
 under `withCache`. Validates `?interval=` (default `week`). Calls
 `intervalMinHeight(ctx, interval)` (reads `pageData.BlockInfo.BlockTime` under
 `pageData.RLock`; calls `GetHeightByTimestamp` on DB). Calls
 `MinerHashrateShares(ctx, minHeight)`. Applies `minerShares()` → JSON response
 `{interval, total, miners:[{rank,address,count,percent}]}`.
 
-**`AgendasPage`** (`explorerroutes.go:2142`): Under `withCache`. Guards on
+**`AgendasPage`** (`explorerroutes.go:2201`): Under `withCache`. Guards on
 `exp.voteTracker != nil` (nil → `ExpStatusPageDisabled`, i.e. simnet). Calls
 `AllAgendas()` (agenda DB) + `voteTracker.Summary()` (in-memory VoteTracker).
 Cross-filters VoteTracker summaries to only Monetarium-era agendas
 (`filterAgendaSummaries`, line 2196).
 
-**`AgendaPage`** (`explorerroutes.go:2047`): Under `withCache`. Reads `agendaId`
+**`AgendaPage`** (`explorerroutes.go:2106`): Under `withCache`. Reads `agendaId`
 from request context (set by `AgendaPathCtx` middleware). Queries
 `agendasSource.AgendaInfo(agendaId)` + `dataSource.AgendasVotesSummary(ctx, agendaId)`.
 Handles `nil` summary (pre-voting agenda) by substituting zero-value
@@ -216,7 +256,7 @@ Handles `nil` summary (pre-voting agenda) by substituting zero-value
 
 ### 3.7 `normalizeExplorerRows[T]`
 
-**Location:** `cmd/dcrdata/internal/explorer/explorerroutes.go:645`
+**Location:** `cmd/dcrdata/internal/explorer/explorerroutes.go:646`
 
 Generic over `int64 | uint64`. Logic:
 - `rows == 0` → `defaultExplorerRows` (100)
@@ -261,7 +301,7 @@ computing SKA vote rewards (line 735). Mixing is impossible — each tx is one c
 (`PoWSKARewards`) are separate fields, not added to `LBlockTotal`.
 
 **C4 (CBlockSubsidy fallback):** `blockData.ExtraInfo.CurrentBlockSubsidy` may be
-nil (e.g. pre-DCP0012). The fallback at `explorer.go:578–581` copies `NBlockSubsidy`
+nil (e.g. pre-DCP0012). The fallback at `explorer.go:570–573` copies `NBlockSubsidy`
 into `CBlockSubsidy`. Any consumer of `CBlockSubsidy` must expect it equals
 `NBlockSubsidy` when the node does not return current subsidy.
 
@@ -273,7 +313,7 @@ before calling `normalizeExplorerRows`.
 **C6 (withCache vs varying params):** A handler under `withCache` must be a pure
 function of `pageData`/`invs` at the last tick. `HashrateSharesData` is NOT under
 `withCache` because its output varies by `?interval=`. The comment at
-`main.go:774` makes this explicit.
+`main.go:779-781` makes this explicit.
 
 **C7 (ActiveMiners timestamp-based):** `Store` calls `GetHeightByTimestamp(ctx, now-7d)`.
 On error it warns and falls back to `minHeight=0` (whole-chain scan). This fallback
@@ -287,7 +327,7 @@ the correct VoteVersion, otherwise it will be hidden from status cards.
 **C9 (RemainingWindowText single source of truth):** `WindowRemaining` and
 `RewardRemaining` in `HomeInfo` are computed by `types.RemainingWindowText`
 (`explorer/types/remaining.go:17`). Both `(*explorerUI).Store` and
-`psHub.Store` (`pubsub/pubsubhub.go:734,736`) call the same function, ensuring the
+`psHub.Store` (`pubsub/pubsubhub.go:738,740`) call the same function, ensuring the
 server-rendered HTML and the live WS payload always produce identical countdown
 strings. Do not inline this calculation in either saver or in a template — the
 function is the single authority (comment references issue #502).
@@ -336,19 +376,34 @@ per-page isolation. See `impact.md` → *commonData Nil Render Crash*.
 ### Adding a new `explorerDataSource` interface method
 
 Interface changes must be reflected in the mock at
-`cmd/dcrdata/internal/explorer/explorer_test.go` (line 207 has `MinerHashrateShares`
-as a recent example). Missing mock update causes test compilation failure.
+`cmd/dcrdata/internal/explorer/explorer_test.go` (line 210 has `MinerHashrateShares`
+as a recent example — its signature has since gained a `maxHeight` parameter, and both
+the interface at `explorer.go:128` and the mock had to move together). Missing mock
+update causes test compilation failure.
 
 ### Changing `intervalMinHeight` / `HashrateSharesData`
 
-`intervalMinHeight` reads `pageData.BlockInfo.BlockTime` under `pageData.RLock`. If
-called from a goroutine that also holds `invsMtx`, check for lock-order inversion
-against `Store` (see `impact.md` → *Lock-Order Inversion*).
+`intervalMinHeight` (`hashrate_shares.go:105-134`) reads
+`pageData.BlockInfo.BlockTime` under `pageData.RLock`. If called from a goroutine that
+also holds `invsMtx`, check for lock-order inversion against `Store` (see `impact.md` →
+*Lock-Order Inversion*).
+
+`HashrateSharesData` (`hashrate_shares.go:158-255`) now has **two modes**. The named
+intervals (`day`/`week`/`month`/`year`/`all`) still resolve through
+`intervalMinHeight`; an explicit `?from=`/`?to=` block range bypasses it entirely,
+validates `from <= to`, caps the *raw* range length at `maxHashrateShareRange` as a
+hostile-request guard, and clamps `to` to the tip (a `to` past the tip just means "to
+now"; a range entirely ahead of the tip is not reported as truncated). The chosen span
+is labelled `range:<from>-<to>` and reaches the DB as
+`MinerHashrateShares(ctx, minHeight, maxHeight)` — the `maxHeight` parameter was added
+for this mode and cascades through `explorerDataSource` (`explorer.go:128`),
+`ChainDB.MinerHashrateShares`, `retrieveMinerRewardCounts` in `db/dcrpg/queries.go`,
+and the test mock. `dbtypes.MinerRewardCount` also gained `RewardAtoms`/`PaidAtoms`.
 
 ### Modifying `HomeInfo.WindowRemaining` / `HomeInfo.RewardRemaining`
 
 Both fields are computed by `types.RemainingWindowText` from `explorer/types/remaining.go`.
-The call sites are `explorer.go:568,570` and `pubsub/pubsubhub.go:734,736`. Changing
+The call sites are `explorer.go:557,559` and `pubsub/pubsubhub.go:738,740`. Changing
 the signature or semantics of `RemainingWindowText` affects both the HTTP render and
 the WS push simultaneously. If either call site is removed or changed independently,
 the HTML countdown and the WS live-update diverge (see `impact.md` →
@@ -415,33 +470,33 @@ is silent — no error, no log. To verify `SetTip` is firing in production, chec
 
 | Claim | Location |
 |---|---|
-| `defaultExplorerRows = 100` | `explorer.go:51` |
-| `normalizeExplorerRows[T]` implementation | `explorerroutes.go:645–652` |
-| `Store` writes `CBlockSubsidy` with nil-check + fallback | `explorer.go:573–581` |
-| `Store` computes `LBlockTotal` from `CBlockSubsidy.PoW` | `explorer.go:589–590` |
-| `Store` queries `GetHeightByTimestamp` then `ActiveMiners` | `explorer.go:539–583` |
-| `Store` recomputes `CoinFills` under `invsMtx.Lock` (nested inside `pageData.Lock`) | `explorer.go:614–631` |
-| `StoreMPData` takes `pageData.RLock`, releases, then `invsMtx.Lock` | `explorer.go:477–501` |
-| `ETagAndLastModifiedIntercept` reads `eTag` under `pageData.RLock` | `explorerroutes.go:2414–2452` (via `eTagAndLastModified` at `explorer.go:949`) |
-| `withCache` group registration; `/hashrate-shares/data` excluded with comment | `main.go:768–777` |
-| `/agendas` + `/agenda/{agendaid}` under `withCache` | `main.go:785–786` |
-| `HashrateShares` reads `SKACoinSupply` under `pageData.RLock` | `hashrate_shares.go:143–145` |
-| `HashrateSharesData` calls `intervalMinHeight` → `pageData.RLock` + `GetHeightByTimestamp` | `hashrate_shares.go:62–91, 95–136` |
-| `AgendasPage` nil voteTracker guard | `explorerroutes.go:2143–2146` |
-| `AgendaPage` nil summary guard (zero-value substitution) | `explorerroutes.go:2068–2072` |
-| `filterAgendaSummaries` VoteVersion cross-filter | `explorerroutes.go:2196–2208` |
-| `mockDataSource.MinerHashrateShares` added to test mock | `explorer_test.go:207` |
-| `commonData` nil return on `GetTip` failure | `explorerroutes.go:2417–2421` |
-| `HomeInfo.WindowRemaining` populated via `types.RemainingWindowText` | `explorer.go:568` |
-| `HomeInfo.RewardRemaining` populated via `types.RemainingWindowText` | `explorer.go:570` |
+| `defaultExplorerRows = 100` | `explorer.go:52` |
+| `normalizeExplorerRows[T]` implementation | `explorerroutes.go:646–653` |
+| `Store` writes `CBlockSubsidy` with nil-check + fallback | `explorer.go:565–573` |
+| `Store` computes `LBlockTotal` from `CBlockSubsidy.PoW` | `explorer.go:581–582` |
+| `Store` queries `GetHeightByTimestamp` then `ActiveMiners` | `explorer.go:531–537` |
+| `Store` recomputes `CoinFills` under `invsMtx.Lock` (nested inside `pageData.Lock`) | `explorer.go:616–622` |
+| `StoreMPData` takes `pageData.RLock`, releases, then `invsMtx.Lock` | `explorer.go:466–495` |
+| `ETagAndLastModifiedIntercept` reads `eTag` under `pageData.RLock` | `explorerroutes.go:2473–2511` (via `eTagAndLastModified` at `explorer.go:958`) |
+| `withCache` group registration; `/hashrate-shares/data` excluded with comment | `main.go:773–782` |
+| `/agendas` + `/agenda/{agendaid}` under `withCache` | `main.go:784–785` |
+| `HashrateShares` reads `SKACoinSupply` under `pageData.RLock` | `hashrate_shares.go:138–145` |
+| `HashrateSharesData` calls `intervalMinHeight` → `pageData.RLock` + `GetHeightByTimestamp` | `hashrate_shares.go:58–99, 105–134` |
+| `AgendasPage` nil voteTracker guard | `explorerroutes.go:2202–2205` |
+| `AgendaPage` nil summary guard (zero-value substitution) | `explorerroutes.go:2127–2131` |
+| `filterAgendaSummaries` VoteVersion cross-filter | `explorerroutes.go:2259–2267` |
+| `mockDataSource.MinerHashrateShares` added to test mock | `explorer_test.go:210` |
+| `commonData` nil return on `GetTip` failure | `explorerroutes.go:2476–2480` |
+| `HomeInfo.WindowRemaining` populated via `types.RemainingWindowText` | `explorer.go:557` |
+| `HomeInfo.RewardRemaining` populated via `types.RemainingWindowText` | `explorer.go:559` |
 | `RemainingWindowText` single-source-of-truth with issue #502 comment | `explorer/types/remaining.go:8–17` |
-| `WindowRemaining`/`RewardRemaining` json tags on `HomeInfo` | `explorer/types/explorertypes.go:911,913` |
-| `psHub.Store` also calls `RemainingWindowText` for both fields | `pubsub/pubsubhub.go:734,736` |
+| `WindowRemaining`/`RewardRemaining` json tags on `HomeInfo` | `explorer/types/explorertypes.go:862,864` |
+| `psHub.Store` also calls `RemainingWindowText` for both fields | `pubsub/pubsubhub.go:738,740` |
 | `ChartTip` struct definition | `db/cache/charts.go:490–497` |
 | `SetTip` stores tip, calls `invalidateTipCharts` | `db/cache/charts.go:908–913` |
 | `invalidateTipCharts` deletes `TicketPrice`+`POWDifficulty` (WindowBin) and `PercentStaked` (Block+DayBin) | `db/cache/charts.go:919–933` |
-| Type assertion `exp.chartSource.(*cache.ChartData)` + `PoolInfo.Value * 1e8` conversion | `explorer.go:652–668` |
-| `chartSource` field typed as `ChartDataSource` interface on `explorerUI` | `explorer.go:223` |
+| Type assertion `exp.chartSource.(*cache.ChartData)` + `PoolInfo.Value * 1e8` conversion | `explorer.go:641–654` |
+| `chartSource` field typed as `ChartDataSource` interface on `explorerUI` | `explorer.go:222` |
 
 See also:
 - /wiki/code-analysis/page-rendering/patterns.md (shares-pattern-with: all cross-domain rendering patterns)

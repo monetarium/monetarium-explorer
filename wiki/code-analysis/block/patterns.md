@@ -104,7 +104,7 @@ MiningFeeAtoms = Σ(VAR outputs in coinbase) − Σ(coinbase inputs)
 
 This is not a heuristic — it is the same conservation formula that the PoW-Reward tx page's `TxInfo.FeeReward()` uses. By construction, the two are always consistent.
 
-Location: `blockdata/blockdata.go:668-691`
+Location: `blockdata/blockdata.go:568-591`
 
 Implication:
 

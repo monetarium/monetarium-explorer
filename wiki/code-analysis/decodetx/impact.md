@@ -70,10 +70,10 @@ A refactor that only touches one side leaves the other speaking a stale dialect.
 - Interface decl (explorer): [cmd/dcrdata/internal/explorer/explorer.go:109-110](../../../cmd/dcrdata/internal/explorer/explorer.go#L109-L110).
 - Interface decl (pubsub): [pubsub/pubsubhub.go:53-54](../../../pubsub/pubsubhub.go#L53-L54).
 - Interface decl (insight, send only): [cmd/dcrdata/internal/api/insight/apiroutes.go:51](../../../cmd/dcrdata/internal/api/insight/apiroutes.go#L51).
-- Implementation (decode): [db/dcrpg/pgblockchain.go:7468](../../../db/dcrpg/pgblockchain.go#L7468).
+- Implementation (decode): [db/dcrpg/pgblockchain.go:7277](../../../db/dcrpg/pgblockchain.go#L7277).
 - Implementation (send): [db/dcrpg/insightapi.go:49](../../../db/dcrpg/insightapi.go#L49).
 - Caller (insight REST send): [cmd/dcrdata/internal/api/insight/apiroutes.go:349](../../../cmd/dcrdata/internal/api/insight/apiroutes.go#L349).
-- Mock: [cmd/dcrdata/internal/explorer/explorer_test.go:140-145](../../../cmd/dcrdata/internal/explorer/explorer_test.go#L140-L145).
+- Mock: [cmd/dcrdata/internal/explorer/explorer_test.go:154-159](../../../cmd/dcrdata/internal/explorer/explorer_test.go#L154-L159).
 
 **Failure mode:** loud (`go build` / `go test` failure). The two interface decls must be kept identical; the test package fails to compile if `mockDataSource` lags.
 
@@ -113,7 +113,7 @@ A refactor that only touches one side leaves the other speaking a stale dialect.
 
 **Trigger:** renaming or removing the `/decodetx` route.
 
-**Affected sites:** [cmd/dcrdata/main.go:750](../../../cmd/dcrdata/main.go#L750) (canonical) and [cmd/dcrdata/internal/explorer/explorer.go:985](../../../cmd/dcrdata/internal/explorer/explorer.go#L985) (`exp.Mux.Get("/decodetx", redirect("decodetx"))` — serves `/explorer/decodetx` → `/decodetx`).
+**Affected sites:** [cmd/dcrdata/main.go:755](../../../cmd/dcrdata/main.go#L755) (canonical) and [cmd/dcrdata/internal/explorer/explorer.go:994](../../../cmd/dcrdata/internal/explorer/explorer.go#L994) (`exp.Mux.Get("/decodetx", redirect("decodetx"))` — serves `/explorer/decodetx` → `/decodetx`).
 
 **Failure mode:** loud (the redirect 308s to a 404).
 
@@ -129,7 +129,7 @@ When modifying `/decodetx`:
 4. [ ] If the change introduces structured frontend rendering of the response, did it switch from `<pre>.textContent = evt` to C6 template cloning + parsed JSON?
 5. [ ] If the change touches the receive loop in `RootWebsocket`, did you verify the live-update side (`loop:`) and every other page that uses `/ws` (homepage, mempool, visualblocks, ticketpool)?
 6. [ ] If the change touches the 1 MB limit, did you adjust the pubsub `psh.wsHub.requestLimit` and Insight `iapi.params.MaxTxSize` to match (or document the divergence)?
-7. [ ] If the route name or path changed, did you update the `/explorer/decodetx` redirect in `explorer.go:985`?
+7. [ ] If the route name or path changed, did you update the `/explorer/decodetx` redirect in `explorer.go:994`?
 8. [ ] If the change affects the pubsub or Insight twin, did you preserve their distinct envelopes (`{ID, RequestID, Data, Success}` vs JSON `{txid}`)?
 
 See also:

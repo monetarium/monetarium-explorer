@@ -1,9 +1,12 @@
 domain: disapproved-blocks
-anchor: 159bedf5
+anchor: d12ec80f
 files:
   - cmd/dcrdata/internal/explorer/explorer.go
+  - cmd/dcrdata/internal/explorer/explorer_test.go
   - cmd/dcrdata/internal/explorer/explorermiddleware.go
   - cmd/dcrdata/internal/explorer/explorerroutes.go
+  - cmd/dcrdata/main.go
+  - cmd/dcrdata/views/blocks.tmpl
   - cmd/dcrdata/views/disapproved.tmpl
   - cmd/dcrdata/views/sidechains.tmpl
   - db/dbtypes/types.go

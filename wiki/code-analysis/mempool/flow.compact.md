@@ -7,10 +7,10 @@
 - **Dual collection paths (batch vs. incremental).** `ParseTxns` at block boundaries fully rebuilds `MempoolInfo.CoinStats`; `addTxToCoinStats` updates it incrementally per new tx. Both must stay equivalent. Tests: [mempool/monitor_test.go](../../../mempool/monitor_test.go).
 - **Multi-saver fan-out.** `MempoolMonitor` dispatches to `[]MempoolDataSaver`: `explorerUI` (computes `CoinFills`), `PubSubHub` (pointer-assign), `DataCache` (early-returns on incremental path via `stakeData==nil` guard).
 - **Dual-transport WS.** Root explorer WS ([websockethandlers.go](../../../cmd/dcrdata/internal/explorer/websockethandlers.go)) and `PubSubHub` ([pubsubhub.go](../../../pubsub/pubsubhub.go)) both emit identical `sigMempoolUpdate(MempoolShort)` and `sigNewTxs(Txs+CoinFills+TotalFillRatio+ActiveSKACount)` payloads. See [/wiki/code-analysis/visualblocks/patterns.md](../visualblocks/patterns.md).
-- **`CoinFills` derived in two sites.** Computed via `types.ComputeCoinFills(CoinStats, maxBlockSize, issuedSKA)` (`explorer/types/explorertypes.go:1047`) inside both `(*explorerUI).StoreMPData` (mempool change, `explorer.go:492`) and `(*explorerUI).Store` (new block, after `SKACoinSupply` refresh, `explorer.go:628`). The old unexported `explorer.go:1047 computeCoinFills` is dead code.
+- **`CoinFills` derived in two sites.** Computed via `types.ComputeCoinFills(CoinStats, maxBlockSize, issuedSKA)` (`explorer/types/explorertypes.go:1730-1821`) inside both `(*explorerUI).StoreMPData` (mempool change, `explorer.go:481`) and `(*explorerUI).Store` (new block, after `SKACoinSupply` refresh, `explorer.go:617`). The old unexported `explorer.go:1036-1136 computeCoinFills` is dead code.
 - **`MempoolTx` identifier is `TxID` only.** The `Hash string json:"hash"` field has been removed. All dedup maps, templates, and JS controllers use `TxID`/`tx.txid`. Any code referencing `tx.hash` on a mempool tx payload gets `undefined`.
 - **`issuedSKA` seeding.** Drawn from `HomeInfo.SKACoinSupply` so ever-issued coin types render zero-fill bars even with no current mempool activity.
-- **rAF-batched indicator updates.** Frontend collapses overlapping `coin_fills` payloads into a single animation frame; bars are zeroed, never removed (`homepage_controller.js:216-269`).
+- **rAF-batched indicator updates.** Frontend collapses overlapping `coin_fills` payloads into a single animation frame; bars are zeroed, never removed (`homepage_controller.js:222-276`).
 
 ### Critical Constraints
 

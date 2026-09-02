@@ -53,7 +53,7 @@ The vote row is now driven by `(Voted, VoteValid)` instead of `VoteValid` alone:
 
 Empty slots up to 5 stay transparent (no class). The class assignment is duplicated in three places:
 
-- Server: `trimmedTxInfoFromMsgTx` ([db/dcrpg/pgblockchain.go:6558-6562](../../../db/dcrpg/pgblockchain.go#L6558-L6562)) sets `Voted = txBasic.VoteInfo != nil` and `VoteValid` from the chain.
+- Server: `trimmedTxInfoFromMsgTx` ([db/dcrpg/pgblockchain.go:6489-6541](../../../db/dcrpg/pgblockchain.go#L6489-L6541)) sets `Voted = txBasic.VoteInfo != nil` and `VoteValid` from the chain.
 - Template: `{{if .Voted}}{{if .VoteValid}}vote-yes{{else}}vote-no{{end}}{{else}}vote-skip{{end}}` in `visualblocks.tmpl`.
 - JS: same nested conditional in `visualBlocks_controller.js:makeVoteElements`.
 - SCSS: the three classes are declared in `visualblocks.scss` (with a dark-theme override for `.vote-skip`).
@@ -109,7 +109,7 @@ Implications:
 
 ## 6. Memoized Single-Block Pointer Share
 
-`pgb.lastExplorerBlock` ([db/dcrpg/pgblockchain.go:6366-6633](../../../db/dcrpg/pgblockchain.go#L6366-L6633)) caches the most recently built `*BlockInfo` keyed by hash. Every caller that requests the same hash gets the *same pointer*. Visualblocks, block page, mempool page, and `/ws` `sigNewBlock` all consume this.
+`pgb.lastExplorerBlock` ([db/dcrpg/pgblockchain.go:6562-6839](../../../db/dcrpg/pgblockchain.go#L6562-L6839)) caches the most recently built `*BlockInfo` keyed by hash. Every caller that requests the same hash gets the *same pointer*. Visualblocks, block page, mempool page, and `/ws` `sigNewBlock` all consume this.
 
 Implications:
 
@@ -158,7 +158,7 @@ Implication: only `Store` nests two `explorerUI` locks (`pageData.Lock` + `invsM
 
 ## 9. WebSocket Subsidy Patch (dead-but-wired)
 
-The mempool tile path still copies `exp.pageData.HomeInfo.NBlockSubsidy` onto `mempoolInfo.Subsidy` just before serializing ([explorerroutes.go:357](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L357) and [websockethandlers.go:200](../../../cmd/dcrdata/internal/explorer/websockethandlers.go#L200)).
+The mempool tile path still copies `exp.pageData.HomeInfo.NBlockSubsidy` onto `mempoolInfo.Subsidy` just before serializing ([explorerroutes.go:398](../../../cmd/dcrdata/internal/explorer/explorerroutes.go#L398) and [websockethandlers.go:204](../../../cmd/dcrdata/internal/explorer/websockethandlers.go#L204)).
 
 **Note:** the new template (`38636d52`) no longer reads `.Subsidy` anywhere (rewards row deleted). The patch is harmless but effectively dead code on this page. Don't rely on it for anything new; do not remove it without an audit of the WS frame's other consumers (currently no external consumer reads the mempool-tile `Subsidy`).
 

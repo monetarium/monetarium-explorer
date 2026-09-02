@@ -65,7 +65,7 @@ views/home_mempool.tmpl  ──► homepage_controller.js (rAF-buffered indicato
 `MempoolDataSaver` is `StoreMPData(*StakeData, []exptypes.MempoolTx, *exptypes.MempoolInfo)`:
 
 - **`mempool/mempoolcache.go::(*DataCache).StoreMPData`** — early-returns when `stakeData == nil` (`mempoolcache.go:46-51`). This is the explicit guard that lets `TxHandler` skip the cache on the incremental path. When called from `CollectAndStore`, stores `txs`, ticket fee info, fee/feeRate slices, ticket details, stake difficulty. The stake-diff update now uses explicit error handling: if `dcrutil.NewAmount(stakeData.StakeDiff)` fails, it logs a warning and leaves the cached value unchanged (`mempoolcache.go:67-72`).
-- **`cmd/dcrdata/internal/explorer/explorer.go::(*explorerUI).StoreMPData`** (`explorer.go:483-512`):
+- **`cmd/dcrdata/internal/explorer/explorer.go::(*explorerUI).StoreMPData`** (`explorer.go:466-495`):
   1. Reads `pageData.HomeInfo.SKACoinSupply` to compute `issuedSKA` (the full set of ever-issued SKA coin types).
   2. Reads `pageData.BlockchainInfo.MaxBlockSize` (fallback `393216.0`).
   3. Calls `types.ComputeCoinFills(inv.CoinStats, maxBlockSize, issuedSKA)` (`explorer.go:487`) → writes the results to **both** `inv.CoinFills` (legacy) **and** `inv.MempoolShort.CoinFills` plus `TotalFillRatio` and `ActiveSKACount`.
@@ -73,7 +73,7 @@ views/home_mempool.tmpl  ──► homepage_controller.js (rAF-buffered indicato
   5. Resets the page ETag/Last-Modified.
 - **`pubsub/pubsubhub.go::(*PubSubHub).StoreMPData`** (`pubsubhub.go:620-626`) — only assigns `psh.invs = inv`. Does **not** recompute CoinFills (it consumes the values the explorer just wrote).
 
-Additional CoinFills recomputation lives in **`(*explorerUI).Store`** (new-block saver path) at `explorer.go:599-615`: after `HomeInfo.SKACoinSupply` is refreshed from the DB, fills are recomputed using the **new** issued set, so a freshly issued SKA coin gets a zero-fill indicator broadcast before its first mempool tx arrives.
+Additional CoinFills recomputation lives in **`(*explorerUI).Store`** (new-block saver path) at `explorer.go:596-620`: after `HomeInfo.SKACoinSupply` is refreshed from the DB, fills are recomputed using the **new** issued set, so a freshly issued SKA coin gets a zero-fill indicator broadcast before its first mempool tx arrives.
 
 #### 3.4 `types.ComputeCoinFills` — `explorer/types/explorertypes.go:1760`
 
@@ -93,7 +93,7 @@ Additional CoinFills recomputation lives in **`(*explorerUI).Store`** (new-block
 - **`MempoolInfo`** (`:965-977`) — embeds `MempoolShort`, holds tx slices and `Ident`; has its own embedded `sync.RWMutex` (separate from `MempoolMonitor.mtx`). `DeepCopy` (`:981`) now correctly copies `Ident` and `CoinFills` in addition to the `MempoolShort` deep-copy — previously these two fields were silently dropped in the snapshot, causing WS payloads from the incremental path to show stale/zero fills.
 - **`MempoolTx`** (`:1473`) — the `Hash string json:"hash"` field has been **removed**; `TxID string json:"txid"` (`:1474`) is now the sole identifier. All dedup maps (`invStake`, `invRegular`) in `ParseTxns` and `TxHandler` now key on `TxID`. Templates and JS controllers updated accordingly (`{{.TxID}}` in templates, `tx.txid` in JS). **This is a WS JSON contract change** — any client reading `tx.hash` will get `undefined`; must use `tx.txid`.
 - **`MempoolTx.SKATotals map[uint8]string`** (`:1492`) — per-coin SKA totals in atom-string form.
-- **`MempoolTx.TicketStage string`** (`explorertypes.go:1513`, `json:"ticket_stage,omitempty"`) — `"Ready"` or `"Staging"` for ticket purchase (`TxTypeSStx`) txs; empty string (omitted from JSON) for all other types. Value type — `DeepCopy` propagates it automatically. Not carried through `TrimMempoolTx` → `TrimmedTxInfo` since VisualBlocks/trimmed view does not display the tickets table.
+- **`MempoolTx.TicketStage string`** (`explorertypes.go:1445`, `json:"ticket_stage,omitempty"`) — `"Ready"` or `"Staging"` for ticket purchase (`TxTypeSStx`) txs; empty string (omitted from JSON) for all other types. Value type — `DeepCopy` propagates it automatically. Not carried through `TrimMempoolTx` → `TrimmedTxInfo` since VisualBlocks/trimmed view does not display the tickets table.
 - **`primaryCoinType(tx)`** (`:1148-1153`) — encodes the chain invariant "a mempool tx is single-coin": returns the single key from `SKATotals` or `0` for VAR (empty `SKATotals`).
 - **`TrimMempoolTx`** (`:1156-1178`) — propagates `CoinType = primaryCoinType(tx)` and `SKASent = tx.SKATotals` onto `TxBasic`. Uses `humanize.Bytes(uint64(tx.Size))` for `FormattedSize` (`:1167`; the old local `BytesString()` function has been removed from `explorertypes.go`).
 - **`HomeInfo`** (`:904`) — two new fields: `WindowRemaining string json:"window_remaining"` (`:911`) and `RewardRemaining string json:"reward_remaining"` (`:913`). Populated in both `(*explorerUI).Store` (`explorer.go:568,570`) and `(*PubSubHub).Store` (`pubsubhub.go:734,736`) via `types.RemainingWindowText()` from `explorer/types/remaining.go:17`.
@@ -135,7 +135,7 @@ In both pipelines the **CoinFills attached to `sigNewTxs` come from `MempoolShor
   - Regular transactions table: `{{if .SKATotals}}` branches per row — SKA txs show `coinSymbol` + `skaDecimalParts $amt false`, VAR txs show `VAR` + `float64AsDecimalParts .TotalOut 8 false`. SKA Fee Rate cell renders `—` (em-dash) because `MempoolTx.FeeRate` is VAR-only float64; a follow-up will add `FeeRateRaw string` for precise SKA display.
   - Tickets table: now includes a `Ticket Stage` column (header `:242-253` with tooltip "Ticket stage: Ready (all inputs confirmed) or Staging (spends an unconfirmed output)") that renders `{{.TicketStage}}` per row (`:270`). The `ticketRowTemplate` (`:222-234`) includes `<td data-slot="ticketStage">` so dynamically inserted rows also show the stage.
   - Votes / Revocations tables stay VAR-only per spec; column headers say `Total VAR` and fee-rate unit is `VAR/kB`.
-  - Treasury Spends and Treasury Adds sections both removed — Monetarium has no treasury (cf. `/treasury` → 410 in [core/pages.md](../../core/pages.md)), so neither tx type can occur on-chain. Backend `TAdds` / `NumTAdds` plumbing in `explorertypes.go`, `monitor.go`, `collector.go` is retained as dead code; UI no longer surfaces it.
+  - Treasury Spends and Treasury Adds sections both removed — Monetarium has no treasury (cf. `/treasury` → 410 in [core/pages.md](../../core/pages.md)), so neither tx type can occur on-chain. The backend plumbing is still present but is now **explicitly marked dead**: `monitor.go` and `collector.go` discard the `tspendVotes` return of `txhelpers.SSGenVoteChoices` into `_`, no longer call `exptypes.ConvertTSpendVotes`, and carry `// Deprecated: Monetarium has no treasury.` comments on every TSpend / TAdd / TreasuryBase branch. `TAdds` / `NumTAdds` fields remain on the types and are always zero. Treat these branches as unreachable rather than as behaviour to preserve.
   - `CoinFills` is not consumed here (it's a homepage indicator-bar concept).
 
 #### 3.9 Frontend — `cmd/dcrdata/public/js/`
@@ -194,11 +194,11 @@ When modifying **`MempoolCoinStats`** (new field, new tx-type bucket, format cha
 
 When modifying **`MempoolShort` / `MempoolInfo`** (new field):
 - Update `MempoolShort.DeepCopy` (`explorertypes.go:1174-1248`).
-- Update `MempoolInfo.Trim()` if the field should reach `TrimmedMempoolInfo` (`explorertypes.go:905-942`).
+- Update `MempoolInfo.Trim()` if the field should reach `TrimmedMempoolInfo` (`explorertypes.go:958-996`).
 - Update both WS encoders (`sigMempoolUpdate`, `sigNewTxs`) in `cmd/dcrdata/internal/explorer/websockethandlers.go` AND `pubsub/pubsubhub.go`.
 
 When modifying **`computeCoinFills`** (new ratio, status, formula):
-- The Go function: `cmd/dcrdata/internal/explorer/explorer.go:1108-1217`.
+- The Go function: `cmd/dcrdata/internal/explorer/explorer.go:1036-1136`.
 - The JS mirror: `cmd/dcrdata/public/js/helpers/indicator_fill.js` (apply/inject/zero helpers).
 - Templates: `views/home_mempool.tmpl` fill-bar markup and the `<template id="fill-bar-template">`.
 - The dev fixtures: `cmd/dcrdata/internal/explorer/dev_indicators.go` (visual regression scenarios).
@@ -263,21 +263,21 @@ When modifying **`TicketStage` / `ticketStage()` classification logic**:
 - `mempool/mptypes.go:15` — `CollectState` struct (replaces the old `MempoolInfo` for monitor's internal state tracking).
 - `mempool/monitor_test.go:13-103` — incremental equivalence tests including precision boundary (`"123456789012345678901"` atoms); fixtures use `TxID` (not `Hash`).
 - `cmd/dcrdata/internal/explorer/explorer.go:477-502` — `(*explorerUI).StoreMPData`; `types.ComputeCoinFills` call (`:492`) + dual write to `inv.CoinFills` and `inv.MempoolShort.CoinFills`.
-- `cmd/dcrdata/internal/explorer/explorer.go:628` — new-block CoinFills recomputation after `SKACoinSupply` refresh.
+- `cmd/dcrdata/internal/explorer/explorer.go:617` — new-block CoinFills recomputation after `SKACoinSupply` refresh.
 - `cmd/dcrdata/internal/explorer/explorer.go:568,570` — `WindowRemaining` and `RewardRemaining` populated via `types.RemainingWindowText()`.
 - `explorer/types/remaining.go:17` — `RemainingWindowText(idx int, max, blockTime int64) string`; single source of truth for window countdown (used by both `explorerUI.Store` and `PubSubHub.Store` so server render and WS payload can never diverge; cf. issue #502).
-- `explorer/types/explorertypes.go:729-747` — `MempoolCoinStats`.
+- `explorer/types/explorertypes.go:685-697` — `MempoolCoinStats`.
 - `explorer/types/explorertypes.go:965-1005` — `MempoolInfo` (`:965`), `DeepCopy` (`:981`) — now copies `Ident` and `CoinFills` correctly.
 - `explorer/types/explorertypes.go:1007-1032` — `MempoolInfo.Trim`.
-- `explorer/types/explorertypes.go:1148-1153` — `primaryCoinType`.
+- `explorer/types/explorertypes.go:1099-1104` — `primaryCoinType`.
 - `explorer/types/explorertypes.go:1156-1178` — `TrimMempoolTx`; uses `humanize.Bytes()` for `FormattedSize` (`:1167`).
-- `explorer/types/explorertypes.go:1214-1340` — `MempoolShort` + `DeepCopy`.
+- `explorer/types/explorertypes.go:1166-1287` — `MempoolShort` + `DeepCopy`.
 - `explorer/types/explorertypes.go:1473-1495` — `MempoolTx`; `Hash` field removed; `TxID string json:"txid"` (`:1474`) is the sole identifier.
 - `explorer/types/explorertypes.go:1494` — `MempoolTx.TicketStage` field (`json:"ticket_stage,omitempty"`).
-- `explorer/types/explorertypes.go:496-530` — `FeeReward()`; SKA early-return guard (`:498-500`).
-- `explorer/types/explorertypes.go:1748-1762` — `UnspentOutputIndices`; SKA fix (`:1755-1757`).
-- `explorer/types/explorertypes.go:904-942` — `HomeInfo`; `WindowRemaining` (`:911`) and `RewardRemaining` (`:913`).
-- `cmd/dcrdata/internal/explorer/websockethandlers.go:122-167` — `getmempooltxs`, `getmempooltrimmed`.
+- `explorer/types/explorertypes.go:477-496` — `FeeReward()`; SKA early-return guard (`:478-480`).
+- `explorer/types/explorertypes.go:1699-1711` — `UnspentOutputIndices`; SKA fix (`:1705-1707`).
+- `explorer/types/explorertypes.go:855-885` — `HomeInfo`; `WindowRemaining` (`:862`) and `RewardRemaining` (`:864`).
+- `cmd/dcrdata/internal/explorer/websockethandlers.go:159-217` — `getmempooltxs`, `getmempooltrimmed`.
 - `cmd/dcrdata/internal/explorer/websockethandlers.go:284-324` — `sigMempoolUpdate`, `sigNewTxs` (root WS).
 - `pubsub/pubsubhub.go:474-529` — `sigMempoolUpdate`, `sigNewTxs` (pubsub WS).
 - `pubsub/pubsubhub.go:620-626` — `PubSubHub.StoreMPData` (assignment only).

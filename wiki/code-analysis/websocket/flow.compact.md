@@ -6,7 +6,7 @@
 → partysocket `onmessage` → `forward(event,message)` → controller handler.
 **Flow (request):** `ws.send(id,msg)` → `{event,message}` JSON → `/ws` reader
 `wsjson.Read` → `switch EventId` → reply on `id+"Resp"`. Route:
-[main.go:663](../../../cmd/dcrdata/main.go#L663). Separate from the pubsub `/ps`
+[main.go:661](../../../cmd/dcrdata/main.go#L661). Separate from the pubsub `/ps`
 server (`pubsub/pubsubhub.go`).
 
 **Flow (pull-refresh):** reconnect / gap detected → `blocks_controller` or
