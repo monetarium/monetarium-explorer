@@ -392,11 +392,11 @@ stalling `run()`.
   `connect`/synthetic events `:94-128`, `close` `:131-133`.
 - Bootstrap: [index.js:37-61](../../../cmd/dcrdata/public/index.js#L37-L61).
 - Consumers: [connection_controller.js](../../../cmd/dcrdata/public/js/controllers/connection_controller.js),
-  [homepage_controller.js:77-128](../../../cmd/dcrdata/public/js/controllers/homepage_controller.js#L77-L128),
-  [mempool_controller.js:264-321](../../../cmd/dcrdata/public/js/controllers/mempool_controller.js#L264-L321),
-  [visualBlocks_controller.js:354-382](../../../cmd/dcrdata/public/js/controllers/visualBlocks_controller.js#L354-L382),
-  [ticketpool_controller.js:149-222](../../../cmd/dcrdata/public/js/controllers/ticketpool_controller.js#L149-L222),
-  `status_controller.js:79`,
+  [homepage_controller.js:84-128](../../../cmd/dcrdata/public/js/controllers/homepage_controller.js#L84-L128),
+  [mempool_controller.js:295-336](../../../cmd/dcrdata/public/js/controllers/mempool_controller.js#L295-L336),
+  [visualBlocks_controller.js:356-380](../../../cmd/dcrdata/public/js/controllers/visualBlocks_controller.js#L356-L380),
+  [ticketpool_controller.js:73-81,170](../../../cmd/dcrdata/public/js/controllers/ticketpool_controller.js#L74-L81),
+  `status_controller.js:81,110-114`,
   [home_latest_blocks_controller.js](../../../cmd/dcrdata/public/js/controllers/home_latest_blocks_controller.js),
   [blocks_controller.js](../../../cmd/dcrdata/public/js/controllers/blocks_controller.js),
   [time_controller.js](../../../cmd/dcrdata/public/js/controllers/time_controller.js),
