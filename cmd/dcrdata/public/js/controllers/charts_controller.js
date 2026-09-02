@@ -286,40 +286,25 @@ export default class extends Controller {
     this.setVisibilityFromSettings()
   }
 
-  // resolveRenderDef returns a NEW object every call; ChartPanel rebuilds on a def-REFERENCE
+  // hashrate drops its y2 axis+series when the payload carries no active-miner counts, so the
+  // def actually rendered is a NEW object every call; ChartPanel rebuilds on a def-REFERENCE
   // change. Memoize by a structural signature so a stable structure returns the same reference
-  // (panel does a cheap setData) and a changed one (chart / axis / series-count / dynamic axis
-  // label) returns a new reference (rebuild). xTime is in the signature so an axis flip forces
-  // the rebuild that re-resolves the panel's xTime/scaleType/formatX.
+  // (panel does a cheap setData) and a changed one (chart / series-count) returns a new one
+  // (rebuild). xTime is in the signature so an axis flip forces the rebuild that re-resolves
+  // the panel's xTime/scaleType/formatX.
   memoizedDef(def) {
-    const renderDef = this.resolveRenderDef(def)
+    const renderDef =
+      def.name === 'hashrate' && !this.payload?.active_miners?.length
+        ? { ...def, axes: [def.axes[0]], series: [def.series[0]] }
+        : def
     const xTime = this.settings.axis === 'time'
-    const axisLabel = (renderDef.axes[0] && renderDef.axes[0].label) || ''
-    const sig = `${renderDef.name}|${xTime}|${renderDef.series.length}|${axisLabel}`
+    const sig = `${renderDef.name}|${xTime}|${renderDef.series.length}`
     const hit = this._defSig === sig && this._memoDef
     if (hit) return this._memoDef
     this._defSig = sig
     this._memoDef = { ...renderDef }
 
     return this._memoDef
-  }
-
-  // chainwork/hashrate set a dynamic axis label; hashrate may drop its y2 series.
-  resolveRenderDef(def) {
-    let d = def
-    if (typeof def.axisLabel === 'function' && this.payload) {
-      d = {
-        ...d,
-        axes: d.axes.map((a, i) => (i === 0 ? { ...a, label: def.axisLabel(this.payload) } : a))
-      }
-    }
-    if (
-      def.name === 'hashrate' &&
-      !(this.payload && this.payload.active_miners && this.payload.active_miners.length)
-    ) {
-      d = { ...d, axes: [d.axes[0]], series: [d.series[0]] }
-    }
-    return d
   }
 
   settingsForDef() {

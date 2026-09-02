@@ -15,12 +15,6 @@ export function intComma(amount) {
   return amount.toLocaleString(undefined, { maximumFractionDigits: 0 })
 }
 
-export function unitPrefix(value) {
-  if (value <= 0) return ''
-  const i = Math.max(0, Math.min(Math.floor(Math.log10(value) / 3), 8))
-  return ['', 'k', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y'][i]
-}
-
 export function withBigUnits(v, units) {
   const i = v === 0 ? 0 : Math.max(0, Math.min(Math.floor(Math.log10(v) / 3), units.length - 1))
   return `${(v / Math.pow(1000, i)).toFixed(3)} ${units[i]}`

@@ -367,27 +367,11 @@ describe('ChartsController def memoization', () => {
       formatValue: () => ''
     }
     const a = c.memoizedDef(base)
-    const b = c.memoizedDef({ ...base }) // same name/xTime/seriesCount/label -> same ref
+    const b = c.memoizedDef({ ...base }) // same name/xTime/seriesCount -> same ref
     expect(b).toBe(a)
     const grown = { ...base, series: [...base.series, { label: 'T', kind: 'line' }] }
     const cc = c.memoizedDef(grown) // series count changed -> new ref
     expect(cc).not.toBe(a)
-  })
-
-  it('a different axis label yields a new reference (dynamic axis-label rebuild)', async () => {
-    const c = makeController()
-    await c.connect()
-    c.payload = {}
-    const base = {
-      name: 'demo',
-      axes: [{ label: 'A' }],
-      series: [{ label: 'S', kind: 'line' }],
-      toColumns: () => [[1], [2]],
-      formatValue: () => ''
-    }
-    const a = c.memoizedDef(base)
-    const relabeled = { ...base, axes: [{ label: 'B' }] }
-    expect(c.memoizedDef(relabeled)).not.toBe(a)
   })
 
   it('an axis flip (time ↔ height) forces a new def reference (xTime in sig)', async () => {
