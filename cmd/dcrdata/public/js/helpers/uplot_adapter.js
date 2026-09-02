@@ -217,8 +217,16 @@ function siPrefixed(v) {
   if (!Number.isFinite(v)) return ''
   const a = Math.abs(v)
   if (a === 0) return '0'
-  const i = Math.max(0, Math.min(Math.floor(Math.log10(a) / 3), SI_PREFIXES.length - 1))
-  return `${v < 0 ? '-' : ''}${+(a / Math.pow(1000, i)).toPrecision(3)}${SI_PREFIXES[i]}`
+  let i = Math.max(0, Math.min(Math.floor(Math.log10(a) / 3), SI_PREFIXES.length - 1))
+  let m = +(a / Math.pow(1000, i)).toPrecision(3)
+  // toPrecision carries a mantissa in [999.5, 1000) up to 1000, which belongs to the
+  // next prefix: 999.5e9 is "1T", not "1000G". At the top of the list there is no next
+  // prefix, so 1e27 keeps reading "1000Y".
+  if (m >= 1000 && i < SI_PREFIXES.length - 1) {
+    m /= 1000
+    i++
+  }
+  return `${v < 0 ? '-' : ''}${m}${SI_PREFIXES[i]}`
 }
 
 // uPlot axis `values` for a log y-scale. Prefer compact k/M/B labels (threeSigFigs),

@@ -283,6 +283,10 @@ describe('buildOpts — options', () => {
     expect(y.values(null, [6e9, 1.05e10, 1.8e10, 1.5e12])).toEqual(['6G', '10.5G', '18G', '1.5T'])
     // Null split, a real zero, the sign, and the clamp at the top of the prefix list.
     expect(y.values(null, [null, 0, -1.8e10, 1e21, 1e27])).toEqual(['', '0', '-18G', '1Z', '1000Y'])
+    // A mantissa that rounds up to 1000 belongs to the next prefix, not a 4-digit tick.
+    expect(y.values(null, [999.5, 999500, 9.995e11, -9.995e11])).toEqual(['1k', '1M', '1T', '-1T'])
+    // Just under the carry, the mantissa stays put.
+    expect(y.values(null, [999.4, 999400])).toEqual(['999', '999k'])
   })
 
   it('keeps the SI alphabet on the log scale of an siTicks axis', () => {
