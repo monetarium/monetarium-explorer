@@ -119,12 +119,35 @@ When modifying **transaction data structures or multi-coin logic**, check ALL of
 - Assuming `ticketStage` is only in `collector.go`: `monitor.go` has a parallel call site.
 - Parsing the transaction's coin data using only the legacy `.Amount` (float64) field.
 - Accessing `MempoolTx.Hash` — the field was removed; use `TxID` (JSON key `"txid"`). Any JS, stored JSON, or Go code that referenced the `"hash"` key on a mempool tx object will silently receive `undefined`/zero-value.
-- Expecting `FeeReward()` to fail visibly on SKA txs — it now returns `0` silently (defensive guard at `explorertypes.go:497`). Callers must use `FeeRaw` + `CoinType` path for SKA.
+- Expecting `FeeReward()` to fail visibly on SKA txs — it now returns `0` silently (defensive guard at `explorertypes.go:478-480`). Callers must use `FeeRaw` + `CoinType` path for SKA.
 - Defining new tx-type comparison strings in `explorertypes.go` — canonical strings live in `txhelpers/txhelpers.go` (exported vars `TxTypeVote`, `TxTypeTicket`, etc.). Adding a duplicate locally creates two constants that can drift.
 - Adding fields to `MempoolInfo` without updating `DeepCopy()` — fields not copied there will be silently dropped from WS broadcasts.
 
+### 7a. Removed surface — treasury / TAdd / TSpend
+
+The treasury and project-fund feature was deleted wholesale (`ffe66f99`). For this domain
+that means four `txhelpers` predicates no longer exist and must not be reintroduced or
+referenced:
+
+- `IsTreasuryActive(net, height)`
+- `TxIsTAdd(txType)`
+- `TxIsTSpend(txType)`
+- `TxIsTreasuryBase(txType)`
+
+`tx.tmpl` lost its Treasury/TSpend rendering branches and the Politeia proposal link
+alongside them. `dbtypes.TreasurySpendVotes` / `TreasurySpendMetaData` and
+`ChainDB.TSpendVotes` are gone too. One commented-out reference survives at
+`db/dcrpg/queries.go:407` (`// treasuryActive := txhelpers.IsTreasuryActive(...)`) — it is
+dead text, not a call site; uncommenting it will not compile.
+
+There is no Monetarium equivalent of these tx types, so a transaction can no longer be a
+treasury base, TAdd or TSpend. Any branch still testing for them is unreachable.
+
 ### 8. Evidence
 
+- **Page container:** `cmd/dcrdata/views/tx.tmpl:7` — now the `<main>` landmark
+  (`<main class="container main" data-controller="time tx" data-tx-txid="{{.TxID}}">`),
+  previously a `<div>`; the `data-tx-txid` contract is unchanged.
 - **Mempool Decoding:** `mempool/monitor.go` — `txhelpers.MsgTxFromHex(rawTx.Hex)`
 - **Mempool SKA extraction:** `mempool/collector.go` — `SKATotals: txhelpers.SKATotalsFromMsgTx(msgTx)`
 - **TicketStage computation:** `mempool/collector.go:ticketStage()` and `mempool/monitor.go` (parallel call site) — "Staging" if any vin parent has `BlockHeight == 0` in `txnsStore`, else "Ready"
@@ -132,21 +155,21 @@ When modifying **transaction data structures or multi-coin logic**, check ALL of
 - **ssFeeNetReward function:** `db/dcrpg/pgblockchain.go:ssFeeNetReward` — `net = Σ(out.SKAValue or out.Value) − Σ(vin.SKAValueIn or vin.ValueIn)`, skipping coinbase-marker inputs
 - **SSFee specialization in GetExplorerBlock:** `db/dcrpg/pgblockchain.go` — scans TxOut for first `CoinType.IsSKA()` output, sets `CoinType`, calls `ssFeeNetReward`, detects `stake.HasSSFeeMarker` for SF/MF
 - **SSFee specialization in GetExplorerTx:** `db/dcrpg/pgblockchain.go` — mirrors block path: scans TxOut, sets `tx.CoinType`, sets `tx.FeeRaw = ssFeeNetReward(msgTx).String()`
-- **FeeReward() method:** `explorer/types/explorertypes.go:496` — VAR-only float64: returns 0 early if `CoinType != 0` (SKA guard at line 497), then Σvout.Amount − Σvin.AmountIn (skips stakebase, skips negative AmountIn)
+- **FeeReward() method:** `explorer/types/explorertypes.go:477` — VAR-only float64: returns 0 early if `CoinType != 0` (SKA guard at line 497), then Σvout.Amount − Σvin.AmountIn (skips stakebase, skips negative AmountIn)
 - **IsSSFee() method:** `explorer/types/explorertypes.go:TxInfo.IsSSFee()` — `t.Type == txhelpers.TxTypeSSFee` (no longer a local constant; all Is*() methods now use `txhelpers.TxTypeXxx` vars)
 - **tx.tmpl fee/reward branch (line 88–92):** `cmd/dcrdata/views/tx.tmpl` — label: `{{if or .Coinbase .IsVote .IsSSFee}}Fee Reward{{else}}Fee{{end}}`; value: 4-way branch on `Coinbase/IsVote` → `float64AsDecimalParts .FeeReward`, `IsSSFee` → `coinDecimalParts .FeeRaw .CoinType`, VAR → `.Fee.ToCoin`, SKA → `skaDecimalParts .FeeRaw`
-- **Stakebase vin N/A:** `cmd/dcrdata/views/tx.tmpl:486` — `{{if or (lt .AmountIn 0.0) .IsStakeBase}} N/A {{else}}...{{end}}`
-- **Fee rate unified display:** `cmd/dcrdata/views/tx.tmpl:233` — `{{template "decimalParts" (coinFeeRateDecimalParts .FeeRateRaw .CoinType false)}} {{coinFeeRateUnit .CoinType}}`
+- **Stakebase vin N/A:** `cmd/dcrdata/views/tx.tmpl:330` — `{{if or (lt .AmountIn 0.0) .IsStakeBase}} N/A {{else}}...{{end}}`
+- **Fee rate unified display:** `cmd/dcrdata/views/tx.tmpl:236` — `{{template "decimalParts" (coinFeeRateDecimalParts .FeeRateRaw .CoinType false)}} {{coinFeeRateUnit .CoinType}}`
 - **MiningFee scope:** `db/dcrpg/pgblockchain.go` — `block.MiningFee = (getTotalFee(block.Tx) + getTotalFee(block.Tickets)).ToCoin()`
 - **Confirmed API Node usage:** `db/dcrpg/pgblockchain.go` — `pgb.Client.GetRawTransactionVerbose`
-- **Per-coin output rendering:** `cmd/dcrdata/views/tx.tmpl:559` — `{{if eq $.Data.CoinType 0}}{{float64AsDecimalParts .Amount 8 false}}{{else}}{{skaDecimalParts .ValueRaw false}}{{end}}`
+- **Per-coin output rendering:** `cmd/dcrdata/views/tx.tmpl:400` — `{{if eq $.Data.CoinType 0}}{{float64AsDecimalParts .Amount 8 false}}{{else}}{{skaDecimalParts .ValueRaw false}}{{end}}`
 - **Mempool UI Logic:** `cmd/dcrdata/public/js/controllers/homepage_controller.js` — `mempoolTableRow(tx)` reads `tx.txid` (not `tx.hash`) at lines 26, 45; handles `ska_totals` via DOM templates
 - **home_mempool.tmpl hash cell:** `cmd/dcrdata/views/home_mempool.tmpl:120` — `hashlink .TxID (print "/tx/" .TxID)` (not `.Hash`)
-- **MempoolTx struct (Hash removed):** `explorer/types/explorertypes.go:1473` — `Hash string` field gone; canonical field is `TxID string json:"txid"` at line 1474
-- **UnspentOutputIndices SKA fix:** `explorer/types/explorertypes.go:1751` — now checks `vout.SKAValue == "" && vout.Amount == 0.0` (SKA vouts have Amount==0; were incorrectly excluded before)
-- **addAtomStrings hardened:** `mempool/monitor.go:656` — uses `strconv.ParseInt` for VAR (explicit error) and checks `big.Int.SetString` ok flag explicitly for SKA; logs warnings on bad input
-- **HomeInfo window fields:** `explorer/types/explorertypes.go:911,913` — `WindowRemaining string json:"window_remaining"`, `RewardRemaining string json:"reward_remaining"`; populated in `pubsub/pubsubhub.go:733-734`
-- **TxType constants canonical home:** `txhelpers/txhelpers.go:1185-1194` — `TxTypeVote`, `TxTypeTicket`, `TxTypeRevocation`, `TxTypeSSFee`, etc. are the single source of truth; `explorertypes.go` retains only `CoinbaseTypeStr` (no stake-package counterpart)
+- **MempoolTx struct (Hash removed):** `explorer/types/explorertypes.go:1424` — `Hash string` field gone; canonical field is `TxID string json:"txid"` at line 1425
+- **UnspentOutputIndices SKA fix:** `explorer/types/explorertypes.go:1699-1709` — now checks `vout.SKAValue == "" && vout.Amount == 0.0` (SKA vouts have Amount==0; were incorrectly excluded before)
+- **addAtomStrings hardened:** `mempool/monitor.go:655-688` — uses `strconv.ParseInt` for VAR (explicit error) and checks `big.Int.SetString` ok flag explicitly for SKA; logs warnings on bad input
+- **HomeInfo window fields:** `explorer/types/explorertypes.go:862,864` — `WindowRemaining string json:"window_remaining"`, `RewardRemaining string json:"reward_remaining"`; populated in `pubsub/pubsubhub.go:738,740`
+- **TxType constants canonical home:** `txhelpers/txhelpers.go:1164-1176` — `TxTypeVote`, `TxTypeTicket`, `TxTypeRevocation`, `TxTypeSSFee`, etc. are the single source of truth; `explorertypes.go` retains only `CoinbaseTypeStr` (no stake-package counterpart)
 
 ### 9. Compact Knowledge (LLM-Optimized)
 
