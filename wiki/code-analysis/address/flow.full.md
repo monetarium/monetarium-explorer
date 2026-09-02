@@ -47,6 +47,18 @@ and the transaction table; charts are per-coin. Mempool/unconfirmed activity is
   │
   ├─ XHR table:  /addresstable/{addr}?txntype=…&n=…&start=…&coin=N
   │     → AddressTable → same AddressData path; linkTemplate also &coin=N
+  │       response also carries tx_count + unconfirmed_by_coin for applyBlockStats()
+  │
+  ├─ XHR summary: /addresssummary/{addr}[?coin=N]   (AddressPathCtx + CoinCtx)
+  │     → AddressSummary (explorerroutes.go:1668) → same AddressData path
+  │       → nonNilUnconfirmedByCoin(…) (:1655) — nil map ⇒ {} so badges never go stale
+  │       → templates.execPartial("address", "addressSummary", addrData) (templates.go:127)
+  │       → {"html": …} → controller sanitises with dompurify, swaps via outerHTML
+  │
+  ├─ Live refresh: globalEventBus 'BLOCK_RECEIVED' → _refreshOnBlock()
+  │     → fetchTable(current view/page) → applyBlockStats(resp)
+  │     → refreshSummary()  (seq-guarded; late responses discarded)
+  │     → invalidateChartCache() → delete retrievedData[key]; state.chart='__force_refetch__'; drawGraph()
   │
   ├─ CSV download: /download/address/io/{addr}[/win]   (STATIC href — carries NO ?coin=, NO ?txntype=)
   │     → addressIoCsv → GetCoinCtx(r) ⇒ always CoinTypeAll (link never sets ?coin=)
@@ -144,7 +156,7 @@ no `coin_type` predicate and uses `$2` for LIMIT) → silently zero rows
 
 `AddressHistory`'s new `coinType` param propagates to:
 `explorer.explorerDataSource` (`explorer.go:80`), `api.DataSource`
-(`apiroutes.go:58`), and mocks `noop_ds_test.go`, `explorer_test.go`,
+(`apiroutes.go:59`), and mocks `noop_ds_test.go`, `explorer_test.go`,
 `pgblockchain_test.go`.
 
 ### 3.4 Data structures (source of truth — `db/dbtypes/types.go`)
@@ -201,6 +213,49 @@ serializes as a JSON array for `data-active-coins`.
 `&coin=%d` appended when `GetCoinCtx(r) != CoinTypeAll`, so pagination links
 preserve the filter.
 
+### 3.5a Live refresh on new block — server-authoritative
+
+The address page updates itself on every new block without reconstructing state from the
+WS payload. `connect()` subscribes at `address_controller.js:218`
+(`globalEventBus.on('BLOCK_RECEIVED', this.refreshOnBlock)`), `disconnect()` unsubscribes
+at `:198`.
+
+`_refreshOnBlock()` (`:800`) does three things in order, each idempotent:
+
+1. `await this.fetchTable(this.txnType, this.pageSize, this.paginationParams.offset)` —
+   re-fetches the *current* table page from `/addresstable/…`, so newly mined and newly
+   pending rows both appear. `applyBlockStats(resp)` then writes the address-level
+   counters from the same response: `resp.tx_count` into the header count, and
+   `resp.unconfirmed_by_coin` into the per-coin badges.
+2. `await this.refreshSummary()` — `GET /addresssummary/{addr}`, then
+   `summaryEl.outerHTML = dompurify.sanitize(data.html)`. Guarded by a `_summarySeq`
+   counter: a response whose sequence no longer matches is dropped, so a slow request
+   cannot overwrite a newer summary.
+3. `invalidateChartCache()` — deletes the entry for the current
+   `${chart}-${bin}-${coin}` key and writes the sentinel `'__force_refetch__'` into
+   `state.chart` before calling `drawGraph()`. The sentinel is what forces the redraw:
+   `drawGraph()` short-circuits when the requested state matches the current state, so
+   deleting the cache entry alone would not re-fetch.
+
+The whole body is wrapped in `try/catch` — a failed refresh logs and leaves the page as
+it was until the next block or a reload.
+
+**Server side.** `AddressSummary` (`explorerroutes.go:1668-1694`) shares the
+`AddressData` path with the full page, passes the result through
+`nonNilUnconfirmedByCoin` (`:1655`) so a nil map cannot marshal as `null`, and renders
+through `templates.execPartial("address", "addressSummary", addrData)`
+(`templates.go:128-140`). `execPartial` executes a named `{{define}}` block from an
+**already-registered page template set** — `addressSummary` is defined inside
+`address.tmpl:358` and included inline at `:44`. There is no separate partial file, and
+the partial inherits the page's funcMap and `--reload-html` behaviour. Route:
+`main.go:748`, wrapped in `AddressPathCtx` + `mw.CoinCtx` like the page itself.
+
+**Badge lifecycle.** `applyBlockStats` toggles `d-hide` on each `numUnconfirmed` target
+instead of removing it, and defaults a missing `unconfirmed_by_coin` to `{}`. Both
+details are load-bearing: removing the element would stop a badge ever reappearing for a
+coin that had no pending txs at page load, and a nil map would leave the previous
+counts on screen.
+
 ### 3.6 Transformation 2 — controller (`address_controller.js`) and chart definitions (`charts/definitions/address.js`)
 
 The controller was retrofitted from a Dygraph-per-chart model (Dygraphs library,
@@ -231,7 +286,7 @@ ctrl.panel = createChartPanel(ctrl.chartTarget, {
 })
 ```
 
-`rangerView` target (`address.tmpl:271`): `<div data-address-target="rangerView" class="chart-ranger">` immediately below the chart div. `rangerData` extracts the primary series via `rangerColumn(cols[1])`, which sustains the last real value into the trailing null bucket appended by `padTrailingBin` (histogram bars are left-aligned and padded with a trailing null so the domain reaches the current period's end; without sustain the ranger's overview LINE stops at the last real point, leaving the newest bar uncovered). The main chart must keep the null (no phantom bar); sustain is ranger-only.
+`rangerView` target (`address.tmpl:191`): `<div data-address-target="rangerView" class="chart-ranger">` immediately below the chart div. `rangerData` extracts the primary series via `rangerColumn(cols[1])`, which sustains the last real value into the trailing null bucket appended by `padTrailingBin` (histogram bars are left-aligned and padded with a trailing null so the domain reaches the current period's end; without sustain the ranger's overview LINE stops at the last real point, leaving the newest bar uncovered). The main chart must keep the null (no phantom bar); sustain is ranger-only.
 
 **Chart definitions** (`charts/definitions/address.js`):
 
@@ -268,7 +323,7 @@ Changed from index-keyed (`{0: bool, 1: bool, 2: bool, 3: bool}`) to **label-key
 - `validateZoom()` (`:579`) guards against a malformed `?zoom=` (undefined `.start`/`.end`); falls back to `setZoom(xExtent[0], xExtent[1])` + `setSelectedZoom('all')`.
 - `setButtonVisibility()` never hides the currently-selected button (fix for a young SKA coin dropping the Month button while still grouped by month).
 
-**Chart title**: still written to `ctrl.chartTitleTarget.textContent` (`address.tmpl:271`); not a uPlot/Dygraph axis label.
+**Chart title**: still written to `ctrl.chartTitleTarget.textContent` (`address.tmpl:189`); not a uPlot/Dygraph axis label.
 
 **`maxAddrRows`/`pageSizeOptions` removed**, always-enabled 20/40/80/160 dropdown (unchanged since `4d5f63ee`).
 Confirmed-tx handler still decrements **only the `numUnconfirmed` target** matching `data-coin-type` (unchanged).
@@ -338,7 +393,7 @@ balanceSKA` → `items.BalanceAtoms`.
 6. **Centralized coin labels (core constraint C7).** Use `coinSymbol`
    (template) / `renderCoinType` (JS); no hard-coded `DCR`/`VAR` literals.
 7. **CSV download is a deliberate full, non-merged, all-coin export.** The
-   `address.tmpl:346` link is static — it carries no `?coin=` / `?txntype=`,
+   `address.tmpl:265` link is static — it carries no `?coin=` / `?txntype=`,
    and the controller never rewrites it. `addressIoCsv` reads `GetCoinCtx(r)`
    (so a future link *could* scope by coin) but never reads `txntype` and
    always calls `AddressRowsCompact`. The on-page Type/Coin filters scoping the
@@ -368,7 +423,7 @@ When modifying *the address coin-filter / multi-coin path*, check:
 
 **Indirect / derived**
 - `ActiveCoins` / `NumUnconfirmedByCoin` populated only at
-  `pgblockchain.go:2592/2648` and `:2719` — patch *both* branches.
+  `pgblockchain.go:2519/2575` and `:2646` — patch *both* branches.
 - `Balance.Coins[0]` legacy-flat sync (drop only when nothing reads it).
 
 **Serialization boundaries**

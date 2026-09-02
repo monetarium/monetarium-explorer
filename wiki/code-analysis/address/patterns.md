@@ -20,9 +20,9 @@ Wrapped at the router level on the chart and CSV API routes ([apirouter.go:185-1
 
 **The frontend now fully participates in this contract** (this is the key reversal vs. the pre-#265/#266 docs):
 
-- `coin` is declared in the controller's `TurboQuery.nullTemplate([...])` ([address_controller.js:282-291](cmd/dcrdata/public/js/controllers/address_controller.js#L282-L291), `'coin'` at line 290).
-- `coinUrlSegment()` ([address_controller.js:400-403](cmd/dcrdata/public/js/controllers/address_controller.js#L400-L403)) appends `&coin=${coin}`; called from `makeTableUrl` (~:395), `setTablePaginationLinks` (~:557), and the chart fetch path.
-- `data-active-coins='{{jsonMarshal .ActiveCoins}}'` ([address.tmpl:15](cmd/dcrdata/views/address.tmpl#L15)) → controller `activeCoins` (~:303-309); `changeCoin` handler (~:456-467) updates settings, invalidates the chart cache, refetches the table.
+- `coin` is declared in the controller's `TurboQuery.nullTemplate([...])` ([address_controller.js:126-135](cmd/dcrdata/public/js/controllers/address_controller.js#L126-L135), `'coin'` at line 134).
+- `coinUrlSegment()` ([address_controller.js:257-260](cmd/dcrdata/public/js/controllers/address_controller.js#L257-L260)) appends `&coin=${coin}`; called from `makeTableUrl` (`:252`), `setTablePaginationLinks` (`:412`), and the chart fetch path.
+- `data-active-coins='{{jsonMarshal .ActiveCoins}}'` ([address.tmpl:15](cmd/dcrdata/views/address.tmpl#L15)) → controller `activeCoins` (`:149-153`); `changeCoin` handler (`:313`) updates settings, invalidates the chart cache, refetches the table.
 - `effectiveCoin()` (~:436-446) collapses `CoinTypeAll → 0` on the JS side, **mirroring the backend chart collapse** at [pgblockchain.go:3285-3287](db/dcrpg/pgblockchain.go#L3285-L3287).
 
 **Constraints:**
@@ -126,7 +126,7 @@ but the code was generalised to multi-coin in the post-`1b670255` fixes:
   pure-SKA addresses as expected.
 - `ChartsData.Tickets`/`Votes`/`RevokeTx` from `selectAddressTxTypesByAddress`
   (`tx_type` 1/2/3) — with coin-filtered SQL these remain zero for `coinType > 0`.
-- Summary-card stake rows (`address.tmpl:129-154`) are gated by `HasStakeOutputs()`
+- Summary-card stake rows (`address.tmpl:47-90`) are gated by `HasStakeOutputs()`
   /`HasStakeInputs()`; they now range over `ActiveCoins` and print per-coin
   percentages, but the gate means they only render when VAR `FromStake > 0`.
 
@@ -153,12 +153,36 @@ but the code was generalised to multi-coin in the post-`1b670255` fixes:
 
 ---
 
+## Server-Rendered Partial Refresh (`execPartial`)
+
+**Description:** A fragment of a page that must stay in sync with the chain is re-rendered
+**on the server** and swapped into the DOM, rather than reconstructed in JS from an event
+payload. The address summary card is the reference implementation: the `addressSummary`
+`{{define}}` block lives inside `address.tmpl` (`:358`), is included inline on first paint
+(`:44`), and is served standalone by `GET /addresssummary/{addr}`
+(`explorerroutes.go:1668`) via `templates.execPartial("address", "addressSummary", data)`
+(`templates.go:128`). The client sanitises the returned HTML with `dompurify` and replaces
+the node's `outerHTML`.
+
+**Constraints:**
+- The partial must stay a `{{define}}` block inside its page template. `execPartial` looks
+  the block up in the *page's* parsed set, so it shares the funcMap and common templates
+  and honours `--reload-html`. A standalone partial file would need its own registration
+  and would drift from the page's rendering.
+- The endpoint must run the same data path as the page (here `AddressData` under the same
+  `AddressPathCtx` + `CoinCtx` middleware), or the refreshed fragment can disagree with
+  the rest of the page.
+- Normalise nil maps before marshalling (`nonNilUnconfirmedByCoin`): a nil Go map becomes
+  JSON `null`, which client code reads as "no data" rather than "zero", leaving stale UI.
+- Sequence-guard concurrent refreshes (`_summarySeq`); block notifications can arrive
+  faster than the round trip, and an out-of-order response would render older data.
+
 ## TurboQuery URL ownership
 
 **Appears in:** [flow.full.md](flow.full.md), [impact.md](impact.md).
 
 **Description:**
-The `address` Stimulus controller owns URL state via the `TurboQuery` helper. On `connect`: `ctrl.settings = TurboQuery.nullTemplate([...keys])` ([address_controller.js:282-291](cmd/dcrdata/public/js/controllers/address_controller.js#L282-L291)) declares every persisted key; `ctrl.query.update(settings)` populates from URL; each state change writes back via `ctrl.query.replace(this.settings)`.
+The `address` Stimulus controller owns URL state via the `TurboQuery` helper. On `connect`: `ctrl.settings = TurboQuery.nullTemplate([...keys])` ([address_controller.js:126-135](cmd/dcrdata/public/js/controllers/address_controller.js#L126-L135)) declares every persisted key; `ctrl.query.update(settings)` populates from URL; each state change writes back via `ctrl.query.replace(this.settings)`.
 
 Keys declared today: `chart`, `zoom`, `bin`, `flow`, `n`, `start`, `txntype`, **`coin`** (line 290). (`coin` was added in #265/#266 — the pre-#265 "`coin` not declared" claim is overturned.)
 
@@ -178,7 +202,7 @@ The amount-flow chart has four series (Received / Spent / Net Received / Net Spe
 controlled by three user checkboxes (Received / Sent / Net — the Net checkbox drives
 both net series). Two constraints govern this:
 
-1. **Atomic visibility update:** `flowVisibility(bitmap)` (`address_controller.js:30`)
+1. **Atomic visibility update:** `flowVisibility(bitmap)` (`address_controller.js:29`)
    is an exported pure function. It takes a 3-bit integer (bit 0 = Received, bit 1 =
    Sent, bit 2 = Net) and returns a label-keyed map:
    `{Received: bool, Spent: bool, 'Net Received': bool, 'Net Spent': bool}`.
