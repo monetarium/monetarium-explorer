@@ -191,5 +191,5 @@ _Full flow trace of `explorerUI` page rendering: `Store`/`StoreMPData` saver fan
 
 - flow (full): code-analysis/page-rendering/flow.full.md — end-to-end trace from `blockdata` fan-out through `Store`/`StoreMPData`, middleware, `commonData`, all page handlers, template execution
 - flow (compact): code-analysis/page-rendering/flow.compact.md — LLM-optimized 200-word summary with mutation checklist
-- patterns: code-analysis/page-rendering/patterns.md — out-of-band shared page state via saver fan-out, `pageData`/`invsMtx` lock discipline, `*CommonPageData` embedding, block-scoped ETag cache, `normalizeExplorerRows` list-page row helper, two-handler shell+data split
+- patterns: code-analysis/page-rendering/patterns.md — out-of-band shared page state via saver fan-out, `pageData`/`invsMtx` lock discipline, `*CommonPageData` embedding, block-scoped ETag cache, `normalizeExplorerRows` list-page row helper, two-handler shell+data split, theme cookie-as-value (`MenuFormParser` / `ThemeFromQueryParser`)
 - impact: code-analysis/page-rendering/impact.md — `commonData` nil render crash (all pages), saver writer/reader drift (HTML≠WS), lock-order inversion against `Store`, data endpoint misplaced under `withCache`, `CBlockSubsidy`/`NBlockSubsidy` confusion
