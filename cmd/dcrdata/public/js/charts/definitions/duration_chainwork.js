@@ -32,8 +32,9 @@ export const chainwork = {
   name: 'chainwork',
   label: 'Total Work',
   controls: { ...baseControls },
-  // Base unit only: the ticks carry the magnitude suffix themselves.
-  axes: [{ label: 'Cumulative Chainwork (H)', scale: 'y' }],
+  // Base unit only: the ticks carry the magnitude suffix themselves, in SI (a work
+  // total is counted in hashes, so 1e12 H is "1T" under "(H)" — see hashrate).
+  axes: [{ label: 'Cumulative Chainwork (H)', scale: 'y', siTicks: true }],
   series: [{ label: 'Cumulative Chainwork', scale: 'y', kind: 'area', colorIndex: 0 }],
   toColumns: (raw) => {
     return [xColumn(raw, raw.work.length), raw.work.slice()]

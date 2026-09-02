@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest'
+import uPlot from 'uplot'
+import { buildOpts } from '../../helpers/uplot_adapter'
 import { durationBtwBlocks, chainwork } from './duration_chainwork'
 
 describe('durationBtwBlocks.toColumns', () => {
@@ -32,6 +34,10 @@ describe('chainwork', () => {
     const label = chainwork.axes[0].label
     expect(label).toBe('Cumulative Chainwork (H)')
     expect(label).not.toMatch(/\([kMGTPEZY]H/) // see the hashrate axis-unit test
+  })
+  it('renders the ticks in SI (work is counted in hashes): 1.5e12 H reads 1.5T', () => {
+    const y = buildOpts(uPlot, chainwork, {}).axes[1]
+    expect(y.values(null, [1.5e12, 1e15])).toEqual(['1.5T', '1P'])
   })
   it('legend uses big units', () => {
     expect(chainwork.formatValue(0, { value: 1500 }, {})).toBe('1.500 kH')

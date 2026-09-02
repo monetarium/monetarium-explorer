@@ -273,6 +273,33 @@ describe('buildOpts — options', () => {
     expect('labelSize' in opts.axes[1]).toBe(true)
   })
 
+  it('renders SI-prefixed ticks for an siTicks axis', () => {
+    const def = {
+      ...lineDef,
+      axes: [{ label: 'Network Hashrate (H/s)', scale: 'y', siTicks: true }]
+    }
+    const y = buildOpts(fakeUPlot, def, {}).axes[1]
+    // 1e9 reads G, not the short scale's B — the axis label carries the base unit.
+    expect(y.values(null, [6e9, 1.05e10, 1.8e10, 1.5e12])).toEqual(['6G', '10.5G', '18G', '1.5T'])
+    // Null split, a real zero, the sign, and the clamp at the top of the prefix list.
+    expect(y.values(null, [null, 0, -1.8e10, 1e21, 1e27])).toEqual(['', '0', '-18G', '1Z', '1000Y'])
+  })
+
+  it('keeps the SI alphabet on the log scale of an siTicks axis', () => {
+    const def = {
+      ...lineDef,
+      axes: [{ label: 'Network Hashrate (H/s)', scale: 'y', siTicks: true }]
+    }
+    const y = buildOpts(fakeUPlot, def, { scaleType: 'log' }).axes[1]
+    // Decade splits: a scale toggle must not put "18B" back on the axis.
+    expect(y.values(null, [1e9, 1e10, 1e11])).toEqual(['1G', '10G', '100G'])
+  })
+
+  it('leaves an axis without the flag on the short scale (money, counts)', () => {
+    const y = buildOpts(fakeUPlot, lineDef, {}).axes[1]
+    expect(y.values(null, [1e9, 1.5e12])).toEqual(['1B', '1.5T'])
+  })
+
   it('renders integer-only ticks for an intTicks axis', () => {
     const def = {
       ...dualAxisDef,
