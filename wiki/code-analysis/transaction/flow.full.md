@@ -167,7 +167,7 @@ treasury base, TAdd or TSpend. Any branch still testing for them is unreachable.
 - **home_mempool.tmpl hash cell:** `cmd/dcrdata/views/home_mempool.tmpl:120` — `hashlink .TxID (print "/tx/" .TxID)` (not `.Hash`)
 - **MempoolTx struct (Hash removed):** `explorer/types/explorertypes.go:1424` — `Hash string` field gone; canonical field is `TxID string json:"txid"` at line 1425
 - **UnspentOutputIndices SKA fix:** `explorer/types/explorertypes.go:1699-1709` — now checks `vout.SKAValue == "" && vout.Amount == 0.0` (SKA vouts have Amount==0; were incorrectly excluded before)
-- **addAtomStrings hardened:** `mempool/monitor.go:655-688` — uses `strconv.ParseInt` for VAR (explicit error) and checks `big.Int.SetString` ok flag explicitly for SKA; logs warnings on bad input
+- **addAtomStrings hardened:** `mempool/monitor.go:655-683` — uses `strconv.ParseInt` for VAR (explicit error) and checks `big.Int.SetString` ok flag explicitly for SKA; logs warnings on bad input
 - **HomeInfo window fields:** `explorer/types/explorertypes.go:862,864` — `WindowRemaining string json:"window_remaining"`, `RewardRemaining string json:"reward_remaining"`; populated in `pubsub/pubsubhub.go:738,740`
 - **TxType constants canonical home:** `txhelpers/txhelpers.go:1164-1176` — `TxTypeVote`, `TxTypeTicket`, `TxTypeRevocation`, `TxTypeSSFee`, etc. are the single source of truth; `explorertypes.go` retains only `CoinbaseTypeStr` (no stake-package counterpart)
 
