@@ -194,7 +194,7 @@ When modifying **`MempoolCoinStats`** (new field, new tx-type bucket, format cha
 
 When modifying **`MempoolShort` / `MempoolInfo`** (new field):
 - Update `MempoolShort.DeepCopy` (`explorertypes.go:1174-1248`).
-- Update `MempoolInfo.Trim()` if the field should reach `TrimmedMempoolInfo` (`explorertypes.go:905-942`).
+- Update `MempoolInfo.Trim()` if the field should reach `TrimmedMempoolInfo` (`explorertypes.go:958-996`).
 - Update both WS encoders (`sigMempoolUpdate`, `sigNewTxs`) in `cmd/dcrdata/internal/explorer/websockethandlers.go` AND `pubsub/pubsubhub.go`.
 
 When modifying **`computeCoinFills`** (new ratio, status, formula):
@@ -276,7 +276,7 @@ When modifying **`TicketStage` / `ticketStage()` classification logic**:
 - `explorer/types/explorertypes.go:1494` — `MempoolTx.TicketStage` field (`json:"ticket_stage,omitempty"`).
 - `explorer/types/explorertypes.go:477-496` — `FeeReward()`; SKA early-return guard (`:478-480`).
 - `explorer/types/explorertypes.go:1699-1711` — `UnspentOutputIndices`; SKA fix (`:1705-1707`).
-- `explorer/types/explorertypes.go:904-942` — `HomeInfo`; `WindowRemaining` (`:911`) and `RewardRemaining` (`:913`).
+- `explorer/types/explorertypes.go:855-885` — `HomeInfo`; `WindowRemaining` (`:862`) and `RewardRemaining` (`:864`).
 - `cmd/dcrdata/internal/explorer/websockethandlers.go:159-217` — `getmempooltxs`, `getmempooltrimmed`.
 - `cmd/dcrdata/internal/explorer/websockethandlers.go:284-324` — `sigMempoolUpdate`, `sigNewTxs` (root WS).
 - `pubsub/pubsubhub.go:474-529` — `sigMempoolUpdate`, `sigNewTxs` (pubsub WS).
