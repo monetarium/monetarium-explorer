@@ -149,14 +149,13 @@ type ChartDataSource interface {
 
 // links to be passed with common page data.
 type links struct {
-	CoinbaseComment string
-	POSExplanation  string
-	APIDocs         string
-	InsightAPIDocs  string
-	Github          string
-	License         string
-	NetParams       string
-	DownloadLink    string
+	POSExplanation string
+	APIDocs        string
+	InsightAPIDocs string
+	Github         string
+	License        string
+	NetParams      string
+	DownloadLink   string
 	// Testnet and below are set via dcrdata config.
 	Testnet       string
 	Mainnet       string
@@ -166,14 +165,13 @@ type links struct {
 }
 
 var explorerLinks = &links{
-	CoinbaseComment: "https://github.com/decred/dcrd/blob/2a18beb4d56fe59d614a7309308d84891a0cba96/chaincfg/genesis.go#L17-L53",
-	POSExplanation:  "https://docs.decred.org/proof-of-stake/overview/",
-	APIDocs:         "https://github.com/monetarium/monetarium-explorer#apis",
-	InsightAPIDocs:  "https://github.com/decred/dcrdata/blob/master/docs/Insight_API_documentation.md",
-	Github:          "https://github.com/monetarium/monetarium-explorer",
-	License:         "https://github.com/monetarium/monetarium-explorer/blob/main/LICENSE",
-	NetParams:       "https://github.com/monetarium/monetarium-node/blob/master/chaincfg/params.go",
-	DownloadLink:    "https://decred.org/wallets/",
+	POSExplanation: "https://docs.decred.org/proof-of-stake/overview/",
+	APIDocs:        "https://github.com/monetarium/monetarium-explorer#apis",
+	InsightAPIDocs: "https://github.com/decred/dcrdata/blob/master/docs/Insight_API_documentation.md",
+	Github:         "https://github.com/monetarium/monetarium-explorer",
+	License:        "https://github.com/monetarium/monetarium-explorer/blob/main/LICENSE",
+	NetParams:      "https://github.com/monetarium/monetarium-node/blob/master/chaincfg/params.go",
+	DownloadLink:   "https://decred.org/wallets/",
 }
 
 // TicketStatusText generates the text to display on the explorer's transaction
