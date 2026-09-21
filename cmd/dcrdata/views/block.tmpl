@@ -207,7 +207,7 @@
 						<td class="break-word">
 						{{- if eq $.Data.Height 0}}
 							<span title="The genesis block coinbase transaction is bootstrap data hardcoded into the node, trusted without full validation.">
-								<span class="attention">&#9888;</span> <a class="hash" href="/tx/{{.TxID}}">{{.TxID}}</a>
+								<span class="attention">&#9888;</span> <span class="hash">{{.TxID}}</span>
 							</span>
 						{{- else}}
 							<span><a class="hash" href="/tx/{{.TxID}}">{{.TxID}}</a></span>

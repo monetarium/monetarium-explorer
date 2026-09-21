@@ -132,11 +132,16 @@ func TestBlockCoinbaseGenesisWarningOnlyForGenesis(t *testing.T) {
 		t.Errorf("non-genesis non-zero nonce block: expected NO genesis warning")
 	}
 
-	// The actual genesis block (height 0) must still render the warning.
+	// The actual genesis block (height 0) must still render the warning, but
+	// with the txid as PLAIN TEXT: the node's txindex never indexes block 0,
+	// so /tx/<genesis coinbase> would 404.
 	out = renderBlock(t, tmpl, blockWithCoinbase(0, 0))
-	for _, want := range []string{"&#9888;", warningMarker} {
+	for _, want := range []string{"&#9888;", warningMarker, ">" + coinbaseTxID + "<"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("genesis block: expected rendered output to contain %q", want)
 		}
+	}
+	if strings.Contains(out, `<a class="hash" href="/tx/`+coinbaseTxID+`">`) {
+		t.Errorf("genesis block: expected plain text txid, got a link to %s", coinbaseTxID)
 	}
 }
