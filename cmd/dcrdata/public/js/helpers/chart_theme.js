@@ -184,6 +184,82 @@ function swatchCandidate(hue, s, l, attempt) {
   return hslToHex(hue, s, l - LIGHT_STEP * (afterHue - SAT_STEP * SAT_ATTEMPTS + 1))
 }
 
+// The last resort, and the only place the no-duplicates invariant can still
+// break: sweep lightness in quarter-percent steps at a few nearby hues. The
+// band is 15–85% rather than the full 0–100% because the ends are pure black
+// and pure white, and a swatch at either is invisible on one of the two themes
+// — a distinct-but-unreadable color is not much of a rescue. That still leaves
+// ~11000 candidates per rank against an issued set of at most a few thousand out
+// of 16.7 million available, so it is not expected to run at all: it exists so a
+// palette under genuine strain still gets a distinct color rather than a silent
+// duplicate.
+const FALLBACK_HUE_OFFSETS = 4
+const FALLBACK_LIGHT_STEP = 0.25
+const FALLBACK_LIGHT_MIN = 15
+const FALLBACK_LIGHT_MAX = 85
+
+// One warning per resolution, not per rank: a strained palette would otherwise
+// emit thousands of identical lines. The flags are scoped to the call rather
+// than the module, so this keeps no state between datasets.
+
+// resolveCollision finds a color for a rank whose straightforward rotation has
+// already been handed out, in three stages, warning as it goes. The invariant
+// this whole module exists for — no two ranks share a value — is only worth
+// claiming if a breach is visible rather than silent, so each stage says so.
+//
+// 1. The ladder. It first fires at rank 1801, and that is arithmetic rather than
+//    bad luck: LOOP_HUE_STEP is 5 deg and 360/5 = 72 loops, so the 72nd pass
+//    rotates a base by a full turn and lands exactly back on its curated color.
+//    Every 25 ranks after that, the same thing happens to the next base. A
+//    longer curated palette is the durable fix; another rung here is not.
+// 2. The full lightness sweep, which cannot realistically fail.
+// 3. Nothing left at all: hand back the last candidate and warn loudly, so the
+//    list is visibly not distinct instead of silently not distinct.
+function resolveCollision(hue, s, l, issued, rank, warned) {
+  let hex = swatchCandidate(hue, s, l, 0)
+  for (let i = 0; issued.has(hex) && i < LADDER_LENGTH - 1; i++) {
+    hex = swatchCandidate(hue, s, l, i + 1)
+  }
+  if (!issued.has(hex)) {
+    if (!warned.escalated) {
+      console.warn(
+        'chart_theme: hashrate-shares swatch collision — escalated past the hue rotation.' +
+          ' Expected from rank 1801 on, where a full hue turn lands back on a curated color;' +
+          ' a longer curated palette is the durable fix.'
+      )
+      warned.escalated = true
+    }
+    return hex
+  }
+  // Walk outward from the base's own lightness rather than from the dark end of
+  // the band: a rescued swatch then stays in its tonal family, and cannot come
+  // back as a near-black sliver that is legible on the light page and invisible
+  // on the dark one.
+  const start = clamp(l, FALLBACK_LIGHT_MIN, FALLBACK_LIGHT_MAX)
+  for (let k = 0; k < FALLBACK_HUE_OFFSETS; k++) {
+    const h = (hue + k * 7) % 360
+    for (let up = 0; start + up <= FALLBACK_LIGHT_MAX; up += FALLBACK_LIGHT_STEP) {
+      const cand = hslToHex(h, s, start + up)
+      if (!issued.has(cand)) return cand
+    }
+    for (
+      let down = FALLBACK_LIGHT_STEP;
+      start - down >= FALLBACK_LIGHT_MIN;
+      down += FALLBACK_LIGHT_STEP
+    ) {
+      const cand = hslToHex(h, s, start - down)
+      if (!issued.has(cand)) return cand
+    }
+  }
+  if (!warned.exhausted) {
+    console.warn(
+      `chart_theme: no distinct swatch left for rank ${rank} — this list contains a duplicate.`
+    )
+    warned.exhausted = true
+  }
+  return hex
+}
+
 // resolveSwatchColors returns one color per rank from 1 to maxRank, as an array
 // indexed by rank - 1. Ranks 1..CURATED_RANKS are the curated palette verbatim,
 // so the top of the leaderboard keeps exactly the colors it has always had —
@@ -195,12 +271,14 @@ function swatchCandidate(hue, s, l, attempt) {
 // range, so a caller that re-derives colors for a filtered subset could hand the
 // same rank a different value depending on what else is on screen.
 //
-// The uniqueness guarantee is tested at 2000 ranks rather than claimed as
-// infinite: the ladder has a finite number of candidates per base, and a rank
-// count that exhausted it would be ~5 orders of magnitude past any real list.
+// The guarantee is enforced rather than assumed: quiet below rank 1801, then the
+// ladder fires and says so in the console, and the result stays distinct either
+// way. A rank count that exhausted every stage would be orders of magnitude past
+// any real list, and would warn.
 export function resolveSwatchColors(maxRank) {
   const colors = []
   const issued = new Set(PALETTE)
+  const warned = { escalated: false, exhausted: false }
   for (let rank = 1; rank <= maxRank; rank++) {
     const base = PALETTE[(rank - 1) % CURATED_RANKS]
     const loop = Math.floor((rank - 1) / CURATED_RANKS)
@@ -211,9 +289,7 @@ export function resolveSwatchColors(maxRank) {
     const [h, s, l] = hexToHsl(base)
     const hue = (h + loop * LOOP_HUE_STEP) % 360
     let hex = hslToHex(hue, s, l)
-    for (let i = 0; issued.has(hex) && i < LADDER_LENGTH; i++) {
-      hex = swatchCandidate(hue, s, l, i)
-    }
+    if (issued.has(hex)) hex = resolveCollision(hue, s, l, issued, rank, warned)
     issued.add(hex)
     colors.push(hex)
   }

@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import {
   PALETTE,
   CURATED_RANKS,
@@ -112,6 +112,37 @@ describe('resolveSwatchColors', () => {
     const colors = resolveSwatchColors(76)
     expect(new Set(colors).size).toBe(76)
     expect(colors.slice(0, CURATED_RANKS)).toEqual(PALETTE)
+  })
+
+  // The collision path is not hypothetical, so it is exercised rather than
+  // asserted unreachable. LOOP_HUE_STEP is 5 deg and 360/5 = 72 loops, so at
+  // rank 1801 the 72nd pass rotates PALETTE[0] by a full turn and lands exactly
+  // back on the curated color — the first rank whose plain rotation is already
+  // taken. Everything below stays quiet.
+  it('stays quiet while every rank gets its plain hue rotation', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      const colors = resolveSwatchColors(1800)
+      expect(new Set(colors).size).toBe(1800)
+      expect(warn).not.toHaveBeenCalled()
+    } finally {
+      warn.mockRestore()
+    }
+  })
+
+  it('escalates past the hue rotation, warns, and still returns distinct colors', () => {
+    // The reviewer's catch: a rank whose rotation is taken must not be handed
+    // the duplicate anyway. It escalates, it tells the console, and the list it
+    // returns is still distinct.
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      const colors = resolveSwatchColors(2000)
+      expect(new Set(colors).size).toBe(2000)
+      expect(warn).toHaveBeenCalledTimes(1)
+      expect(warn.mock.calls[0][0]).toMatch(/collision/i)
+    } finally {
+      warn.mockRestore()
+    }
   })
 
   it('does NOT claim to be distinguishable: loops are siblings, and that is the cost', () => {
