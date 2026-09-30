@@ -169,10 +169,11 @@ const LIGHT_STEP = 1
 const LIGHT_ATTEMPTS = 20
 const LADDER_LENGTH = HUE_ATTEMPTS + SAT_STEP * SAT_ATTEMPTS + LIGHT_ATTEMPTS
 
-// Sizing: 25 bases x (720 hue + 15 saturation + 20 lightness) candidates, and
-// the ladder resolves every collision that 10000 ranks produce (the point where
-// loop rotations start wrapping onto each other). The tests assert uniqueness
-// at 2000 ranks, ~26x the live address count.
+// Sizing: 770 candidates per rank (720 hue + 30 saturation + 20 lightness),
+// which is what a rank would have to exhaust before resolveCollision had to
+// escalate. The ladder alone resolves every collision 10000 ranks produce, the
+// point where loop rotations start wrapping onto each other; the tests pin the
+// quiet case at 1800 ranks and the escalating one at 2000.
 function swatchCandidate(hue, s, l, attempt) {
   if (attempt < HUE_ATTEMPTS) return hslToHex(hue + (attempt + 1) * 0.5, s, l)
   const afterHue = attempt - HUE_ATTEMPTS
@@ -198,10 +199,6 @@ const FALLBACK_LIGHT_STEP = 0.25
 const FALLBACK_LIGHT_MIN = 15
 const FALLBACK_LIGHT_MAX = 85
 
-// One warning per resolution, not per rank: a strained palette would otherwise
-// emit thousands of identical lines. The flags are scoped to the call rather
-// than the module, so this keeps no state between datasets.
-
 // resolveCollision finds a color for a rank whose straightforward rotation has
 // already been handed out, in three stages, warning as it goes. The invariant
 // this whole module exists for — no two ranks share a value — is only worth
@@ -212,7 +209,8 @@ const FALLBACK_LIGHT_MAX = 85
 //    rotates a base by a full turn and lands exactly back on its curated color.
 //    Every 25 ranks after that, the same thing happens to the next base. A
 //    longer curated palette is the durable fix; another rung here is not.
-// 2. The full lightness sweep, which cannot realistically fail.
+// 2. The lightness sweep, walked outward from the base's own lightness so the
+//    rescue stays in its tonal family. Cannot realistically fail.
 // 3. Nothing left at all: hand back the last candidate and warn loudly, so the
 //    list is visibly not distinct instead of silently not distinct.
 function resolveCollision(hue, s, l, issued, rank, warned) {
@@ -278,6 +276,9 @@ function resolveCollision(hue, s, l, issued, rank, warned) {
 export function resolveSwatchColors(maxRank) {
   const colors = []
   const issued = new Set(PALETTE)
+  // One warning per resolution, not per rank: a strained palette would otherwise
+  // emit thousands of identical lines. Scoped to this call rather than to the
+  // module, so resolving one dataset leaves no state behind for the next.
   const warned = { escalated: false, exhausted: false }
   for (let rank = 1; rank <= maxRank; rank++) {
     const base = PALETTE[(rank - 1) % CURATED_RANKS]
