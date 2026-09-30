@@ -113,6 +113,24 @@ describe('resolveSwatchColors', () => {
     expect(new Set(colors).size).toBe(76)
     expect(colors.slice(0, CURATED_RANKS)).toEqual(PALETTE)
   })
+
+  it('does NOT claim to be distinguishable: loops are siblings, and that is the cost', () => {
+    // The tradeoff, pinned so it cannot quietly regress. Uniqueness here is
+    // uniqueness of VALUE: a rank and its next loop are the same color to the
+    // eye (~1 ΔE00 apart), which is the accepted cost of reusing 25 colors. These
+    // assertions therefore pin the near-equality, not a separation: they say
+    // "same saturation, hue within one step, different value". Anyone who later
+    // raises LOOP_HUE_STEP enough to make loops genuinely distinguishable has to
+    // come back here and decide whether losing the grouping cue was intended.
+    const colors = resolveSwatchColors(CURATED_RANKS * 3)
+    for (let i = 0; i < CURATED_RANKS; i++) {
+      const [h0, s0] = hexToHsl(colors[i])
+      const [h1, s1] = hexToHsl(colors[CURATED_RANKS + i])
+      expect(colors[CURATED_RANKS + i]).not.toBe(colors[i]) // different value
+      expect(s1).toBeCloseTo(s0, 0) // same chroma: a sibling, not a stranger
+      expect(Math.abs(h1 - h0)).toBeLessThanOrEqual(LOOP_HUE_STEP + 1)
+    }
+  })
 })
 
 describe('seriesStroke', () => {

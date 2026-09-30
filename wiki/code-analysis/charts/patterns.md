@@ -239,7 +239,9 @@ Uniqueness is still not left to that arithmetic. `resolveSwatchColors` walks the
 
 **Call it once per dataset, not per render.** The controller resolves in `fetchAndRender` and stores `this.swatches`; `buildRows` takes it as a parameter. Re-deriving per render would let the address filter hand the same miner a different color depending on which rows are on screen.
 
-Known limits, not bugs: loop-mates sit ~1 ΔE00 apart — same family, different value, by design. And 10 of the 25 curated swatches are below 2:1 against the dark page background (`#3b3f45`; worst is `#495057` at 1.30:1), unchanged from before and deliberately out of scope.
+Known limits, not bugs. **Uniqueness here means uniqueness of VALUE, not distinguishability of color** — a rank and its next loop sit ~1 ΔE00 apart (worst pair on the live palette: rank 10 vs rank 35 at 0.98), i.e. the same color to the eye. Accepted for now: the swatch is a grouping cue, not an identifier; rank number, percent, address and the `?address=` highlight identify a row, and the wedge number identifies a wedge. A test pins this near-equality on purpose, so raising `LOOP_HUE_STEP` enough to separate them has to be a deliberate decision.
+
+Separately, 10 of the 25 curated swatches are below 2:1 against the dark page background (`#3b3f45`; worst is `#495057` at 1.30:1) — unchanged from before and deliberately out of scope.
 
 **Constraints:**
 - Adding a new named series color: update `SERIES_COLORS` in `chart_theme.js` AND the matching `.checkmark` rule in `charts.scss`.

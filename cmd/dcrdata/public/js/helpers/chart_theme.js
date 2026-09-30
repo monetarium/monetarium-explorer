@@ -62,6 +62,24 @@ export function colorForIndex(i, dark = false) {
 // of the same 25 colors, every rank gets its own value, and nothing has to be
 // regenerated when the address count grows.
 //
+// THE TRADEOFF, STATED PLAINLY. This buys uniqueness of VALUE, not
+// distinguishability of COLOR. Two ranks one loop apart are ~1 CIEDE2000 apart —
+// measurably different numbers, effectively the same color to the eye. So on a
+// 76-row page, rank 1 and rank 26 read as "the same blue", and the swatch alone
+// cannot tell them apart. That is the deliberate price of reusing 25 curated
+// colors instead of curating more, and it is accepted for now: the rank number,
+// the percentage and the address identify a row, the pie's wedge number
+// disambiguates a wedge, and ?address= scrolls to and highlights the row. The
+// swatch is a visual grouping cue, never the identifier.
+//
+// The alternative, if that ceiling is ever reached, is a curated palette long
+// enough that loops stop being siblings. That is a real list to design, review
+// and keep in sync, and 25 colors was the chosen budget; the cost above is
+// legibility, the benefit is that nothing on the page looks like a duplicate.
+// For scale: the worst pair among the curated 25 themselves is 3.5 ΔE00
+// (#4263EB vs #3B5BDB) — this palette already tolerates near-neighbors, it just
+// does so by hand rather than by rotation.
+//
 // The rotation is done in HSL rather than Lab on purpose. A Lab rotation holds
 // lightness by rotating the chroma vector, which for the gamut-edge colors in
 // this palette (the yellows and oranges, and the near-grey #495057 at 9%
