@@ -4,19 +4,20 @@ import { Controller } from '@hotwired/stimulus'
 import { requestJSON } from '../helpers/http'
 import humanize from '../helpers/humanize_helper'
 import TurboQuery from '../helpers/turbo_helper'
-import { OTHERS_COLOR, colorForIndex } from '../helpers/chart_theme'
+import { resolveSwatchColors } from '../helpers/chart_theme'
 
 // Pie geometry constants (SVG viewBox is 360x360).
 export const PIE = { cx: 180, cy: 180, r: 165, labelR: 110 }
 
-// Number of individually-drawn pie slices. Miners ranked beyond this are folded
-// into a single "Others" slice. Matches the shared PALETTE length (in
-// chart_theme) so every drawn slice has its own color. This limits the PIE
-// only — the table draws the full list (spec §5.3).
-export const PIE_SLICES = 25
-
 // Minimum slice sweep (radians) for a rank number to fit inside the slice.
 export const MIN_LABEL_SWEEP = 0.18 // ~10.3 degrees
+
+// Below this sweep a wedge is narrower than the 1px separator drawn on each of
+// its two edges, so the outline would cover the fill and the miner would
+// silently vanish from the pie — the exact "was I dropped or not counted?"
+// reading the page exists to prevent. Such a wedge is drawn without the
+// separator instead. At r=165, 1px of arc is 1/165 rad.
+export const MIN_STROKED_SWEEP = 1 / PIE.r
 
 // Interval filters (mirrors the backend's accepted ?interval values).
 export const INTERVALS = ['all', 'year', 'month', 'week', 'day']
@@ -104,32 +105,6 @@ export function syncUrlQuery(interval, blockRange, address, defaultInterval = DE
   }
 }
 
-// swatchColor maps a 1-based miner rank to its color: ranks drawn in the pie get
-// their slice color; ranks folded into "Others" get the grey aggregate color.
-export function swatchColor(rank) {
-  return rank >= 1 && rank <= PIE_SLICES ? colorForIndex(rank - 1) : OTHERS_COLOR
-}
-
-// pieSlices reduces the full ranked miner list to what the pie draws: the top
-// PIE_SLICES miners verbatim, plus a single { isOthers, count, percent }
-// aggregate for the remainder, where percent is the combined share of every
-// miner ranked beyond PIE_SLICES (1 decimal place, matching the per-miner
-// percents). Returns the input unchanged when it already fits.
-export function pieSlices(miners, maxSlices = PIE_SLICES) {
-  if (miners.length <= maxSlices) return miners
-  const top = miners.slice(0, maxSlices)
-  let total = 0
-  for (const m of miners) total += Number(m.count)
-  let othersCount = 0
-  for (let i = maxSlices; i < miners.length; i++) othersCount += Number(miners[i].count)
-  const othersPercent = total > 0 ? ((othersCount / total) * 100).toFixed(1) : '0.0'
-  const othersAddrCount = miners.length - maxSlices
-  return [
-    ...top,
-    { isOthers: true, count: othersCount, percent: othersPercent, addressCount: othersAddrCount }
-  ]
-}
-
 // copyIconNode builds the clipboard control appended to each address cell. It
 // mirrors the "copyTextIcon" template: the clipboard controller copies the cell
 // text (the full address), and the empty alert span shows the "Copied" toast.
@@ -150,19 +125,24 @@ function copyIconNode() {
 
 // buildRows clones the row <template> once per entry and fills each cell via
 // textContent / DOM nodes, returning the resulting <tr> elements. Each entry is
-// a ranked miner: the table draws the full list (spec §5.3), so there is no
-// "Others" aggregate row here — the pie derives it separately via pieSlices.
+// a ranked miner and the table draws the full list (spec §5.3) — as does the
+// pie now, so neither has an "Others" row any more.
+//
+// `swatches` is the list resolved by resolveSwatchColors for this dataset,
+// indexed by rank - 1, and is passed in rather than derived here: a rank's color
+// must not depend on which rows happen to be on screen, or the same miner would
+// change color every time the address filter re-rendered the table.
 //
 // No HTML is parsed from the data, so untrusted values (reward addresses) stay
 // inert without a sanitizer — humanize.hashElide sets the address via
 // textContent, which never interprets markup. Cloning a <template> also
 // preserves the <tr>/<td> structure, which a row string fed through innerHTML
 // would lose (the HTML parser drops bare table tags outside a table context).
-export function buildRows(rowTemplate, miners) {
+export function buildRows(rowTemplate, miners, swatches) {
   return miners.map((m) => {
     const row = document.importNode(rowTemplate.content, true).querySelector('tr')
     row.querySelector('[data-type="rank"]').textContent = String(m.rank)
-    row.querySelector('[data-type="swatch"]').style.background = swatchColor(m.rank)
+    row.querySelector('[data-type="swatch"]').style.background = swatches[m.rank - 1]
     row.querySelector('[data-type="percent"]').textContent = `${m.percent}%`
     row.querySelector('[data-type="blocks"]').textContent = String(m.count)
     row.querySelector('[data-type="minerReward"]').textContent = humanize.formatAtomsAsCoinString(
@@ -285,6 +265,7 @@ export default class extends Controller {
 
   connect() {
     this.miners = []
+    this.swatches = []
     this.truncated = false
     // emptyState is why the empty slot is showing: null (no active message —
     // renderTable may write the generic empty message), 'invalid' (bad range
@@ -558,9 +539,12 @@ export default class extends Controller {
     this.emptyState = null
     this.miners = (data && data.miners) || []
     this.truncated = !!(data && data.truncated)
+    // Resolved once per dataset, not per render: a rank's color must not depend
+    // on which rows the address filter happens to be showing.
+    this.swatches = resolveSwatchColors(this.miners.length)
     this.renderTable()
     this.renderAddressCount((data && data.totals && data.totals.addresses) || 0)
-    this.renderPie(pieSlices(this.miners))
+    this.renderPie(this.miners)
     if (this._pendingAddressScroll) this.scrollToAddress(this._pendingAddressScroll)
     this._pendingAddressScroll = null
   }
@@ -575,6 +559,7 @@ export default class extends Controller {
   // it (see renderTable).
   showEmpty(message) {
     this.miners = []
+    this.swatches = []
     this.truncated = false
     this.emptyTarget.textContent = message
     this.emptyTarget.classList.remove('d-hide')
@@ -622,7 +607,9 @@ export default class extends Controller {
     const filtered = this.addressFilter
       ? this.miners.filter((m) => m.address.includes(this.addressFilter))
       : this.miners
-    this.tableBodyTarget.replaceChildren(...buildRows(this.rowTemplateTarget, filtered))
+    this.tableBodyTarget.replaceChildren(
+      ...buildRows(this.rowTemplateTarget, filtered, this.swatches)
+    )
     this.emptyTarget.classList.toggle('d-hide', filtered.length > 0)
     if (!filtered.length) {
       this.emptyTarget.textContent = `No reward addresses match “${this.addressFilter}”.`
@@ -647,27 +634,32 @@ export default class extends Controller {
     row.scrollIntoView({ block: 'center' })
   }
 
-  renderPie(slices) {
+  // renderPie draws every ranked miner as its own wedge, in the same color as its
+  // row's swatch, so the two never tell different stories about who is in the
+  // list. There is no "Others" wedge: folding the tail into one grey slice is
+  // what made a miner past the palette look like they had been dropped, which
+  // is the one reading this page must not allow (spec §5.3).
+  renderPie(miners) {
     const svg = this.pieTarget
     svg.innerHTML = ''
-    if (!slices.length) return
+    if (!miners.length) return
 
-    const total = slices.reduce((acc, m) => acc + Number(m.count), 0)
+    const total = miners.reduce((acc, m) => acc + Number(m.count), 0)
     if (total <= 0) return
 
     // Single slice cannot be drawn as a wedge arc — use a full circle.
-    if (slices.length === 1) {
+    if (miners.length === 1) {
       const c = document.createElementNS(SVGNS, 'circle')
       c.setAttribute('cx', PIE.cx)
       c.setAttribute('cy', PIE.cy)
       c.setAttribute('r', PIE.r)
-      c.setAttribute('fill', colorForIndex(0))
+      c.setAttribute('fill', this.swatches[0])
       svg.appendChild(c)
       return
     }
 
     let angle = -Math.PI / 2 // start at 12 o'clock
-    slices.forEach((m, i) => {
+    miners.forEach((m) => {
       const sweep = (Number(m.count) / total) * 2 * Math.PI
       const start = angle
       const end = angle + sweep
@@ -675,13 +667,23 @@ export default class extends Controller {
 
       const path = document.createElementNS(SVGNS, 'path')
       path.setAttribute('d', arcPath(start, end))
-      path.setAttribute('fill', m.isOthers ? OTHERS_COLOR : colorForIndex(i))
-      path.setAttribute('stroke', 'var(--hashrate-shares-stroke, #fff)')
-      path.setAttribute('stroke-width', '1')
+      path.setAttribute('fill', this.swatches[m.rank - 1])
+      // A wedge narrower than the separator gets no separator: at 1px centered on
+      // the path, the outline would cover the fill and erase the miner.
+      //
+      // The stroke goes through the style attribute rather than setAttribute:
+      // Chromium does not substitute custom properties inside SVG presentation
+      // attributes (Firefox and WebKit do — open spec issue w3c/svgwg#1031), so
+      // as a presentation attribute this separator silently rendered in some
+      // browsers and not in others. style="stroke: var(--x)" works everywhere.
+      if (sweep >= MIN_STROKED_SWEEP) {
+        path.style.stroke = 'var(--hashrate-shares-stroke, #fff)'
+        path.style.strokeWidth = '1'
+      }
       svg.appendChild(path)
 
-      // Rank number only when it fits and the slice is not "Others".
-      if (!m.isOthers && sliceLabelFits(sweep)) {
+      // Rank number only when it fits inside the wedge.
+      if (sliceLabelFits(sweep)) {
         const mid = (start + end) / 2
         const lx = PIE.cx + PIE.labelR * Math.cos(mid)
         const ly = PIE.cy + PIE.labelR * Math.sin(mid)

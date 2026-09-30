@@ -1,8 +1,12 @@
 import { describe, it, expect } from 'vitest'
 import {
   PALETTE,
-  OTHERS_COLOR,
+  CURATED_RANKS,
+  LOOP_HUE_STEP,
   colorForIndex,
+  resolveSwatchColors,
+  hexToHsl,
+  hslToHex,
   seriesStroke,
   seriesFill,
   chartColors,
@@ -34,9 +38,80 @@ describe('colorForIndex', () => {
 })
 
 describe('palette constants', () => {
-  it('exposes a 25-color palette and the grey Others color', () => {
+  it('exposes a 25-color palette', () => {
     expect(PALETTE).toHaveLength(25)
-    expect(OTHERS_COLOR).toBe('#adb5bd')
+    expect(CURATED_RANKS).toBe(25)
+  })
+  it('rotates 5 degrees per loop, the step that quantizes cleanly', () => {
+    // 7 and 11 degrees were measured to collide MORE often, not less: a bigger
+    // step is likelier to land on another rank's 8-bit RGB byte.
+    expect(LOOP_HUE_STEP).toBe(5)
+  })
+})
+
+describe('hexToHsl / hslToHex', () => {
+  it('round-trips a palette color', () => {
+    for (const hex of PALETTE) {
+      const [h, s, l] = hexToHsl(hex)
+      expect(hslToHex(h, s, l)).toBe(hex)
+    }
+  })
+  it('reads a known color in HSL', () => {
+    const [h, s, l] = hexToHsl('#2970FF')
+    expect(h).toBeCloseTo(220, 0)
+    expect(s).toBeCloseTo(100, 0)
+    expect(l).toBeCloseTo(58, 0)
+  })
+})
+
+describe('resolveSwatchColors', () => {
+  // The requirement this function exists for: every ranked miner gets its own
+  // color, no grey bucket, no cap. Mainnet had 76 reward addresses as of
+  // 30 Sep 2026 and the count is not bounded by anything, so the uniqueness
+  // assertion is run far past it.
+  const UNIQUENESS_RANKS = 2000
+
+  it('hands out the curated palette verbatim for the first 25 ranks', () => {
+    // Frozen, because these are the colors the pie has always drawn and the
+    // charts.scss visibility swatches are keyed to PALETTE indices.
+    expect(resolveSwatchColors(CURATED_RANKS)).toEqual(PALETTE)
+  })
+
+  it('never repeats a color, at any rank count up to 2000 miners', () => {
+    const colors = resolveSwatchColors(UNIQUENESS_RANKS)
+    expect(colors).toHaveLength(UNIQUENESS_RANKS)
+    expect(new Set(colors).size).toBe(UNIQUENESS_RANKS)
+  })
+
+  it('returns one color per rank and is deterministic', () => {
+    expect(resolveSwatchColors(120)).toEqual(resolveSwatchColors(120))
+    expect(resolveSwatchColors(0)).toEqual([])
+  })
+
+  it('reuses the same palette entries one loop later, nudged in hue', () => {
+    // The nudge is a hue rotation, so this asserts the hue actually moved by
+    // about one step — not the exact value, because 8-bit rounding costs the
+    // low-chroma entries their share of it: #495057 sits at 9% saturation and
+    // comes back 4.3 deg rather than 5.0. The contract is "same palette, turned
+    // a few degrees", and that is what the bounds below pin.
+    const colors = resolveSwatchColors(CURATED_RANKS * 3)
+    for (let i = 0; i < CURATED_RANKS; i++) {
+      const base = hexToHsl(PALETTE[i])[0]
+      const oneLoop = hexToHsl(colors[CURATED_RANKS + i])[0] - base
+      const twoLoops = hexToHsl(colors[CURATED_RANKS * 2 + i])[0] - base
+      expect(oneLoop).toBeGreaterThan(LOOP_HUE_STEP - 1.5)
+      expect(oneLoop).toBeLessThan(LOOP_HUE_STEP + 0.5)
+      expect(twoLoops).toBeGreaterThan(LOOP_HUE_STEP * 2 - 1.5)
+      expect(twoLoops).toBeLessThan(LOOP_HUE_STEP * 2 + 0.5)
+    }
+  })
+
+  it('keeps every rank its own value in the mainnet-scale range too', () => {
+    // 76 addresses is what mainnet actually has; asserted on its own so a
+    // regression at the real size is not hidden by a larger sweep.
+    const colors = resolveSwatchColors(76)
+    expect(new Set(colors).size).toBe(76)
+    expect(colors.slice(0, CURATED_RANKS)).toEqual(PALETTE)
   })
 })
 
