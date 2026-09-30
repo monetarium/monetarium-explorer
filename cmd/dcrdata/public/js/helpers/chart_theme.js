@@ -186,16 +186,20 @@ function swatchCandidate(hue, s, l, attempt) {
 }
 
 // The last resort, and the only place the no-duplicates invariant can still
-// break: sweep lightness in quarter-percent steps at a few nearby hues. The
-// band is 15–85% rather than the full 0–100% because the ends are pure black
-// and pure white, and a swatch at either is invisible on one of the two themes
-// — a distinct-but-unreadable color is not much of a rescue. That still leaves
-// ~11000 candidates per rank against an issued set of at most a few thousand out
-// of 16.7 million available, so it is not expected to run at all: it exists so a
-// palette under genuine strain still gets a distinct color rather than a silent
-// duplicate.
-const FALLBACK_HUE_OFFSETS = 4
-const FALLBACK_LIGHT_STEP = 0.25
+// break: sweep lightness outward from the base's own lightness, in 1% steps
+// within a 15–85% band. That band excludes the ends on purpose — pure black and
+// pure white are invisible on one of the two themes, and a distinct-but-
+// unreadable color is not much of a rescue. Walking outward from the base's own
+// lightness (rather than from the dark end) keeps the rescue in its tonal
+// family, so it inherits the original's contrast profile instead of arriving
+// invisible in one theme.
+//
+// Sized by measurement, not guesswork: with a base's ENTIRE ladder already
+// issued, one hue and a 1% step still finds a free color for all 25 palette
+// entries, in the first step or two. It is not expected to run at all — it
+// exists so a palette under genuine strain still gets a distinct color rather
+// than a silent duplicate.
+const FALLBACK_LIGHT_STEP = 1
 const FALLBACK_LIGHT_MIN = 15
 const FALLBACK_LIGHT_MAX = 85
 
@@ -234,20 +238,17 @@ function resolveCollision(hue, s, l, issued, rank, warned) {
   // back as a near-black sliver that is legible on the light page and invisible
   // on the dark one.
   const start = clamp(l, FALLBACK_LIGHT_MIN, FALLBACK_LIGHT_MAX)
-  for (let k = 0; k < FALLBACK_HUE_OFFSETS; k++) {
-    const h = (hue + k * 7) % 360
-    for (let up = 0; start + up <= FALLBACK_LIGHT_MAX; up += FALLBACK_LIGHT_STEP) {
-      const cand = hslToHex(h, s, start + up)
-      if (!issued.has(cand)) return cand
-    }
-    for (
-      let down = FALLBACK_LIGHT_STEP;
-      start - down >= FALLBACK_LIGHT_MIN;
-      down += FALLBACK_LIGHT_STEP
-    ) {
-      const cand = hslToHex(h, s, start - down)
-      if (!issued.has(cand)) return cand
-    }
+  for (let up = 0; start + up <= FALLBACK_LIGHT_MAX; up += FALLBACK_LIGHT_STEP) {
+    const cand = hslToHex(hue, s, start + up)
+    if (!issued.has(cand)) return cand
+  }
+  for (
+    let down = FALLBACK_LIGHT_STEP;
+    start - down >= FALLBACK_LIGHT_MIN;
+    down += FALLBACK_LIGHT_STEP
+  ) {
+    const cand = hslToHex(hue, s, start - down)
+    if (!issued.has(cand)) return cand
   }
   if (!warned.exhausted) {
     console.warn(
