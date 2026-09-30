@@ -210,20 +210,51 @@ The lazy DB load (`ChartTypeData` calling `LoadSKASupplyForCoin`) is a separate 
 - [/wiki/code-analysis/charts/flow.full.md](flow.full.md)
 
 **Description:**
-`public/js/helpers/chart_theme.js` is the single source of truth for all chart colors used by both the uPlot charts (via `uplot_adapter.js`) and the hashrate-shares SVG pie (via `colorForIndex`). It defines:
+`public/js/helpers/chart_theme.js` is the single source of truth for all chart colors used by both the uPlot charts (via `uplot_adapter.js`) and the hashrate-shares page (pie wedges + table swatches). It defines:
 
 - `PALETTE` — 25-entry categorical palette. Index 0 (`PRIMARY`) is theme-aware: light `#2970FF`, dark `#2DD8A3` (mint, ~4.5:1 contrast).
 - `SERIES_COLORS` — named overrides for specific series: `tickets-price`, `tickets-bought` (dark `#4dabf7`), `hashrate-rate`, `hashrate-miners` (dark `#4dabf7`). Dark secondary (y2) series use `#4dabf7` (~4.3:1) instead of `#2970ff` (~2.4:1) for legibility.
 - `colorForIndex(i, dark)`, `seriesColorByKey(key, dark)` — resolution functions.
+- `resolveSwatchColors(maxRank)` — the hashrate-shares leaderboard colors (see below).
 
 `uplot_adapter.js:resolveSeriesColor(s, i, dark)` applies them in order: explicit `s.color` → named `seriesColorByKey(s.colorKey)` → palette `colorForIndex(s.colorIndex ?? i)`.
 
 The `.vSelector .checkmark` background-color values in `charts.scss` MUST stay in sync with `SERIES_COLORS` dark-mode values (visibility toggle swatches mirror the series line color).
 
+### hashrate-shares swatches: one color per rank, unbounded
+
+`/hashrate-shares` ranks every reward address, and the list is **not** bounded — 76 addresses on mainnet as of 30 Sep 2026, with no cap in the data or the API. A 25-entry palette therefore cannot color it.
+
+`resolveSwatchColors(maxRank)` returns one color per rank (array indexed by `rank - 1`):
+
+- ranks 1–25 are `PALETTE` **verbatim** — those are the colors the pie has always drawn, and `charts.scss` `.customcheck` swatches are keyed to PALETTE indices;
+- later ranks repeat the palette one full pass per **loop**, each loop rotated `LOOP_HUE_STEP` (5°) further in hue: rank 26 is `PALETTE[0]` at +5°, rank 51 at +10°.
+
+Two constraints found by measurement, both encoded in `chart_theme.js`:
+
+- **HSL, not Lab.** A Lab rotation holds lightness by rotating the chroma vector, which for the gamut-edge entries (the yellows/oranges, and near-grey `#495057` at 9% saturation) must pull chroma back in to stay inside sRGB — and that pull-back collapses adjacent rotations onto the same 8-bit RGB. HSL is in gamut at any hue.
+- **5°, not 7° or 11°.** Bigger steps collide *more* often, not less: they are likelier to land on another rank's RGB byte.
+
+Uniqueness is still not left to that arithmetic. `resolveSwatchColors` walks the rank range with a `Set` seeded from `PALETTE`, and a rank whose rotation is already taken escalates through **the ladder** — hue in half-degree steps (720, a full turn) → saturation in 2% steps (±30%) → lightness in 1% steps (20%) — for **770 candidates per rank**, then `console.warn`s that no distinct value was left.
+
+The ladder is the guarantee, not edge-case handling: without it, the first rank whose rotation is already taken would be handed a duplicate. It first fires at **rank 1801**, and that is arithmetic rather than bad luck: `360 / 5 = 72` loops, so the 72nd pass rotates a base by a full turn and lands exactly back on its curated color. Every 25 ranks after that the same thing happens to the next base.
+
+Its 770 candidates are **not** oversized, which is worth stating because they look like over-provisioning. Collisions accumulate with the rank count, so the ladder digs deeper as they do — measured deepest rung used is 1 of 770 at 1801 ranks, 380 at 2000, 722 at 5000 (94% consumed), 726 at 10000, 742 at 25000, with nothing ever exhausted. Tests pin the quiet case at 1800, the first escalation at 2000, and uniqueness at 5000 — the size that actually works the deep end, since 2000 alone only reaches rung 380.
+
+An earlier version carried a lightness sweep *behind* the ladder, so that a rescued swatch would be usable rather than merely distinct. It was removed: 770 candidates per rank had never once failed, so it was a net under a net, and it was the only part of this path the test suite could not reach. A rank that exhausts the ladder now warns instead of quietly returning a duplicate.
+
+**Call it once per dataset, not per render.** The controller resolves in `fetchAndRender` and stores `this.swatches`; `buildRows` takes it as a parameter. Re-deriving per render would let the address filter hand the same miner a different color depending on which rows are on screen.
+
+Known limits, not bugs. **Uniqueness here means uniqueness of VALUE, not distinguishability of color** — a rank and its next loop sit ~1 ΔE00 apart (worst pair on the live palette: rank 10 vs rank 35 at 0.98), i.e. the same color to the eye. Accepted for now: the swatch is a grouping cue, not an identifier; rank number, percent, address and the `?address=` highlight identify a row, and the wedge number identifies a wedge. A test pins this near-equality on purpose, so raising `LOOP_HUE_STEP` enough to separate them has to be a deliberate decision.
+
+Separately, 10 of the 25 curated swatches are below 2:1 against the dark page background (`#3b3f45`; worst is `#495057` at 1.30:1) — unchanged from before and deliberately out of scope.
+
 **Constraints:**
 - Adding a new named series color: update `SERIES_COLORS` in `chart_theme.js` AND the matching `.checkmark` rule in `charts.scss`.
 - Renaming a `colorKey` in a series spec: update both the spec and the `SERIES_COLORS` key — there is no runtime error for a missing key (falls back to palette index).
 - The address page uses a parallel `.customcheck` swatch set (`received`/`sent`/`net`) that tracks **PALETTE indices**, not `SERIES_COLORS` named entries. Current values (as of `7a2e5da9`): `.received` dark-mode = `#2dd8a3` (PRIMARY mint); `.sent` = `#e03131` (PALETTE[1]); `.net` = `#f08c00` (PALETTE[3], representing Net Spent). A PALETTE color change must also update the matching `.customcheck` swatch in `charts.scss`.
+- **Do not** resolve hashrate-shares swatch colors with `colorForIndex` — it wraps at 25 and would give rank 26 the same blue as rank 1. Use `resolveSwatchColors`.
+- `PIE` separators are set through the `style` attribute, never `setAttribute('stroke', ...)`: Chromium does not substitute custom properties inside SVG presentation attributes (Firefox/WebKit do — open issue w3c/svgwg#1031), so a presentation-attribute `var()` renders in some browsers and not others.
 
 ---
 

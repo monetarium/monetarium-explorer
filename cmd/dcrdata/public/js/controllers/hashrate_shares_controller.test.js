@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { colorForIndex, OTHERS_COLOR } from '../helpers/chart_theme'
+import { PALETTE, CURATED_RANKS, resolveSwatchColors } from '../helpers/chart_theme'
 // Stub the @hotwired/stimulus import so the controller module loads in jsdom
 // and can be constructed directly — Stimulus registration is not involved in
 // these tests (same convention as voting_controller.test.js).
@@ -16,13 +16,11 @@ vi.mock('@hotwired/stimulus', () => ({
 const { mockRequestJSON } = vi.hoisted(() => ({ mockRequestJSON: vi.fn() }))
 vi.mock('../helpers/http', () => ({ requestJSON: mockRequestJSON }))
 import {
-  swatchColor,
   sliceLabelFits,
   arcPath,
   emptyStateMessage,
   errorStateMessage,
   buildRows,
-  pieSlices,
   buildCsv,
   blockRangeFromParams,
   dataUrl,
@@ -32,20 +30,9 @@ import {
   ERROR_MESSAGE,
   INVALID_MESSAGE,
   PIE,
-  PIE_SLICES,
+  MIN_STROKED_SWEEP,
   default as HashrateSharesController
 } from './hashrate_shares_controller'
-
-describe('swatchColor', () => {
-  it('colors ranks within the pie by their slice color', () => {
-    expect(swatchColor(1)).toBe(colorForIndex(0))
-    expect(swatchColor(PIE_SLICES)).toBe(colorForIndex(PIE_SLICES - 1))
-  })
-  it('greys out ranks beyond the pie (the "Others" bucket)', () => {
-    expect(swatchColor(PIE_SLICES + 1)).toBe(OTHERS_COLOR)
-    expect(swatchColor(999)).toBe(OTHERS_COLOR)
-  })
-})
 
 describe('sliceLabelFits', () => {
   it('numbers a large slice', () => {
@@ -69,26 +56,124 @@ describe('arcPath', () => {
   })
 })
 
-describe('pieSlices', () => {
+describe('renderPie', () => {
+  // The pie draws every miner now, with no "Others" wedge: folding the tail
+  // into one grey slice is what made a miner past the 25th look like they had
+  // been dropped, which is the one reading this page must not allow.
+  //
+  // The counts are top-heavy like real shares (spec §5.2 measured the top three
+  // holding 93% of blocks), not a uniform ramp: with a uniform ramp the largest
+  // wedge is only 0.16 rad and no wedge at all clears the 0.18 rad label floor,
+  // which would make the labelling assertions below vacuous.
   function miners(n) {
-    return Array.from({ length: n }, (_, i) => ({ rank: i + 1, count: n - i }))
+    return Array.from({ length: n }, (_, i) => ({
+      rank: i + 1,
+      count: [1000, 500, 300][i] ?? 1
+    }))
   }
 
-  it('passes through when miner count fits the pie', () => {
-    const m = miners(PIE_SLICES)
-    expect(pieSlices(m)).toBe(m) // same reference, no aggregation
+  function pieCtrl(minerList) {
+    const ctrl = new HashrateSharesController(document.body)
+    ctrl.pieTarget = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+    ctrl.swatches = resolveSwatchColors(minerList.length)
+    return ctrl
+  }
+
+  it('draws one wedge per miner, with no aggregate slice', () => {
+    const m = miners(76) // mainnet's address count as of 30 Sep 2026
+    const ctrl = pieCtrl(m)
+    ctrl.renderPie(m)
+    expect(ctrl.pieTarget.querySelectorAll('path')).toHaveLength(76)
   })
 
-  it('aggregates the tail beyond the pie into a single "Others" slice', () => {
-    const slices = pieSlices(miners(PIE_SLICES + 3))
-    expect(slices).toHaveLength(PIE_SLICES + 1)
-    const others = slices[slices.length - 1]
-    expect(others.isOthers).toBe(true)
-    // ranks 26,27,28 had counts 3,2,1 (n - i with n = 28) => 6
-    expect(others.count).toBe(6)
-    // total = sum 1..28 = 406; others share = 6/406*100 = 1.477.. -> "1.5"
-    expect(others.percent).toBe('1.5')
-    expect(others.addressCount).toBe(3)
+  it('gives every wedge the same color as its row, and no two the same color', () => {
+    const m = miners(76)
+    const ctrl = pieCtrl(m)
+    ctrl.renderPie(m)
+    const fills = [...ctrl.pieTarget.querySelectorAll('path')].map((p) => p.getAttribute('fill'))
+    expect(fills).toEqual(ctrl.swatches)
+    expect(new Set(fills).size).toBe(76)
+  })
+
+  it('keeps the top 25 wedges on the curated palette, unchanged', () => {
+    const m = miners(30)
+    const ctrl = pieCtrl(m)
+    ctrl.renderPie(m)
+    const fills = [...ctrl.pieTarget.querySelectorAll('path')].map((p) => p.getAttribute('fill'))
+    expect(fills.slice(0, CURATED_RANKS)).toEqual(PALETTE)
+  })
+
+  it('draws a single miner as a full circle in rank 1 color', () => {
+    const m = miners(1)
+    const ctrl = pieCtrl(m)
+    ctrl.renderPie(m)
+    const circle = ctrl.pieTarget.querySelector('circle')
+    expect(circle).not.toBeNull()
+    expect(circle.getAttribute('fill')).toBe(ctrl.swatches[0])
+    expect(ctrl.pieTarget.querySelectorAll('path')).toHaveLength(0)
+  })
+
+  it('draws nothing for an empty list or a zero-block total', () => {
+    const ctrl = pieCtrl([])
+    ctrl.renderPie([])
+    expect(ctrl.pieTarget.children).toHaveLength(0)
+    ctrl.renderPie([{ rank: 1, count: 0 }])
+    expect(ctrl.pieTarget.children).toHaveLength(0)
+  })
+
+  it('sets the separator through the style attribute, not setAttribute', () => {
+    // Chromium does not substitute custom properties inside SVG presentation
+    // attributes (w3c/svgwg#1031) — as an attribute this rendered in Firefox and
+    // Safari only, so the separator must go through style.
+    const m = miners(3)
+    const ctrl = pieCtrl(m)
+    ctrl.renderPie(m)
+    const [path] = ctrl.pieTarget.querySelectorAll('path')
+    expect(path.getAttribute('stroke')).toBeNull()
+    expect(path.style.stroke).toBe('var(--hashrate-shares-stroke, #fff)')
+  })
+
+  it('drops the separator on a wedge too thin to survive its own outline', () => {
+    // The 1px separator eats 0.5px from each of the wedge's two radial edges, so
+    // the visible colour at the rim is PIE.r * sweep - 1px. The cutoff is 2/r so
+    // that every outlined wedge keeps at least 1px of colour: keying on 1/r (only
+    // where the outline erases the wedge COMPLETELY) left wedges just above it
+    // outlined with nothing inside. In a week view that band is real — a 2-block
+    // miner came out at 0.03px of colour, invisible, while a 1-block miner fell
+    // below the old cutoff, got no separator, and stayed visible.
+    const WEEK_BLOCKS = 2016
+    const thin = [
+      { rank: 1, count: WEEK_BLOCKS - 3 },
+      { rank: 2, count: 2 },
+      { rank: 3, count: 1 }
+    ]
+    const ctrl = pieCtrl(thin)
+    ctrl.renderPie(thin)
+    const paths = [...ctrl.pieTarget.querySelectorAll('path')]
+    const sweep = (n) => (n / WEEK_BLOCKS) * 2 * Math.PI
+
+    // 2 blocks sits just above the OLD 1/r cutoff and below the new 2/r one: the
+    // regression this pins is that it used to be outlined and therefore invisible
+    // while the smaller 1-block miner below it was not.
+    expect(sweep(2)).toBeGreaterThan(1 / PIE.r)
+    expect(sweep(2)).toBeLessThan(MIN_STROKED_SWEEP)
+    expect(paths[0].style.strokeWidth).toBe('1') // 2013 blocks: outlined
+    expect(paths[1].style.strokeWidth).toBe('') // 2 blocks: no outline
+    expect(paths[2].style.strokeWidth).toBe('') // 1 block: no outline
+
+    // The smallest outlined wedge keeps a full pixel of colour.
+    expect(PIE.r * MIN_STROKED_SWEEP - 1).toBeGreaterThanOrEqual(1)
+  })
+
+  it('numbers a wedge only when the rank fits inside it', () => {
+    const m = miners(76)
+    const ctrl = pieCtrl(m)
+    ctrl.renderPie(m)
+    // counts descend, so only the leading wedges clear MIN_LABEL_SWEEP
+    const labels = [...ctrl.pieTarget.querySelectorAll('text')].map((t) => t.textContent)
+    expect(labels[0]).toBe('1')
+    expect(labels.length).toBeLessThan(m.length)
+    expect(labels.length).toBeGreaterThan(0)
   })
 })
 
@@ -109,6 +194,18 @@ describe('buildRows', () => {
     return t
   }
 
+  // A rank's color is resolved once per dataset, not per render, so a filtered
+  // re-render cannot hand the same miner a different swatch. That is why the
+  // list is a parameter here instead of something buildRows looks up.
+  const swatches = (n) => resolveSwatchColors(n)
+
+  // jsdom rewrites a hex it is given as a style value into rgb(), so an exact
+  // color assertion has to go through the same normalization.
+  const asRgb = (hex) => {
+    const n = parseInt(hex.slice(1), 16)
+    return `rgb(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255})`
+  }
+
   const ADDR = 'VsAbCdEfGhIjKlMnOpQrStUvWxYz1234'
   const MINER = {
     rank: 1,
@@ -124,31 +221,37 @@ describe('buildRows', () => {
   it('builds one <tr> with seven <td> cells per miner', () => {
     const tbody = document.createElement('tbody')
     tbody.replaceChildren(
-      ...buildRows(rowTemplate(), [
-        MINER,
-        {
-          rank: 2,
-          percent: '9.0',
-          address: 'VsZZZ',
-          count: 1,
-          miner_reward: '1000000000',
-          fees: '0'
-        }
-      ])
+      ...buildRows(
+        rowTemplate(),
+        [
+          MINER,
+          {
+            rank: 2,
+            percent: '9.0',
+            address: 'VsZZZ',
+            count: 1,
+            miner_reward: '1000000000',
+            fees: '0'
+          }
+        ],
+        swatches(2)
+      )
     )
     expect(tbody.querySelectorAll('tr')).toHaveLength(2)
     expect(tbody.querySelectorAll('td')).toHaveLength(14)
   })
 
   it('populates rank, percent, blocks, money cells, swatch and a full-address link', () => {
-    const tr = buildRows(rowTemplate(), [MINER])[0]
+    const tr = buildRows(rowTemplate(), [MINER], swatches(1))[0]
     expect(tr.querySelector('[data-type="rank"]').textContent).toBe('1')
     expect(tr.querySelector('[data-type="percent"]').textContent).toBe('91.0%')
     expect(tr.querySelector('[data-type="blocks"]').textContent).toBe('9')
     // atom strings are formatted client-side as coin strings (spec §4.6)
     expect(tr.querySelector('[data-type="minerReward"]').textContent).toBe('90.00')
     expect(tr.querySelector('[data-type="fees"]').textContent).toBe('0.0001549')
-    expect(tr.querySelector('[data-type="swatch"]').style.background).not.toBe('')
+    expect(tr.querySelector('[data-type="swatch"]').style.background).toBe(
+      asRgb(resolveSwatchColors(1)[0])
+    )
     const a = tr.querySelector('a.elidedhash')
     expect(a.getAttribute('href')).toBe(`/address/${ADDR}`)
     // Full address is the actual text content (the CSS elides it responsively);
@@ -157,7 +260,7 @@ describe('buildRows', () => {
   })
 
   it('adds a clipboard copy control to each address cell', () => {
-    const tr = buildRows(rowTemplate(), [MINER])[0]
+    const tr = buildRows(rowTemplate(), [MINER], swatches(1))[0]
     const addr = tr.querySelector('[data-type="addr"]')
     const copy = addr.querySelector('.monicon-copy')
     expect(copy).not.toBeNull()
@@ -170,15 +273,67 @@ describe('buildRows', () => {
 
   it('never interprets an address as HTML (XSS-safe, no sanitizer needed)', () => {
     const evil = '<b>x</b>'
-    const tr = buildRows(rowTemplate(), [
-      { rank: 1, percent: '1.0', address: evil, count: 1, miner_reward: '0', fees: '0' }
-    ])[0]
+    const tr = buildRows(
+      rowTemplate(),
+      [{ rank: 1, percent: '1.0', address: evil, count: 1, miner_reward: '0', fees: '0' }],
+      swatches(1)
+    )[0]
     expect(tr.querySelector('b')).toBeNull()
     expect(tr.querySelector('a.elidedhash').textContent).toBe(evil)
   })
 
   it('returns no rows for an empty miner list', () => {
-    expect(buildRows(rowTemplate(), [])).toEqual([])
+    expect(buildRows(rowTemplate(), [], swatches(0))).toEqual([])
+  })
+
+  it('keeps a rank color stable when the address filter narrows the rows', () => {
+    // The list of colors is resolved once per dataset and handed to buildRows,
+    // precisely so a filtered re-render cannot hand the same miner a different
+    // swatch: the address filter is the one interaction that re-renders rows
+    // without new data arriving.
+    const list = Array.from({ length: 76 }, (_, i) => ({
+      rank: i + 1,
+      percent: '1.0',
+      address: `VsMiner${i}`,
+      count: 1,
+      miner_reward: '0',
+      fees: '0'
+    }))
+    const colors = swatches(list.length)
+    const bg = (rows) => rows.map((tr) => tr.querySelector('[data-type="swatch"]').style.background)
+
+    const before = bg(buildRows(rowTemplate(), list, colors))
+    const after = bg(
+      buildRows(
+        rowTemplate(),
+        list.filter((m) => m.rank === 40),
+        colors
+      )
+    )
+    expect(after).toEqual([before[39]])
+  })
+
+  it('paints a distinct swatch on every row, at the mainnet address count and past it', () => {
+    // The requirement: every miner gets their own color, no grey bucket, no cap.
+    // Asserted on the values actually written to the DOM, not on the resolver.
+    for (const n of [76, 250]) {
+      const list = Array.from({ length: n }, (_, i) => ({
+        rank: i + 1,
+        percent: '1.0',
+        address: `VsMiner${i}`,
+        count: n - i,
+        miner_reward: '0',
+        fees: '0'
+      }))
+      const tbody = document.createElement('tbody')
+      tbody.replaceChildren(...buildRows(rowTemplate(), list, swatches(n)))
+      const backgrounds = [...tbody.querySelectorAll('[data-type="swatch"]')].map(
+        (el) => el.style.background
+      )
+      expect(backgrounds).toHaveLength(n)
+      expect(backgrounds.every((bg) => bg !== '')).toBe(true)
+      expect(new Set(backgrounds).size).toBe(n)
+    }
   })
 })
 
@@ -379,6 +534,7 @@ describe('controller applyBlockRange and showEmpty', () => {
     ctrl.truncatedNoteTarget = document.createElement('div')
     ctrl.pieTarget = document.createElement('div')
     ctrl.miners = []
+    ctrl.swatches = resolveSwatchColors(0)
     ctrl.truncated = false
     ctrl.emptyState = null
     ctrl.blockRange = null
@@ -524,6 +680,7 @@ describe('controller address filter clear button', () => {
     ctrl.clearAddressTarget = document.createElement('button')
     ctrl.clearAddressTarget.classList.add('d-none')
     ctrl.miners = []
+    ctrl.swatches = resolveSwatchColors(0)
     ctrl.truncated = false
     ctrl.addressFilter = ''
     ctrl.emptyState = null
@@ -666,6 +823,7 @@ describe('controller scroll shadow', () => {
         fees: '0'
       }
     ]
+    ctrl.swatches = resolveSwatchColors(1)
     ctrl.addressFilter = ''
     ctrl.truncated = false
     ctrl.emptyState = null
@@ -821,6 +979,7 @@ describe('controller fitScrollHeight', () => {
         fees: '0'
       }
     ]
+    ctrl.swatches = resolveSwatchColors(1)
     ctrl.addressFilter = ''
     ctrl.truncated = false
     ctrl.emptyState = null
