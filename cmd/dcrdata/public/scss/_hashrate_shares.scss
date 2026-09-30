@@ -42,9 +42,9 @@
 }
 
 // The full (uncapped) miner list lives in a height-limited, scrollable
-// container (spec §5.3): the pie keeps its top-25 + "Others" cut, the table
-// draws every miner. The header sticks to the container top so the column
-// labels stay visible while scrolling a long list.
+// container (spec §5.3): the table draws every miner, and so does the pie —
+// neither has a top-N cut or an "Others" row any more. The header sticks to the
+// container top so the column labels stay visible while scrolling a long list.
 // max-height is the target height for the list, and the controller's
 // fitScrollHeight reads it from here (it is the single definition of the
 // number) and rounds it to whole-rows-plus-a-half, so the bottom edge always
@@ -272,6 +272,23 @@ body.darkBG .hashrate-shares-scroll-wrap::after {
 body.darkBG .hashrate-shares-highlight {
   background: #2970ff33;
   box-shadow: inset 3px 0 0 #6fa1ff;
+}
+
+// The pie separator. This variable was read by the controller but never defined
+// anywhere, and the controller was reading it from a presentation attribute
+// (stroke="var(--hashrate-shares-stroke)") — which Chromium does not resolve at
+// all, while Firefox and WebKit do (open spec issue w3c/svgwg#1031). So the
+// separator rendered in some browsers and not in others; the controller now sets
+// the stroke through the style attribute, where custom property substitution
+// works everywhere. The value itself is the same near-white as the page in light
+// mode, and a light grey in dark mode so it reads against the saturated wedges
+// rather than glowing on them.
+:root {
+  --hashrate-shares-stroke: #fff;
+}
+
+body.darkBG {
+  --hashrate-shares-stroke: #e6e6e6;
 }
 
 // Clear button for the address filter input

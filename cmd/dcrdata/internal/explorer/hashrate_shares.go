@@ -50,11 +50,12 @@ type hashrateSharesTotals struct {
 // minerShares converts raw per-miner reward data into ranked views with
 // 1-decimal-place percent shares of the period's total blocks, plus the
 // period totals. It sorts descending by count and returns one row per miner
-// (no top-N truncation): the client renders the full list and derives the
-// pie's "Others" aggregate itself. The denominator for percents is the total
-// across all miners, so shares sum to ~100%. Fees = paid - reward is computed
-// here (both atom values already live in the DB rows); the total sum is
-// reward + fees. Returns zero-valued views/totals when there is no data.
+// (no top-N truncation): the client renders the full list, and its pie draws
+// every miner as its own wedge with no "Others" aggregate. The denominator for
+// percents is the total across all miners, so shares sum to ~100%. Fees =
+// paid - reward is computed here (both atom values already live in the DB
+// rows); the total sum is reward + fees. Returns zero-valued views/totals when
+// there is no data.
 func minerShares(rows []dbtypes.MinerRewardCount) (total int64, views []MinerShareView, totals hashrateSharesTotals) {
 	if len(rows) == 0 {
 		return 0, nil, hashrateSharesTotals{}
