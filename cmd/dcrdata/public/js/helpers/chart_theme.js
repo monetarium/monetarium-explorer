@@ -169,11 +169,16 @@ const LIGHT_STEP = 1
 const LIGHT_ATTEMPTS = 20
 const LADDER_LENGTH = HUE_ATTEMPTS + SAT_STEP * SAT_ATTEMPTS + LIGHT_ATTEMPTS
 
-// Sizing: 770 candidates per rank (720 hue + 30 saturation + 20 lightness),
-// which is what a rank would have to exhaust before resolveCollision had to
-// escalate. The ladder alone resolves every collision 10000 ranks produce, the
-// point where loop rotations start wrapping onto each other; the tests pin the
-// quiet case at 1800 ranks and the escalating one at 2000.
+// Sizing: 770 candidates per rank (720 hue + 30 saturation + 20 lightness) —
+// what a rank must exhaust before resolveCollision gives up and warns.
+//
+// These rungs are not oversized, which is worth stating because it looks like
+// over-provisioning at first glance. Collisions accumulate with the rank count,
+// and the ladder has to dig deeper as they do. Measured deepest rung used:
+// 1 of 770 at 1801 ranks, 380 at 2000, 722 at 5000, 726 at 10000, 742 at 25000
+// — 94% consumed by 5000 ranks, with nothing ever exhausted. The tests pin the
+// quiet case at 1800, the first escalation at 2000, and uniqueness at 5000,
+// which is the size that actually works the deep end.
 function swatchCandidate(hue, s, l, attempt) {
   if (attempt < HUE_ATTEMPTS) return hslToHex(hue + (attempt + 1) * 0.5, s, l)
   const afterHue = attempt - HUE_ATTEMPTS

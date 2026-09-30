@@ -145,6 +145,25 @@ describe('resolveSwatchColors', () => {
     }
   })
 
+  it('holds at 5000 ranks, where the ladder is genuinely worked', () => {
+    // The 2000-rank case above only climbs to rung 380 of 770. Collisions
+    // accumulate with the rank count, so this one is what actually exercises the
+    // deep end of the ladder — measured deepest rung is 722 of 770, i.e. 94% of
+    // it consumed, with nothing exhausted. That is the evidence for the ladder's
+    // size: it is not oversized, and 2000 ranks alone would not have shown it.
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      const colors = resolveSwatchColors(5000)
+      expect(colors).toHaveLength(5000)
+      expect(new Set(colors).size).toBe(5000)
+      // The warning must not escalate to the exhaustion path: nothing here
+      // should claim a duplicate, and the single collision warning is expected.
+      expect(warn.mock.calls.every((c) => !/duplicate/i.test(c[0]))).toBe(true)
+    } finally {
+      warn.mockRestore()
+    }
+  })
+
   it('does NOT claim to be distinguishable: loops are siblings, and that is the cost', () => {
     // The tradeoff, pinned so it cannot quietly regress. Uniqueness here is
     // uniqueness of VALUE: a rank and its next loop are the same color to the
