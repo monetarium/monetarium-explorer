@@ -134,19 +134,35 @@ describe('renderPie', () => {
   })
 
   it('drops the separator on a wedge too thin to survive its own outline', () => {
-    // At r=165 a 1px separator covers any wedge under 1/165 rad of arc, so the
-    // fill would be erased and the miner would silently disappear.
+    // The 1px separator eats 0.5px from each of the wedge's two radial edges, so
+    // the visible colour at the rim is PIE.r * sweep - 1px. The cutoff is 2/r so
+    // that every outlined wedge keeps at least 1px of colour: keying on 1/r (only
+    // where the outline erases the wedge COMPLETELY) left wedges just above it
+    // outlined with nothing inside. In a week view that band is real — a 2-block
+    // miner came out at 0.03px of colour, invisible, while a 1-block miner fell
+    // below the old cutoff, got no separator, and stayed visible.
+    const WEEK_BLOCKS = 2016
     const thin = [
-      { rank: 1, count: 1000000 },
-      { rank: 2, count: 1 }
+      { rank: 1, count: WEEK_BLOCKS - 3 },
+      { rank: 2, count: 2 },
+      { rank: 3, count: 1 }
     ]
     const ctrl = pieCtrl(thin)
     ctrl.renderPie(thin)
     const paths = [...ctrl.pieTarget.querySelectorAll('path')]
-    const thinSweep = (1 / 1000001) * 2 * Math.PI
-    expect(thinSweep).toBeLessThan(MIN_STROKED_SWEEP)
-    expect(paths[0].style.strokeWidth).toBe('1') // rank 1 keeps its separator
-    expect(paths[1].style.strokeWidth).toBe('') // rank 2 would be erased by it
+    const sweep = (n) => (n / WEEK_BLOCKS) * 2 * Math.PI
+
+    // 2 blocks sits just above the OLD 1/r cutoff and below the new 2/r one: the
+    // regression this pins is that it used to be outlined and therefore invisible
+    // while the smaller 1-block miner below it was not.
+    expect(sweep(2)).toBeGreaterThan(1 / PIE.r)
+    expect(sweep(2)).toBeLessThan(MIN_STROKED_SWEEP)
+    expect(paths[0].style.strokeWidth).toBe('1') // 2013 blocks: outlined
+    expect(paths[1].style.strokeWidth).toBe('') // 2 blocks: no outline
+    expect(paths[2].style.strokeWidth).toBe('') // 1 block: no outline
+
+    // The smallest outlined wedge keeps a full pixel of colour.
+    expect(PIE.r * MIN_STROKED_SWEEP - 1).toBeGreaterThanOrEqual(1)
   })
 
   it('numbers a wedge only when the rank fits inside it', () => {

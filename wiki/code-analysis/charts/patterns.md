@@ -235,15 +235,11 @@ Two constraints found by measurement, both encoded in `chart_theme.js`:
 - **HSL, not Lab.** A Lab rotation holds lightness by rotating the chroma vector, which for the gamut-edge entries (the yellows/oranges, and near-grey `#495057` at 9% saturation) must pull chroma back in to stay inside sRGB — and that pull-back collapses adjacent rotations onto the same 8-bit RGB. HSL is in gamut at any hue.
 - **5°, not 7° or 11°.** Bigger steps collide *more* often, not less: they are likelier to land on another rank's RGB byte.
 
-Uniqueness is still not left to that arithmetic. `resolveSwatchColors` walks the rank range with a `Set` seeded from `PALETTE` and escalates in three stages, so "no two ranks share a value" is a property of the code:
+Uniqueness is still not left to that arithmetic. `resolveSwatchColors` walks the rank range with a `Set` seeded from `PALETTE`, and a rank whose rotation is already taken escalates through **the ladder** — hue in half-degree steps (720, a full turn) → saturation in 2% steps (±30%) → lightness in 1% steps (20%) — for **770 candidates per rank**, then `console.warn`s that no distinct value was left.
 
-1. **the ladder** — hue (half-degree steps) → saturation → lightness;
-2. **a lightness sweep** from the base's own lightness outward, bounded to 15–85% and quarter-percent steps, so a rescued swatch stays in its tonal family instead of coming back as a near-black sliver legible only on the light page;
-3. **nothing left** — hand back the last candidate and `console.warn` that the list contains a duplicate.
+The ladder is the guarantee, not edge-case handling: without it, the first rank whose rotation is already taken would be handed a duplicate. It first fires at **rank 1801**, and that is arithmetic rather than bad luck: `360 / 5 = 72` loops, so the 72nd pass rotates a base by a full turn and lands exactly back on its curated color. Every 25 ranks after that the same thing happens to the next base. Both sides are pinned by tests — 1800 ranks is quiet, 2000 escalates, warns, and is still duplicate-free. The ladder has never failed at any size measured, up to 10000 ranks.
 
-Stage 1 first fires at **rank 1801**, and that is arithmetic rather than bad luck: `360 / 5 = 72` loops, so the 72nd pass rotates a base by a full turn and lands exactly back on its curated color. Every 25 ranks after that the same thing happens to the next base. Both facts are pinned by tests — 1800 ranks is quiet, 2000 ranks escalates, warns, and is still duplicate-free.
-
-Stage 1 already handles every collision up to 10000 ranks; stages 2 and 3 are unreachable safety nets and are verified out-of-band, not by the suite. With all 754 ladder candidates for a base taken, stage 2 finds a free color within two candidates, at the base's own lightness (so the rescue inherits the original's contrast profile rather than being invisible in one theme).
+An earlier version carried a lightness sweep *behind* the ladder, so that a rescued swatch would be usable rather than merely distinct. It was removed: 770 candidates per rank had never once failed, so it was a net under a net, and it was the only part of this path the test suite could not reach. A rank that exhausts the ladder now warns instead of quietly returning a duplicate.
 
 **Call it once per dataset, not per render.** The controller resolves in `fetchAndRender` and stores `this.swatches`; `buildRows` takes it as a parameter. Re-deriving per render would let the address filter hand the same miner a different color depending on which rows are on screen.
 

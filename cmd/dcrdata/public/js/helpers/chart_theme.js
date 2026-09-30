@@ -185,38 +185,25 @@ function swatchCandidate(hue, s, l, attempt) {
   return hslToHex(hue, s, l - LIGHT_STEP * (afterHue - SAT_STEP * SAT_ATTEMPTS + 1))
 }
 
-// The last resort, and the only place the no-duplicates invariant can still
-// break: sweep lightness outward from the base's own lightness, in 1% steps
-// within a 15–85% band. That band excludes the ends on purpose — pure black and
-// pure white are invisible on one of the two themes, and a distinct-but-
-// unreadable color is not much of a rescue. Walking outward from the base's own
-// lightness (rather than from the dark end) keeps the rescue in its tonal
-// family, so it inherits the original's contrast profile instead of arriving
-// invisible in one theme.
-//
-// Sized by measurement, not guesswork: with a base's ENTIRE ladder already
-// issued, one hue and a 1% step still finds a free color for all 25 palette
-// entries, in the first step or two. It is not expected to run at all — it
-// exists so a palette under genuine strain still gets a distinct color rather
-// than a silent duplicate.
-const FALLBACK_LIGHT_STEP = 1
-const FALLBACK_LIGHT_MIN = 15
-const FALLBACK_LIGHT_MAX = 85
-
 // resolveCollision finds a color for a rank whose straightforward rotation has
-// already been handed out, in three stages, warning as it goes. The invariant
-// this whole module exists for — no two ranks share a value — is only worth
-// claiming if a breach is visible rather than silent, so each stage says so.
+// already been handed out, warning as it goes. The invariant this whole module
+// exists for — no two ranks share a value — is only worth claiming if a breach
+// is visible rather than silent, so the failure path says so too.
 //
-// 1. The ladder. It first fires at rank 1801, and that is arithmetic rather than
-//    bad luck: LOOP_HUE_STEP is 5 deg and 360/5 = 72 loops, so the 72nd pass
-//    rotates a base by a full turn and lands exactly back on its curated color.
-//    Every 25 ranks after that, the same thing happens to the next base. A
-//    longer curated palette is the durable fix; another rung here is not.
-// 2. The lightness sweep, walked outward from the base's own lightness so the
-//    rescue stays in its tonal family. Cannot realistically fail.
-// 3. Nothing left at all: hand back the last candidate and warn loudly, so the
-//    list is visibly not distinct instead of silently not distinct.
+// The ladder is the guarantee, not edge-case handling: without it, the first rank
+// whose rotation is already taken would be handed a duplicate. It fires at rank
+// 1801, and that is arithmetic rather than bad luck — LOOP_HUE_STEP is 5 deg and
+// 360/5 = 72 loops, so the 72nd pass rotates a base by a full turn and lands
+// exactly back on its curated color. Every 25 ranks after that the same happens
+// to the next base. A longer curated palette is the durable fix; another rung
+// here is not.
+//
+// Past the ladder there is only the warning. An earlier version carried a
+// lightness sweep behind it, on the reasoning that a rescued swatch should be
+// usable rather than merely distinct. It was dropped: 770 candidates per rank
+// has never once failed, so it was a net under a net, and it was the only part
+// of this path the test suite could not reach. A rank that exhausts the ladder
+// now says so instead of quietly returning a duplicate.
 function resolveCollision(hue, s, l, issued, rank, warned) {
   let hex = swatchCandidate(hue, s, l, 0)
   for (let i = 0; issued.has(hex) && i < LADDER_LENGTH - 1; i++) {
@@ -232,23 +219,6 @@ function resolveCollision(hue, s, l, issued, rank, warned) {
       warned.escalated = true
     }
     return hex
-  }
-  // Walk outward from the base's own lightness rather than from the dark end of
-  // the band: a rescued swatch then stays in its tonal family, and cannot come
-  // back as a near-black sliver that is legible on the light page and invisible
-  // on the dark one.
-  const start = clamp(l, FALLBACK_LIGHT_MIN, FALLBACK_LIGHT_MAX)
-  for (let up = 0; start + up <= FALLBACK_LIGHT_MAX; up += FALLBACK_LIGHT_STEP) {
-    const cand = hslToHex(hue, s, start + up)
-    if (!issued.has(cand)) return cand
-  }
-  for (
-    let down = FALLBACK_LIGHT_STEP;
-    start - down >= FALLBACK_LIGHT_MIN;
-    down += FALLBACK_LIGHT_STEP
-  ) {
-    const cand = hslToHex(hue, s, start - down)
-    if (!issued.has(cand)) return cand
   }
   if (!warned.exhausted) {
     console.warn(

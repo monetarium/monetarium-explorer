@@ -138,8 +138,8 @@
                 <div class="d-hide text-secondary p-3" data-hashrate-shares-target="empty">
                     No PoW Reward transactions in the selected period.
                 </div>
-                {{/* Download CSV — exports the full per-miner list (not the capped
-                     top-25 + "Others" view). The wrapper hides with the table when
+                {{/* Download CSV — exports the full per-miner list, the same rows the
+                     table and the pie draw. The wrapper hides with the table when
                      the period is empty (the controller toggles d-hide), so the
                      link only shows when there is data to export. The CSV is built
                      client-side from the full ranked list, so this is a JS action,

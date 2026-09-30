@@ -12,12 +12,22 @@ export const PIE = { cx: 180, cy: 180, r: 165, labelR: 110 }
 // Minimum slice sweep (radians) for a rank number to fit inside the slice.
 export const MIN_LABEL_SWEEP = 0.18 // ~10.3 degrees
 
-// Below this sweep a wedge is narrower than the 1px separator drawn on each of
-// its two edges, so the outline would cover the fill and the miner would
-// silently vanish from the pie — the exact "was I dropped or not counted?"
-// reading the page exists to prevent. Such a wedge is drawn without the
-// separator instead. At r=165, 1px of arc is 1/165 rad.
-export const MIN_STROKED_SWEEP = 1 / PIE.r
+// The sweep below which a wedge is drawn WITHOUT its 1px separator.
+//
+// The separator is 1px wide, centred on the path, so it eats 0.5px from each of
+// the wedge's two radial edges — measured at the outer arc, that leaves
+// `PIE.r * sweep - 1px` of visible colour. The cutoff is therefore 2/r, not 1/r:
+// 1/r is only where the outline erases the wedge COMPLETELY, and keying on that
+// leaves every wedge just above it outlined with almost nothing inside. In a week
+// view that band is real — a 2-block miner is 0.00623 rad, 1.03px of rim, 0.03px
+// of colour left (invisible), while a 1-block miner falls BELOW a 1/r cutoff and
+// gets no separator at all and stays visible. So the bigger miner disappeared and
+// the smaller one didn't, which is exactly the "was I dropped or not counted?"
+// reading this page exists to prevent.
+//
+// At 2/r the smallest outlined wedge keeps a full 1px of colour, and the whole
+// 0.1-0.19% share band drops to the no-separator branch together.
+export const MIN_STROKED_SWEEP = 2 / PIE.r
 
 // Interval filters (mirrors the backend's accepted ?interval values).
 export const INTERVALS = ['all', 'year', 'month', 'week', 'day']
@@ -182,10 +192,9 @@ function csvField(value) {
 
 // buildCsv serializes the full ranked miner list to an RFC 4180 CSV string. The
 // whole dataset already lives client-side (this.miners), so the export needs no
-// server round-trip — and it exports every miner individually, not the pie's
-// top-25 + "Others" view. Money columns are formatted as coin strings, matching
-// the table. Records are CRLF-terminated (including the last), matching Go's
-// csv.Writer.
+// server round-trip, and it covers exactly the list the table and the pie draw.
+// Money columns are formatted as coin strings, matching the table. Records are
+// CRLF-terminated (including the last), matching Go's csv.Writer.
 export function buildCsv(miners) {
   const lines = [CSV_HEADER.join(',')]
   for (const m of miners) {
@@ -486,8 +495,8 @@ export default class extends Controller {
     this.addressInputTarget.focus()
   }
 
-  // downloadCsv exports the full ranked miner list (every miner, not the pie's
-  // top-25 + "Others" view) as a CSV file, built client-side from this.miners.
+  // downloadCsv exports the full ranked miner list — the same rows the table
+  // and the pie draw — as a CSV file, built client-side from this.miners.
   // The address page streams its CSV from the server because its rows are
   // server-paginated; here the whole dataset is already in the browser, so a Blob
   // download avoids a round-trip. The period is baked into the filename so the
