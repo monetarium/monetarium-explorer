@@ -1,0 +1,20 @@
+name: claude-review
+
+on:
+  pull_request:
+    types: [labeled]
+
+jobs:
+  review:
+    if: github.event.label.name == 'ai-review' && github.event.pull_request.base.ref == 'develop'
+    uses: monetarium/monetarium-ai-review/.github/workflows/claude-review.yml@main
+    permissions:
+      contents: read
+      pull-requests: write
+    secrets:
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+      AI_REVIEW_DEPLOY_KEY: ${{ secrets.AI_REVIEW_DEPLOY_KEY }}
+    with:
+      trust_boundary: >-
+        api/ (the HTTP API's input), db/dcrpg (SQL), explorer/ and its templates
+        (what the pages render), pubsub/ (websocket clients), rpcutils/ (the node's answers)
