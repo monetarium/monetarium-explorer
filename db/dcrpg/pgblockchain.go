@@ -2372,7 +2372,11 @@ func (pgb *ChainDB) AddressHistory(ctx context.Context, address string, N, offse
 		// a single-coin balance for the coin-filtered slice.
 		balance, _, bErr := pgb.AddressBalance(ctx, address)
 		if bErr != nil && !errors.Is(bErr, dbtypes.ErrNoResult) && !errors.Is(bErr, sql.ErrNoRows) {
-			log.Errorf("AddressBalance failed for %s: %v, returning rows anyway", address, bErr)
+			if errors.Is(bErr, context.Canceled) {
+				log.Debugf("AddressBalance canceled for %s, returning rows anyway", address)
+			} else {
+				log.Errorf("AddressBalance failed for %s: %v, returning rows anyway", address, bErr)
+			}
 			balance = &dbtypes.AddressBalance{
 				Address: address,
 				Coins:   make(map[uint8]*dbtypes.CoinBalance),
@@ -2457,7 +2461,11 @@ func (pgb *ChainDB) AddressHistory(ctx context.Context, address string, N, offse
 		log.Debugf("AddressHistory: Obtaining balance via DB query.")
 		balance, _, err = pgb.AddressBalance(ctx, address)
 		if err != nil && !errors.Is(err, dbtypes.ErrNoResult) && !errors.Is(err, sql.ErrNoRows) {
-			log.Errorf("AddressBalance failed for %s: %v, returning rows anyway", address, err)
+			if errors.Is(err, context.Canceled) {
+				log.Debugf("AddressBalance canceled for %s, returning rows anyway", address)
+			} else {
+				log.Errorf("AddressBalance failed for %s: %v, returning rows anyway", address, err)
+			}
 			balance = &dbtypes.AddressBalance{
 				Address: address,
 				Coins:   make(map[uint8]*dbtypes.CoinBalance),
@@ -2490,15 +2498,23 @@ func (pgb *ChainDB) AddressData(ctx context.Context, address string, limitN, off
 		return nil, err
 	}
 
-	addrHist, balance, err := pgb.AddressHistory(ctx, address, limitN, offsetAddrOuts, txnType, coinType)
-	if dbtypes.IsTimeoutErr(err) {
-		return nil, err
+	addrHist, balance, histErr := pgb.AddressHistory(ctx, address, limitN, offsetAddrOuts, txnType, coinType)
+	if dbtypes.IsTimeoutErr(histErr) {
+		return nil, histErr
 	}
 
-	// Populate ActiveCoins from coin types present in the address
-	activeCoins, err = retrieveAddressCoinTypes(ctx, pgb.db, address)
-	if err != nil {
-		log.Errorf("Failed to get coin types for address %s: %v", address, err)
+	// Populate ActiveCoins from coin types present in the address. This is a
+	// secondary lookup (it only feeds the coin selector), so its failure must
+	// never discard the rows AddressHistory already returned. Keep its error
+	// separate from histErr -- reusing err here would clobber the history
+	// result and fail the whole page when the coin-types query fails.
+	activeCoins, coinErr := retrieveAddressCoinTypes(ctx, pgb.db, address)
+	if coinErr != nil {
+		if errors.Is(coinErr, context.Canceled) {
+			log.Debugf("Coin types lookup canceled for address %s", address)
+		} else {
+			log.Errorf("Failed to get coin types for address %s: %v", address, coinErr)
+		}
 	}
 
 	populateTemplate := func() {
@@ -2509,7 +2525,7 @@ func (pgb *ChainDB) AddressData(ctx context.Context, address string, limitN, off
 		addrData.Address = address
 	}
 
-	if errors.Is(err, dbtypes.ErrNoResult) || errors.Is(err, sql.ErrNoRows) || (err == nil && len(addrHist) == 0) {
+	if errors.Is(histErr, dbtypes.ErrNoResult) || errors.Is(histErr, sql.ErrNoRows) || (histErr == nil && len(addrHist) == 0) {
 		// We do not have any confirmed transactions. Prep to display ONLY
 		// unconfirmed transactions (or none at all).
 		addrData = new(dbtypes.AddressInfo)
@@ -2518,11 +2534,15 @@ func (pgb *ChainDB) AddressData(ctx context.Context, address string, limitN, off
 		// Still populate ActiveCoins even with no confirmed transactions
 		addrData.ActiveCoins = activeCoins
 		log.Tracef("AddressHistory: No confirmed transactions for address %s.", address)
-	} else if err != nil {
-		// Unexpected error
-		log.Errorf("AddressHistory: %v", err)
-		return nil, fmt.Errorf("AddressHistory: %w", err)
-	} else /*err == nil*/ {
+	} else if histErr != nil {
+		if errors.Is(histErr, context.Canceled) {
+			// The client disconnected mid-query; not a server fault.
+			log.Debugf("AddressHistory canceled for %s", address)
+		} else {
+			log.Errorf("AddressHistory: %v", histErr)
+		}
+		return nil, fmt.Errorf("AddressHistory: %w", histErr)
+	} else /*histErr == nil*/ {
 		// Generate AddressInfo skeleton from the address table rows.
 		addrData, _, _ = dbtypes.ReduceAddressHistory(addrHist)
 		if addrData == nil {
@@ -6903,9 +6923,9 @@ func (pgb *ChainDB) txWithTicketPrice(ctx context.Context, txhash *chainhash.Has
 	// If the transaction is unconfirmed, the RPC client must provide the ticket
 	// price. Ensure the best block does not change between calls to
 	// getrawtransaction and getstakedifficulty.
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	rpcCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	blockHash, _, err := pgb.Client.GetBestBlock(ctx)
+	blockHash, _, err := pgb.Client.GetBestBlock(rpcCtx)
 	if err != nil {
 		return nil, 0, fmt.Errorf("GetBestBlock failed: %w", err)
 	}
@@ -6913,21 +6933,27 @@ func (pgb *ChainDB) txWithTicketPrice(ctx context.Context, txhash *chainhash.Has
 	var txraw *chainjson.TxRawResult
 	var ticketPrice int64
 	for {
-		txraw, err = pgb.Client.GetRawTransactionVerbose(ctx, txhash)
+		txraw, err = pgb.Client.GetRawTransactionVerbose(rpcCtx, txhash)
 		if err != nil {
 			return nil, 0, fmt.Errorf("GetRawTransactionVerbose failed for %v: %w", txhash, err)
 		}
 
 		if txraw.Confirmations > 0 {
-			return txraw, pgb.GetSBitsByHash(ctx, txraw.BlockHash), nil
+			// Query the DB with its own budget. Sharing rpcCtx here would leave
+			// the query with whatever time the RPC calls above did not consume,
+			// so a slow RPC makes the lookup fail with "context deadline
+			// exceeded" even though the DB is healthy.
+			dbCtx, dbCancel := context.WithTimeout(ctx, pgb.queryTimeout)
+			defer dbCancel()
+			return txraw, pgb.GetSBitsByHash(dbCtx, txraw.BlockHash), nil
 		}
 
-		sdiffRes, err := pgb.Client.GetStakeDifficulty(ctx)
+		sdiffRes, err := pgb.Client.GetStakeDifficulty(rpcCtx)
 		if err != nil {
 			return nil, 0, fmt.Errorf("GetStakeDifficulty failed: %w", err)
 		}
 
-		blockHash1, _, err := pgb.Client.GetBestBlock(ctx)
+		blockHash1, _, err := pgb.Client.GetBestBlock(rpcCtx)
 		if err != nil {
 			return nil, 0, fmt.Errorf("GetBestBlock failed: %w", err)
 		}

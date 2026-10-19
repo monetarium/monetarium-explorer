@@ -1539,6 +1539,10 @@ func (exp *explorerUI) AddressPage(w http.ResponseWriter, r *http.Request) {
 		}
 	} else {
 		addrData, err = exp.AddressListData(ctx, address, txnType, limitN, offsetAddrOuts, middleware.GetCoinCtx(r))
+		if errors.Is(err, context.Canceled) {
+			// Client went away; do not render an error page for a dead request.
+			return
+		}
 		if exp.timeoutErrorPage(w, err, "TicketsPriceByHeight") {
 			return
 		} else if err != nil {
@@ -1599,6 +1603,10 @@ func (exp *explorerUI) AddressTable(w http.ResponseWriter, r *http.Request) {
 	}
 
 	addrData, err := exp.AddressListData(ctx, address, txnType, limitN, offsetAddrOuts, middleware.GetCoinCtx(r))
+	if errors.Is(err, context.Canceled) {
+		// Client went away; nothing to answer.
+		return
+	}
 	if err != nil {
 		log.Errorf("AddressListData error: %v", err)
 		http.Error(w, http.StatusText(http.StatusInternalServerError),
@@ -1676,6 +1684,10 @@ func (exp *explorerUI) AddressSummary(w http.ResponseWriter, r *http.Request) {
 	}
 
 	addrData, err := exp.AddressListData(ctx, address, dbtypes.AddrTxnAll, 1, 0, dbtypes.CoinTypeAll)
+	if errors.Is(err, context.Canceled) {
+		// Client went away; nothing to answer.
+		return
+	}
 	if err != nil {
 		log.Errorf("AddressListData error: %v", err)
 		http.Error(w, http.StatusText(http.StatusInternalServerError),
@@ -1774,6 +1786,13 @@ func (exp *explorerUI) AddressListData(ctx context.Context, address string, txnT
 	// Get addresses table rows for the address.
 	addrData, err = exp.dataSource.AddressData(ctx, address, limitN,
 		offsetAddrOuts, txnType, coinType)
+	if errors.Is(err, context.Canceled) {
+		// The client disconnected before the response could be delivered, so
+		// the request context was canceled mid-query. This is not a server
+		// error and there is nobody left to answer.
+		log.Debugf("AddressData canceled for %s: %v", address, err)
+		return nil, err
+	}
 	if dbtypes.IsTimeoutErr(err) { //exp.timeoutErrorPage(w, err, "TicketsPriceByHeight") {
 		return nil, err
 	} else if err != nil {
