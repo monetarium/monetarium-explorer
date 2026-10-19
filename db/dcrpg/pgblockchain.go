@@ -1724,6 +1724,8 @@ func (pgb *ChainDB) AddressMetrics(ctx context.Context, addr string) (*dbtypes.A
 
 // ActiveCoinsForAddress retrieves the sorted list of coin types present at the given address.
 func (pgb *ChainDB) ActiveCoinsForAddress(ctx context.Context, address string) ([]uint8, error) {
+	ctx, cancel := context.WithTimeout(ctx, pgb.queryTimeout)
+	defer cancel()
 	return retrieveAddressCoinTypes(ctx, pgb.db, address)
 }
 
@@ -2495,8 +2497,13 @@ func (pgb *ChainDB) AddressData(ctx context.Context, address string, limitN, off
 		return nil, err
 	}
 
-	// Populate ActiveCoins from coin types present in the address
-	activeCoins, err = retrieveAddressCoinTypes(ctx, pgb.db, address)
+	// Populate ActiveCoins from coin types present in the address. Use a
+	// dedicated timeout context so this secondary lookup cannot outlive the
+	// request's budget (it was previously run against the raw request context,
+	// leaving it uncapped relative to every other query in this package).
+	coinsCtx, coinsCancel := context.WithTimeout(ctx, pgb.queryTimeout)
+	activeCoins, err = retrieveAddressCoinTypes(coinsCtx, pgb.db, address)
+	coinsCancel()
 	if err != nil {
 		log.Errorf("Failed to get coin types for address %s: %v", address, err)
 	}
