@@ -1726,7 +1726,8 @@ func (pgb *ChainDB) AddressMetrics(ctx context.Context, addr string) (*dbtypes.A
 func (pgb *ChainDB) ActiveCoinsForAddress(ctx context.Context, address string) ([]uint8, error) {
 	ctx, cancel := context.WithTimeout(ctx, pgb.queryTimeout)
 	defer cancel()
-	return retrieveAddressCoinTypes(ctx, pgb.db, address)
+	coins, err := retrieveAddressCoinTypes(ctx, pgb.db, address)
+	return coins, pgb.replaceCancelError(err)
 }
 
 // AddressTransactions retrieves a slice of *dbtypes.AddressRow for a given
@@ -2500,12 +2501,14 @@ func (pgb *ChainDB) AddressData(ctx context.Context, address string, limitN, off
 	// Populate ActiveCoins from coin types present in the address. Use a
 	// dedicated timeout context so this secondary lookup cannot outlive the
 	// request's budget (it was previously run against the raw request context,
-	// leaving it uncapped relative to every other query in this package).
+	// leaving it uncapped relative to every other query in this package). Keep
+	// its error separate so a failure here cannot clobber the AddressHistory
+	// error that drives the branches below.
 	coinsCtx, coinsCancel := context.WithTimeout(ctx, pgb.queryTimeout)
-	activeCoins, err = retrieveAddressCoinTypes(coinsCtx, pgb.db, address)
+	activeCoins, coinsErr := retrieveAddressCoinTypes(coinsCtx, pgb.db, address)
 	coinsCancel()
-	if err != nil {
-		log.Errorf("Failed to get coin types for address %s: %v", address, err)
+	if coinsErr != nil {
+		log.Errorf("Failed to get coin types for address %s: %v", address, coinsErr)
 	}
 
 	populateTemplate := func() {
