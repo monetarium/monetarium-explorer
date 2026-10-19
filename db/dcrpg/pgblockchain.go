@@ -2507,6 +2507,12 @@ func (pgb *ChainDB) AddressData(ctx context.Context, address string, limitN, off
 	coinsCtx, coinsCancel := context.WithTimeout(ctx, pgb.queryTimeout)
 	activeCoins, coinsErr := retrieveAddressCoinTypes(coinsCtx, pgb.db, address)
 	coinsCancel()
+	// A failed active-coins lookup leaves an empty summary (missing coin
+	// selector, "—" totals), so surface a timeout like AddressHistory does
+	// rather than silently serving a wrong page.
+	if dbtypes.IsTimeoutErr(pgb.replaceCancelError(coinsErr)) {
+		return nil, pgb.replaceCancelError(coinsErr)
+	}
 	if coinsErr != nil {
 		log.Errorf("Failed to get coin types for address %s: %v", address, coinsErr)
 	}
