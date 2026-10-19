@@ -1730,6 +1730,22 @@ func (pgb *ChainDB) ActiveCoinsForAddress(ctx context.Context, address string) (
 	return coins, pgb.replaceCancelError(err)
 }
 
+// coinTypesFromBalance returns the sorted coin types present in a balance's
+// per-coin map. It is the fallback source for an address's coin list when the
+// dedicated lookup fails, since the balance map is built from the same
+// addresses table and a balance may be available when the lookup is not.
+func coinTypesFromBalance(balance *dbtypes.AddressBalance) []uint8 {
+	if balance == nil || len(balance.Coins) == 0 {
+		return nil
+	}
+	coinTypes := make([]uint8, 0, len(balance.Coins))
+	for ct := range balance.Coins {
+		coinTypes = append(coinTypes, ct)
+	}
+	sort.Slice(coinTypes, func(i, j int) bool { return coinTypes[i] < coinTypes[j] })
+	return coinTypes
+}
+
 // AddressTransactions retrieves a slice of *dbtypes.AddressRow for a given
 // address and transaction type (i.e. all, credit, or debit) from the DB. Only
 // the first N transactions starting from the offset element in the set of all
@@ -2497,33 +2513,30 @@ func (pgb *ChainDB) AddressData(ctx context.Context, address string, limitN, off
 	if dbtypes.IsTimeoutErr(err) {
 		return nil, err
 	}
+	// Fail fast on an unexpected AddressHistory error before running the
+	// secondary lookup. Otherwise a non-timeout history error (which leaves
+	// balance nil) combined with a coin-types lookup timeout would return the
+	// lookup's error and mask the real one in the branches below.
+	if err != nil && !errors.Is(err, dbtypes.ErrNoResult) && !errors.Is(err, sql.ErrNoRows) {
+		log.Errorf("AddressHistory: %v", err)
+		return nil, fmt.Errorf("AddressHistory: %w", err)
+	}
 
-	// Populate ActiveCoins from coin types present in the address. Use a
-	// dedicated timeout context so this secondary lookup cannot outlive the
-	// request's budget (it was previously run against the raw request context,
-	// leaving it uncapped relative to every other query in this package). Keep
-	// its error separate so a failure here cannot clobber the AddressHistory
-	// error that drives the branches below.
-	coinsCtx, coinsCancel := context.WithTimeout(ctx, pgb.queryTimeout)
-	activeCoins, coinsErr := retrieveAddressCoinTypes(coinsCtx, pgb.db, address)
-	coinsCancel()
-	if coinsErr != nil {
-		// This lookup only feeds the summary's coin list (stake income/spending
-		// lines and the coin selector); the balances themselves come from
-		// AddressHistory. Recover from balance.Coins when it is available so a
-		// transient failure here does not blank a funded address. Only when the
-		// balance is also empty is there nothing to recover with — then surface
-		// the timeout like AddressHistory does rather than serve a wrong page.
-		if balance != nil && len(balance.Coins) > 0 {
+	// Populate ActiveCoins from the coin types present in the address. This
+	// only feeds the summary's coin list (the stake income/spending lines and
+	// the coin selector); the balances come from AddressHistory. Recover from
+	// balance.Coins when the lookup fails and a balance is available, so a
+	// transient failure does not blank a funded address. Only when the balance
+	// is also empty is there nothing to recover with — then surface the
+	// timeout rather than serve a wrong page.
+	activeCoins, coinsErr := pgb.ActiveCoinsForAddress(ctx, address)
+	if coinsErr != nil && len(activeCoins) == 0 {
+		if fromBalance := coinTypesFromBalance(balance); len(fromBalance) > 0 {
 			log.Errorf("Failed to get coin types for address %s: %v; using balance coins",
 				address, coinsErr)
-			activeCoins = make([]uint8, 0, len(balance.Coins))
-			for ct := range balance.Coins {
-				activeCoins = append(activeCoins, ct)
-			}
-			sort.Slice(activeCoins, func(i, j int) bool { return activeCoins[i] < activeCoins[j] })
-		} else if dbtypes.IsTimeoutErr(pgb.replaceCancelError(coinsErr)) {
-			return nil, pgb.replaceCancelError(coinsErr)
+			activeCoins = fromBalance
+		} else if dbtypes.IsTimeoutErr(coinsErr) {
+			return nil, coinsErr
 		} else {
 			log.Errorf("Failed to get coin types for address %s: %v", address, coinsErr)
 		}
@@ -2546,11 +2559,9 @@ func (pgb *ChainDB) AddressData(ctx context.Context, address string, limitN, off
 		// Still populate ActiveCoins even with no confirmed transactions
 		addrData.ActiveCoins = activeCoins
 		log.Tracef("AddressHistory: No confirmed transactions for address %s.", address)
-	} else if err != nil {
-		// Unexpected error
-		log.Errorf("AddressHistory: %v", err)
-		return nil, fmt.Errorf("AddressHistory: %w", err)
-	} else /*err == nil*/ {
+	} else /* err == nil */ {
+		// err is guaranteed nil here: timeouts and unexpected AddressHistory
+		// errors returned above, and the no-result cases are handled above.
 		// Generate AddressInfo skeleton from the address table rows.
 		addrData, _, _ = dbtypes.ReduceAddressHistory(addrHist)
 		if addrData == nil {
