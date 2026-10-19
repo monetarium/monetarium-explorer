@@ -2507,14 +2507,26 @@ func (pgb *ChainDB) AddressData(ctx context.Context, address string, limitN, off
 	coinsCtx, coinsCancel := context.WithTimeout(ctx, pgb.queryTimeout)
 	activeCoins, coinsErr := retrieveAddressCoinTypes(coinsCtx, pgb.db, address)
 	coinsCancel()
-	// A failed active-coins lookup leaves an empty summary (missing coin
-	// selector, "—" totals), so surface a timeout like AddressHistory does
-	// rather than silently serving a wrong page.
-	if dbtypes.IsTimeoutErr(pgb.replaceCancelError(coinsErr)) {
-		return nil, pgb.replaceCancelError(coinsErr)
-	}
 	if coinsErr != nil {
-		log.Errorf("Failed to get coin types for address %s: %v", address, coinsErr)
+		// This lookup only feeds the summary's coin list (stake income/spending
+		// lines and the coin selector); the balances themselves come from
+		// AddressHistory. Recover from balance.Coins when it is available so a
+		// transient failure here does not blank a funded address. Only when the
+		// balance is also empty is there nothing to recover with — then surface
+		// the timeout like AddressHistory does rather than serve a wrong page.
+		if balance != nil && len(balance.Coins) > 0 {
+			log.Errorf("Failed to get coin types for address %s: %v; using balance coins",
+				address, coinsErr)
+			activeCoins = make([]uint8, 0, len(balance.Coins))
+			for ct := range balance.Coins {
+				activeCoins = append(activeCoins, ct)
+			}
+			sort.Slice(activeCoins, func(i, j int) bool { return activeCoins[i] < activeCoins[j] })
+		} else if dbtypes.IsTimeoutErr(pgb.replaceCancelError(coinsErr)) {
+			return nil, pgb.replaceCancelError(coinsErr)
+		} else {
+			log.Errorf("Failed to get coin types for address %s: %v", address, coinsErr)
+		}
 	}
 
 	populateTemplate := func() {
