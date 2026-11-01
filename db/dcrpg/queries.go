@@ -1438,6 +1438,9 @@ func retrieveAddressCoinTypes(ctx context.Context, db *sql.DB, address string) (
 // distinct spending transactions, and the fraction spent to and received from
 // stake-related transactions.
 func retrieveAddressBalance(ctx context.Context, db *sql.DB, address string) (balance *dbtypes.AddressBalance, err error) {
+	started := time.Now()
+	stage, stageStarted := "begin_tx", started
+	defer func() { logBalanceFailure(ctx, db, stage, started, stageStarted, err) }()
 	// Never return nil *AddressBalance.
 	balance = &dbtypes.AddressBalance{Address: address}
 
@@ -1454,6 +1457,7 @@ func retrieveAddressBalance(ctx context.Context, db *sql.DB, address string) (ba
 
 	// Query for spent and unspent totals.
 	var rows *sql.Rows
+	stage, stageStarted = "query_spent_unspent", time.Now()
 	rows, err = dbtx.QueryContext(ctx, internal.SelectAddressSpentUnspentCountAndValue, address)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -1478,6 +1482,7 @@ func retrieveAddressBalance(ctx context.Context, db *sql.DB, address string) (ba
 	skaReceivedExclIssuance := make(map[uint8]*big.Int)
 	skaFromStake := make(map[uint8]*big.Int)
 
+	stage, stageStarted = "iterate_spent_unspent", time.Now()
 	for rows.Next() {
 		var count, totalValue int64
 		var skaTotal string
@@ -1486,6 +1491,7 @@ func retrieveAddressBalance(ctx context.Context, db *sql.DB, address string) (ba
 		var coinType uint8
 		err = rows.Scan(&txType, &coinType, &count, &totalValue, &skaTotal, &isFunding, &noMatchingTx, &isChange)
 		if err != nil {
+			stage = "scan_spent_unspent"
 			return
 		}
 
@@ -1627,6 +1633,7 @@ func retrieveAddressBalance(ctx context.Context, db *sql.DB, address string) (ba
 
 	closeRows(rows)
 
+	stage, stageStarted = "commit", time.Now()
 	err = dbtx.Commit()
 	return
 }
