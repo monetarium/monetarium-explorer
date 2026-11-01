@@ -14,9 +14,10 @@ import (
 // poolDiagnostics is owned by the monitor goroutine. Historical waits alone do
 // not indicate current pressure. Sampling never acquires a SQL connection.
 type poolDiagnostics struct {
-	previous sql.DBStats
-	lastLog  time.Time
-	pressure bool
+	previous        sql.DBStats
+	lastLog         time.Time
+	lastPressureLog time.Time
+	pressure        bool
 }
 
 func (p *poolDiagnostics) observe(now time.Time, stats sql.DBStats) string {
@@ -24,9 +25,9 @@ func (p *poolDiagnostics) observe(now time.Time, stats sql.DBStats) string {
 	saturated := stats.MaxOpenConnections > 0 && stats.InUse >= stats.MaxOpenConnections && stats.Idle == 0
 	p.previous = stats
 	if saturated || waiting {
-		first := !p.pressure
-		p.pressure = true
-		if first || now.Sub(p.lastLog) >= time.Minute {
+		if p.lastPressureLog.IsZero() || now.Sub(p.lastPressureLog) >= time.Minute {
+			p.pressure = true
+			p.lastPressureLog = now
 			p.lastLog = now
 			return "pressure"
 		}

@@ -43,6 +43,31 @@ func TestPoolDiagnostics(t *testing.T) {
 	}
 }
 
+func TestPoolDiagnosticsFlapping(t *testing.T) {
+	start := time.Unix(1000, 0)
+	healthy := sql.DBStats{MaxOpenConnections: 25, Idle: 1}
+	full := sql.DBStats{MaxOpenConnections: 25, InUse: 25}
+	monitor := poolDiagnostics{previous: healthy, lastLog: start}
+	for _, tt := range []struct {
+		seconds int
+		stats   sql.DBStats
+		want    string
+	}{
+		{10, full, "pressure"},
+		{20, healthy, "recovered"},
+		{30, full, ""},
+		{40, healthy, ""},
+		{50, full, ""},
+		{60, healthy, ""},
+		{70, full, "pressure"},
+		{80, healthy, "recovered"},
+	} {
+		if got := monitor.observe(start.Add(time.Duration(tt.seconds)*time.Second), tt.stats); got != tt.want {
+			t.Fatalf("at %ds: event = %q, want %q", tt.seconds, got, tt.want)
+		}
+	}
+}
+
 func TestBalanceFailureLogging(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	if err != nil {

@@ -1489,11 +1489,9 @@ func retrieveAddressBalance(ctx context.Context, db *sql.DB, address string) (ba
 		var txType int16
 		var noMatchingTx, isFunding, isChange bool
 		var coinType uint8
-		scanStarted := time.Now()
 		err = rows.Scan(&txType, &coinType, &count, &totalValue, &skaTotal, &isFunding, &noMatchingTx, &isChange)
 		if err != nil {
 			stage = "scan_spent_unspent"
-			stageStarted = scanStarted
 			return
 		}
 

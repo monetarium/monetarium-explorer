@@ -35,9 +35,10 @@ The existing `PSQL` logger reports connection-pool diagnostics automatically:
 - Every 10 seconds, a background monitor samples `sql.DB.Stats()` without
   acquiring a database connection or issuing SQL. Pool saturation or newly
   queued connection acquisitions produce `DB pool event=pressure` warnings,
-  at most once per minute during sustained pressure.
+  at most once per minute, including when pressure and healthy samples alternate.
 - `event=recovered` means the sampled pool is no longer saturated and no new
-  waits were recorded during that sample interval. It does not prove all
+  waits were recorded during that sample interval, following a reported pressure
+  warning. Suppressed pressure episodes do not generate recovery messages. It does not prove all
   database operations are healthy. A healthy `event=heartbeat` appears every
   five minutes at INFO, so historical counters and process liveness can be
   compared before and during an incident.
@@ -47,7 +48,8 @@ The existing `PSQL` logger reports connection-pool diagnostics automatically:
   `in_use=max` with zero idle connections demonstrates pool saturation, not
   whether it was caused by leaked transactions, slow SQL, or another holder.
 - Failed address-balance operations add `operation=address_balance`, `stage`,
-  total and stage elapsed times, allowlisted `error_class`, caller `context`,
+  total and stage elapsed times (scan failures retain the row-iteration start),
+  allowlisted `error_class`, caller `context`,
   and pool counters. Stages distinguish transaction acquisition, query, scan,
   row iteration, and commit. These warnings are limited to once per minute per
   stage; `suppressed` counts omitted diagnostics since the previous stage log.
