@@ -256,6 +256,8 @@ type ChainDB struct {
 	ctx                context.Context
 	queryTimeout       time.Duration
 	db                 *sql.DB
+	poolMonitorCancel  context.CancelFunc
+	poolMonitorDone    chan struct{}
 	mp                 rpcutils.MempoolAddressChecker
 	chainParams        *chaincfg.Params
 	dupChecks          bool
@@ -737,11 +739,23 @@ func NewChainDB(ctx context.Context, cfg *ChainDBCfg, stakeDB *stakedb.StakeData
 		chainDB.UpdateChainState(bci)
 	}
 
+	chainDB.startPoolMonitor()
 	return chainDB, nil
 }
 
 // Close closes the underlying sql.DB connection to the database.
 func (pgb *ChainDB) Close() error {
+	if pgb.poolMonitorCancel != nil {
+		pgb.poolMonitorCancel()
+		// A stalled log sink must not prevent database shutdown. Cancellation
+		// stops sampling; an in-flight log write may finish after Close returns.
+		timer := time.NewTimer(time.Second)
+		select {
+		case <-pgb.poolMonitorDone:
+		case <-timer.C:
+		}
+		timer.Stop()
+	}
 	return pgb.db.Close()
 }
 
