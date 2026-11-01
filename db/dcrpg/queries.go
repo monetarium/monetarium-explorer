@@ -1473,7 +1473,7 @@ func retrieveAddressBalance(ctx context.Context, db *sql.DB, address string) (ba
 		err = fmt.Errorf("failed to query spent and unspent amounts: %w", err)
 		return
 	}
-	defer rows.Close()
+	defer closeRows(rows)
 
 	balance.Coins = make(map[uint8]*dbtypes.CoinBalance)
 
@@ -1634,8 +1634,6 @@ func retrieveAddressBalance(ctx context.Context, db *sql.DB, address string) (ba
 		balance.TotalInputs += cb.NumSpent
 		balance.TotalOutputs += cb.NumSpent + cb.NumUnspent
 	}
-
-	closeRows(rows)
 
 	stage, stageStarted = "commit", time.Now()
 	err = dbtx.Commit()
