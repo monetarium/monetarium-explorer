@@ -1454,6 +1454,9 @@ func retrieveAddressBalance(ctx context.Context, db *sql.DB, address string) (ba
 		err = fmt.Errorf("unable to begin database transaction: %w", err)
 		return
 	}
+	// Complete the transaction on every early return. After Commit or an
+	// explicit Rollback this returns sql.ErrTxDone without another driver call.
+	defer dbtx.Rollback()
 
 	// Query for spent and unspent totals.
 	var rows *sql.Rows
@@ -1470,6 +1473,7 @@ func retrieveAddressBalance(ctx context.Context, db *sql.DB, address string) (ba
 		err = fmt.Errorf("failed to query spent and unspent amounts: %w", err)
 		return
 	}
+	defer rows.Close()
 
 	balance.Coins = make(map[uint8]*dbtypes.CoinBalance)
 
