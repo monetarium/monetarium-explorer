@@ -860,6 +860,12 @@ func (psh *PubSubHub) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgBl
 	if len(coinTypes) > 0 {
 		rewards := make([]exptypes.SKAVoteReward, 0, len(coinTypes))
 		for ct := range coinTypes {
+			// Skip VAR: its vote reward is carried in the Vote VAR Reward
+			// section above, and it is not an "SKA<n>" coin.  The HTTP path
+			// makes the same skip, so the /ps payload matches the page.
+			if ct == 0 {
+				continue
+			}
 			var perBlock string
 			var blockHeight int64
 			var blockHash string
@@ -948,22 +954,42 @@ func (psh *PubSubHub) Store(blockData *blockdata.BlockData, msgBlock *wire.MsgBl
 
 	// PoW SKA Fee Reward: the miner's portion of redistributed SKA tx fees
 	// from the authoritative "MF"-marked SSFee split (issue #273). Mirrors the
-	// explorer (HTTP) derivation so the two paths cannot drift.
+	// explorer (HTTP) derivation -- including the 30-day fallback for coins
+	// whose last MF SSFee was in an earlier block -- so the two paths cannot
+	// drift and a coin's entry does not blink out of the /ps payload.
 	powRewardsBlockHeight := make(map[uint8]int64)
-	powRewards := make([]exptypes.PoWSKAReward, 0)
+	powRewardsMap := make(map[uint8]string)
 	for ct, split := range blockData.ExtraInfo.SSFeeTotalsByCoin {
 		if ct == 0 || split.PoW == nil || split.PoW.Sign() <= 0 {
 			continue
 		}
+		powRewardsMap[ct] = txhelpers.FormatSKAAtoms(split.PoW)
 		powRewardsBlockHeight[ct] = int64(blockData.Header.Height)
-		powRewards = append(powRewards, exptypes.PoWSKAReward{
-			CoinType:    ct,
-			Symbol:      fmt.Sprintf("SKA%d", ct),
-			Amount:      txhelpers.FormatSKAAtoms(split.PoW),
-			BlockHeight: powRewardsBlockHeight[ct],
-		})
 	}
-	if len(powRewards) > 0 {
+	for i := len(sum30) - 1; i >= 0; i-- {
+		for ct, split := range sum30[i].SSFeeTotalsByCoin {
+			if ct == 0 || split.PoW == nil || split.PoW.Sign() <= 0 {
+				continue
+			}
+			if _, seen := powRewardsMap[ct]; seen {
+				continue
+			}
+			powRewardsMap[ct] = txhelpers.FormatSKAAtoms(split.PoW)
+			if _, hasHeight := powRewardsBlockHeight[ct]; !hasHeight {
+				powRewardsBlockHeight[ct] = int64(sum30[i].Height)
+			}
+		}
+	}
+	if len(powRewardsMap) > 0 {
+		powRewards := make([]exptypes.PoWSKAReward, 0, len(powRewardsMap))
+		for ct, amountStr := range powRewardsMap {
+			powRewards = append(powRewards, exptypes.PoWSKAReward{
+				CoinType:    ct,
+				Symbol:      fmt.Sprintf("SKA%d", ct),
+				Amount:      amountStr,
+				BlockHeight: powRewardsBlockHeight[ct],
+			})
+		}
 		sort.Slice(powRewards, func(i, j int) bool { return powRewards[i].CoinType < powRewards[j].CoinType })
 		p.GeneralInfo.PoWSKARewards = powRewards
 	} else {
