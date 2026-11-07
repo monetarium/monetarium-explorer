@@ -2229,14 +2229,19 @@ func (charts *ChartData) skaSupplyChart(chartID string, bin binLevel, axis axisT
 		return coinSupplyChart(charts, bin, axis, DefaultInterval)
 	}
 
-	// SKA supply data should already be pre-loaded in SKASupply map
-	charts.mtx.RLock()
+	// SKA supply data should already be pre-loaded in SKASupply map.
+	// Read it under SKASupplyMtx, the mutex every writer of the map
+	// holds (pgblockchain.go batch load and LoadSKASupplyForCoin), and
+	// the same mutex SKASupplyExists and SKASupplyHeight use.  charts.mtx
+	// does not exclude those writers, so reading under it is a concurrent
+	// map read that can fatal the process.
+	charts.SKASupplyMtx.RLock()
 	if charts.SKASupply == nil {
-		charts.mtx.RUnlock()
+		charts.SKASupplyMtx.RUnlock()
 		return nil, fmt.Errorf("SKA supply data not initialized for coin type %d", coinType)
 	}
 	data, ok := charts.SKASupply[coinType]
-	charts.mtx.RUnlock()
+	charts.SKASupplyMtx.RUnlock()
 	if !ok || len(data.Timestamps) == 0 {
 		return nil, fmt.Errorf("no SKA supply data found for coin type %d", coinType)
 	}
